@@ -13,7 +13,7 @@
 </p>
 
 
-[``braintools``](https://github.com/brainpy/braintools) is the core system for general-purpose brain dynamics programming framework [``BrainPy``](https://github.com/brainpy/BrainPy). 
+[``braintools``](https://github.com/brainpy/braintools) provides toolboxes for brain dynamics programming. 
 
 
 ## Installation

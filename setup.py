@@ -25,8 +25,7 @@ with io.open(os.path.join(here, 'README.md'), 'r', encoding='utf-8') as f:
 
 # installation packages
 packages = find_packages(exclude=["docs*", "tests*", "examples*", "build*",
-                                  "dist*", "brainpy.egg-info*", "brainpy/__pycache__*",
-                                  "brainpy/__init__.py"])
+                                  "dist*", "braintools.egg-info*", "braintools/__pycache__*"])
 
 # setup
 setup(
