@@ -1,0 +1,8 @@
+numpy
+jax
+jaxlib
+braincore
+
+# test requirements
+pytest
+absl-py
