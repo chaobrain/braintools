@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 
-import copy
 import functools
 from typing import Union, Dict, Optional, Tuple, Any, TypeVar
 
 import braincore as bc
 import jax
 import jax.numpy as jnp
-from brainpy import check
 
 from ._lr_scheduler import make_schedule, LRScheduler
 
@@ -157,7 +155,7 @@ class _WeightDecayOptimizer(Optimizer):
   ):
     super().__init__(lr=lr, name=name)
     self.lr: LRScheduler = make_schedule(lr)
-    weight_decay = check.is_float(weight_decay, min_bound=0., max_bound=1., allow_none=True)
+    assert weight_decay is None or 0. <= weight_decay <= 1., 'weight_decay must be in [0, 1].'
     self.weight_decay = (fcast(weight_decay) if weight_decay is not None else None)
 
   def extra_repr(self) -> str:
