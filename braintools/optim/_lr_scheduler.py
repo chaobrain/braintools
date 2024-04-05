@@ -8,11 +8,9 @@ import jax.numpy as jnp
 from brainpy import check
 from brainpy.errors import MathError
 
-
 __all__ = [
   'LRScheduler',
-  'Constant',
-  'CallBasedLRScheduler',
+  'ConstantLR',
   'StepLR',
   'MultiStepLR',
   'CosineAnnealingLR',
@@ -33,7 +31,7 @@ def make_schedule(scalar_or_schedule):
   if isinstance(scalar_or_schedule, LRScheduler):
     return scalar_or_schedule
   elif isinstance(scalar_or_schedule, (int, float, bc.State)):
-    return Constant(scalar_or_schedule)
+    return ConstantLR(scalar_or_schedule)
   else:
     raise TypeError(type(scalar_or_schedule))
 
@@ -54,9 +52,9 @@ class LRScheduler(bc.Module):
   def __init__(self, lr: Union[float, bc.State], last_epoch: int = -1):
     super(LRScheduler, self).__init__()
     if isinstance(lr, bc.State):
-      lr.value = jnp.asarray(lr.value, dtype=bc.environ.ditype())
+      lr.value = jnp.asarray(lr.value, dtype=bc.environ.dftype())
     else:
-      lr = jnp.asarray(lr, dtype=bc.environ.ditype())
+      lr = jnp.asarray(lr, dtype=bc.environ.dftype())
     self._lr = lr
     assert last_epoch >= -1, 'last_epoch should be greater than -1.'
     self.last_epoch = bc.State(jnp.asarray(last_epoch, dtype=bc.environ.ditype()))
@@ -97,10 +95,11 @@ class LRScheduler(bc.Module):
     raise NotImplementedError
 
 
-class Constant(LRScheduler):
+class ConstantLR(LRScheduler):
   """
   Constant learning rate scheduler.
   """
+
   def __call__(self, i=None):
     return self.lr
 
@@ -119,6 +118,7 @@ class CallBasedLRScheduler(LRScheduler):
     The index of last call.
 
   """
+
   def __init__(self, lr: Union[float, bc.State], last_epoch: int = -1, last_call: int = -1):
     super().__init__(lr=lr, last_epoch=last_epoch)
 
@@ -202,13 +202,14 @@ class MultiStepLR(LRScheduler):
   ):
     super().__init__(lr=lr, last_epoch=last_epoch)
 
-    self.milestones = check.is_sequence(milestones, elem_type=int, allow_none=False)
+    milestones = check.is_sequence(milestones, elem_type=int, allow_none=False)
+    self.milestones = jnp.asarray((-1,) + tuple(milestones), dtype=bc.environ.ditype())
     self.gamma = check.is_float(gamma, min_bound=0., max_bound=1., allow_int=False)
 
   def __call__(self, i=None):
     i = (self.last_epoch.value + 1) if i is None else i
-    p = bc.ifelse([i < m for m in self.milestones],
-                  list(range(0, len(self.milestones))) + [len(self.milestones)])
+    conditions = (i > self.milestones[:-1]) & i < self.milestones[1:]
+    p = jnp.where(conditions, jnp.arange(0, len(self.milestones)))
     return self.lr * self.gamma ** p
 
   def extra_repr(self):
@@ -273,7 +274,7 @@ class CosineAnnealingLR(LRScheduler):
 
   def __call__(self, i=None):
     i = (self.last_epoch.value + 1) if i is None else i
-    return (self.eta_min + (self.lr - self.eta_min) * (1 + jnp.cos(jnp.pi * i / self.T_max)) / 2)
+    return self.eta_min + (self.lr - self.eta_min) * (1 + jnp.cos(jnp.pi * i / self.T_max)) / 2
 
   def extra_repr(self):
     return f', T_max={self.T_max}, eta_min={self.eta_min}'

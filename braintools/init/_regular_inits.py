@@ -3,7 +3,7 @@
 import braincore as bc
 import jax.numpy as jnp
 
-from ._base import Initializer
+from ._base import Initializer, to_size
 
 __all__ = [
   'ZeroInit',
@@ -22,7 +22,8 @@ class ZeroInit(Initializer):
     super(ZeroInit, self).__init__()
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     return jnp.zeros(shape, dtype=self.dtype)
 
   def __repr__(self):
@@ -45,7 +46,8 @@ class Constant(Initializer):
     self.dtype = dtype or bc.environ.dftype()
     self.value = jnp.asarray(value, dtype=self.dtype)
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     return jnp.full(shape, self.value, dtype=self.dtype)
 
   def __repr__(self):
@@ -79,11 +81,12 @@ class Identity(Initializer):
     self.dtype = dtype or bc.environ.dftype()
     self.value = jnp.asarray(value, dtype=self.dtype)
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     if isinstance(shape, (tuple, list)):
       if len(shape) > 2:
         raise ValueError(f'Only support initialize 2D weights for {self.__class__.__name__}.')
-    r = jnp.eye(*shape, dtype=self.dtype)
+    r = jnp.eye(shape, dtype=self.dtype)
     r = jnp.fill_diagonal(r, self.value)
     return r
 

@@ -40,6 +40,16 @@ def fcast(value: T, dtype: Any = None) -> jax.Array:
   return cast(value, dtype=dtype or bc.environ.dftype())
 
 
+def _to_dict_value(old_dict: Dict) -> Dict:
+  new_dict = dict()
+  for k, v in old_dict.items():
+    if isinstance(v, bc.State):
+      new_dict[k] = v.value
+    else:
+      new_dict[k] = v
+  return new_dict
+
+
 def to_same_dict_tree(*dicts: dict):
   """
   Convert multiple dictionaries to the same tree structure.
@@ -55,8 +65,6 @@ def to_same_dict_tree(*dicts: dict):
     The converted dictionary.
   """
   if len(dicts):
-    dicts = tuple(copy.copy(d) for d in dicts)
-
     # all keys
     all_keys = tuple(set(d.keys()) for d in dicts)
     for keys in all_keys[1:]:
@@ -64,31 +72,39 @@ def to_same_dict_tree(*dicts: dict):
         raise ValueError('Dictionary does not match.')
 
     # flatten to normal python dict
-    r = [dict() for _ in range(len(dicts))]
-    for i in range(len(dicts)):
-      for k in all_keys[0]:
-        v = dicts[i][k]
-        if isinstance(v, bc.State):
-          r[i][k] = v.value
-        else:
-          r[i][k] = v
+    r = [_to_dict_value(d) for d in dicts]
+
     if len(dicts) == 1:
       return r[0]
     else:
       return tuple(r)
 
 
-def _sgd(pv, gd, weight_decay, lr=None):
+def _sgd(prev_weight, gradient, weight_decay, lr=None):
+  """
+  The update function for SGD learning.
+
+  Parameters
+  ----------
+  prev_weight: jax.Array
+    The previous weight.
+  gradient: jax.Array
+    The gradient.
+  weight_decay: float
+    The weight decay.
+  lr: float
+    The learning rate.
+  """
   if weight_decay is None:
     if lr is None:
-      return pv - gd
+      return prev_weight - gradient
     else:
-      return pv - lr * gd
+      return prev_weight - lr * gradient
   else:
     if lr is None:
-      return (1 - weight_decay) * pv - gd
+      return (1 - weight_decay) * prev_weight - gradient
     else:
-      return (1 - weight_decay) * pv - lr * gd
+      return (1 - weight_decay) * prev_weight - lr * gradient
 
 
 class OptimState(bc.LongTermState):
@@ -108,7 +124,7 @@ class Optimizer(bc.Module):
   """
 
   lr: LRScheduler  # learning rate
-  weight_states: bc.StateStack  # states to train, invisible to ``.states()``
+  weight_states: bc.StateDictManager  # states to train, invisible to ``.states()``
 
   def __init__(
       self,
@@ -117,7 +133,7 @@ class Optimizer(bc.Module):
   ):
     super().__init__(name=name)
     self.lr: LRScheduler = make_schedule(lr)
-    self.weight_states = bc.StateStack()
+    self.weight_states = bc.StateDictManager()
 
   def register_trainable_weights(self, train_states: Optional[Dict[str, bc.State]] = None):
     raise NotImplementedError
@@ -1079,7 +1095,7 @@ class SM3(_WeightDecayOptimizer):
         result = update
         for j in range(ndim):
           if i != j:
-            result = jnp.max(result, axis=j, keepdim=True)
+            result = jnp.maximum(result, axis=j, keepdim=True)
         acc = self.memory_states[f'{k}_m{i}'].value
         if self.beta > 0.:
           acc.value = jnp.maximum(acc, result)

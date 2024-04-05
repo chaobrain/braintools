@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
+import numbers
 from typing import Union, Callable, Optional, Sequence
 
 import braincore as bc
 import jax
 import jax.numpy as jnp
 import numpy as np
-from brainpy.tools import to_size
+
+from ._base import to_size
 
 __all__ = [
   'parameter',
@@ -16,12 +18,13 @@ __all__ = [
 
 
 def _is_scalar(x):
-  return isinstance(x, (float, int, bool, complex))
+  return isinstance(x, numbers.Number)
 
 
 def parameter(
     param: Union[Callable, np.ndarray, jax.Array, float, int, bool],
     sizes: Union[int, Sequence[int]],
+    batch_or_mode: Optional[Union[int, bool, bc.mixin.Mode]] = None,
     allow_none: bool = True,
     allow_scalar: bool = True,
 ):
@@ -33,10 +36,12 @@ def parameter(
     The initialization of the parameter.
     - If it is None, the created parameter will be None.
     - If it is a callable function :math:`f`, the ``f(size)`` will be returned.
-    - If it is an instance of :py:class:`brainonline.init.Initializer``, the ``f(size)`` will be returned.
+    - If it is an instance of :py:class:`init.Initializer``, the ``f(size)`` will be returned.
     - If it is a tensor, then this function check whether ``tensor.shape`` is equal to the given ``size``.
   sizes: int, sequence of int
     The shape of the parameter.
+  batch_or_mode: int, bool, braincore.mixin.Mode
+    The batch size or the mode.
   allow_none: bool
     Whether allow the parameter is None.
   allow_scalar: bool
@@ -57,23 +62,43 @@ def parameter(
     else:
       raise ValueError(f'Expect a parameter with type of float, ArrayType, Initializer, or '
                        f'Callable function, but we got None. ')
-  sizes = to_size(sizes)
+  sizes = list(to_size(sizes))
   if allow_scalar and _is_scalar(param):
     return param
 
+  batch_axis = None
+  batch_size = None
+  if isinstance(batch_or_mode, bc.mixin.Mode):
+    if batch_or_mode.has(bc.mixin.Batching):
+      batch_axis = batch_or_mode.batch_axis
+      batch_size = batch_or_mode.batch_size
+  elif batch_or_mode in (None, False):
+    pass
+  elif isinstance(batch_or_mode, int):
+    batch_axis = 0
+    batch_size = batch_or_mode
+  else:
+    raise ValueError('Unknown batch_or_mode.')
+  if batch_size is not None:
+    sizes.insert(batch_axis, batch_size)
+
   if callable(param):
-    return param(*sizes)
-  elif isinstance(param, np.ndarray):
+    return param(sizes)
+  elif isinstance(param, (np.ndarray, jax.Array)):
     param = jnp.asarray(param)
+    if batch_size is not None:
+      param = jnp.repeat(jnp.expand_dims(param, axis=batch_axis), batch_size, axis=batch_axis)
   elif isinstance(param, bc.State):
     param = param
+    if batch_size is not None:
+      param = bc.State(jnp.repeat(jnp.expand_dims(param.value, axis=batch_axis), batch_size, axis=batch_axis))
   else:
-    param = param
+    raise ValueError(f'Unknown parameter type: {type(param)}')
 
   if allow_scalar:
     if param.shape == () or param.shape == (1,):
       return param
-  if param.shape != sizes:
+  if param.shape != tuple(sizes):
     raise ValueError(f'The shape of the parameters should be {sizes}, but we got {param.shape}')
   return param
 
@@ -86,11 +111,12 @@ def state(
   """
   Initialize a :math:`~.State` from a callable function or a data.
   """
-  sizes = list(to_size(sizes))
+  sizes = to_size(sizes)
 
   if callable(init):
     if sizes is None:
       raise ValueError('"varshape" cannot be None when data is a callable function.')
+    sizes = list(sizes)
     if isinstance(batch_or_mode, bc.mixin.Mode):
       if batch_or_mode.has(bc.mixin.Batching):
         sizes.insert(batch_or_mode.batch_axis, batch_or_mode.batch_size)
@@ -100,7 +126,7 @@ def state(
       sizes.insert(0, batch_or_mode)
     else:
       raise ValueError(f'Unknown batch_size_or_mode: {batch_or_mode}')
-    data = bc.State(init(*sizes))
+    return bc.State(init(sizes))
 
   else:
     if sizes is not None:
