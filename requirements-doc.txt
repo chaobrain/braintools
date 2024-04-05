@@ -1,8 +1,5 @@
-jax
+-r requirements.txt
 jaxlib
-matplotlib
-numpy
-braincore
 
 # document requirements
 pandoc

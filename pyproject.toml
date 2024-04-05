@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "numpy", 'jax', 'jaxlib']
+requires = ["setuptools", "numpy", 'jax', 'jaxlib', 'braincore']
 build-backend = "setuptools.build_meta"
 
 
