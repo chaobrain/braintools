@@ -6,7 +6,7 @@ import braincore as bc
 import jax.numpy as jnp
 import numpy as np
 
-from ._base import Initializer
+from ._base import Initializer, to_size
 
 __all__ = [
   'Normal',
@@ -113,7 +113,8 @@ class Normal(Initializer):
     self.mean = mean
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     weights = bc.random.normal(size=shape, loc=self.mean, scale=self.scale, dtype=self.dtype)
     return weights
 
@@ -150,7 +151,7 @@ class TruncatedNormal(Initializer):
     self.upper = upper
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
     weights = bc.random.truncated_normal(
       size=shape,
       scale=self.scale,
@@ -183,7 +184,8 @@ class Gamma(Initializer):
     self.scale = scale
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     weights = bc.random.gamma(self.shape, scale=self.scale, size=shape, dtype=self.dtype)
     return weights
 
@@ -205,7 +207,8 @@ class Exponential(Initializer):
     self.scale = scale
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     weights = bc.random.exponential(scale=self.scale, size=shape, dtype=self.dtype)
     return weights
 
@@ -230,7 +233,8 @@ class Uniform(Initializer):
     self.max_val = max_val
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     return bc.random.uniform(low=self.min_val, high=self.max_val, size=shape, dtype=self.dtype)
 
   def __repr__(self):
@@ -257,7 +261,8 @@ class VarianceScaling(Initializer):
     self.distribution = distribution
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     fan_in, fan_out = _compute_fans(shape, in_axis=self.in_axis, out_axis=self.out_axis)
     if self.mode == "fan_in":
       denominator = fan_in
@@ -414,7 +419,8 @@ class Orthogonal(Initializer):
     self.axis = axis
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     n_rows = shape[self.axis]
     n_cols = np.prod(shape) // n_rows
     matrix_shape = (n_rows, n_cols) if n_rows > n_cols else (n_cols, n_rows)
@@ -445,7 +451,8 @@ class DeltaOrthogonal(Initializer):
     self.axis = axis
     self.dtype = dtype or bc.environ.dftype()
 
-  def __call__(self, *shape):
+  def __call__(self, shape):
+    shape = to_size(shape)
     if len(shape) not in [3, 4, 5]:
       raise ValueError("Delta orthogonal initializer requires a 3D, 4D or 5D shape.")
     if shape[-1] < shape[-2]:
