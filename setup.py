@@ -46,9 +46,9 @@ setup(
     "Source Code": "https://github.com/brainpy/braintools",
   },
   extras_require={
-    'cpu': ['jaxlib', 'brainpylib'],
-    'cuda11': ['jaxlib[cuda11_pip]', 'brainpylib'],
-    'cuda12': ['jaxlib[cuda12_pip]', 'brainpylib'],
+    'cpu': ['jaxlib',],
+    'cuda11': ['jaxlib[cuda11_pip]',],
+    'cuda12': ['jaxlib[cuda12_pip]',],
     'tpu': ['jaxlib[tpu]'],
     'cpu_mini': ['jaxlib'],
     'cuda11_mini': ['jaxlib[cuda11_pip]'],
