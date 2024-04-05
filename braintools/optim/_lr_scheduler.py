@@ -5,8 +5,6 @@ from typing import Sequence, Union
 import braincore as bc
 import jax
 import jax.numpy as jnp
-from brainpy import check
-from brainpy.errors import MathError
 
 __all__ = [
   'LRScheduler',
@@ -163,8 +161,10 @@ class StepLR(LRScheduler):
   ):
     super().__init__(lr=lr, last_epoch=last_epoch)
 
-    self.step_size = check.is_integer(step_size, min_bound=1, allow_none=False)
-    self.gamma = check.is_float(gamma, min_bound=0., max_bound=1., allow_int=False)
+    assert step_size >= 1, 'step_size should be greater than or equal to 1.'
+    assert 1. >= gamma >= 0, 'gamma should be in the range [0, 1].'
+    self.step_size = step_size
+    self.gamma = gamma
 
   def __call__(self, i=None):
     i = (self.last_epoch.value + 1) if i is None else i
@@ -202,9 +202,13 @@ class MultiStepLR(LRScheduler):
   ):
     super().__init__(lr=lr, last_epoch=last_epoch)
 
-    milestones = check.is_sequence(milestones, elem_type=int, allow_none=False)
+    assert len(milestones) > 0, 'milestones should be a non-empty sequence.'
+    assert all([milestones[i] < milestones[i + 1] for i in range(len(milestones) - 1)]), (
+      'milestones should be a sequence of increasing integers.'
+    )
+    assert 1. >= gamma >= 0, 'gamma should be in the range [0, 1].'
     self.milestones = jnp.asarray((-1,) + tuple(milestones), dtype=bc.environ.ditype())
-    self.gamma = check.is_float(gamma, min_bound=0., max_bound=1., allow_int=False)
+    self.gamma = gamma
 
   def __call__(self, i=None):
     i = (self.last_epoch.value + 1) if i is None else i
@@ -268,8 +272,9 @@ class CosineAnnealingLR(LRScheduler):
   ):
     super().__init__(lr=lr, last_epoch=last_epoch)
 
+    assert T_max >= 1, 'T_max should be greater than or equal to 1.'
     self._init_epoch = last_epoch
-    self.T_max = check.is_integer(T_max, min_bound=1)
+    self.T_max = T_max
     self.eta_min = eta_min
 
   def __call__(self, i=None):
@@ -382,7 +387,8 @@ class ExponentialLR(LRScheduler):
                gamma: float,
                last_epoch: int = -1):
     super(ExponentialLR, self).__init__(lr=lr, last_epoch=last_epoch)
-    self.gamma = check.is_float(gamma, min_bound=0., max_bound=1.)
+    assert 1. >= gamma >= 0, 'gamma should be in the range [0, 1].'
+    self.gamma = gamma
 
   def __call__(self, i: int = None):
     i = (self.last_epoch.value + 1) if i is None else i
@@ -447,9 +453,9 @@ class PiecewiseConstantLR(CallBasedLRScheduler):
     boundaries = jnp.array(boundaries)
     values = jnp.array(values)
     if not boundaries.ndim == values.ndim == 1:
-      raise MathError("boundaries and values must be sequences")
+      raise ValueError("boundaries and values must be sequences")
     if not boundaries.shape[0] == values.shape[0] - 1:
-      raise MathError("boundaries length must be one shorter than values length")
+      raise ValueError("boundaries length must be one shorter than values length")
     self.boundaries = boundaries
     self.values = values
 

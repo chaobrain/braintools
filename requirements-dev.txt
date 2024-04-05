@@ -1,7 +1,5 @@
-numpy
-jax
+-r requirements.txt
 jaxlib
-braincore
 
 # test requirements
 pytest
