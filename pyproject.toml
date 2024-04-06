@@ -4,9 +4,11 @@ build-backend = "setuptools.build_meta"
 
 
 [tool.setuptools.packages.find]
-exclude = ["docs*", "tests*", "examples*", "build*", "dist*",
+exclude = [
+    "docs*", "tests*", "examples*", "build*", "dist*",
     "braintools.egg-info*", "braintools/__pycache__*",
-    "braintools/__init__.py"]
+    "braintools/__init__.py"
+]
 
 
 [tool.distutils.bdist_wheel]
@@ -17,7 +19,7 @@ universal = true
 name = "braintools"
 description = "The Toolbox for Brain Dynamics Programming."
 readme = 'README.md'
-license = { text = 'GPL-3.0 license' }
+license = { text = 'Apache-2.0 license' }
 requires-python = '>=3.9'
 authors = [{ name = 'BrainPy Team', email = 'chao.brain@qq.com' }]
 classifiers = [

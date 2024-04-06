@@ -13,24 +13,27 @@
 # limitations under the License.
 # ==============================================================================
 
-
-from typing import Optional, Tuple
-
-import numpy as np
-
-__all__ = ['Initializer', 'to_size']
+# -*- coding: utf-8 -*-
 
 
-class Initializer(object):
-  def __call__(self, *args, **kwargs):
-    raise NotImplementedError
+import unittest
+import brainpy as bp
 
 
-def to_size(x) -> Optional[Tuple[int]]:
-  if isinstance(x, (tuple, list)):
-    return tuple(x)
-  if isinstance(x, (int, np.integer)):
-    return (x,)
-  if x is None:
-    return x
-  raise ValueError(f'Cannot make a size for {x}')
+class TestFiringRate(unittest.TestCase):
+  def test_fr1(self):
+    spikes = bp.math.ones((1000, 10))
+    print(bp.measure.firing_rate(spikes, 1.))
+
+  def test_fr2(self):
+    bp.math.random.seed()
+    spikes = bp.math.random.random((1000, 10)) < 0.2
+    print(bp.measure.firing_rate(spikes, 1.))
+    print(bp.measure.firing_rate(spikes, 10.))
+
+  def test_fr3(self):
+    bp.math.random.seed()
+    spikes = bp.math.random.random((1000, 10)) < 0.02
+    print(bp.measure.firing_rate(spikes, 1.))
+    print(bp.measure.firing_rate(spikes, 5.))
+
