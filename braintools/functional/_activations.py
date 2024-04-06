@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 from jax.typing import ArrayLike
+import braincore as bc
 
 __all__ = [
   "relu",
@@ -40,6 +41,18 @@ __all__ = [
   'tanh_shrink',
   'softmin',
 ]
+
+
+def _get_dtype(x: ArrayLike):
+  if hasattr(x, 'dtype'):
+    return x.dtype
+  else:
+    if isinstance(x, float):
+      return bc.environ.dftype()
+    elif isinstance(x, int):
+      return bc.environ.dftype()
+    else:
+      raise ValueError(f'Unsupported type: {type(x)}')
 
 
 def softmin(x, axis=-1):
@@ -93,7 +106,10 @@ def prelu(x, a=0.25):
   parameter :math:`a` across all input channels. If called with `nn.PReLU(nChannels)`,
   a separate :math:`a` is used for each input channel.
   """
-  return jnp.where(x >= 0., x, a * x)
+  dtype = _get_dtype(x)
+  return jnp.where(x >= jnp.asarray(0., dtype),
+                   x,
+                   jnp.asarray(a, dtype) * x)
 
 
 def soft_shrink(x, lambd=0.5):
@@ -114,7 +130,11 @@ def soft_shrink(x, lambd=0.5):
       - Input: :math:`(*)`, where :math:`*` means any number of dimensions.
       - Output: :math:`(*)`, same shape as the input.
   """
-  return jnp.where(x > lambd, x - lambd, jnp.where(x < -lambd, x + lambd, 0.))
+  dtype = _get_dtype(x)
+  lambd = jnp.asarray(lambd, dtype)
+  return jnp.where(x > lambd,
+                   x - lambd,
+                   jnp.where(x < -lambd, x + lambd, jnp.asarray(0., dtype)))
 
 
 def mish(x):
@@ -135,7 +155,7 @@ def mish(x):
   return x * jnp.tanh(softplus(x))
 
 
-def rrelu(key, x, lower=0.125, upper=0.3333333333333333):
+def rrelu(x, lower=0.125, upper=0.3333333333333333):
   r"""Applies the randomized leaky rectified liner unit function, element-wise,
   as described in the paper:
 
@@ -166,9 +186,9 @@ def rrelu(key, x, lower=0.125, upper=0.3333333333333333):
   .. _`Empirical Evaluation of Rectified Activations in Convolutional Network`:
       https://arxiv.org/abs/1505.00853
   """
-  x = jnp.asarray(x)
-  a = jax.random.uniform(key, x.shape, x.dtype, lower, upper)
-  return jnp.where(x >= 0., x, a * x)
+  dtype = _get_dtype(x)
+  a = bc.random.uniform(lower, upper, size=jnp.shape(x), dtype=dtype)
+  return jnp.where(x >= jnp.asarray(0., dtype), x, jnp.asarray(a, dtype) * x)
 
 
 def hard_shrink(x, lambd=0.5):
@@ -192,7 +212,11 @@ def hard_shrink(x, lambd=0.5):
       - Output: :math:`(*)`, same shape as the input.
 
   """
-  return jnp.where(x > lambd, x, jnp.where(x < -lambd, x, 0.))
+  dtype = _get_dtype(x)
+  lambd = jnp.asarray(lambd, dtype)
+  return jnp.where(x > lambd,
+                   x,
+                   jnp.where(x < -lambd, x, jnp.asarray(0., dtype)))
 
 
 def relu(x: ArrayLike) -> jax.Array:
@@ -229,7 +253,6 @@ def relu(x: ArrayLike) -> jax.Array:
   return jax.nn.relu(x)
 
 
-
 def squareplus(x: ArrayLike, b: ArrayLike = 4) -> jax.Array:
   r"""Squareplus activation function.
 
@@ -244,7 +267,8 @@ def squareplus(x: ArrayLike, b: ArrayLike = 4) -> jax.Array:
     x : input array
     b : smoothness parameter
   """
-  return jax.nn.squareplus(x, b)
+  dtype = _get_dtype(x)
+  return jax.nn.squareplus(x, jnp.asarray(b, dtype))
 
 
 def softplus(x: ArrayLike) -> jax.Array:
@@ -362,6 +386,8 @@ def elu(x: ArrayLike, alpha: ArrayLike = 1.0) -> jax.Array:
   See also:
     :func:`selu`
   """
+  dtype = _get_dtype(x)
+  alpha = jnp.asarray(alpha, dtype)
   return jax.nn.elu(x, alpha)
 
 
@@ -388,6 +414,8 @@ def leaky_relu(x: ArrayLike, negative_slope: ArrayLike = 1e-2) -> jax.Array:
   See also:
     :func:`relu`
   """
+  dtype = _get_dtype(x)
+  negative_slope = jnp.asarray(negative_slope, dtype)
   return jax.nn.leaky_relu(x, negative_slope=negative_slope)
 
 
@@ -434,6 +462,8 @@ def celu(x: ArrayLike, alpha: ArrayLike = 1.0) -> jax.Array:
   Returns:
     An array.
   """
+  dtype = _get_dtype(x)
+  alpha = jnp.asarray(alpha, dtype)
   return jax.nn.celu(x, alpha)
 
 
