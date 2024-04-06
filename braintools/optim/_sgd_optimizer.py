@@ -7,11 +7,15 @@ import braincore as bc
 import jax
 import jax.numpy as jnp
 
-from ._lr_scheduler import make_schedule, LRScheduler
+from ._lr_scheduler import make_schedule, LearningRateScheduler
 
 __all__ = [
   'to_same_dict_tree',
+
+  # new class of braincore.State for optimizer
   'OptimState',
+
+  # commonly used optimizers
   'Optimizer',
   'SGD',
   'Momentum',
@@ -48,7 +52,7 @@ def _to_dict_value(old_dict: Dict) -> Dict:
   return new_dict
 
 
-def to_same_dict_tree(*dicts: dict):
+def to_same_dict_tree(*dicts: Dict):
   """
   Convert multiple dictionaries to the same tree structure.
 
@@ -117,20 +121,20 @@ class Optimizer(bc.Module):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
   """
 
-  lr: LRScheduler  # learning rate
+  lr: LearningRateScheduler  # learning rate
   weight_states: bc.StateDictManager  # states to train, invisible to ``.states()``
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       name: Optional[str] = None
   ):
     super().__init__(name=name)
-    self.lr: LRScheduler = make_schedule(lr)
+    self.lr: LearningRateScheduler = make_schedule(lr)
     self.weight_states = bc.StateDictManager()
 
   def register_trainable_weights(self, train_states: Optional[Dict[str, bc.State]] = None):
@@ -149,12 +153,12 @@ class Optimizer(bc.Module):
 class _WeightDecayOptimizer(Optimizer):
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       weight_decay: Optional[float] = None,
       name: Optional[str] = None
   ):
     super().__init__(lr=lr, name=name)
-    self.lr: LRScheduler = make_schedule(lr)
+    self.lr: LearningRateScheduler = make_schedule(lr)
     assert weight_decay is None or 0. <= weight_decay <= 1., 'weight_decay must be in [0, 1].'
     self.weight_decay = (fcast(weight_decay) if weight_decay is not None else None)
 
@@ -178,20 +182,18 @@ class SGD(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
 
   """
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       weight_decay: Optional[float] = None,
       name: Optional[str] = None
   ):
-    super(SGD, self).__init__(lr=lr,
-                              weight_decay=weight_decay,
-                              name=name)
+    super().__init__(lr=lr, weight_decay=weight_decay,  name=name)
 
   def register_trainable_weights(self, states: Optional[Dict[str, bc.State]] = None):
     states = dict() if states is None else states
@@ -228,7 +230,7 @@ class Momentum(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
 
   References
@@ -242,7 +244,7 @@ class Momentum(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       momentum: float = 0.9,
       weight_decay: Optional[float] = None,
       name: Optional[str] = None
@@ -278,7 +280,8 @@ class Momentum(_WeightDecayOptimizer):
 
 
 class MomentumNesterov(_WeightDecayOptimizer):
-  r"""Nesterov accelerated gradient optimizer [2]_.
+  r"""
+  Nesterov accelerated gradient optimizer [2]_.
 
   .. math::
 
@@ -291,7 +294,7 @@ class MomentumNesterov(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
 
   References
@@ -302,7 +305,7 @@ class MomentumNesterov(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       weight_decay: Optional[float] = None,
       momentum: float = 0.9,
       name: Optional[str] = None
@@ -359,7 +362,7 @@ class Adagrad(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
 
   References
@@ -370,12 +373,12 @@ class Adagrad(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       weight_decay: Optional[float] = None,
       epsilon: float = 1e-6,
       name: Optional[str] = None
   ):
-    super(Adagrad, self).__init__(lr=lr, weight_decay=weight_decay, name=name)
+    super().__init__(lr=lr, weight_decay=weight_decay, name=name)
     self.epsilon = fcast(epsilon)
     self.cache_states = bc.visible_state_dict()
 
@@ -437,7 +440,7 @@ class Adadelta(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
 
   References
@@ -448,13 +451,13 @@ class Adadelta(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State] = 0.01,
+      lr: Union[float, LearningRateScheduler, bc.State] = 0.01,
       weight_decay: Optional[float] = None,
       epsilon: float = 1e-6,
       rho: float = 0.95,
       name: Optional[str] = None
   ):
-    super(Adadelta, self).__init__(lr=lr, weight_decay=weight_decay, name=name)
+    super().__init__(lr=lr, weight_decay=weight_decay, name=name)
 
     self.epsilon = fcast(epsilon)
     self.rho = fcast(rho)
@@ -510,7 +513,7 @@ class RMSProp(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
 
   References
@@ -522,7 +525,7 @@ class RMSProp(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       weight_decay: Optional[float] = None,
       epsilon: float = 1e-6,
       rho: float = 0.9,
@@ -567,7 +570,7 @@ class Adam(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
   beta1: optional, float
     A positive scalar value for beta_1, the exponential decay rate
@@ -588,7 +591,7 @@ class Adam(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, bc.State, LRScheduler],
+      lr: Union[float, bc.State, LearningRateScheduler],
       beta1: float = 0.9,
       beta2: float = 0.999,
       eps: float = 1e-8,
@@ -653,7 +656,7 @@ class LARS(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
   momentum: float
     coefficient used for the moving average of the gradient.
@@ -671,7 +674,7 @@ class LARS(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       momentum: float = 0.9,
       weight_decay: float = 1e-4,
       tc: float = 1e-3,
@@ -735,7 +738,7 @@ class Adan(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate. Can be much higher than Adam, up to 5-10x. (default: 1e-3)
   betas : tuple
      Coefficients used for computing running averages of gradient and its norm. (default: (0.02, 0.08, 0.01))
@@ -765,7 +768,7 @@ class Adan(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State] = 1e-3,
+      lr: Union[float, LearningRateScheduler, bc.State] = 1e-3,
       betas: Tuple[float, float, float] = (0.02, 0.08, 0.01),
       eps: float = 1e-8,
       weight_decay: float = 0.02,
@@ -886,7 +889,7 @@ class AdamW(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
   beta1: optional, float
     A positive scalar value for beta_1, the exponential decay rate
@@ -914,7 +917,7 @@ class AdamW(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       beta1: float = 0.9,
       beta2: float = 0.999,
       eps: float = 1e-8,
@@ -1015,7 +1018,7 @@ class SM3(_WeightDecayOptimizer):
 
   Parameters
   ----------
-  lr: float, LRScheduler
+  lr: float, LearningRateScheduler
     learning rate.
   momentum: float
     coefficient used to scale prior updates
@@ -1035,7 +1038,7 @@ class SM3(_WeightDecayOptimizer):
 
   def __init__(
       self,
-      lr: Union[float, LRScheduler, bc.State],
+      lr: Union[float, LearningRateScheduler, bc.State],
       beta: float = 0.,
       momentum: float = 0.,
       eps: float = 1e-30,
