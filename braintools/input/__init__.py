@@ -13,24 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 
-
-from typing import Optional, Tuple
-
-import numpy as np
-
-__all__ = ['Initializer', 'to_size']
+# -*- coding: utf-8 -*-
 
 
-class Initializer(object):
-  def __call__(self, *args, **kwargs):
-    raise NotImplementedError
+"""
+This module provides various methods to form current inputs.
+You can access them through ``brainpy.inputs.XXX``.
+"""
 
+from .currents import *
+from .currents import __all__ as currents_all
 
-def to_size(x) -> Optional[Tuple[int]]:
-  if isinstance(x, (tuple, list)):
-    return tuple(x)
-  if isinstance(x, (int, np.integer)):
-    return (x,)
-  if x is None:
-    return x
-  raise ValueError(f'Cannot make a size for {x}')
+__all__ = currents_all

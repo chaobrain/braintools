@@ -1,3 +1,18 @@
+# Copyright 2024- BrainPy Ecosystem Limited. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 # -*- coding: utf-8 -*-
 
 from typing import Sequence, Union
@@ -7,7 +22,7 @@ import jax
 import jax.numpy as jnp
 
 __all__ = [
-  'LRScheduler',
+  'LearningRateScheduler',
   'ConstantLR',
   'StepLR',
   'MultiStepLR',
@@ -26,7 +41,7 @@ __all__ = [
 
 
 def make_schedule(scalar_or_schedule):
-  if isinstance(scalar_or_schedule, LRScheduler):
+  if isinstance(scalar_or_schedule, LearningRateScheduler):
     return scalar_or_schedule
   elif isinstance(scalar_or_schedule, (int, float, bc.State)):
     return ConstantLR(scalar_or_schedule)
@@ -34,7 +49,7 @@ def make_schedule(scalar_or_schedule):
     raise TypeError(type(scalar_or_schedule))
 
 
-class LRScheduler(bc.Module):
+class LearningRateScheduler(bc.Module):
   """
   The learning rate scheduler.
 
@@ -48,7 +63,7 @@ class LRScheduler(bc.Module):
   """
 
   def __init__(self, lr: Union[float, bc.State], last_epoch: int = -1):
-    super(LRScheduler, self).__init__()
+    super(LearningRateScheduler, self).__init__()
     if isinstance(lr, bc.State):
       lr.value = jnp.asarray(lr.value, dtype=bc.environ.dftype())
     else:
@@ -93,7 +108,7 @@ class LRScheduler(bc.Module):
     raise NotImplementedError
 
 
-class ConstantLR(LRScheduler):
+class ConstantLR(LearningRateScheduler):
   """
   Constant learning rate scheduler.
   """
@@ -102,7 +117,7 @@ class ConstantLR(LRScheduler):
     return self.lr
 
 
-class CallBasedLRScheduler(LRScheduler):
+class CallBasedLRScheduler(LearningRateScheduler):
   """
   The learning rate scheduler based on the call count.
 
@@ -135,7 +150,7 @@ class CallBasedLRScheduler(LRScheduler):
             f'last_call={self.last_call.value}{self.extra_repr()})')
 
 
-class StepLR(LRScheduler):
+class StepLR(LearningRateScheduler):
   """Decays the learning rate of each parameter group by gamma every
   `step_size` epochs.
 
@@ -174,7 +189,7 @@ class StepLR(LRScheduler):
     return f', gamma={self.gamma}, step_size={self.step_size}'
 
 
-class MultiStepLR(LRScheduler):
+class MultiStepLR(LearningRateScheduler):
   """Decays the learning rate of each parameter group by gamma once the
   number of epoch reaches one of the milestones. Notice that such decay can
   happen simultaneously with other changes to the learning rate from outside
@@ -220,7 +235,7 @@ class MultiStepLR(LRScheduler):
     return f', milestones={self.milestones}, gamma={self.gamma}'
 
 
-class CosineAnnealingLR(LRScheduler):
+class CosineAnnealingLR(LearningRateScheduler):
   r"""Set the learning rate of each parameter group using a cosine annealing
   schedule, where :math:`\eta_{max}` is set to the initial lr and
   :math:`T_{cur}` is the number of epochs since the last restart in SGDR:
@@ -368,7 +383,7 @@ class CosineAnnealingWarmRestarts(CallBasedLRScheduler):
     return f', T_0={self.T_0}, T_mult={self.T_mult}, eta_min={self.eta_min}'
 
 
-class ExponentialLR(LRScheduler):
+class ExponentialLR(LearningRateScheduler):
   """Decays the learning rate of each parameter group by gamma every epoch.
   When last_epoch=-1, sets initial lr as lr.
 
