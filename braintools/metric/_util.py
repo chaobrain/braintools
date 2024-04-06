@@ -14,12 +14,12 @@
 # ==============================================================================
 
 
-from ._activations import *
-from ._activations import __all__ as __activations_all__
-from ._normalization import *
-from ._normalization import __all__ as __others_all__
-from ._spikes import *
-from ._spikes import __all__ as __spikes_all__
-
-__all__ = __spikes_all__ + __others_all__ + __activations_all__
-
+def _reduce(outputs, reduction, axis=None):
+  if reduction == 'mean':
+    return outputs.mean(axis)
+  elif reduction == 'sum':
+    return outputs.sum(axis)
+  elif reduction == 'none':
+    return outputs
+  else:
+    raise ValueError('Only support reduction of "mean", "sum" and "none", but we got "%s".' % reduction)
