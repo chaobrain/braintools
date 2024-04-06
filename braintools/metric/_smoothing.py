@@ -1,7 +1,4 @@
-# This file is modified from [optax/losses](https://github.com/google-deepmind/optax).
-# The copyright notice is as follows:
-#
-# Copyright 2019 DeepMind Technologies Limited. All Rights Reserved.
+# Copyright 2024- BrainPy Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+
 """Smoothing functions."""
 
 import jax.numpy as jnp
 import braincore as bc
+
+__all__ = ['smooth_labels']
 
 
 def smooth_labels(

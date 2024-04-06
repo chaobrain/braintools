@@ -1,4 +1,4 @@
-# Copyright 2024- BrainPy Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainPy Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,9 @@
 
 # -*- coding: utf-8 -*-
 
+from typing import Union
 
+import braincore as bc
 import numpy as onp
 from jax import vmap, lax, numpy as jnp
 
@@ -29,7 +31,10 @@ __all__ = [
 ]
 
 
-def cross_correlation(spikes, bin, dt=None, numpy=True, method='loop'):
+def cross_correlation(spikes: bc.typing.ArrayLike,
+                      bin: Union[int, float],
+                      dt: Union[int, float] =None,
+                      method: str = 'loop'):
   r"""Calculate cross correlation index between neurons.
 
   The coherence [1]_ between two neurons i and j is measured by their
@@ -61,15 +66,10 @@ def cross_correlation(spikes, bin, dt=None, numpy=True, method='loop'):
       The time bin to normalize spike states.
   dt : float, optional
       The time precision.
-  numpy: bool
-    Whether we use numpy array as the functional output.
-    If ``False``, this function can be JIT compiled.
   method: str
     The method to calculate all pairs of cross correlation.
     Supports two kinds of methods: `loop` and `vmap`.
     `vmap` method needs much more memory.
-
-    .. versionadded:: 2.2.3.4
 
   Returns
   -------
@@ -82,16 +82,14 @@ def cross_correlation(spikes, bin, dt=None, numpy=True, method='loop'):
          inhibition in a hippocampal interneuronal network model." Journal of
          neuroscience 16.20 (1996): 6402-6413.
   """
-  spikes = bm.as_numpy(spikes) if numpy else bm.as_jax(spikes)
-  np = onp if numpy else jnp
-  dt = bm.get_dt() if dt is None else dt
+  dt = bc.environ.get_dt() if dt is None else dt
   bin_size = int(bin / dt)
   num_hist, num_neu = spikes.shape
   num_bin = int(onp.ceil(num_hist / bin_size))
   if num_bin * bin_size != num_hist:
-    spikes = np.append(spikes, np.zeros((num_bin * bin_size - num_hist, num_neu)), axis=0)
+    spikes = jnp.append(spikes, jnp.zeros((num_bin * bin_size - num_hist, num_neu)), axis=0)
   states = spikes.T.reshape((num_neu, num_bin, bin_size))
-  states = jnp.asarray(np.sum(states, axis=2) > 0., dtype=jnp.float_)
+  states = jnp.asarray(jnp.sum(states, axis=2) > 0., dtype=jnp.float_)
   indices = jnp.tril_indices(num_neu, k=-1)
 
   if method == 'loop':
@@ -101,7 +99,8 @@ def cross_correlation(spikes, bin, dt=None, numpy=True, method='loop'):
                       lambda _: 0.,
                       lambda _: jnp.sum(states[i] * states[j]) / sqrt_ij,
                       None)
-    res = bm.for_loop(_f, operands=indices)
+
+    res = bc.transform.for_loop(_f, *indices)
 
   elif method == 'vmap':
     @vmap
@@ -114,16 +113,16 @@ def cross_correlation(spikes, bin, dt=None, numpy=True, method='loop'):
 
     res = _cc(*indices)
   else:
-    raise UnsupportedError(f'Do not support {method}. We only support "loop" or "vmap".')
+    raise ValueError(f'Do not support {method}. We only support "loop" or "vmap".')
 
-  return np.mean(np.asarray(res))
+  return jnp.mean(jnp.asarray(res))
 
 
 def _f_signal(signal):
   return jnp.mean(signal * signal) - jnp.mean(signal) ** 2
 
 
-def voltage_fluctuation(potentials, numpy=True, method='loop'):
+def voltage_fluctuation(potentials, method='loop'):
   r"""Calculate neuronal synchronization via voltage variance.
 
   The method comes from [1]_ [2]_ [3]_.
@@ -167,35 +166,30 @@ def voltage_fluctuation(potentials, numpy=True, method='loop'):
 
   Args:
     potentials: The membrane potential matrix of the neuron group.
-    numpy: Whether we use numpy array as the functional output. If ``False``, this function can be JIT compiled.
     method: The method to calculate all pairs of cross correlation.
        Supports two kinds of methods: `loop` and `vmap`.
       `vmap` method will consume much more memory.
-
-      .. versionadded:: 2.2.3.4
 
   Returns:
     sync_index: The synchronization index.
   """
 
-  potentials = bm.as_jax(potentials)
   avg = jnp.mean(potentials, axis=1)
   avg_var = jnp.mean(avg * avg) - jnp.mean(avg) ** 2
 
   if method == 'loop':
-    _var = bm.for_loop(_f_signal, operands=jnp.moveaxis(potentials, 0, 1))
-
+    _var = bc.transform.for_loop(_f_signal, jnp.moveaxis(potentials, 0, 1))
   elif method == 'vmap':
     _var = vmap(_f_signal, in_axes=1)(potentials)
   else:
-    raise UnsupportedError(f'Do not support {method}. We only support "loop" or "vmap".')
-
+    raise ValueError(f'Do not support {method}. We only support "loop" or "vmap".')
+  
   var_mean = jnp.mean(_var)
   r = jnp.where(var_mean == 0., 1., avg_var / var_mean)
-  return bm.as_numpy(r) if numpy else r
+  return r
 
 
-def matrix_correlation(x, y, numpy=True):
+def matrix_correlation(x, y):
   """Pearson correlation of the lower triagonal of two matrices.
 
     The triangular matrix is offset by k = 1 in order to ignore the diagonal line
@@ -215,23 +209,19 @@ def matrix_correlation(x, y, numpy=True):
   coef: ndarray
     Correlation coefficient
   """
-
-  x = bm.as_numpy(x) if numpy else bm.as_device_array(x)
-  y = bm.as_numpy(y) if numpy else bm.as_device_array(y)
-  np = onp if numpy else jnp
   if x.ndim != 2:
     raise ValueError(f'Only support 2d array, but we got a array '
                      f'with the shape of {x.shape}')
   if y.ndim != 2:
     raise ValueError(f'Only support 2d array, but we got a array '
                      f'with the shape of {y.shape}')
-  x = x[np.triu_indices_from(x, k=1)]
-  y = y[np.triu_indices_from(y, k=1)]
-  cc = np.corrcoef(x, y)[0, 1]
+  x = x[jnp.triu_indices_from(x, k=1)]
+  y = y[jnp.triu_indices_from(y, k=1)]
+  cc = jnp.corrcoef(x, y)[0, 1]
   return cc
 
 
-def functional_connectivity(activities, numpy=True):
+def functional_connectivity(activities):
   """Functional connectivity matrix of timeseries activities.
 
   Parameters
@@ -247,13 +237,11 @@ def functional_connectivity(activities, numpy=True):
   connectivity_matrix: ndarray
     ``num_sample x num_sample`` functional connectivity matrix.
   """
-  activities = bm.as_numpy(activities) if numpy else bm.as_device_array(activities)
-  np = onp if numpy else jnp
   if activities.ndim != 2:
     raise ValueError('Only support 2d array with shape of "(num_time, num_sample)". '
                      f'But we got a array with the shape of {activities.shape}')
-  fc = np.corrcoef(activities.T)
-  return np.nan_to_num(fc)
+  fc = jnp.corrcoef(activities.T)
+  return jnp.nan_to_num(fc)
 
 
 def functional_connectivity_dynamics(activities, window_size=30, step_size=5):
@@ -276,7 +264,7 @@ def functional_connectivity_dynamics(activities, window_size=30, step_size=5):
   pass
 
 
-def weighted_correlation(x, y, w, numpy=True):
+def weighted_correlation(x, y, w):
   """Weighted Pearson correlation of two data series.
 
   Parameters
@@ -287,27 +275,20 @@ def weighted_correlation(x, y, w, numpy=True):
     The data series 2.
   w: ndarray
     Weight vector, must have same length as x and y.
-  numpy: bool
-    Whether we use numpy array as the functional output.
-    If ``False``, this function can be JIT compiled.
 
   Returns
   -------
   corr: ndarray
     Weighted correlation coefficient.
   """
-  x = bm.as_numpy(x) if numpy else bm.as_device_array(x)
-  y = bm.as_numpy(y) if numpy else bm.as_device_array(y)
-  w = bm.as_numpy(w) if numpy else bm.as_device_array(w)
-  np = onp if numpy else jnp
 
   def _weighted_mean(x, w):
     """Weighted Mean"""
-    return np.sum(x * w) / np.sum(w)
+    return jnp.sum(x * w) / jnp.sum(w)
 
   def _weighted_cov(x, y, w):
     """Weighted Covariance"""
-    return np.sum(w * (x - _weighted_mean(x, w)) * (y - _weighted_mean(y, w))) / np.sum(w)
+    return jnp.sum(w * (x - _weighted_mean(x, w)) * (y - _weighted_mean(y, w))) / jnp.sum(w)
 
   if x.ndim != 1:
     raise ValueError(f'Only support 1d array, but we got a array '
@@ -318,4 +299,4 @@ def weighted_correlation(x, y, w, numpy=True):
   if w.ndim != 1:
     raise ValueError(f'Only support 1d array, but we got a array '
                      f'with the shape of {w.shape}')
-  return _weighted_cov(x, y, w) / np.sqrt(_weighted_cov(x, x, w) * _weighted_cov(y, y, w))
+  return _weighted_cov(x, y, w) / jnp.sqrt(_weighted_cov(x, x, w) * _weighted_cov(y, y, w))

@@ -1,7 +1,4 @@
-# This file is modified from [optax/losses](https://github.com/google-deepmind/optax).
-# The copyright notice is as follows:
-#
-# Copyright 2019 DeepMind Technologies Limited. All Rights Reserved.
+# Copyright 2024 BrainPy Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+
 """
 Ranking losses.
 
@@ -26,9 +24,10 @@ leading dimensions are considered batch dimensions.
 
 Standalone usage:
 
+>>> import braintools as bt
 >>> scores = jnp.array([2., 1., 3.])
 >>> labels = jnp.array([1., 0., 0.])
->>> loss = optax.losses.ranking_softmax_loss(scores, labels)
+>>> loss = bt.metric.ranking_softmax_loss(scores, labels)
 >>> print(f"{loss:.3f}")
 1.408
 
@@ -37,32 +36,27 @@ Usage with a batch of data and a mask to indicate valid items.
 >>> scores = jnp.array([[2., 1., 0.], [1., 0.5, 1.5]])
 >>> labels = jnp.array([[1., 0., 0.], [0., 0., 1.]])
 >>> where = jnp.array([[True, True, False], [True, True, True]])
->>> loss = optax.losses.ranking_softmax_loss(scores, labels, where=where)
+>>> loss = bt.metric.ranking_softmax_loss(scores, labels, where=where)
 >>> print(f"{loss:.3f}")
 0.497
-
-To compute gradients of each loss function, please use standard JAX
-transformations such as :func:`jax.grad` or :func:`jax.value_and_grad`:
-
->>> scores = jnp.asarray([2., 1., 3.])
->>> labels = jnp.asarray([1., 0., 0.])
->>> grads = jax.grad(optax.losses.ranking_softmax_loss)(scores, labels)
->>> print([float(f"{grad:.3f}") for grad in grads])
-[-0.755, 0.09, 0.665]
 """
 
 from typing import Callable, Optional
 
-import chex
 import jax
 import jax.numpy as jnp
+import braincore as bc
+
+__all__ = [
+  'ranking_softmax_loss',
+]
 
 
 def _safe_reduce(
-    a: chex.Array,
-    where: Optional[chex.Array] = None,
-    reduce_fn: Optional[Callable[..., chex.Array]] = None,
-) -> chex.Array:
+    a: bc.typing.ArrayLike,
+    where: Optional[bc.typing.ArrayLike] = None,
+    reduce_fn: Optional[Callable[..., bc.typing.ArrayLike]] = None,
+) -> bc.typing.ArrayLike:
   """Reduces the values of given array while preventing NaN in the output.
 
   For :func:`jax.numpy.mean` reduction, this additionally prevents ``NaN`` in
@@ -110,13 +104,13 @@ def _safe_reduce(
 
 
 def ranking_softmax_loss(
-    logits: chex.Array,
-    labels: chex.Array,
+    logits: bc.typing.ArrayLike,
+    labels: bc.typing.ArrayLike,
     *,
-    where: Optional[chex.Array] = None,
-    weights: Optional[chex.Array] = None,
-    reduce_fn: Optional[Callable[..., chex.Array]] = jnp.mean
-) -> chex.Array:
+    where: Optional[bc.typing.ArrayLike] = None,
+    weights: Optional[bc.typing.ArrayLike] = None,
+    reduce_fn: Optional[Callable[..., bc.typing.ArrayLike]] = jnp.mean
+) -> bc.typing.ArrayLike:
   r"""Ranking softmax loss.
 
   Definition:
@@ -141,7 +135,7 @@ def ranking_softmax_loss(
   Returns:
     The ranking softmax loss.
   """
-  chex.assert_type([logits], float)
+  assert bc.math.is_float(logits), "logits must be a float type."
   labels = labels.astype(logits.dtype)
 
   # Applies mask so that masked elements do not count towards the loss.

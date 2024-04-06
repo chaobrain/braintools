@@ -1,7 +1,4 @@
-# This file is modified from [optax/losses](https://github.com/google-deepmind/optax).
-# The copyright notice is as follows:
-#
-# Copyright 2019 DeepMind Technologies Limited. All Rights Reserved.
+# Copyright 2024 BrainPy Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Tests for optax.losses._ranking."""
+
 
 import doctest
 import functools
@@ -26,8 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-import optax
-from optax.losses import _ranking
+from braintools.metric import _ranking
 
 # Export symbols from math for conciser test value definitions.
 exp = math.exp
@@ -247,14 +243,14 @@ class RankingLossesTest(parameterized.TestCase):
     np.testing.assert_allclose(output, expected, rtol=1e-3)
 
 
-def load_tests(loader, tests, ignore):
-  del loader, ignore  # Unused.
-  tests.addTests(
-      doctest.DocTestSuite(
-          _ranking, globs={"jax": jax, "jnp": jnp, "optax": optax}
-      )
-  )
-  return tests
+# def load_tests(loader, tests, ignore):
+#   del loader, ignore  # Unused.
+#   tests.addTests(
+#       doctest.DocTestSuite(
+#           _ranking, globs={"jax": jax, "jnp": jnp, "optax": optax}
+#       )
+#   )
+#   return tests
 
 
 if __name__ == "__main__":

@@ -26,6 +26,23 @@ import braincore as bc
 import jax
 import jax.numpy as jnp
 
+__all__ = [
+    'sigmoid_binary_cross_entropy',
+    'hinge_loss',
+    'perceptron_loss',
+    'softmax_cross_entropy',
+    'softmax_cross_entropy_with_integer_labels',
+    'multiclass_hinge_loss',
+    'multiclass_perceptron_loss',
+    'poly_loss_cross_entropy',
+    'kl_divergence',
+    'kl_divergence_with_log_targets',
+    'convex_kl_divergence',
+    'ctc_loss',
+    'ctc_loss_with_forward_probs',
+    'sigmoid_focal_loss',
+]
+
 
 def assert_is_float(array):
   assert bc.math.is_float(array), 'Array must be float.'
@@ -103,7 +120,7 @@ def perceptron_loss(
   Returns:
     loss value.
   """
-  assert jnp.shape(predictor_outputs) == jnp.shape(targets)
+  assert jnp.shape(predictor_outputs) == jnp.shape(targets), 'shape mismatch'
   return jnp.maximum(0, - predictor_outputs * targets)
 
 
@@ -545,9 +562,7 @@ def sigmoid_focal_loss(
   ce_loss = sigmoid_binary_cross_entropy(logits, labels)
   p_t = p * labels + (1 - p) * (1 - labels)
   loss = ce_loss * ((1 - p_t) ** gamma)
-
   weighted = lambda loss_arg: (alpha * labels + (1 - alpha) * (1 - labels)) * loss_arg
   not_weighted = lambda loss_arg: loss_arg
-
   loss = jax.lax.cond(alpha >= 0, weighted, not_weighted, loss)
   return loss

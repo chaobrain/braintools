@@ -16,13 +16,11 @@
 # limitations under the License.
 # ==============================================================================
 
-from absl.testing import absltest
-from absl.testing import parameterized
-
-import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
+from absl.testing import absltest
+from absl.testing import parameterized
 
 from braintools.metric import _classification
 
@@ -36,20 +34,18 @@ class SoftmaxCrossEntropyTest(parameterized.TestCase):
     # taken expected outputs from rlax.
     self.exp = np.array([9.00013, 3.0696733], dtype=np.float32)
 
-  @chex.all_variants
   def test_scalar(self):
     """Tests for a full batch."""
     np.testing.assert_allclose(
-        self.variant(
-            _classification.softmax_cross_entropy)(self.ys[0], self.ts[0]),
-        self.exp[0], atol=1e-4)
+      (
+        _classification.softmax_cross_entropy)(self.ys[0], self.ts[0]),
+      self.exp[0], atol=1e-4)
 
-  @chex.all_variants
   def test_batched(self):
     """Tests for a full batch."""
     np.testing.assert_allclose(
-        self.variant(_classification.softmax_cross_entropy)(self.ys, self.ts),
-        self.exp, atol=1e-4)
+      (_classification.softmax_cross_entropy)(self.ys, self.ts),
+      self.exp, atol=1e-4)
 
 
 class SoftmaxCrossEntropyWithIntegerLabelsTest(parameterized.TestCase):
@@ -59,64 +55,62 @@ class SoftmaxCrossEntropyWithIntegerLabelsTest(parameterized.TestCase):
     self.ys = np.array([[10., 1., -2.], [1., 4., 0.2]], dtype=np.float32)
     self.ts = np.array([1, 0], dtype=np.int32)
 
-  @chex.all_variants
   def test_consistent_with_softmax_cross_entropy_scalar(self):
     """Tests for a scalar."""
     exp = _classification.softmax_cross_entropy(
-        self.ys[0], jax.nn.one_hot(self.ts[0], 3))
+      self.ys[0], jax.nn.one_hot(self.ts[0], 3))
     np.testing.assert_allclose(
-        self.variant(_classification.softmax_cross_entropy_with_integer_labels)(self.ys[0], self.ts[0]),
-        exp, rtol=1e-6
+      (_classification.softmax_cross_entropy_with_integer_labels)(self.ys[0], self.ts[0]),
+      exp, rtol=1e-6
     )
 
-  @chex.all_variants
   def test_consistent_with_softmax_cross_entropy_batched(self):
     """Tests for a full batch."""
     exp = _classification.softmax_cross_entropy(
-        self.ys, jax.nn.one_hot(self.ts, 3))
+      self.ys, jax.nn.one_hot(self.ts, 3))
     np.testing.assert_allclose(
-        self.variant(_classification.softmax_cross_entropy_with_integer_labels)(self.ys, self.ts),
-        exp, rtol=1e-6
+      (_classification.softmax_cross_entropy_with_integer_labels)(self.ys, self.ts),
+      exp, rtol=1e-6
     )
 
 
 class SigmoidCrossEntropyTest(parameterized.TestCase):
 
   @parameterized.parameters(
-      dict(preds=np.array([-1e+09, -1e-09]),
-           labels=np.array([1., 0.]),
-           expected=5e+08),
-      dict(preds=np.array([-1e+09, -1e-09]),
-           labels=np.array([0., 1.]),
-           expected=0.3465736),
-      dict(preds=np.array([1e+09, 1e-09]),
-           labels=np.array([1., 0.]),
-           expected=0.3465736),
-      dict(preds=np.array([1e+09, 1e-09]),
-           labels=np.array([0., 1.]),
-           expected=5e+08),
-      dict(preds=np.array([-1e+09, 1e-09]),
-           labels=np.array([1., 0.]),
-           expected=5e+08),
-      dict(preds=np.array([-1e+09, 1e-09]),
-           labels=np.array([0., 1.]),
-           expected=0.3465736),
-      dict(preds=np.array([1e+09, -1e-09]),
-           labels=np.array([1., 0.]),
-           expected=0.3465736),
-      dict(preds=np.array([1e+09, -1e-09]),
-           labels=np.array([0., 1.]),
-           expected=5e+08),
-      dict(preds=np.array([0., 0.]),
-           labels=np.array([1., 0.]),
-           expected=0.6931472),
-      dict(preds=np.array([0., 0.]),
-           labels=np.array([0., 1.]),
-           expected=0.6931472),
+    dict(preds=np.array([-1e+09, -1e-09]),
+         labels=np.array([1., 0.]),
+         expected=5e+08),
+    dict(preds=np.array([-1e+09, -1e-09]),
+         labels=np.array([0., 1.]),
+         expected=0.3465736),
+    dict(preds=np.array([1e+09, 1e-09]),
+         labels=np.array([1., 0.]),
+         expected=0.3465736),
+    dict(preds=np.array([1e+09, 1e-09]),
+         labels=np.array([0., 1.]),
+         expected=5e+08),
+    dict(preds=np.array([-1e+09, 1e-09]),
+         labels=np.array([1., 0.]),
+         expected=5e+08),
+    dict(preds=np.array([-1e+09, 1e-09]),
+         labels=np.array([0., 1.]),
+         expected=0.3465736),
+    dict(preds=np.array([1e+09, -1e-09]),
+         labels=np.array([1., 0.]),
+         expected=0.3465736),
+    dict(preds=np.array([1e+09, -1e-09]),
+         labels=np.array([0., 1.]),
+         expected=5e+08),
+    dict(preds=np.array([0., 0.]),
+         labels=np.array([1., 0.]),
+         expected=0.6931472),
+    dict(preds=np.array([0., 0.]),
+         labels=np.array([0., 1.]),
+         expected=0.6931472),
   )
   def testSigmoidCrossEntropy(self, preds, labels, expected):
     tested = jnp.mean(
-        _classification.sigmoid_binary_cross_entropy(preds, labels))
+      _classification.sigmoid_binary_cross_entropy(preds, labels))
     np.testing.assert_allclose(tested, expected, rtol=1e-6, atol=1e-6)
 
 
@@ -132,77 +126,74 @@ class PolyLossTest(parameterized.TestCase):
     # all expected values are computed using tf version of `poly1_cross_entropy`
     # see page 10 here https://arxiv.org/pdf/2204.12511.pdf for more
 
-  @chex.all_variants
   @parameterized.parameters(
-      dict(eps=2, expected=4.5317),
-      dict(eps=1, expected=3.7153),
-      dict(eps=-1, expected=2.0827),
-      dict(eps=0, expected=2.8990),
-      dict(eps=-0.5, expected=2.4908),
-      dict(eps=1.15, expected=3.8378),
-      dict(eps=1.214, expected=3.8900),
-      dict(eps=5.45, expected=7.3480),
+    dict(eps=2, expected=4.5317),
+    dict(eps=1, expected=3.7153),
+    dict(eps=-1, expected=2.0827),
+    dict(eps=0, expected=2.8990),
+    dict(eps=-0.5, expected=2.4908),
+    dict(eps=1.15, expected=3.8378),
+    dict(eps=1.214, expected=3.8900),
+    dict(eps=5.45, expected=7.3480),
   )
   def test_scalar(self, eps, expected):
     np.testing.assert_allclose(
-        self.variant(_classification.poly_loss_cross_entropy)(
-            self.logits, self.labels, epsilon=eps
-        ),
-        expected,
-        atol=1e-4,
+      (_classification.poly_loss_cross_entropy)(
+        self.logits, self.labels, epsilon=eps
+      ),
+      expected,
+      atol=1e-4,
     )
 
-  @chex.all_variants
   @parameterized.parameters(
-      dict(eps=2, expected=np.array([0.4823, 1.2567])),
-      dict(eps=1, expected=np.array([0.3261, 1.0407])),
-      dict(eps=0, expected=np.array([0.1698, 0.8247])),
-      dict(eps=-0.5, expected=np.array([0.0917, 0.7168])),
-      dict(eps=1.15, expected=np.array([0.3495, 1.0731])),
-      dict(eps=1.214, expected=np.array([0.3595, 1.0870])),
-      dict(eps=5.45, expected=np.array([1.0211, 2.0018])),
+    dict(eps=2, expected=np.array([0.4823, 1.2567])),
+    dict(eps=1, expected=np.array([0.3261, 1.0407])),
+    dict(eps=0, expected=np.array([0.1698, 0.8247])),
+    dict(eps=-0.5, expected=np.array([0.0917, 0.7168])),
+    dict(eps=1.15, expected=np.array([0.3495, 1.0731])),
+    dict(eps=1.214, expected=np.array([0.3595, 1.0870])),
+    dict(eps=5.45, expected=np.array([1.0211, 2.0018])),
   )
   def test_batched(self, eps, expected):
     np.testing.assert_allclose(
-        self.variant(_classification.poly_loss_cross_entropy)(
-            self.batched_logits, self.batched_labels, epsilon=eps
-        ),
-        expected,
-        atol=1e-4,
+      (_classification.poly_loss_cross_entropy)(
+        self.batched_logits, self.batched_labels, epsilon=eps
+      ),
+      expected,
+      atol=1e-4,
     )
 
-  @chex.all_variants
   @parameterized.parameters(
-      dict(
-          logits=np.array(
-              [[4.0, 2.0, 1.0], [0.0, 5.0, 1.0], [0.134, 1.234, 3.235]]
-          ),
-          labels=np.array(
-              [[1.0, 0.0, 0.0], [0.0, 0.8, 0.2], [0.34, 0.33, 0.33]]
-          ),
+    dict(
+      logits=np.array(
+        [[4.0, 2.0, 1.0], [0.0, 5.0, 1.0], [0.134, 1.234, 3.235]]
       ),
-      dict(
-          logits=np.array([[4.0, 2.0, 1.0], [0.0, 5.0, 1.0]]),
-          labels=np.array([[1.0, 0.0, 0.0], [0.0, 0.8, 0.2]]),
+      labels=np.array(
+        [[1.0, 0.0, 0.0], [0.0, 0.8, 0.2], [0.34, 0.33, 0.33]]
       ),
-      dict(
-          logits=np.array(
-              [[4.0, 2.0, 1.0, 0.134, 1.3515], [0.0, 5.0, 1.0, 0.5215, 5.616]]
-          ),
-          labels=np.array(
-              [[0.5, 0.0, 0.0, 0.0, 0.5], [0.0, 0.12, 0.2, 0.56, 0.12]]
-          ),
+    ),
+    dict(
+      logits=np.array([[4.0, 2.0, 1.0], [0.0, 5.0, 1.0]]),
+      labels=np.array([[1.0, 0.0, 0.0], [0.0, 0.8, 0.2]]),
+    ),
+    dict(
+      logits=np.array(
+        [[4.0, 2.0, 1.0, 0.134, 1.3515], [0.0, 5.0, 1.0, 0.5215, 5.616]]
       ),
-      dict(logits=np.array([1.89, 2.39]), labels=np.array([0.34, 0.66])),
-      dict(logits=np.array([0.314]), labels=np.array([1.0])),
+      labels=np.array(
+        [[0.5, 0.0, 0.0, 0.0, 0.5], [0.0, 0.12, 0.2, 0.56, 0.12]]
+      ),
+    ),
+    dict(logits=np.array([1.89, 2.39]), labels=np.array([0.34, 0.66])),
+    dict(logits=np.array([0.314]), labels=np.array([1.0])),
   )
   def test_equals_to_cross_entropy_when_eps0(self, logits, labels):
     np.testing.assert_allclose(
-        self.variant(_classification.poly_loss_cross_entropy)(
-            logits, labels, epsilon=0.0),
-        self.variant(_classification.softmax_cross_entropy)(
-            logits, labels),
-        atol=1e-4,
+      (_classification.poly_loss_cross_entropy)(
+        logits, labels, epsilon=0.0),
+      (_classification.softmax_cross_entropy)(
+        logits, labels),
+      atol=1e-4,
     )
 
 
@@ -212,8 +203,10 @@ class HingeTest(parameterized.TestCase):
     label = jnp.array(1)
     signed_label = jnp.array(2.0 * label - 1.0)
     score = jnp.array(10.)
+
     def reference_impl(label, logit):
       return jax.nn.relu(1 - logit * (2.0 * label - 1.0))
+
     expected = reference_impl(label, score)
     result = _classification.hinge_loss(score, signed_label)
     np.testing.assert_allclose(result, expected, atol=1e-4)
@@ -222,8 +215,10 @@ class HingeTest(parameterized.TestCase):
     labels = jnp.array([1, 0])
     signed_labels = jnp.array(2.0 * labels - 1.0)
     scores = jnp.array([10., 20.])
+
     def reference_impl(label, logit):
       return jax.nn.relu(1 - logit * (2.0 * label - 1.0))
+
     expected = jax.vmap(reference_impl)(labels, scores)
     # no need to vmap the optax loss. leading dimensions automatically handled.
     result = _classification.hinge_loss(scores, signed_labels)
@@ -232,9 +227,11 @@ class HingeTest(parameterized.TestCase):
   def test_multi_class(self):
     label = jnp.array(1)
     scores = jnp.array([10., 3.])
+
     def reference_impl(label, scores):
       one_hot_label = jax.nn.one_hot(label, scores.shape[-1])
       return jnp.max(scores + 1.0 - one_hot_label) - scores[label]
+
     expected = reference_impl(label, scores)
     result = _classification.multiclass_hinge_loss(scores, label)
     np.testing.assert_allclose(result, expected, atol=1e-4)
@@ -242,9 +239,11 @@ class HingeTest(parameterized.TestCase):
   def test_batched_multi_class(self):
     label = jnp.array([1, 0])
     scores = jnp.array([[10., 3.], [11., -2.]])
+
     def reference_impl(label, scores):
       one_hot_label = jax.nn.one_hot(label, scores.shape[-1])
       return jnp.max(scores + 1.0 - one_hot_label) - scores[label]
+
     expected = jax.vmap(reference_impl)(label, scores)
     # no need to vmap the optax loss. leading dimensions automatically handled.
     result = _classification.multiclass_hinge_loss(scores, label)
@@ -256,32 +255,30 @@ class ConvexKLDivergenceTest(parameterized.TestCase):
   def setUp(self):
     super().setUp()
     self.log_ps = np.array([
-        [-2.9957, -3.5066, -3.9120, -1.2040, -0.6931, -2.3026],
-        [-1.6094, -1.6094, -1.6094, -2.3026, -1.8971, -1.8971],
+      [-2.9957, -3.5066, -3.9120, -1.2040, -0.6931, -2.3026],
+      [-1.6094, -1.6094, -1.6094, -2.3026, -1.8971, -1.8971],
     ])
     self.qs = np.array(
-        [[0.2, 0.2, 0.2, 0.1, 0.15, 0.15], [0.05, 0.03, 0.02, 0.3, 0.5, 0.0]]
+      [[0.2, 0.2, 0.2, 0.1, 0.15, 0.15], [0.05, 0.03, 0.02, 0.3, 0.5, 0.0]]
     )
 
     # Computed convex kullback-leibler divergence of P from Q.
     self.exp = np.array([0.88757247, 0.859308])
 
-  @chex.all_variants
   def test_scalar(self):
     np.testing.assert_allclose(
-        self.variant(_classification.convex_kl_divergence)(
-            self.log_ps[0], self.qs[0]),
-        self.exp[0],
-        atol=1e-4,
+      (_classification.convex_kl_divergence)(
+        self.log_ps[0], self.qs[0]),
+      self.exp[0],
+      atol=1e-4,
     )
 
-  @chex.all_variants
   def test_batched(self):
     np.testing.assert_allclose(
-        self.variant(_classification.convex_kl_divergence)(
-            self.log_ps, self.qs),
-        self.exp,
-        atol=1e-4,
+      (_classification.convex_kl_divergence)(
+        self.log_ps, self.qs),
+      self.exp,
+      atol=1e-4,
     )
 
 
@@ -291,8 +288,10 @@ class PerceptronTest(parameterized.TestCase):
     label = jnp.array(1)
     signed_label = jnp.array(2.0 * label - 1.0)
     score = jnp.array(10.)
+
     def reference_impl(label, logit) -> float:
       return jax.nn.relu(- logit * (2.0 * label - 1.0))
+
     expected = reference_impl(label, score)
     result = _classification.perceptron_loss(score, signed_label)
     np.testing.assert_allclose(result, expected, atol=1e-4)
@@ -301,8 +300,10 @@ class PerceptronTest(parameterized.TestCase):
     labels = jnp.array([1, 0])
     signed_labels = jnp.array(2.0 * labels - 1.0)
     scores = jnp.array([10., 20.])
+
     def reference_impl(label, logit) -> float:
       return jax.nn.relu(- logit * (2.0 * label - 1.0))
+
     expected = jax.vmap(reference_impl)(labels, scores)
     # no need to vmap the optax loss. leading dimensions automatically handled.
     result = _classification.perceptron_loss(scores, signed_labels)
@@ -311,8 +312,10 @@ class PerceptronTest(parameterized.TestCase):
   def test_multi_class(self):
     label = jnp.array(1)
     scores = jnp.array([10., 3.])
+
     def reference_impl(label, scores):
       return jnp.max(scores) - scores[label]
+
     expected = reference_impl(label, scores)
     result = _classification.multiclass_perceptron_loss(scores, label)
     np.testing.assert_allclose(result, expected, atol=1e-4)
@@ -320,8 +323,10 @@ class PerceptronTest(parameterized.TestCase):
   def test_batched_multi_class(self):
     label = jnp.array([1, 0])
     scores = jnp.array([[10., 3.], [11., -2.]])
+
     def reference_impl(label, scores):
       return jnp.max(scores) - scores[label]
+
     expected = jax.vmap(reference_impl)(label, scores)
     # no need to vmap the optax loss. leading dimensions automatically handled.
     result = _classification.multiclass_perceptron_loss(scores, label)
@@ -333,26 +338,24 @@ class KLDivergenceTest(parameterized.TestCase):
   def setUp(self):
     super().setUp()
     self.log_ps = np.array(
-        [[-2.9957, -3.5066, -3.9120, -1.2040, -0.6931, -2.3026],
-         [-1.6094, -1.6094, -1.6094, -2.3026, -1.8971, -1.8971]])
+      [[-2.9957, -3.5066, -3.9120, -1.2040, -0.6931, -2.3026],
+       [-1.6094, -1.6094, -1.6094, -2.3026, -1.8971, -1.8971]])
     self.qs = np.array([[0.2, 0.2, 0.2, 0.1, 0.15, 0.15],
                         [0.05, 0.03, 0.02, 0.3, 0.5, 0.]])
     # Computed kullback-leibler divergence of P from Q.
     self.exp = np.array([0.8875577, 0.7592807])
 
-  @chex.all_variants
   def test_scalar(self):
     np.testing.assert_allclose(
-        self.variant(_classification.kl_divergence)(self.log_ps[0], self.qs[0]),
-        self.exp[0],
-        atol=1e-4)
+      (_classification.kl_divergence)(self.log_ps[0], self.qs[0]),
+      self.exp[0],
+      atol=1e-4)
 
-  @chex.all_variants
   def test_batched(self):
     np.testing.assert_allclose(
-        self.variant(_classification.kl_divergence)(self.log_ps, self.qs),
-        self.exp,
-        atol=1e-4)
+      (_classification.kl_divergence)(self.log_ps, self.qs),
+      self.exp,
+      atol=1e-4)
 
 
 class KLDivergenceWithLogTargetsTest(parameterized.TestCase):
@@ -360,31 +363,29 @@ class KLDivergenceWithLogTargetsTest(parameterized.TestCase):
   def setUp(self):
     super().setUp()
     self.log_ps = np.array(
-        [[-2.9957, -3.5066, -3.9120, -1.2040, -0.6931, -2.3026],
-         [-1.6094, -1.6094, -1.6094, -2.3026, -1.8971, -1.8971]])
+      [[-2.9957, -3.5066, -3.9120, -1.2040, -0.6931, -2.3026],
+       [-1.6094, -1.6094, -1.6094, -2.3026, -1.8971, -1.8971]])
     self.qs = np.array([[-1.6094, -1.6094, -1.6094, -2.3026, -1.8971, -1.8971],
                         [-2.9957, -3.5066, -3.9120, -1.2040, -0.6931, -2.3026]])
     # Computed kullback-leibler divergence of P from Q.
     self.exp = np.array([0.8875625, 0.7187435584901326])
 
-  @chex.all_variants
   def test_scalar(self):
     np.testing.assert_allclose(
-        self.variant(_classification.kl_divergence_with_log_targets)(
-            self.log_ps[0], self.qs[0]),
-        self.exp[0],
-        atol=1e-4)
+      (_classification.kl_divergence_with_log_targets)(
+        self.log_ps[0], self.qs[0]),
+      self.exp[0],
+      atol=1e-4)
 
-  @chex.all_variants
   def test_batched(self):
     np.testing.assert_allclose(
-        self.variant(_classification.kl_divergence_with_log_targets)(
-            self.log_ps, self.qs),
-        self.exp,
-        atol=1e-4)
+      (_classification.kl_divergence_with_log_targets)(
+        self.log_ps, self.qs),
+      self.exp,
+      atol=1e-4)
 
 
-def _lengths_to_paddings(lengths: chex.Array, maxlength: int) -> chex.Array:
+def _lengths_to_paddings(lengths, maxlength: int):
   indices = jnp.arange(maxlength).reshape((1,) * lengths.ndim + (maxlength,))
   lengths = jnp.expand_dims(lengths, axis=-1)
   elem_valid = indices < lengths
@@ -392,13 +393,12 @@ def _lengths_to_paddings(lengths: chex.Array, maxlength: int) -> chex.Array:
 
 
 def _average_ctc_loss(
-    logprobs: chex.Array, logprob_paddings: chex.Array,
-    labels: chex.Array,
-    label_paddings: chex.Array
-) -> chex.Array:
-  return jnp.average(
-      _classification.ctc_loss(
-          logprobs, logprob_paddings, labels, label_paddings))
+    logprobs,
+    logprob_paddings,
+    labels,
+    label_paddings
+):
+  return jnp.average(_classification.ctc_loss(logprobs, logprob_paddings, labels, label_paddings))
 
 
 class CTCTest(parameterized.TestCase):
@@ -408,7 +408,6 @@ class CTCTest(parameterized.TestCase):
     np.random.seed(1234)
     self._rtol = 5e-3 if jax.default_backend() != 'cpu' else 1e-6
 
-  @chex.all_variants
   def test_with_one_to_one_alignment(self):
     # when inputsteps and outputsteps are equal, no blank will be allowed.
     batchsize = 8
@@ -416,7 +415,7 @@ class CTCTest(parameterized.TestCase):
     nclasses = 40
     logits = np.random.randn(batchsize, steps, nclasses)
     labels = np.random.uniform(
-        1, nclasses, size=(batchsize, steps)).astype(np.int32)
+      1, nclasses, size=(batchsize, steps)).astype(np.int32)
 
     # This function only covers the cases without same-label repetition.
     # `test_repeat_with_one_to_one_alignment` below complements those cases.
@@ -426,9 +425,9 @@ class CTCTest(parameterized.TestCase):
         while labels[n, t] == labels[n, t - 1]:
           labels[n, t] = np.random.uniform(1, nclasses)
 
-    results = self.variant(_classification.ctc_loss_with_forward_probs)(
-        logits, np.zeros(logits.shape[:2]),
-        labels, np.zeros(labels.shape))
+    results = (_classification.ctc_loss_with_forward_probs)(
+      logits, np.zeros(logits.shape[:2]),
+      labels, np.zeros(labels.shape))
     (per_seq_loss, logalpha_blank, logalpha_emit) = results
 
     logprobs = jax.nn.log_softmax(logits)
@@ -437,7 +436,7 @@ class CTCTest(parameterized.TestCase):
       for t in range(steps):
         p += logprobs[b, t, labels[b, t]]
       np.testing.assert_allclose(
-          np.array(-p), per_seq_loss[b], rtol=self._rtol)
+        np.array(-p), per_seq_loss[b], rtol=self._rtol)
 
       # Check forward-probabilities.
       # 1. All-phi path: logalpha_blank[-1, b, 0] must be a probability of
@@ -459,7 +458,6 @@ class CTCTest(parameterized.TestCase):
                                  -per_seq_loss[b],
                                  rtol=self._rtol)
 
-  @chex.all_variants
   def test_with_one_to_one_alignment_and_paddings(self):
     batch_size = 5
     nclasses = 13
@@ -477,12 +475,12 @@ class CTCTest(parameterized.TestCase):
     lengths = np.random.randint(3, 6, size=(batch_size,))
     paddings = _lengths_to_paddings(lengths, steps)
 
-    actual_loss = self.variant(_classification.ctc_loss)(
-        logits, paddings, labels, paddings)
+    actual_loss = (_classification.ctc_loss)(
+      logits, paddings, labels, paddings)
 
-    value_and_grad = self.variant(jax.value_and_grad(_average_ctc_loss))
+    value_and_grad = (jax.value_and_grad(_average_ctc_loss))
     unused_avg_loss, actual_gradients = value_and_grad(
-        logits, paddings, labels, paddings)
+      logits, paddings, labels, paddings)
 
     for n in range(batch_size):
       expected_loss = -sum(logprobs[n, t, k]
@@ -495,25 +493,24 @@ class CTCTest(parameterized.TestCase):
         expected_gradients[t, k] -= 1.0
       expected_gradients /= batch_size
       np.testing.assert_allclose(
-          expected_gradients, actual_gradients[n], rtol=self._rtol)
+        expected_gradients, actual_gradients[n], rtol=self._rtol)
 
-  @chex.all_variants
   def test_repeat_with_one_to_one_alignment(self):
     # test if it can correctly handle the same-label repetition.
     nclasses = 5
     labels = np.array([
-        [1, 2, 2, 3],
-        [2, 3, 4, 4],
-        [1, 1, 1, 1],
-        [1, 1, 2, 3],
-        [1, 1, 1, 2],
+      [1, 2, 2, 3],
+      [2, 3, 4, 4],
+      [1, 1, 1, 1],
+      [1, 1, 2, 3],
+      [1, 1, 1, 2],
     ])
     expected_alignment = [  # expected minimal alignment
-        [1, 2, 0, 2, 3],
-        [2, 3, 4, 0, 4],
-        [1, 0, 1, 0, 1, 0, 1],
-        [1, 0, 1, 2, 3],
-        [1, 0, 1, 0, 1, 2],
+      [1, 2, 0, 2, 3],
+      [2, 3, 4, 0, 4],
+      [1, 0, 1, 0, 1, 0, 1],
+      [1, 0, 1, 2, 3],
+      [1, 0, 1, 0, 1, 2],
     ]
     batch_size = len(labels)
     label_lens = np.array([4] * batch_size)
@@ -527,15 +524,15 @@ class CTCTest(parameterized.TestCase):
     logits = np.random.randn(batch_size, logit_steps, nclasses)
     logit_paddings = _lengths_to_paddings(logit_lengths, logit_steps)
 
-    per_seq_loss = self.variant(_classification.ctc_loss)(
-        logits, logit_paddings, labels, label_paddings)
+    per_seq_loss = (_classification.ctc_loss)(
+      logits, logit_paddings, labels, label_paddings)
 
     logprobs = jax.nn.log_softmax(logits)
     for n in range(batch_size):
       expected_loss = -sum(logprobs[n, t, k]
                            for t, k in enumerate(expected_alignment[n]))
       np.testing.assert_allclose(
-          jnp.array(expected_loss), per_seq_loss[n], rtol=self._rtol)
+        jnp.array(expected_loss), per_seq_loss[n], rtol=self._rtol)
 
 
 class SigmoidFocalLossTest(parameterized.TestCase):
@@ -551,23 +548,21 @@ class SigmoidFocalLossTest(parameterized.TestCase):
     self.small_ys = logit(jnp.array([0.1, 0.02, 0.09, 0.15]))
     self.ones_ts = jnp.array([1.0, 1.0, 1.0, 1.0])
 
-  @chex.all_variants
   def test_focal_equals_ce(self):
     """If gamma == 0 and alpha == 0 we expect a CE loss."""
     np.testing.assert_allclose(
-        self.variant(_classification.sigmoid_focal_loss)(
-            self.ys, self.ts, gamma=0.0
-        ),
-        _classification.sigmoid_binary_cross_entropy(self.ys, self.ts),
-        rtol=self._rtol,
+      (_classification.sigmoid_focal_loss)(
+        self.ys, self.ts, gamma=0.0
+      ),
+      _classification.sigmoid_binary_cross_entropy(self.ys, self.ts),
+      rtol=self._rtol,
     )
 
-  @chex.all_variants
   def test_scale(self):
     """This test should catch problems with p_t."""
     gamma = 2
-    focal_loss = self.variant(_classification.sigmoid_focal_loss)(
-        self.ys, self.ts, gamma=gamma
+    focal_loss = (_classification.sigmoid_focal_loss)(
+      self.ys, self.ts, gamma=gamma
     )
     p = jax.nn.sigmoid(self.ys)
     ce_loss = _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
@@ -576,59 +571,54 @@ class SigmoidFocalLossTest(parameterized.TestCase):
     focal_scale = focal_loss / ce_loss
     np.testing.assert_allclose(focal_scale, scale, rtol=self._rtol)
 
-  @chex.all_variants
   def test_large_logit_fl_less_than_ce(self):
     """If gamma == 2 and alpha == 0.5, the impact of large logits is reduced."""
-    focal_loss = self.variant(_classification.sigmoid_focal_loss)(
-        self.large_ys, self.ones_ts, gamma=2, alpha=0.5
+    focal_loss = (_classification.sigmoid_focal_loss)(
+      self.large_ys, self.ones_ts, gamma=2, alpha=0.5
     )
     ce_loss = _classification.sigmoid_binary_cross_entropy(
-        self.large_ys, self.ones_ts
+      self.large_ys, self.ones_ts
     )
     loss_ratio = ce_loss / focal_loss
     expected_ratio = 2.0 / ((1.0 - jax.nn.sigmoid(self.large_ys)) ** 2)
     np.testing.assert_allclose(loss_ratio, expected_ratio, rtol=self._rtol)
 
-  @chex.all_variants
   def test_small_logit_fl_less_than_ce(self):
     """If gamma == 2, small logits retain their weight."""
-    focal_loss = self.variant(_classification.sigmoid_focal_loss)(
-        self.small_ys, self.ones_ts, gamma=2
+    focal_loss = (_classification.sigmoid_focal_loss)(
+      self.small_ys, self.ones_ts, gamma=2
     )
     ce_loss = _classification.sigmoid_binary_cross_entropy(
-        self.small_ys, self.ones_ts
+      self.small_ys, self.ones_ts
     )
     loss_ratio = ce_loss / focal_loss
     expected_ratio = 1.0 / ((1.0 - jax.nn.sigmoid(self.small_ys)) ** 2)
     np.testing.assert_allclose(loss_ratio, expected_ratio, rtol=self._rtol)
 
-  @chex.all_variants
   def test_alpha_one(self):
     """Test if re-weighting with alpha=1 is ok."""
     np.testing.assert_allclose(
-        self.variant(_classification.sigmoid_focal_loss)(
-            self.ys, self.ts, gamma=0.0, alpha=1
-        ),
-        _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
-        * self.ts,
-        rtol=self._rtol,
+      (_classification.sigmoid_focal_loss)(
+        self.ys, self.ts, gamma=0.0, alpha=1
+      ),
+      _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
+      * self.ts,
+      rtol=self._rtol,
     )
 
-  @chex.all_variants
   def test_ignore_positive(self):
     """If alpha == 0 positive examples do not matter."""
-    focal_loss = self.variant(_classification.sigmoid_focal_loss)(
-        self.ys, self.ts, alpha=0
+    focal_loss = (_classification.sigmoid_focal_loss)(
+      self.ys, self.ts, alpha=0
     )
     ce_loss = _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
     assert all(ce_loss[self.ts == 1] > 0)
     assert all(focal_loss[self.ts == 1] == 0)
 
-  @chex.all_variants
   def test_ignore_negative(self):
     """If alpha == 1 negative examples do not matter."""
-    focal_loss = self.variant(_classification.sigmoid_focal_loss)(
-        self.ys, self.ts, alpha=1
+    focal_loss = (_classification.sigmoid_focal_loss)(
+      self.ys, self.ts, alpha=1
     )
     ce_loss = _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
     assert all(ce_loss[self.ts == 0] > 0)
