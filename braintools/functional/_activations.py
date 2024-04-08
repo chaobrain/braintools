@@ -59,20 +59,9 @@ __all__ = [
 ]
 
 
-def _get_dtype(x: ArrayLike):
-  if hasattr(x, 'dtype'):
-    return x.dtype
-  else:
-    if isinstance(x, float):
-      return bc.environ.dftype()
-    elif isinstance(x, int):
-      return bc.environ.dftype()
-    else:
-      raise ValueError(f'Unsupported type: {type(x)}')
-
-
 def softmin(x, axis=-1):
-  r"""Applies the Softmin function to an n-dimensional input Tensor
+  r"""
+  Applies the Softmin function to an n-dimensional input Tensor
   rescaling them so that the elements of the n-dimensional output Tensor
   lie in the range `[0, 1]` and sum to 1.
 
@@ -95,7 +84,8 @@ def softmin(x, axis=-1):
 
 
 def tanh_shrink(x):
-  r"""Applies the element-wise function:
+  r"""
+  Applies the element-wise function:
 
   .. math::
       \text{Tanhshrink}(x) = x - \tanh(x)
@@ -104,7 +94,8 @@ def tanh_shrink(x):
 
 
 def prelu(x, a=0.25):
-  r"""Applies the element-wise function:
+  r"""
+  Applies the element-wise function:
 
   .. math::
       \text{PReLU}(x) = \max(0,x) + a * \min(0,x)
@@ -122,14 +113,15 @@ def prelu(x, a=0.25):
   parameter :math:`a` across all input channels. If called with `nn.PReLU(nChannels)`,
   a separate :math:`a` is used for each input channel.
   """
-  dtype = _get_dtype(x)
+  dtype = bc.math.get_dtype(x)
   return jnp.where(x >= jnp.asarray(0., dtype),
                    x,
                    jnp.asarray(a, dtype) * x)
 
 
 def soft_shrink(x, lambd=0.5):
-  r"""Applies the soft shrinkage function elementwise:
+  r"""
+  Applies the soft shrinkage function elementwise:
 
   .. math::
       \text{SoftShrinkage}(x) =
@@ -146,7 +138,7 @@ def soft_shrink(x, lambd=0.5):
       - Input: :math:`(*)`, where :math:`*` means any number of dimensions.
       - Output: :math:`(*)`, same shape as the input.
   """
-  dtype = _get_dtype(x)
+  dtype = bc.math.get_dtype(x)
   lambd = jnp.asarray(lambd, dtype)
   return jnp.where(x > lambd,
                    x - lambd,
@@ -202,7 +194,7 @@ def rrelu(x, lower=0.125, upper=0.3333333333333333):
   .. _`Empirical Evaluation of Rectified Activations in Convolutional Network`:
       https://arxiv.org/abs/1505.00853
   """
-  dtype = _get_dtype(x)
+  dtype = bc.math.get_dtype(x)
   a = bc.random.uniform(lower, upper, size=jnp.shape(x), dtype=dtype)
   return jnp.where(x >= jnp.asarray(0., dtype), x, jnp.asarray(a, dtype) * x)
 
@@ -228,7 +220,7 @@ def hard_shrink(x, lambd=0.5):
       - Output: :math:`(*)`, same shape as the input.
 
   """
-  dtype = _get_dtype(x)
+  dtype = bc.math.get_dtype(x)
   lambd = jnp.asarray(lambd, dtype)
   return jnp.where(x > lambd,
                    x,
@@ -283,7 +275,7 @@ def squareplus(x: ArrayLike, b: ArrayLike = 4) -> jax.Array:
     x : input array
     b : smoothness parameter
   """
-  dtype = _get_dtype(x)
+  dtype = bc.math.get_dtype(x)
   return jax.nn.squareplus(x, jnp.asarray(b, dtype))
 
 
@@ -402,7 +394,7 @@ def elu(x: ArrayLike, alpha: ArrayLike = 1.0) -> jax.Array:
   See also:
     :func:`selu`
   """
-  dtype = _get_dtype(x)
+  dtype = bc.math.get_dtype(x)
   alpha = jnp.asarray(alpha, dtype)
   return jax.nn.elu(x, alpha)
 
@@ -430,7 +422,7 @@ def leaky_relu(x: ArrayLike, negative_slope: ArrayLike = 1e-2) -> jax.Array:
   See also:
     :func:`relu`
   """
-  dtype = _get_dtype(x)
+  dtype = bc.math.get_dtype(x)
   negative_slope = jnp.asarray(negative_slope, dtype)
   return jax.nn.leaky_relu(x, negative_slope=negative_slope)
 
@@ -478,7 +470,7 @@ def celu(x: ArrayLike, alpha: ArrayLike = 1.0) -> jax.Array:
   Returns:
     An array.
   """
-  dtype = _get_dtype(x)
+  dtype = bc.math.get_dtype(x)
   alpha = jnp.asarray(alpha, dtype)
   return jax.nn.celu(x, alpha)
 
