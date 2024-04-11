@@ -1,5 +1,6 @@
 -r requirements.txt
 jaxlib
+matplotlib
 
 # document requirements
 pandoc
