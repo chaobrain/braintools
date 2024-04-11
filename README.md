@@ -7,13 +7,15 @@
 <p align="center">
 	<a href="https://pypi.org/project/braintools/"><img alt="Supported Python Version" src="https://img.shields.io/pypi/pyversions/braintools"></a>
 	<a href="https://github.com/brainpy/braintools/blob/main/LICENSE"><img alt="LICENSE" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
-  	<a href="https://brainpy.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation" src="https://readthedocs.org/projects/brainpy/badge/?version=latest"></a>
-  	<a href="https://badge.fury.io/py/braintools"><img alt="PyPI version" src="https://badge.fury.io/py/braintools.svg"></a>
+    <a href='https://braintools.readthedocs.io/en/latest/?badge=latest'>
+        <img src='https://readthedocs.org/projects/braintools/badge/?version=latest' alt='Documentation Status' />
+    </a>  	
+    <a href="https://badge.fury.io/py/braintools"><img alt="PyPI version" src="https://badge.fury.io/py/braintools.svg"></a>
     <a href="https://github.com/brainpy/braintools/actions/workflows/CI.yml"><img alt="Continuous Integration" src="https://github.com/brainpy/braintools/actions/workflows/CI.yml/badge.svg"></a>
 </p>
 
 
-[``braintools``](https://github.com/brainpy/braintools) provides toolboxes for brain dynamics programming. 
+[``braintools``](https://github.com/brainpy/braintools) provides common toolboxes for brain dynamics programming (BDP). 
 
 
 ## Installation
