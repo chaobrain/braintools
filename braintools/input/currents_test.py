@@ -23,21 +23,22 @@ import jax.numpy as jnp
 import numpy as np
 
 import braintools as bt
+try:
+  import matplotlib.pyplot as plt
+except (ImportError, ModuleNotFoundError):
+  plt = None
 
-plt = None
 block = False
 
 
 def show(current, duration, title=''):
-  global plt
-  if plt is None:
-    import matplotlib.pyplot as plt
-  ts = np.arange(0, duration, bc.environ.get_dt())
-  plt.plot(ts, current)
-  plt.title(title)
-  plt.xlabel('Time [ms]')
-  plt.ylabel('Current Value')
-  plt.show(block=block)
+  if plt is not None:
+    ts = np.arange(0, duration, bc.environ.get_dt())
+    plt.plot(ts, current)
+    plt.title(title)
+    plt.xlabel('Time [ms]')
+    plt.ylabel('Current Value')
+    plt.show(block=block)
 
 
 class TestCurrents(TestCase):
