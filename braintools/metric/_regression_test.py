@@ -32,14 +32,14 @@ class SquaredErrorTest(parameterized.TestCase):
     self.exp = (self.ts - self.ys) ** 2
 
   def test_scalar(self):
-    np.testing.assert_allclose((_regression.squared_error)(self.ys[0], self.ts[0]), self.exp[0])
+    np.testing.assert_allclose(_regression.squared_error(self.ys[0], self.ts[0]), self.exp[0])
 
   def test_batched(self):
-    np.testing.assert_allclose((_regression.squared_error)(self.ys, self.ts), self.exp)
+    np.testing.assert_allclose(_regression.squared_error(self.ys, self.ts), self.exp)
 
   def test_shape_mismatch(self):
     with self.assertRaises(AssertionError):
-      _ = (_regression.squared_error)(self.ys, jnp.expand_dims(self.ts, axis=-1))
+      _ = _regression.squared_error(self.ys, jnp.expand_dims(self.ts, axis=-1))
 
 
 class L2LossTest(parameterized.TestCase):

@@ -25,7 +25,6 @@ from typing import Optional
 import braincore as bc
 import jax
 import jax.numpy as jnp
-from ._util import _reduce
 
 __all__ = [
     'sigmoid_binary_cross_entropy',
