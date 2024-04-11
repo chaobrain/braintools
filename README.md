@@ -28,3 +28,15 @@ pip install braintools --upgrade
 
 The official documentation is hosted on Read the Docs: [https://braintools.readthedocs.io](https://braintools.readthedocs.io)
 
+
+
+## See also the BDP ecosystem
+
+- [``brainpy``](https://github.com/brainpy/BrainPy): The solution for the general-purpose brain dynamics programming.
+
+- [``braincore``](https://github.com/brainpy/braincore): The core system for the next generation of BrainPy framework.
+
+- [``braintools``](https://github.com/brainpy/braintools): The tools for the brain dynamics simulation and analysis.
+
+- [``brainscale``](https://github.com/brainpy/brainscale): The scalable online learning for biological spiking neural networks.
+
