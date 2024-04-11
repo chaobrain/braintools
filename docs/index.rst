@@ -1,7 +1,7 @@
-``braincore`` documentation
-===========================
+``braintools`` documentation
+============================
 
-`braincore <https://github.com/brainpy/braincore>`_ implements the core system for general-purpose brain dynamics programming (BDP).
+`braintools <https://github.com/brainpy/braintools>`_ implements the common toolboxes for brain dynamics programming (BDP).
 
 ----
 
@@ -15,25 +15,25 @@ Installation
 
        .. code-block:: bash
 
-          pip install -U braincore[cpu]
+          pip install -U braintools[cpu]
 
     .. tab-item:: GPU (CUDA 11.0)
 
        .. code-block:: bash
 
-          pip install -U braincore[cuda11] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+          pip install -U braintools[cuda11] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
     .. tab-item:: GPU (CUDA 12.0)
 
        .. code-block:: bash
 
-          pip install -U braincore[cuda12] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+          pip install -U braintools[cuda12] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
     .. tab-item:: TPU
 
        .. code-block:: bash
 
-          pip install -U braincore[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+          pip install -U braintools[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 
 
 ----
