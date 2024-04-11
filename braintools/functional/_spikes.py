@@ -13,6 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
+from __future__ import annotations
+
 __all__ = [
   'spike_bitwise_or',
   'spike_bitwise_and',

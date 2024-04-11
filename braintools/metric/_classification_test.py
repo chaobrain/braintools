@@ -19,7 +19,6 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-from absl.testing import absltest
 from absl.testing import parameterized
 
 from braintools.metric import _classification
@@ -624,6 +623,3 @@ class SigmoidFocalLossTest(parameterized.TestCase):
     assert all(ce_loss[self.ts == 0] > 0)
     assert all(focal_loss[self.ts == 0] == 0)
 
-
-if __name__ == '__main__':
-  absltest.main()

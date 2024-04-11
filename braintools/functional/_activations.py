@@ -16,6 +16,8 @@
 
 """Shared neural network activations and other functions."""
 
+
+from __future__ import annotations
 from typing import Any, Union, Sequence
 
 import jax

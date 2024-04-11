@@ -14,10 +14,8 @@
 # ==============================================================================
 
 
-import doctest
 import functools
 import math
-from absl.testing import absltest
 from absl.testing import parameterized
 import jax
 import jax.numpy as jnp
@@ -242,16 +240,3 @@ class RankingLossesTest(parameterized.TestCase):
 
     np.testing.assert_allclose(output, expected, rtol=1e-3)
 
-
-# def load_tests(loader, tests, ignore):
-#   del loader, ignore  # Unused.
-#   tests.addTests(
-#       doctest.DocTestSuite(
-#           _ranking, globs={"jax": jax, "jnp": jnp, "optax": optax}
-#       )
-#   )
-#   return tests
-
-
-if __name__ == "__main__":
-  absltest.main()
