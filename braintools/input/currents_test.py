@@ -18,40 +18,43 @@
 
 from unittest import TestCase
 
-
+import braincore as bc
+import jax.numpy as jnp
 import numpy as np
 
+import braintools as bt
+try:
+  import matplotlib.pyplot as plt
+except (ImportError, ModuleNotFoundError):
+  plt = None
 
-plt = None
 block = False
 
 
 def show(current, duration, title=''):
-  global plt
-  if plt is None:
-    import matplotlib.pyplot as plt
-  ts = np.arange(0, duration, bp.math.get_dt())
-  plt.plot(ts, current)
-  plt.title(title)
-  plt.xlabel('Time [ms]')
-  plt.ylabel('Current Value')
-  plt.show(block=block)
+  if plt is not None:
+    ts = np.arange(0, duration, bc.environ.get_dt())
+    plt.plot(ts, current)
+    plt.title(title)
+    plt.xlabel('Time [ms]')
+    plt.ylabel('Current Value')
+    plt.show(block=block)
 
 
 class TestCurrents(TestCase):
   def test_section_input(self):
-    current1, duration = bp.inputs.section_input(values=[0, 1., 0.],
-                                                 durations=[100, 300, 100],
-                                                 return_length=True,
-                                                 dt=0.1)
+    current1, duration = bt.input.section_input(values=[0, 1., 0.],
+                                                durations=[100, 300, 100],
+                                                return_length=True,
+                                                dt=0.1)
     show(current1, duration, 'values=[0, 1, 0], durations=[100, 300, 100]')
 
   def test_constant_input(self):
-    current2, duration = bp.inputs.constant_input([(0, 100), (1, 300), (0, 100)])
+    current2, duration = bt.input.constant_input([(0, 100), (1, 300), (0, 100)])
     show(current2, duration, '[(0, 100), (1, 300), (0, 100)]')
 
   def test_spike_input(self):
-    current3 = bp.inputs.spike_input(
+    current3 = bt.input.spike_input(
       sp_times=[10, 20, 30, 200, 300],
       sp_lens=1.,  # can be a list to specify the spike length at each point
       sp_sizes=0.5,  # can be a list to specify the spike current size at each point
@@ -61,48 +64,48 @@ class TestCurrents(TestCase):
 
   def test_ramp_input(self):
     duration = 500
-    current4 = bp.inputs.ramp_input(0, 1, duration)
+    current4 = bt.input.ramp_input(0, 1, duration)
 
     show(current4, duration, r'$c_{start}$=0, $c_{end}$=%d, duration, '
                              r'$t_{start}$=0, $t_{end}$=None' % (duration))
 
   def test_ramp_input2(self):
     duration, t_start, t_end = 500, 100, 400
-    current5 = bp.inputs.ramp_input(0, 1, duration, t_start, t_end)
+    current5 = bt.input.ramp_input(0, 1, duration, t_start, t_end)
 
     show(current5, duration, r'$c_{start}$=0, $c_{end}$=1, duration=%d, '
                              r'$t_{start}$=%d, $t_{end}$=%d' % (duration, t_start, t_end))
 
   def test_wiener_process(self):
     duration = 200
-    current6 = bp.inputs.wiener_process(duration, n=2, t_start=10., t_end=180.)
+    current6 = bt.input.wiener_process(duration, n=2, t_start=10., t_end=180.)
     show(current6, duration, 'Wiener Process')
 
   def test_ou_process(self):
     duration = 200
-    current7 = bp.inputs.ou_process(mean=1., sigma=0.1, tau=10., duration=duration, n=2, t_start=10., t_end=180.)
+    current7 = bt.input.ou_process(mean=1., sigma=0.1, tau=10., duration=duration, n=2, t_start=10., t_end=180.)
     show(current7, duration, 'Ornstein-Uhlenbeck Process')
 
   def test_sinusoidal_input(self):
     duration = 2000
-    current8 = bp.inputs.sinusoidal_input(amplitude=1., frequency=2.0, duration=duration, t_start=100., )
+    current8 = bt.input.sinusoidal_input(amplitude=1., frequency=2.0, duration=duration, t_start=100., )
     show(current8, duration, 'Sinusoidal Input')
 
   def test_square_input(self):
     duration = 2000
-    current9 = bp.inputs.square_input(amplitude=1., frequency=2.0,
-                                      duration=duration, t_start=100)
+    current9 = bt.input.square_input(amplitude=1., frequency=2.0,
+                                     duration=duration, t_start=100)
     show(current9, duration, 'Square Input')
 
   def test_general1(self):
-    I1 = bp.inputs.section_input(values=[0, 1, 2], durations=[10, 20, 30], dt=0.1)
-    I2 = bp.inputs.section_input(values=[0, 1, 2], durations=[10, 20, 30], dt=0.01)
+    I1 = bt.input.section_input(values=[0, 1, 2], durations=[10, 20, 30], dt=0.1)
+    I2 = bt.input.section_input(values=[0, 1, 2], durations=[10, 20, 30], dt=0.01)
     self.assertTrue(I1.shape[0] == 600)
     self.assertTrue(I2.shape[0] == 6000)
 
   def test_general2(self):
-    bp.math.random.seed(123)
-    current = bp.inputs.section_input(values=[0, bp.math.ones(10),
-                                              bp.math.random.random((3, 10))],
-                                      durations=[100, 300, 100])
+    bc.random.seed(123)
+    current = bt.input.section_input(values=[0, jnp.ones(10), bc.random.random((3, 10))],
+                                     durations=[100, 300, 100])
     self.assertTrue(current.shape == (5000, 3, 10))
+

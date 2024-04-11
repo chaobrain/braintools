@@ -283,7 +283,7 @@ def ou_process(mean, sigma, tau, duration, dt=None, n=1, t_start=0., t_end=None,
     x = x + dt * ((mean - x) / tau) + sigma * dt_sqrt * bc.random.rand(n, key=key)
     return x, x
 
-  noises = jax.lax.scan(_f, jnp.full(n, mean, dtype=bc.environ.dftype()), bc.random.split_keys(i_end - i_start))
+  _, noises = jax.lax.scan(_f, jnp.full(n, mean, dtype=bc.environ.dftype()), bc.random.split_keys(i_end - i_start))
   currents = jnp.zeros((int(duration / dt), n), dtype=bc.environ.dftype())
   return currents.at[i_start: i_end].set(noises)
 

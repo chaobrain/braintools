@@ -16,7 +16,6 @@
 
 import jax.numpy as jnp
 import numpy as np
-from absl.testing import absltest
 from absl.testing import parameterized
 
 from braintools.metric import _regression
@@ -32,14 +31,14 @@ class SquaredErrorTest(parameterized.TestCase):
     self.exp = (self.ts - self.ys) ** 2
 
   def test_scalar(self):
-    np.testing.assert_allclose((_regression.squared_error)(self.ys[0], self.ts[0]), self.exp[0])
+    np.testing.assert_allclose(_regression.squared_error(self.ys[0], self.ts[0]), self.exp[0])
 
   def test_batched(self):
-    np.testing.assert_allclose((_regression.squared_error)(self.ys, self.ts), self.exp)
+    np.testing.assert_allclose(_regression.squared_error(self.ys, self.ts), self.exp)
 
   def test_shape_mismatch(self):
     with self.assertRaises(AssertionError):
-      _ = (_regression.squared_error)(self.ys, jnp.expand_dims(self.ts, axis=-1))
+      _ = _regression.squared_error(self.ys, jnp.expand_dims(self.ts, axis=-1))
 
 
 class L2LossTest(parameterized.TestCase):
@@ -78,7 +77,6 @@ class HuberLossTest(parameterized.TestCase):
     np.testing.assert_allclose((_regression.huber_loss)(self.ys, self.ts, delta=1.0), self.exp)
 
 
-# TODO(b/188419459): add test for grad and second order grad.
 class LogCoshTest(parameterized.TestCase):
 
   def setUp(self):
@@ -133,6 +131,3 @@ class CosineDistanceTest(parameterized.TestCase):
     """Tests for a full batch."""
     np.testing.assert_allclose((_regression.cosine_similarity)(self.ys, self.ts), 1. - self.exp, atol=1e-4)
 
-
-if __name__ == '__main__':
-  absltest.main()

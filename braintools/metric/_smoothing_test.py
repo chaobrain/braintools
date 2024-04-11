@@ -15,7 +15,6 @@
 
 import jax.numpy as jnp
 import numpy as np
-from absl.testing import absltest
 from absl.testing import parameterized
 
 from braintools.metric import _smoothing
@@ -42,7 +41,3 @@ class SmoothLabelsTest(parameterized.TestCase):
     np.testing.assert_allclose(_smoothing.smooth_labels(self.ts, 0.), self.exp_alpha_zero, atol=1e-4)
     np.testing.assert_allclose(_smoothing.smooth_labels(self.ts, 0.1), self.exp_alpha_zero_point_one, atol=1e-4)
     np.testing.assert_allclose(_smoothing.smooth_labels(self.ts, 1.), self.exp_alpha_one, atol=1e-4)
-
-
-if __name__ == '__main__':
-  absltest.main()

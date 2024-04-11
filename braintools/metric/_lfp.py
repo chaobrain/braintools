@@ -24,18 +24,21 @@ __all__ = [
 ]
 
 
-def unitary_LFP(times: bc.typing.ArrayLike,
-                spikes: bc.typing.ArrayLike,
-                spike_type: str,
-                xmax: bc.typing.ArrayLike = 0.2,
-                ymax: bc.typing.ArrayLike = 0.2,
-                va: bc.typing.ArrayLike = 200.,
-                lambda_: bc.typing.ArrayLike = 0.2,
-                sig_i: bc.typing.ArrayLike = 2.1,
-                sig_e: bc.typing.ArrayLike = 2.1 * 1.5,
-                location: str = 'soma layer',
-                seed: bc.typing.SeedOrKey = None) -> jax.Array:
-  """A kernel-based method to calculate unitary local field potentials (uLFP)
+def unitary_LFP(
+    times: bc.typing.ArrayLike,
+    spikes: bc.typing.ArrayLike,
+    spike_type: str,
+    xmax: bc.typing.ArrayLike = 0.2,
+    ymax: bc.typing.ArrayLike = 0.2,
+    va: bc.typing.ArrayLike = 200.,
+    lambda_: bc.typing.ArrayLike = 0.2,
+    sig_i: bc.typing.ArrayLike = 2.1,
+    sig_e: bc.typing.ArrayLike = 2.1 * 1.5,
+    location: str = 'soma layer',
+    seed: bc.typing.SeedOrKey = None
+) -> jax.Array:
+  """
+  A kernel-based method to calculate unitary local field potentials (uLFP)
   from a network of spiking neurons [1]_.
 
   .. note::
@@ -48,15 +51,17 @@ def unitary_LFP(times: bc.typing.ArrayLike,
   If you have spike data of excitatory and inhibtiory neurons, you can get the LFP
   by the following methods:
 
-  >>> import brainpy as bp
+  >>> import braincore as bc
+  >>> import jax
+  >>> import braintools as bt
   >>> n_time = 1000
   >>> n_exc = 100
   >>> n_inh = 25
-  >>> times = bm.arange(n_time) * 0.1
-  >>> exc_sps = bp.math.random.random((n_time, n_exc)) < 0.3
-  >>> inh_sps = bp.math.random.random((n_time, n_inh)) < 0.4
-  >>> lfp = bp.measure.unitary_LFP(times, exc_sps, 'exc')
-  >>> lfp += bp.measure.unitary_LFP(times, inh_sps, 'inh')
+  >>> times = jax.numpy.arange(n_time) * 0.1
+  >>> exc_sps = bc.random.random((n_time, n_exc)) < 0.3
+  >>> inh_sps = bc.random.random((n_time, n_inh)) < 0.4
+  >>> lfp = bt.metric.unitary_LFP(times, exc_sps, 'exc')
+  >>> lfp += bt.metric.unitary_LFP(times, inh_sps, 'inh')
 
   Parameters
   ----------

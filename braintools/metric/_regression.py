@@ -75,7 +75,7 @@ def squared_error(
     predictions: bc.typing.ArrayLike,
     targets: Optional[bc.typing.ArrayLike] = None,
     axis: Optional[Union[int, tuple[int, ...]]] = None,
-    reduction: str = 'mean',
+    reduction: str = 'none',
 ) -> bc.typing.ArrayLike:
   """Calculates the squared error for a set of predictions.
 
@@ -94,7 +94,7 @@ def squared_error(
       if not provided then it is assumed to be a vector of zeros.
     axis: the dimensions to reduce. If `None`, the loss is reduced to a scalar.
     reduction: the reduction operation to apply to the output. One of
-      'none', 'mean', 'sum'. Default is 'mean'.
+      'none', 'mean', 'sum'. Default is 'none'.
 
   Returns:
     elementwise squared differences, with same shape as `predictions`.
@@ -104,6 +104,7 @@ def squared_error(
     # Avoid broadcasting logic for "-" operator.
     assert predictions.shape == targets.shape, 'predictions and targets must have the same shape.'
   errors = predictions - targets if targets is not None else predictions
+  # return errors ** 2
   return _reduce(errors ** 2, reduction, axis=axis)
 
 

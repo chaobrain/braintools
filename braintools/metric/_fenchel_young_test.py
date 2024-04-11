@@ -15,7 +15,6 @@
 
 import jax
 import jax.numpy as jnp
-from absl.testing import absltest
 from absl.testing import parameterized
 from jax.scipy.special import logsumexp
 
@@ -54,6 +53,3 @@ class FenchelYoungTest(parameterized.TestCase):
     loss_one_hot_no_vmap = fy_loss(theta_random, y_one_hot)
     self.assertTrue(jnp.allclose(loss_one_hot, loss_one_hot_no_vmap, rtol=1e-4))
 
-
-if __name__ == "__main__":
-  absltest.main()
