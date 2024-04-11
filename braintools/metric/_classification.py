@@ -25,6 +25,7 @@ from typing import Optional
 import braincore as bc
 import jax
 import jax.numpy as jnp
+from ._util import _reduce
 
 __all__ = [
     'sigmoid_binary_cross_entropy',
@@ -148,7 +149,8 @@ def softmax_cross_entropy(
     cross entropy between each prediction and the corresponding target
     distributions, with shape `[...]`.
   """
-  return -jnp.sum(labels * jax.nn.log_softmax(logits, axis=-1), axis=-1)
+  ret = -jnp.sum(labels * jax.nn.log_softmax(logits, axis=-1), axis=-1)
+  return ret
 
 
 def softmax_cross_entropy_with_integer_labels(
