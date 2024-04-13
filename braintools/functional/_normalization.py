@@ -19,6 +19,7 @@ from typing import Sequence, Optional
 import jax
 import jax.numpy as jnp
 import numpy as np
+import braincore as bc
 
 
 __all__ = [
@@ -28,35 +29,43 @@ __all__ = [
 
 def weight_standardization(
     w: jax.typing.ArrayLike,
-    axes: Sequence[int],
-    eps: float,
-    gain: Optional[jax.Array] = None
+    eps: float = 1e-4,
+    gain: Optional[jax.Array] = None,
+    out_axis: int = -1,
 ):
   """
-  Scaled Weight Standardization.
+  Scaled Weight Standardization,
+  see `Micro-Batch Training with Batch-Channel Normalization and Weight Standardization <https://paperswithcode.com/paper/weight-standardization>`_.
 
   Parameters
   ----------
   w : jax.typing.ArrayLike
       The weight tensor.
-  axes : Sequence[int]
-      The axes to calculate the mean and variance.
   eps : float
       A small value to avoid division by zero.
   gain : Array
       The gain function, by default None.
+  out_axis : int
+      The output axis, by default -1.
 
   Returns
   -------
   jax.typing.ArrayLike
       The scaled weight tensor.
-
   """
-  # Get Scaled WS weight HWIO;
-  fan_in = np.prod(w.shape[:-1])
-  mean = jnp.mean(w, axis=axes[:-1], keepdims=True)
-  var = jnp.var(w, axis=axes[:-1], keepdims=True)
-  weight = (w - mean) / (var * fan_in + eps) ** 0.5
+  if out_axis < 0:
+    out_axis = w.ndim + out_axis
+  fan_in = 1  # get the fan-in of the weight tensor
+  axes = []  # get the axes of the weight tensor
+  for i in range(w.ndim):
+    if i != out_axis:
+      fan_in *= w.shape[i]
+      axes.append(i)
+  # normalize the weight
+  mean = jnp.mean(w, axis=axes, keepdims=True)
+  var = jnp.var(w, axis=axes, keepdims=True)
+  scale = jax.lax.rsqrt(jnp.maximum(var * fan_in, eps))
   if gain is not None:
-    weight = gain * weight
-  return weight
+    scale = gain * scale
+  shift = mean * scale
+  return w * scale - shift
