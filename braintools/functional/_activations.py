@@ -27,6 +27,7 @@ from jax.typing import ArrayLike
 import braincore as bc
 
 __all__ = [
+  "tanh",
   "relu",
   "squareplus",
   "softplus",
@@ -59,6 +60,22 @@ __all__ = [
   'tanh_shrink',
   'softmin',
 ]
+
+def tanh(x: ArrayLike) -> jax.Array:
+  r"""Hyperbolic tangent activation function.
+
+  Computes the element-wise function:
+
+  .. math::
+    \mathrm{tanh}(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}
+
+  Args:
+    x : input array
+
+  Returns:
+    An array.
+  """
+  return jnp.tanh(x)
 
 
 def softmin(x, axis=-1):
