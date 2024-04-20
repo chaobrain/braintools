@@ -12,6 +12,7 @@ Activation Functions
    :nosignatures:
    :template: classtemplate.rst
 
+   tanh
    relu
    squareplus
    softplus
