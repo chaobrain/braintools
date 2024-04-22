@@ -17,6 +17,7 @@
 
 from typing import Sequence, Union
 
+import numpy as np
 import braincore as bc
 import jax
 import jax.numpy as jnp
@@ -222,13 +223,13 @@ class MultiStepLR(LearningRateScheduler):
       'milestones should be a sequence of increasing integers.'
     )
     assert 1. >= gamma >= 0, 'gamma should be in the range [0, 1].'
-    self.milestones = jnp.asarray((-1,) + tuple(milestones), dtype=bc.environ.ditype())
+    self.milestones = jnp.asarray((-1,) + tuple(milestones) + (np.iinfo(np.int32).max,), dtype=bc.environ.ditype())
     self.gamma = gamma
 
   def __call__(self, i=None):
     i = (self.last_epoch.value + 1) if i is None else i
-    conditions = (i > self.milestones[:-1]) & i < self.milestones[1:]
-    p = jnp.where(conditions, jnp.arange(0, len(self.milestones)))
+    conditions = jnp.logical_and((i >= self.milestones[:-1]), (i < self.milestones[1:]))
+    p = jnp.argmax(conditions)
     return self.lr * self.gamma ** p
 
   def extra_repr(self):
