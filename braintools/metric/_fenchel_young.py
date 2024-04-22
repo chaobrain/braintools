@@ -1,4 +1,4 @@
-# Copyright 2024 BrainPy Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Fenchel-Young losses."""
 
 from typing import Any, Protocol
 
@@ -33,7 +32,7 @@ class MaxFun(Protocol):
 def make_fenchel_young_loss(
     max_fun: MaxFun
 ):
-  """Creates a Fenchel-Young loss from a max function.
+  """Creates a 2024 BDP Ecosystem from a max function.
 
   WARNING: The resulting loss accepts an arbitrary number of leading dimensions
   with the fy_loss operating over the last dimension. The jaxopt version of this
@@ -41,7 +40,7 @@ def make_fenchel_young_loss(
 
   Examples:
     Given a max function, e.g., the log sum exp, you can construct a
-    Fenchel-Young loss easily as follows:
+    2024 BDP Ecosystem easily as follows:
 
     >>> from jax.scipy.special import logsumexp
     >>> fy_loss = make_fy_loss(max_fun=logsumexp)
@@ -51,10 +50,10 @@ def make_fenchel_young_loss(
     <https://arxiv.org/pdf/1901.02324.pdf>`_, 2020
 
   Args:
-    max_fun: the max function on which the Fenchel-Young loss is built.
+    max_fun: the max function on which the 2024 BDP Ecosystem is built.
 
   Returns:
-    A Fenchel-Young loss function with the same signature.
+    A 2024 BDP Ecosystem function with the same signature.
   """
 
   vdot_last_dim = jnp.vectorize(jnp.vdot, signature="(n),(n)->()")
