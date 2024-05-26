@@ -106,7 +106,7 @@ def parameter(
   elif isinstance(param, bc.State):
     param = param
     if batch_size is not None:
-      param = bc.State(jnp.repeat(jnp.expand_dims(param.value, axis=batch_axis), batch_size, axis=batch_axis))
+      param = type(param)(jnp.repeat(jnp.expand_dims(param.value, axis=batch_axis), batch_size, axis=batch_axis))
   else:
     raise ValueError(f'Unknown parameter type: {type(param)}')
 
