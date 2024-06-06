@@ -18,8 +18,7 @@
 from typing import Union
 import numpy as onp
 import jax.numpy as jnp
-import braincore as bc
-
+import brainstate as bst
 
 __all__ = [
   'raster_plot',
@@ -27,8 +26,8 @@ __all__ = [
 ]
 
 
-def raster_plot(sp_matrix: bc.typing.ArrayLike,
-                times: bc.typing.ArrayLike):
+def raster_plot(sp_matrix: bst.typing.ArrayLike,
+                times: bst.typing.ArrayLike):
   """Get spike raster plot which displays the spiking activity
   of a group of neurons over time.
 
@@ -51,7 +50,7 @@ def raster_plot(sp_matrix: bc.typing.ArrayLike,
   return index, time
 
 
-def firing_rate(spikes: bc.typing.ArrayLike,
+def firing_rate(spikes: bst.typing.ArrayLike,
                 width: Union[int, float],
                 dt: Union[int, float]=None):
   r"""Calculate the mean firing rate over in a neuron group.
@@ -79,7 +78,7 @@ def firing_rate(spikes: bc.typing.ArrayLike,
   rate : ndarray
       The population rate in Hz, smoothed with the given window.
   """
-  dt = bc.environ.get_dt() if (dt is None) else dt
+  dt = bst.environ.get_dt() if (dt is None) else dt
   width1 = int(width / 2 / dt) * 2 + 1
   window = jnp.ones(width1) * 1000 / width
   return jnp.convolve(jnp.mean(spikes, axis=1), window, mode='same')

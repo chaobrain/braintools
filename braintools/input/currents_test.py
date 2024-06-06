@@ -18,9 +18,9 @@
 
 from unittest import TestCase
 
-import braincore as bc
 import jax.numpy as jnp
 import numpy as np
+import brainstate as bst
 
 import braintools as bt
 try:
@@ -33,7 +33,7 @@ block = False
 
 def show(current, duration, title=''):
   if plt is not None:
-    ts = np.arange(0, duration, bc.environ.get_dt())
+    ts = np.arange(0, duration, bst.environ.get_dt())
     plt.plot(ts, current)
     plt.title(title)
     plt.xlabel('Time [ms]')
@@ -104,8 +104,8 @@ class TestCurrents(TestCase):
     self.assertTrue(I2.shape[0] == 6000)
 
   def test_general2(self):
-    bc.random.seed(123)
-    current = bt.input.section_input(values=[0, jnp.ones(10), bc.random.random((3, 10))],
+    bst.random.seed(123)
+    current = bt.input.section_input(values=[0, jnp.ones(10), bst.random.random((3, 10))],
                                      durations=[100, 300, 100])
     self.assertTrue(current.shape == (5000, 3, 10))
 

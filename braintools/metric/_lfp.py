@@ -15,9 +15,9 @@
 
 # -*- coding: utf-8 -*-
 
-import braincore as bc
 import jax
 from jax import numpy as jnp
+import brainstate as bst
 
 __all__ = [
   'unitary_LFP',
@@ -25,17 +25,17 @@ __all__ = [
 
 
 def unitary_LFP(
-    times: bc.typing.ArrayLike,
-    spikes: bc.typing.ArrayLike,
+    times: bst.typing.ArrayLike,
+    spikes: bst.typing.ArrayLike,
     spike_type: str,
-    xmax: bc.typing.ArrayLike = 0.2,
-    ymax: bc.typing.ArrayLike = 0.2,
-    va: bc.typing.ArrayLike = 200.,
-    lambda_: bc.typing.ArrayLike = 0.2,
-    sig_i: bc.typing.ArrayLike = 2.1,
-    sig_e: bc.typing.ArrayLike = 2.1 * 1.5,
+    xmax: bst.typing.ArrayLike = 0.2,
+    ymax: bst.typing.ArrayLike = 0.2,
+    va: bst.typing.ArrayLike = 200.,
+    lambda_: bst.typing.ArrayLike = 0.2,
+    sig_i: bst.typing.ArrayLike = 2.1,
+    sig_e: bst.typing.ArrayLike = 2.1 * 1.5,
     location: str = 'soma layer',
-    seed: bc.typing.SeedOrKey = None
+    seed: bst.typing.SeedOrKey = None
 ) -> jax.Array:
   """
   A kernel-based method to calculate unitary local field potentials (uLFP)
@@ -58,8 +58,8 @@ def unitary_LFP(
   >>> n_exc = 100
   >>> n_inh = 25
   >>> times = jax.numpy.arange(n_time) * 0.1
-  >>> exc_sps = bc.random.random((n_time, n_exc)) < 0.3
-  >>> inh_sps = bc.random.random((n_time, n_inh)) < 0.4
+  >>> exc_sps = bst.random.random((n_time, n_exc)) < 0.3
+  >>> inh_sps = bst.random.random((n_time, n_inh)) < 0.4
   >>> lfp = bt.metric.unitary_LFP(times, exc_sps, 'exc')
   >>> lfp += bt.metric.unitary_LFP(times, inh_sps, 'inh')
 
@@ -106,7 +106,7 @@ def unitary_LFP(
                      f'Bug we got {times.shape[0]} != {spikes.shape}.')
 
   # Distributing cells in a 2D grid
-  rng = bc.random.RandomState(seed)
+  rng = bst.random.RandomState(seed)
   num_neuron = spikes.shape[1]
   pos_xs, pos_ys = rng.rand(2, num_neuron).value * jnp.array([[xmax], [ymax]])
   pos_xs, pos_ys = jnp.asarray(pos_xs), jnp.asarray(pos_ys)
@@ -136,4 +136,4 @@ def unitary_LFP(
   tts = times[iis] + delay[ids]
   exc_amp = A[ids]
   tau = (2 * sig_e * sig_e) if spike_type == 'exc' else (2 * sig_i * sig_i)
-  return bc.transform.for_loop(lambda t: jnp.sum(exc_amp * jnp.exp(-(t - tts) ** 2 / tau)), times)
+  return bst.transform.for_loop(lambda t: jnp.sum(exc_amp * jnp.exp(-(t - tts) ** 2 / tau)), times)

@@ -16,7 +16,7 @@
 # -*- coding: utf-8 -*-
 
 
-import braincore as bc
+import brainstate as bst
 import jax.lax
 import jax.numpy as jnp
 import numpy as np
@@ -63,7 +63,7 @@ def section_input(values, durations, dt=None, return_length=False):
     raise ValueError(f'"values" and "durations" must be the same length, while '
                      f'we got {len(values)} != {len(durations)}.')
 
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
 
   # get input current shape, and duration
   I_duration = sum(durations)
@@ -75,7 +75,7 @@ def section_input(values, durations, dt=None, return_length=False):
 
   # get the current
   start = 0
-  I_current = jnp.zeros((int(np.ceil(I_duration / dt)),) + I_shape, dtype=bc.environ.dftype())
+  I_current = jnp.zeros((int(np.ceil(I_duration / dt)),) + I_shape, dtype=bst.environ.dftype())
   for c_size, duration in zip(values, durations):
     length = int(duration / dt)
     I_current = I_current.at[start: start + length].set(c_size)
@@ -112,7 +112,7 @@ def constant_input(I_and_duration, dt=None):
   current_and_duration : tuple
       (The formatted current, total duration)
   """
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
 
   # get input current dimension, shape, and duration
   I_duration = 0.
@@ -125,13 +125,12 @@ def constant_input(I_and_duration, dt=None):
 
   # get the current
   start = 0
-  I_current = jnp.zeros((int(np.ceil(I_duration / dt)),) + I_shape, dtype=bc.environ.dftype())
+  I_current = jnp.zeros((int(np.ceil(I_duration / dt)),) + I_shape, dtype=bst.environ.dftype())
   for c_size, duration in I_and_duration:
     length = int(duration / dt)
     I_current = I_current.at[start: start + length].set(c_size)
     start += length
   return I_current, I_duration
-
 
 
 def spike_input(sp_times, sp_lens, sp_sizes, duration, dt=None):
@@ -166,14 +165,14 @@ def spike_input(sp_times, sp_lens, sp_sizes, duration, dt=None):
   current : bm.ndarray
       The formatted input current.
   """
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
   assert isinstance(sp_times, (list, tuple))
   if isinstance(sp_lens, (float, int)):
     sp_lens = [sp_lens] * len(sp_times)
   if isinstance(sp_sizes, (float, int)):
     sp_sizes = [sp_sizes] * len(sp_times)
 
-  current = jnp.zeros(int(np.ceil(duration / dt)), dtype=bc.environ.dftype())
+  current = jnp.zeros(int(np.ceil(duration / dt)), dtype=bst.environ.dftype())
   for time, dur, size in zip(sp_times, sp_lens, sp_sizes):
     pp = int(time / dt)
     p_len = int(dur / dt)
@@ -204,16 +203,15 @@ def ramp_input(c_start, c_end, duration, t_start=0, t_end=None, dt=None):
   current : bm.ndarray
     The formatted current
   """
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
   t_end = duration if t_end is None else t_end
 
-  current = jnp.zeros(int(np.ceil(duration / dt)), dtype=bc.environ.dftype())
+  current = jnp.zeros(int(np.ceil(duration / dt)), dtype=bst.environ.dftype())
   p1 = int(np.ceil(t_start / dt))
   p2 = int(np.ceil(t_end / dt))
   cc = jnp.array(jnp.linspace(c_start, c_end, p2 - p1))
   current = current.at[p1: p2].set(cc)
   return current
-
 
 
 def wiener_process(duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
@@ -235,12 +233,12 @@ def wiener_process(duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
   seed: int
     The noise seed.
   """
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
   t_end = duration if t_end is None else t_end
   i_start = int(t_start / dt)
   i_end = int(t_end / dt)
-  noises = bc.random.standard_normal((i_end - i_start, n)) * jnp.sqrt(dt)
-  currents = jnp.zeros((int(duration / dt), n), dtype=bc.environ.dftype())
+  noises = bst.random.standard_normal((i_end - i_start, n)) * jnp.sqrt(dt)
+  currents = jnp.zeros((int(duration / dt), n), dtype=bst.environ.dftype())
   currents = currents.at[i_start: i_end].set(noises)
   return currents
 
@@ -273,18 +271,19 @@ def ou_process(mean, sigma, tau, duration, dt=None, n=1, t_start=0., t_end=None,
   seed: optional, int
     The random seed.
   """
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
   dt_sqrt = jnp.sqrt(dt)
   t_end = duration if t_end is None else t_end
   i_start = int(t_start / dt)
   i_end = int(t_end / dt)
 
   def _f(x, key):
-    x = x + dt * ((mean - x) / tau) + sigma * dt_sqrt * bc.random.rand(n, key=key)
+    x = x + dt * ((mean - x) / tau) + sigma * dt_sqrt * bst.random.rand(n, key=key)
     return x, x
 
-  _, noises = jax.lax.scan(_f, jnp.full(n, mean, dtype=bc.environ.dftype()), bc.random.split_keys(i_end - i_start))
-  currents = jnp.zeros((int(duration / dt), n), dtype=bc.environ.dftype())
+  _, noises = jax.lax.scan(_f, jnp.full(n, mean, dtype=bst.environ.dftype()),
+                           bst.random.split_keys(i_end - i_start))
+  currents = jnp.zeros((int(duration / dt), n), dtype=bst.environ.dftype())
   return currents.at[i_start: i_end].set(noises)
 
 
@@ -309,7 +308,7 @@ def sinusoidal_input(amplitude, frequency, duration, dt=None, t_start=0., t_end=
     Whether the sinusoid oscillates around 0 (False), or
     has a positive DC bias, thus non-negative (True).
   """
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
   if t_end is None:
     t_end = duration
   times = jnp.arange(0, t_end - t_start, dt)
@@ -317,7 +316,7 @@ def sinusoidal_input(amplitude, frequency, duration, dt=None, t_start=0., t_end=
   end_i = int(t_end / dt)
   sin_inputs = amplitude * jnp.sin(2 * jnp.pi * times * (frequency / 1000.0))
   if bias: sin_inputs += amplitude
-  currents = jnp.zeros(int(duration / dt), dtype=bc.environ.dftype())
+  currents = jnp.zeros(int(duration / dt), dtype=bst.environ.dftype())
   return currents.at[start_i:end_i].set(sin_inputs)
 
 
@@ -369,12 +368,12 @@ def square_input(amplitude, frequency, duration, dt=None, bias=False, t_start=0.
     Whether the sinusoid oscillates around 0 (False), or
     has a positive DC bias, thus non-negative (True).
   """
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
   if t_end is None: t_end = duration
   times = np.arange(0, t_end - t_start, dt)
   sin_inputs = amplitude * _square(2 * np.pi * times * (frequency / 1000.0))
   if bias: sin_inputs += amplitude
-  currents = jnp.zeros(int(duration / dt), dtype=bc.environ.dftype())
+  currents = jnp.zeros(int(duration / dt), dtype=bst.environ.dftype())
   start_i = int(t_start / dt)
   end_i = int(t_end / dt)
   return currents.at[start_i:end_i].set(sin_inputs)

@@ -17,8 +17,8 @@
 
 
 import unittest
-import braincore as bc
 import jax.numpy as jnp
+import brainstate as bst
 import braintools as bt
 
 
@@ -28,14 +28,14 @@ class TestFiringRate(unittest.TestCase):
     print(bt.metric.firing_rate(spikes, 1.))
 
   def test_fr2(self):
-    bc.random.seed()
-    spikes = bc.random.random((1000, 10)) < 0.2
+    bst.random.seed()
+    spikes = bst.random.random((1000, 10)) < 0.2
     print(bt.metric.firing_rate(spikes, 1.))
     print(bt.metric.firing_rate(spikes, 10.))
 
   def test_fr3(self):
-    bc.random.seed()
-    spikes = bc.random.random((1000, 10)) < 0.02
+    bst.random.seed()
+    spikes = bst.random.random((1000, 10)) < 0.02
     print(bt.metric.firing_rate(spikes, 1.))
     print(bt.metric.firing_rate(spikes, 5.))
 

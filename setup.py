@@ -53,7 +53,7 @@ setup(
   author_email='chao.brain@qq.com',
   packages=packages,
   python_requires='>=3.9',
-  install_requires=['numpy>=1.15', 'jax', 'braincore'],
+  install_requires=['numpy>=1.15', 'jax', 'brainstate'],
   url='https://github.com/brainpy/braintools',
   project_urls={
     "Bug Tracker": "https://github.com/brainpy/braintools/issues",

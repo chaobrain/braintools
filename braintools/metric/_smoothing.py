@@ -16,13 +16,13 @@
 """Smoothing functions."""
 
 import jax.numpy as jnp
-import braincore as bc
+import brainstate as bst
 
 __all__ = ['smooth_labels']
 
 
 def smooth_labels(
-    labels: bc.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
     alpha: float,
 ) -> jnp.ndarray:
   """Apply label smoothing.
@@ -41,6 +41,6 @@ def smooth_labels(
   Returns:
     a smoothed version of the one hot input labels.
   """
-  assert bc.math.is_float(labels), f'labels should be a float.'
+  assert bst.math.is_float(labels), f'labels should be a float.'
   num_categories = labels.shape[-1]
   return (1.0 - alpha) * labels + alpha / num_categories

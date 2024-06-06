@@ -45,7 +45,7 @@ from typing import Callable, Optional
 
 import jax
 import jax.numpy as jnp
-import braincore as bc
+import brainstate as bst
 
 __all__ = [
   'ranking_softmax_loss',
@@ -53,10 +53,10 @@ __all__ = [
 
 
 def _safe_reduce(
-    a: bc.typing.ArrayLike,
-    where: Optional[bc.typing.ArrayLike] = None,
-    reduce_fn: Optional[Callable[..., bc.typing.ArrayLike]] = None,
-) -> bc.typing.ArrayLike:
+    a: bst.typing.ArrayLike,
+    where: Optional[bst.typing.ArrayLike] = None,
+    reduce_fn: Optional[Callable[..., bst.typing.ArrayLike]] = None,
+) -> bst.typing.ArrayLike:
   """Reduces the values of given array while preventing NaN in the output.
 
   For :func:`jax.numpy.mean` reduction, this additionally prevents ``NaN`` in
@@ -104,13 +104,13 @@ def _safe_reduce(
 
 
 def ranking_softmax_loss(
-    logits: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
+    logits: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
     *,
-    where: Optional[bc.typing.ArrayLike] = None,
-    weights: Optional[bc.typing.ArrayLike] = None,
-    reduce_fn: Optional[Callable[..., bc.typing.ArrayLike]] = jnp.mean
-) -> bc.typing.ArrayLike:
+    where: Optional[bst.typing.ArrayLike] = None,
+    weights: Optional[bst.typing.ArrayLike] = None,
+    reduce_fn: Optional[Callable[..., bst.typing.ArrayLike]] = jnp.mean
+) -> bst.typing.ArrayLike:
   r"""Ranking softmax loss.
 
   Definition:
@@ -135,7 +135,7 @@ def ranking_softmax_loss(
   Returns:
     The ranking softmax loss.
   """
-  assert bc.math.is_float(logits), "logits must be a float type."
+  assert bst.math.is_float(logits), "logits must be a float type."
   labels = labels.astype(logits.dtype)
 
   # Applies mask so that masked elements do not count towards the loss.

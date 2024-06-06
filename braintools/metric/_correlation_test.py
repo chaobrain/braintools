@@ -22,22 +22,20 @@ import braintools as bt
 
 from jax import jit
 import jax.numpy as jnp
-import braincore as bc
+import brainstate as bst
 
 
 class TestCrossCorrelation(unittest.TestCase):
   def test_c(self):
-    bc.random.seed()
     spikes = jnp.asarray([[1, 0, 1, 0, 1, 0, 1, 0, 0], [1, 1, 1, 1, 1, 1, 1, 0, 0]]).T
     cc1 = bt.metric.cross_correlation(spikes, 1., dt=1.)
     f_cc = jit(partial(bt.metric.cross_correlation, bin=1, dt=1.))
     cc2 = f_cc(spikes)
     print(cc1, cc2)
     self.assertTrue(cc1 == cc2)
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
   def test_cc(self):
-    bc.random.seed()
     spikes = jnp.ones((1000, 10))
     cc1 = bt.metric.cross_correlation(spikes, 1.)
     self.assertTrue(cc1 == 1.)
@@ -46,44 +44,39 @@ class TestCrossCorrelation(unittest.TestCase):
     cc2 = bt.metric.cross_correlation(spikes, 1.)
     self.assertTrue(cc2 == 0.)
 
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
   def test_cc2(self):
-    bc.random.seed()
-    spikes = bc.random.randint(0, 2, (1000, 10))
+    spikes = bst.random.randint(0, 2, (1000, 10))
     print(bt.metric.cross_correlation(spikes, 1.))
     print(bt.metric.cross_correlation(spikes, 0.5))
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
   def test_cc3(self):
-    bc.random.seed()
-    spikes = bc.random.random((1000, 100)) < 0.8
+    spikes = bst.random.random((1000, 100)) < 0.8
     print(bt.metric.cross_correlation(spikes, 1.))
     print(bt.metric.cross_correlation(spikes, 0.5))
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
   def test_cc4(self):
-    bc.random.seed()
-    spikes = bc.random.random((1000, 100)) < 0.2
+    spikes = bst.random.random((1000, 100)) < 0.2
     print(bt.metric.cross_correlation(spikes, 1.))
     print(bt.metric.cross_correlation(spikes, 0.5))
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
   def test_cc5(self):
-    bc.random.seed()
-    spikes = bc.random.random((1000, 100)) < 0.05
+    spikes = bst.random.random((1000, 100)) < 0.05
     print(bt.metric.cross_correlation(spikes, 1.))
     print(bt.metric.cross_correlation(spikes, 0.5))
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
 
 class TestVoltageFluctuation(unittest.TestCase):
   def test_vf1(self):
-    bc.random.seed()
-    voltages = bc.random.normal(0, 10, size=(100, 10))
+    voltages = bst.random.normal(0, 10, size=(100, 10))
     print(bt.metric.voltage_fluctuation(voltages))
 
-    with bc.environ.context(precision=64):
+    with bst.environ.context(precision=64):
       voltages = jnp.ones((100, 10))
       r1 = bt.metric.voltage_fluctuation(voltages)
   
@@ -93,32 +86,31 @@ class TestVoltageFluctuation(unittest.TestCase):
       print(r1, r2)  # TODO: JIT results are different?
       # self.assertTrue(r1 == r2)
 
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
 
 class TestFunctionalConnectivity(unittest.TestCase):
   def test_cf1(self):
-    bc.random.seed()
-    act = bc.random.random((10000, 3))
+    act = bst.random.random((10000, 3))
     r1 = bt.metric.functional_connectivity(act)
 
     jit_f = jit(partial(bt.metric.functional_connectivity))
     r2 = jit_f(act)
 
     self.assertTrue(jnp.allclose(r1, r2))
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
 
 class TestMatrixCorrelation(unittest.TestCase):
   def test_mc(self):
-    bc.random.seed()
-    A = bc.random.random((100, 100))
-    B = bc.random.random((100, 100))
+    
+    A = bst.random.random((100, 100))
+    B = bst.random.random((100, 100))
     r1 = (bt.metric.matrix_correlation(A, B))
 
     jit_f = jit(partial(bt.metric.matrix_correlation))
     r2 = jit_f(A, B)
     self.assertTrue(jnp.allclose(r1, r2))
-    bc.util.clear_buffer_memory()
+    bst.util.clear_buffer_memory()
 
 

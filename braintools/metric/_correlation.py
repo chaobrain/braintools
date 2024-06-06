@@ -17,9 +17,9 @@
 
 from typing import Union
 
-import braincore as bc
 import numpy as onp
 from jax import vmap, lax, numpy as jnp
+import brainstate as bst
 
 __all__ = [
   'cross_correlation',
@@ -31,7 +31,7 @@ __all__ = [
 ]
 
 
-def cross_correlation(spikes: bc.typing.ArrayLike,
+def cross_correlation(spikes: bst.typing.ArrayLike,
                       bin: Union[int, float],
                       dt: Union[int, float] =None,
                       method: str = 'loop'):
@@ -82,7 +82,7 @@ def cross_correlation(spikes: bc.typing.ArrayLike,
          inhibition in a hippocampal interneuronal network model." Journal of
          neuroscience 16.20 (1996): 6402-6413.
   """
-  dt = bc.environ.get_dt() if dt is None else dt
+  dt = bst.environ.get_dt() if dt is None else dt
   bin_size = int(bin / dt)
   num_hist, num_neu = spikes.shape
   num_bin = int(onp.ceil(num_hist / bin_size))
@@ -100,7 +100,7 @@ def cross_correlation(spikes: bc.typing.ArrayLike,
                       lambda _: jnp.sum(states[i] * states[j]) / sqrt_ij,
                       None)
 
-    res = bc.transform.for_loop(_f, *indices)
+    res = bst.transform.for_loop(_f, *indices)
 
   elif method == 'vmap':
     @vmap
@@ -178,7 +178,7 @@ def voltage_fluctuation(potentials, method='loop'):
   avg_var = jnp.mean(avg * avg) - jnp.mean(avg) ** 2
 
   if method == 'loop':
-    _var = bc.transform.for_loop(_f_signal, jnp.moveaxis(potentials, 0, 1))
+    _var = bst.transform.for_loop(_f_signal, jnp.moveaxis(potentials, 0, 1))
   elif method == 'vmap':
     _var = vmap(_f_signal, in_axes=1)(potentials)
   else:

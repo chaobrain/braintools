@@ -16,11 +16,7 @@
 
 __version__ = "0.0.3"
 
-from . import metric
 from . import input
-from . import init
-from . import optim
-from . import functional
+from . import metric
 
-__all__ = ['input', 'init', 'optim', 'functional', 'metric']
-
+__all__ = ['input', 'metric']

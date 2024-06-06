@@ -22,9 +22,9 @@ Classification losses.
 
 from typing import Optional
 
-import braincore as bc
 import jax
 import jax.numpy as jnp
+import brainstate as bst
 
 __all__ = [
     'sigmoid_binary_cross_entropy',
@@ -45,16 +45,16 @@ __all__ = [
 
 
 def assert_is_float(array):
-  assert bc.math.is_float(array), 'Array must be float.'
+  assert bst.math.is_float(array), 'Array must be float.'
 
 
 def assert_is_int(array):
-  assert bc.math.is_int(array), 'Array must be int.'
+  assert bst.math.is_int(array), 'Array must be int.'
 
 
 def sigmoid_binary_cross_entropy(
-    logits: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
+    logits: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
 ):
   """Computes element-wise sigmoid cross entropy given logits and labels.
 
@@ -89,9 +89,9 @@ def sigmoid_binary_cross_entropy(
 
 
 def hinge_loss(
-    predictor_outputs: bc.typing.ArrayLike,
-    targets: bc.typing.ArrayLike
-) -> bc.typing.ArrayLike:
+    predictor_outputs: bst.typing.ArrayLike,
+    targets: bst.typing.ArrayLike
+) -> bst.typing.ArrayLike:
   """Computes the hinge loss for binary classification.
 
   Args:
@@ -105,9 +105,9 @@ def hinge_loss(
 
 
 def perceptron_loss(
-    predictor_outputs: bc.typing.ArrayLike,
-    targets: bc.typing.ArrayLike
-) -> bc.typing.ArrayLike:
+    predictor_outputs: bst.typing.ArrayLike,
+    targets: bst.typing.ArrayLike
+) -> bst.typing.ArrayLike:
   """Binary perceptron loss.
 
   References:
@@ -125,9 +125,9 @@ def perceptron_loss(
 
 
 def softmax_cross_entropy(
-    logits: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
-) -> bc.typing.ArrayLike:
+    logits: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
+) -> bst.typing.ArrayLike:
   """Computes the softmax cross entropy between sets of logits and labels.
 
   Measures the probability error in discrete classification tasks in which
@@ -153,9 +153,9 @@ def softmax_cross_entropy(
 
 
 def softmax_cross_entropy_with_integer_labels(
-    logits: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
-) -> bc.typing.ArrayLike:
+    logits: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
+) -> bst.typing.ArrayLike:
   """Computes softmax cross entropy between sets of logits and integer labels.
 
   Measures the probability error in discrete classification tasks in which
@@ -191,9 +191,9 @@ _dot_last_dim = jnp.vectorize(jnp.dot, signature='(n),(n)->()')
 
 
 def multiclass_hinge_loss(
-    scores: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
-) -> bc.typing.ArrayLike:
+    scores: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
+) -> bst.typing.ArrayLike:
   """Multiclass hinge loss.
 
   Args:
@@ -213,9 +213,9 @@ def multiclass_hinge_loss(
 
 
 def multiclass_perceptron_loss(
-    scores: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
-) -> bc.typing.ArrayLike:
+    scores: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
+) -> bst.typing.ArrayLike:
   """Binary perceptron loss.
 
   References:
@@ -234,10 +234,10 @@ def multiclass_perceptron_loss(
 
 
 def poly_loss_cross_entropy(
-    logits: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
+    logits: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
     epsilon: float = 2.0
-) -> bc.typing.ArrayLike:
+) -> bst.typing.ArrayLike:
   r"""
   Computes PolyLoss between logits and labels.
 
@@ -281,9 +281,9 @@ def poly_loss_cross_entropy(
 
 
 def kl_divergence(
-    log_predictions: bc.typing.ArrayLike,
-    targets: bc.typing.ArrayLike
-) -> bc.typing.ArrayLike:
+    log_predictions: bst.typing.ArrayLike,
+    targets: bst.typing.ArrayLike
+) -> bst.typing.ArrayLike:
   """Computes the Kullback-Leibler divergence (relative entropy) loss.
 
   Measures the information gain achieved if target probability distribution
@@ -309,9 +309,9 @@ def kl_divergence(
 
 
 def kl_divergence_with_log_targets(
-    log_predictions: bc.typing.ArrayLike,
-    log_targets: bc.typing.ArrayLike
-) -> bc.typing.ArrayLike:
+    log_predictions: bst.typing.ArrayLike,
+    log_targets: bst.typing.ArrayLike
+) -> bst.typing.ArrayLike:
   """Computes the Kullback-Leibler divergence (relative entropy) loss.
 
   Version of kl_div_loss where targets are given in log-space.
@@ -333,9 +333,9 @@ def kl_divergence_with_log_targets(
 
 
 def convex_kl_divergence(
-    log_predictions: bc.typing.ArrayLike,
-    targets: bc.typing.ArrayLike
-) -> bc.typing.ArrayLike:
+    log_predictions: bst.typing.ArrayLike,
+    targets: bst.typing.ArrayLike
+) -> bst.typing.ArrayLike:
   """Computes a convex version of the Kullback-Leibler divergence loss.
 
   Measures the information gain achieved if target probability distribution
@@ -359,13 +359,13 @@ def convex_kl_divergence(
 
 
 def ctc_loss_with_forward_probs(
-    logits: bc.typing.ArrayLike,
-    logit_paddings: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
-    label_paddings: bc.typing.ArrayLike,
+    logits: bst.typing.ArrayLike,
+    logit_paddings: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
+    label_paddings: bst.typing.ArrayLike,
     blank_id: int = 0,
     log_epsilon: float = -1e5
-) -> tuple[bc.typing.ArrayLike, bc.typing.ArrayLike, bc.typing.ArrayLike]:
+) -> tuple[bst.typing.ArrayLike, bst.typing.ArrayLike, bst.typing.ArrayLike]:
   r"""Computes CTC loss and CTC forward-probabilities.
 
   The CTC loss is a loss function based on log-likelihoods of the model that
@@ -484,13 +484,13 @@ def ctc_loss_with_forward_probs(
 
 
 def ctc_loss(
-    logits: bc.typing.ArrayLike,
-    logit_paddings: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
-    label_paddings: bc.typing.ArrayLike,
+    logits: bst.typing.ArrayLike,
+    logit_paddings: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
+    label_paddings: bst.typing.ArrayLike,
     blank_id: int = 0,
     log_epsilon: float = -1e5
-) -> bc.typing.ArrayLike:
+) -> bst.typing.ArrayLike:
   """Computes CTC loss.
 
   See docstring for ``ctc_loss_with_forward_probs`` for details.
@@ -525,11 +525,11 @@ def ctc_loss(
 
 
 def sigmoid_focal_loss(
-    logits: bc.typing.ArrayLike,
-    labels: bc.typing.ArrayLike,
+    logits: bst.typing.ArrayLike,
+    labels: bst.typing.ArrayLike,
     alpha: Optional[float] = None,
     gamma: float = 2.,
-) -> bc.typing.ArrayLike:
+) -> bst.typing.ArrayLike:
   """Sigmoid focal loss.
 
   The focal loss is a re-weighted cross entropy for unbalanced problems.
