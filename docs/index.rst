@@ -21,13 +21,13 @@ Installation
 
        .. code-block:: bash
 
-          pip install -U braintools[cuda11] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+          pip install -U braintools[cuda11]
 
     .. tab-item:: GPU (CUDA 12.0)
 
        .. code-block:: bash
 
-          pip install -U braintools[cuda12] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+          pip install -U braintools[cuda12]
 
     .. tab-item:: TPU
 
