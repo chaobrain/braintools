@@ -41,6 +41,7 @@ __all__ = [
     'ctc_loss',
     'ctc_loss_with_forward_probs',
     'sigmoid_focal_loss',
+    'nll_loss',
 ]
 
 
@@ -567,3 +568,75 @@ def sigmoid_focal_loss(
   not_weighted = lambda loss_arg: loss_arg
   loss = jax.lax.cond(alpha >= 0, weighted, not_weighted, loss)
   return loss
+
+
+
+def nll_loss(input, target):
+  r"""
+  The negative log likelihood loss.
+
+  The negative log likelihood loss. It is useful to train a classification
+  problem with `C` classes.
+
+  If provided, the optional argument :attr:`weight` should be a 1D Tensor assigning
+  weight to each of the classes. This is particularly useful when you have an
+  unbalanced training set.
+
+  The `input` given through a forward call is expected to contain
+  log-probabilities of each class. `input` has to be a Tensor of size either
+  :math:`(minibatch, C)` or :math:`(minibatch, C, d_1, d_2, ..., d_K)`
+  with :math:`K \geq 1` for the `K`-dimensional case. The latter is useful for
+  higher dimension inputs, such as computing NLL loss per-pixel for 2D images.
+
+  Obtaining log-probabilities in a neural network is easily achieved by
+  adding a  `LogSoftmax`  layer in the last layer of your network.
+  You may use `CrossEntropyLoss` instead, if you prefer not to add an extra
+  layer.
+
+  The `target` that this loss expects should be a class index in the range :math:`[0, C-1]`
+  where `C = number of classes`; if `ignore_index` is specified, this loss also accepts
+  this class index (this index may not necessarily be in the class range).
+
+  The unreduced (i.e. with :attr:`reduction` set to ``'none'``) loss can be described as:
+
+  .. math::
+      \ell(x, y) = L = \{l_1,\dots,l_N\}^\top, \quad
+      l_n = - w_{y_n} x_{n,y_n}, \quad
+      w_{c} = \text{weight}[c] \cdot \mathbb{1}\{c \not= \text{ignore\_index}\},
+
+  where :math:`x` is the input, :math:`y` is the target, :math:`w` is the weight, and
+  :math:`N` is the batch size. If :attr:`reduction` is not ``'none'``
+  (default ``'mean'``), then
+
+  .. math::
+      \ell(x, y) = \begin{cases}
+          \sum_{n=1}^N \frac{1}{\sum_{n=1}^N w_{y_n}} l_n, &
+          \text{if reduction} = \text{`mean';}\\
+          \sum_{n=1}^N l_n,  &
+          \text{if reduction} = \text{`sum'.}
+      \end{cases}
+
+  Shape:
+      - Input: :math:`(N, C)` or :math:`(C)`, where `C = number of classes`, or
+        :math:`(N, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`
+        in the case of `K`-dimensional loss.
+      - Target: :math:`(N)` or :math:`()`, where each value is
+        :math:`0 \leq \text{targets}[i] \leq C-1`, or
+        :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case of
+        K-dimensional loss.
+      - Output: If :attr:`reduction` is ``'none'``, shape :math:`(N)` or
+        :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case of K-dimensional loss.
+        Otherwise, scalar.
+
+  """
+  target = jnp.asarray(target)
+  if target.ndim == 1:
+    assert input.ndim == 2
+    loss = input[jnp.arange(len(target)), target]
+    return loss
+  elif target.ndim == 0:
+    assert input.ndim == 1
+    return input[target]
+  else:
+    assert False, 'Invalid shape for target'
+

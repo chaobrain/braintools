@@ -43,13 +43,16 @@ See also the BDP ecosystem
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-- `brainpy <https://github.com/brainpy/BrainPy>`_: The solution for the general-purpose brain dynamics programming.
 
-- `braincore <https://github.com/brainpy/braincore>`_: The core system for the next generation of BrainPy framework.
+- `brainstate <https://github.com/brainpy/brainstate>`_: A ``State``-based transformation system for brain dynamics programming.
 
-- `braintools <https://github.com/brainpy/braintools>`_: The tools for the brain dynamics simulation and analysis.
+- `brainunit <https://github.com/brainpy/brainunit>`_: The unit system for brain dynamics programming.
 
-- `brainscale <https://github.com/brainpy/brainscale>`_: The scalable online learning for biological spiking neural networks.
+- `braintaichi <https://github.com/brainpy/braintaichi>`_: Leveraging Taichi Lang to customize brain dynamics operators.
+
+- `brainscale <https://github.com/brainpy/brainscale>`_: The scalable online learning framework for biological neural networks.
+
+- `braintools <https://github.com/brainpy/braintools>`_: The toolbox for the brain dynamics simulation, training and analysis.
 
 
 

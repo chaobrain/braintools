@@ -14,11 +14,12 @@
 # ==============================================================================
 
 
-__version__ = "0.0.3"
+from .style import *
+from .figures import *
+from .figures import __all__ as _figures_all
 
-from . import input
-from . import metric
-from . import visualize
+__all__ = list(_figures_all)
 
-__all__ = ['input', 'metric', 'visualize']
+del _figures_all
+
 
