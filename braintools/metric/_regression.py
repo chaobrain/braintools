@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 import jax.numpy as jnp
 import brainstate as bst
+import brainunit as bu
 
 from ._util import _reduce
 
@@ -99,7 +100,7 @@ def squared_error(
   Returns:
     elementwise squared differences, with same shape as `predictions`.
   """
-  assert bst.math.is_float(predictions), 'predictions must be float.'
+  assert bu.math.is_float(predictions), 'predictions must be float.'
   if targets is not None:
     # Avoid broadcasting logic for "-" operator.
     assert predictions.shape == targets.shape, 'predictions and targets must have the same shape.'
@@ -129,7 +130,7 @@ def absolute_error(
   Returns:
     elementwise absolute differences, with same shape as `predictions`.
   """
-  assert bst.math.is_float(predictions), 'predictions must be float.'
+  assert bu.math.is_float(predictions), 'predictions must be float.'
   if targets is not None:
     # Avoid broadcasting logic for "-" operator.
     assert predictions.shape == targets.shape, 'predictions and targets must have the same shape.'
@@ -293,7 +294,7 @@ def l2_norm(
   Returns:
     elementwise l2 norm of the differences, with same shape as `predictions`.
   """
-  assert bst.math.is_float(predictions), 'predictions must be float.'
+  assert bu.math.is_float(predictions), 'predictions must be float.'
   if targets is not None:
     # Avoid broadcasting logic for "-" operator.
     assert predictions.shape == targets.shape, 'predictions and targets must have the same shape.'
@@ -323,7 +324,7 @@ def huber_loss(
   Returns:
     elementwise huber losses, with the same shape of `predictions`.
   """
-  assert bst.math.is_float(predictions), 'predictions must be float.'
+  assert bu.math.is_float(predictions), 'predictions must be float.'
   errors = (predictions - targets) if (targets is not None) else predictions
   # 0.5 * err^2                  if |err| <= d
   # 0.5 * d^2 + d * (|err| - d)  if |err| > d
@@ -354,7 +355,7 @@ def log_cosh(
   Returns:
     the log-cosh loss, with same shape as `predictions`.
   """
-  assert bst.math.is_float(predictions), 'predictions must be float.'
+  assert bu.math.is_float(predictions), 'predictions must be float.'
   errors = (predictions - targets) if (targets is not None) else predictions
   # log(cosh(x)) = log((exp(x) + exp(-x))/2) = log(exp(x) + exp(-x)) - log(2)
   return jnp.logaddexp(errors, -errors) - jnp.log(2.0).astype(errors.dtype)
@@ -382,8 +383,8 @@ def cosine_similarity(
   Returns:
     cosine similarity measures, with shape `[...]`.
   """
-  assert bst.math.is_float(predictions), 'predictions must be float.'
-  assert bst.math.is_float(targets), 'targets must be float.'
+  assert bu.math.is_float(predictions), 'predictions must be float.'
+  assert bu.math.is_float(targets), 'targets must be float.'
   # vectorize norm fn, to treat all dimensions except the last as batch dims.
   batched_norm_fn = jnp.vectorize(safe_norm, signature='(k)->()', excluded={1})
   # normalise the last dimension of targets and predictions.
@@ -416,8 +417,8 @@ def cosine_distance(
   Returns:
     cosine distances, with shape `[...]`.
   """
-  assert bst.math.is_float(predictions), 'predictions must be float.'
-  assert bst.math.is_float(targets), 'targets must be float.'
+  assert bu.math.is_float(predictions), 'predictions must be float.'
+  assert bu.math.is_float(targets), 'targets must be float.'
   # cosine distance = 1 - cosine similarity.
   return 1. - cosine_similarity(predictions, targets, epsilon=epsilon)
 

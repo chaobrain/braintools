@@ -17,6 +17,7 @@
 
 import jax.numpy as jnp
 import brainstate as bst
+import brainunit as bu
 
 __all__ = ['smooth_labels']
 
@@ -41,6 +42,6 @@ def smooth_labels(
   Returns:
     a smoothed version of the one hot input labels.
   """
-  assert bst.math.is_float(labels), f'labels should be a float.'
+  assert bu.math.is_float(labels), f'labels should be a float.'
   num_categories = labels.shape[-1]
   return (1.0 - alpha) * labels + alpha / num_categories

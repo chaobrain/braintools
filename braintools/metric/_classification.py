@@ -25,6 +25,8 @@ from typing import Optional
 import jax
 import jax.numpy as jnp
 import brainstate as bst
+import brainunit as bu
+
 
 __all__ = [
     'sigmoid_binary_cross_entropy',
@@ -46,11 +48,11 @@ __all__ = [
 
 
 def assert_is_float(array):
-  assert bst.math.is_float(array), 'Array must be float.'
+  assert bu.math.is_float(array), 'Array must be float.'
 
 
 def assert_is_int(array):
-  assert bst.math.is_int(array), 'Array must be int.'
+  assert bu.math.is_int(array), 'Array must be int.'
 
 
 def sigmoid_binary_cross_entropy(

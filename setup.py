@@ -39,8 +39,10 @@ with io.open(os.path.join(here, 'README.md'), 'r', encoding='utf-8') as f:
   README = f.read()
 
 # installation packages
-packages = find_packages(exclude=["docs*", "tests*", "examples*", "build*",
-                                  "dist*", "braintools.egg-info*", "braintools/__pycache__*"])
+packages = find_packages(
+  exclude=["docs*", "tests*", "examples*", "build*",
+           "dist*", "braintools.egg-info*", "braintools/__pycache__*"]
+)
 
 # setup
 setup(
@@ -53,7 +55,7 @@ setup(
   author_email='chao.brain@qq.com',
   packages=packages,
   python_requires='>=3.9',
-  install_requires=['numpy>=1.15', 'jax', 'brainstate'],
+  install_requires=['numpy>=1.15', 'jax', 'brainstate', 'brainunit'],
   url='https://github.com/brainpy/braintools',
   project_urls={
     "Bug Tracker": "https://github.com/brainpy/braintools/issues",
@@ -61,9 +63,9 @@ setup(
     "Source Code": "https://github.com/brainpy/braintools",
   },
   extras_require={
-    'cpu': ['jaxlib',],
-    'cuda11': ['jaxlib[cuda11_pip]',],
-    'cuda12': ['jaxlib[cuda12_pip]',],
+    'cpu': ['jaxlib', ],
+    'cuda11': ['jaxlib[cuda11_pip]', ],
+    'cuda12': ['jaxlib[cuda12_pip]', ],
     'tpu': ['jaxlib[tpu]'],
     'cpu_mini': ['jaxlib'],
     'cuda11_mini': ['jaxlib[cuda11_pip]'],

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "numpy", 'jax', 'jaxlib', 'braincore']
+requires = ["setuptools", "numpy", 'jax', 'jaxlib', 'brainstate', 'brainunit']
 build-backend = "setuptools.build_meta"
 
 
@@ -48,7 +48,8 @@ dependencies = [
     'jax',
     'jaxlib',
     'numpy',
-    'braincore',
+    'brainstate',
+    'brainunit',
 ]
 
 dynamic = ['version']

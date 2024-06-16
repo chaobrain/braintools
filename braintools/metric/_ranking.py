@@ -46,6 +46,7 @@ from typing import Callable, Optional
 import jax
 import jax.numpy as jnp
 import brainstate as bst
+import brainunit as bu
 
 __all__ = [
   'ranking_softmax_loss',
@@ -135,7 +136,7 @@ def ranking_softmax_loss(
   Returns:
     The ranking softmax loss.
   """
-  assert bst.math.is_float(logits), "logits must be a float type."
+  assert bu.math.is_float(logits), "logits must be a float type."
   labels = labels.astype(logits.dtype)
 
   # Applies mask so that masked elements do not count towards the loss.

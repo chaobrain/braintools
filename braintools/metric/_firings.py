@@ -16,9 +16,11 @@
 # -*- coding: utf-8 -*-
 
 from typing import Union
-import numpy as onp
-import jax.numpy as jnp
+
 import brainstate as bst
+import brainunit as bu
+import jax.numpy as jnp
+import numpy as onp
 
 __all__ = [
   'raster_plot',
@@ -26,8 +28,10 @@ __all__ = [
 ]
 
 
-def raster_plot(sp_matrix: bst.typing.ArrayLike,
-                times: bst.typing.ArrayLike):
+def raster_plot(
+    sp_matrix: bst.typing.ArrayLike,
+    times: bst.typing.ArrayLike
+):
   """Get spike raster plot which displays the spiking activity
   of a group of neurons over time.
 
@@ -50,9 +54,11 @@ def raster_plot(sp_matrix: bst.typing.ArrayLike,
   return index, time
 
 
-def firing_rate(spikes: bst.typing.ArrayLike,
-                width: Union[int, float],
-                dt: Union[int, float]=None):
+def firing_rate(
+    spikes: bst.typing.ArrayLike,
+    width: Union[float, bu.Quantity],
+    dt: Union[float, bu.Quantity] = None
+):
   r"""Calculate the mean firing rate over in a neuron group.
 
   This method is adopted from Brian2.
@@ -68,9 +74,9 @@ def firing_rate(spikes: bst.typing.ArrayLike,
   ----------
   spikes : ndarray
     The spike matrix which record spiking activities.
-  width : int, float
+  width : int, float, Quantity
     The width of the ``window`` in millisecond.
-  dt : float, optional
+  dt : float, Quantity, optional
     The sample rate.
 
   Returns
