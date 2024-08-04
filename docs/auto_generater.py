@@ -317,11 +317,15 @@ def _section(header, numpy_mod, brainpy_mod, jax_mod, klass=None, is_jax=False):
 
 
 def main():
-  os.makedirs('apis/auto/', exist_ok=True)
+  os.makedirs('apis/', exist_ok=True)
 
-  _write_module(module_name='braintools.input',
-                filename='apis/input.rst',
-                header='``braintools.init`` module')
+  _write_module(module_name='braintools.tree',
+                filename='apis/tree.rst',
+                header='``braintools.tree`` module')
+
+  _write_module(module_name='braintools.optim',
+                filename='apis/optim.rst',
+                header='``braintools.optim`` module')
 
   # module_and_name = [
   #   ('_classification', 'Classification Losses'),

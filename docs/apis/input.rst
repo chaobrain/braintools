@@ -1,5 +1,5 @@
-``braintools.init`` module
-==========================
+``braintools.input`` module
+===========================
 
 .. currentmodule:: braintools.input 
 .. automodule:: braintools.input 

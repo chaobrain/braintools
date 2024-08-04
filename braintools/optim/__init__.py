@@ -14,13 +14,7 @@
 # ==============================================================================
 
 
-__version__ = "0.0.4"
+from .optimizer import *
+from .optimizer import __all__ as optimizer__all__a
 
-from . import input
-from . import metric
-from . import visualize
-from . import optim
-from . import tree
-
-__all__ = ['input', 'metric', 'visualize', 'optim', 'tree']
-
+__all__ = optimizer__all__a
