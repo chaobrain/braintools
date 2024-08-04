@@ -6,4 +6,7 @@ API Documentation
 
    apis/changelog.md
    apis/metric.rst
+   apis/optim.rst
+   apis/input.rst
+   apis/tree.rst
 
