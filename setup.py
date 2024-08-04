@@ -40,18 +40,22 @@ with io.open(os.path.join(here, 'README.md'), 'r', encoding='utf-8') as f:
 
 # installation packages
 packages = find_packages(
-  exclude=["docs*", "tests*", "examples*", "build*",
-           "dist*", "braintools.egg-info*", "braintools/__pycache__*"]
+  exclude=[
+    "docs*", "tests*", "examples*", "build*",
+    "dist*", "braintools.egg-info*", "braintools/__pycache__*"
+  ]
 )
+
+all_dependencies = ['scienceplots', 'matplotlib', 'nevergrad', 'scipy']
 
 # setup
 setup(
   name='braintools',
   version=version,
-  description='The Toolbox for Brain Dynamics Programming',
+  description='Commonly Used Toolboxes for Brain Dynamics Programming',
   long_description=README,
   long_description_content_type="text/markdown",
-  author='BrainPy Team',
+  author='BDP',
   author_email='chao.brain@qq.com',
   packages=packages,
   python_requires='>=3.9',
@@ -63,17 +67,18 @@ setup(
     "Source Code": "https://github.com/brainpy/braintools",
   },
   extras_require={
-    'cpu': ['jaxlib', ],
-    'cuda11': ['jaxlib[cuda11_pip]', ],
-    'cuda12': ['jaxlib[cuda12_pip]', ],
+    'cpu': ['jaxlib'],
+    'cuda12': ['jaxlib[cuda12]'],
     'tpu': ['jaxlib[tpu]'],
-    'cpu_mini': ['jaxlib'],
-    'cuda11_mini': ['jaxlib[cuda11_pip]'],
-    'cuda12_mini': ['jaxlib[cuda12_pip]'],
+    'cuda_all': ['jaxlib[cuda12]'] + all_dependencies,
+    'cpu_all': ['jaxlib'] + all_dependencies,
+    'tpu_all': ['jaxlib[tpu]'] + all_dependencies,
   },
-  keywords=('computational neuroscience, '
-            'brain-inspired computation, '
-            'brain dynamics programming'),
+  keywords=(
+    'computational neuroscience, '
+    'brain-inspired computation, '
+    'brain dynamics programming'
+  ),
   classifiers=[
     'Natural Language :: English',
     'Operating System :: OS Independent',
