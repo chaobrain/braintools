@@ -16,11 +16,11 @@
 
 __version__ = "0.0.4"
 
+from . import file
 from . import input
 from . import metric
-from . import visualize
 from . import optim
 from . import tree
+from . import visualize
 
-__all__ = ['input', 'metric', 'visualize', 'optim', 'tree']
-
+__all__ = ['input', 'file', 'metric', 'visualize', 'optim', 'tree']
