@@ -21,7 +21,7 @@ description = "The Toolbox for Brain Dynamics Programming."
 readme = 'README.md'
 license = { text = 'Apache-2.0 license' }
 requires-python = '>=3.9'
-authors = [{ name = 'BrainPy Team', email = 'chao.brain@qq.com' }]
+authors = [{ name = 'BrainTools Developers', email = 'chao.brain@qq.com' }]
 classifiers = [
     'Natural Language :: English',
     'Operating System :: OS Independent',
@@ -42,7 +42,7 @@ classifiers = [
 ]
 
 
-keywords = ["BrainPy", "brain simulation", "brain-inspired computing"]
+keywords = ["brain dynamics programming", "brain simulation", "brain-inspired computing"]
 
 dependencies = [
     'jax',
@@ -58,8 +58,8 @@ dynamic = ['version']
 name = "braintools"
 
 [project.urls]
-homepage = 'http://github.com/brainpy/braintools'
-repository = 'http://github.com/brainpy/braintools'
+homepage = 'http://github.com/chaoming0625/braintools'
+repository = 'http://github.com/chaoming0625/braintools'
 
 [project.optional-dependencies]
 testing = [

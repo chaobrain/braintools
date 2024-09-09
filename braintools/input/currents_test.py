@@ -18,11 +18,13 @@
 
 from unittest import TestCase
 
+import brainstate as bst
+import brainunit as u
 import jax.numpy as jnp
 import numpy as np
-import brainstate as bst
 
 import braintools as bt
+
 try:
   import matplotlib.pyplot as plt
 except (ImportError, ModuleNotFoundError):
@@ -58,7 +60,8 @@ class TestCurrents(TestCase):
       sp_times=[10, 20, 30, 200, 300],
       sp_lens=1.,  # can be a list to specify the spike length at each point
       sp_sizes=0.5,  # can be a list to specify the spike current size at each point
-      duration=400.)
+      duration=400.
+    )
 
     show(current3, 400, 'Spike Input Example')
 
@@ -87,15 +90,18 @@ class TestCurrents(TestCase):
     show(current7, duration, 'Ornstein-Uhlenbeck Process')
 
   def test_sinusoidal_input(self):
-    duration = 2000
-    current8 = bt.input.sinusoidal_input(amplitude=1., frequency=2.0, duration=duration, t_start=100., )
-    show(current8, duration, 'Sinusoidal Input')
+    duration = 2000 * u.ms
+    current8 = bt.input.sinusoidal_input(amplitude=1., frequency=2.0 * u.Hz,
+                                         duration=duration, t_start=100. * u.ms, dt=0.1 * u.ms)
+    show(current8, duration / u.ms, 'Sinusoidal Input')
 
   def test_square_input(self):
-    duration = 2000
-    current9 = bt.input.square_input(amplitude=1., frequency=2.0,
-                                     duration=duration, t_start=100)
-    show(current9, duration, 'Square Input')
+    duration = 2000 * u.ms
+    current9 = bt.input.square_input(amplitude=1., frequency=2.0 * u.Hz,
+                                     duration=duration,
+                                     t_start=100 * u.ms,
+                                     dt=0.1 * u.ms)
+    show(current9, duration / u.ms, 'Square Input')
 
   def test_general1(self):
     I1 = bt.input.section_input(values=[0, 1, 2], durations=[10, 20, 30], dt=0.1)
@@ -108,4 +114,3 @@ class TestCurrents(TestCase):
     current = bt.input.section_input(values=[0, jnp.ones(10), bst.random.random((3, 10))],
                                      durations=[100, 300, 100])
     self.assertTrue(current.shape == (5000, 3, 10))
-

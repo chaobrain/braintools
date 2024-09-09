@@ -19,7 +19,7 @@ from __future__ import annotations
 import warnings
 from typing import Callable, Optional, Union, Sequence, Dict, List, Tuple
 
-import brainunit as bu
+import brainunit as u
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -132,26 +132,47 @@ class NevergradOptimizer(Optimizer):
     bounds = () if bounds is None else bounds
     self.bounds = bounds
     if isinstance(self.bounds, dict):
+      bound_units = dict()
       parameters = dict()
       for key, bound in self.bounds.items():
         assert len(bound) == 2, f'Each bound must be a tuple of two elements (min, max), got {bound}.'
-        if np.size(bound[0]) == 1 and np.size(bound[1]) == 1:
-          parameters[key] = ng.p.Scalar(lower=bound[0], upper=bound[1])
+        bound = (u.Quantity(bound[0]), u.Quantity(bound[1]))
+        u.fail_for_unit_mismatch(bound[0], bound[1])
+        bound = (bound[0], bound[1].in_unit(bound[0].unit))
+        bound_units[key] = bound[0].unit
+        if np.size(bound[0].mantissa) == 1 and np.size(bound[1].mantissa) == 1:
+          parameters[key] = ng.p.Scalar(lower=np.asarray(bound[0].mantissa),
+                                        upper=np.asarray(bound[1].mantissa))
         else:
-          parameters[key] = ng.p.Array(shape=bound[0].shape, lower=bound[0], upper=bound[1])
+          assert bound[0].shape == bound[1].shape, (f"Shape of the bounds must be the same, "
+                                                    f"got {bound[0].shape} and {bound[1].shape}.")
+          parameters[key] = ng.p.Array(shape=bound[0].shape,
+                                       lower=np.asarray(bound[0].mantissa),
+                                       upper=np.asarray(bound[1].mantissa))
       parametrization = ng.p.Dict(**parameters)
     elif isinstance(self.bounds, (list, tuple)):
       parameters = list()
+      bound_units = list()
       for i, bound in enumerate(self.bounds):
         assert len(bound) == 2, f'Each bound must be a tuple of two elements (min, max), got {bound}.'
+        bound = (u.Quantity(bound[0]), u.Quantity(bound[1]))
+        u.fail_for_unit_mismatch(bound[0], bound[1])
+        bound = (bound[0], bound[1].in_unit(bound[0].unit))
+        bound_units.append(bound[0].unit)
         if np.size(bound[0]) == 1 and np.size(bound[1]) == 1:
-          parameters.append(ng.p.Scalar(lower=bound[0], upper=bound[1]))
+          parameters.append(ng.p.Scalar(lower=np.asarray(bound[0].mantissa),
+                                        upper=np.asarray(bound[1].mantissa)))
         else:
-          parameters.append(ng.p.Array(shape=bound[0].shape, lower=bound[0], upper=bound[1]))
+          assert bound[0].shape == bound[1].shape, (f"Shape of the bounds must be the same, "
+                                                    f"got {bound[0].shape} and {bound[1].shape}.")
+          parameters.append(ng.p.Array(shape=bound[0].shape,
+                                       lower=np.asarray(bound[0].mantissa),
+                                       upper=np.asarray(bound[1].mantissa)))
       parametrization = ng.p.Tuple(*parameters)
     else:
       raise ValueError(f"Unknown type of 'bounds': {type(self.bounds)}")
     self.parametrization = parametrization
+    self._bound_units = bound_units
 
     # others
     self.budget = budget
@@ -185,6 +206,19 @@ class NevergradOptimizer(Optimizer):
     self.candidates = []
     self.errors: np.ndarray = None
 
+  def _add_unit(self, parameters):
+    if isinstance(self.parametrization, ng.p.Tuple):
+      parameters = [(param if unit.dim.is_dimensionless else u.Quantity(param, unit))
+                    for unit, param in zip(self._bound_units, parameters)]
+    elif isinstance(self.parametrization, ng.p.Dict):
+      parameters = {
+        key: (param if self._bound_units[key].dim.is_dimensionless else u.Quantity(param, self._bound_units[key]))
+        for key, param in parameters.items()
+      }
+    else:
+      raise ValueError(f"Unknown type of 'parametrization': {type(self.parametrization)}")
+    return parameters
+
   def _one_trial(self, choice_best: bool = False):
     # draw parameters
     candidates = [self.optimizer.ask() for _ in range(self.n_sample)]
@@ -193,8 +227,10 @@ class NevergradOptimizer(Optimizer):
 
     # evaluate parameters
     if isinstance(self.parametrization, ng.p.Tuple):
+      mapped_parameters = self._add_unit(mapped_parameters)
       errors = self.vmap_loss_fun(*mapped_parameters)
     elif isinstance(self.parametrization, ng.p.Dict):
+      mapped_parameters = self._add_unit(mapped_parameters)
       errors = self.vmap_loss_fun(**mapped_parameters)
     else:
       raise ValueError(f"Unknown type of 'parametrization': {type(self.parametrization)}")
@@ -213,10 +249,10 @@ class NevergradOptimizer(Optimizer):
     if choice_best:
       if self.use_nevergrad_recommendation:
         res = self.optimizer.provide_recommendation()
-        return res.args
+        return self._add_unit(res.args)
       else:
         best = np.nanargmin(self.errors)
-        return self.candidates[best]
+        return self._add_unit(self.candidates[best])
 
   def minimize(self, n_iter: int = 1):
     # check the number of iterations
@@ -231,7 +267,7 @@ class NevergradOptimizer(Optimizer):
     for i in range(n_iter):
       r = self._one_trial(choice_best=True)
       best_result = r
-      print(f'Iteration {i}, current best error: {np.nanmin(self.errors):.5f}, current best parameters: {r}')
+      print(f'Iteration {i}, best error: {np.nanmin(self.errors):.5f}, best parameters: {r}')
     return best_result
 
 
@@ -287,7 +323,7 @@ def unravel_pytree(treedef, unravel_list, flat):
 def _ravel_list(lst):
   if not lst:
     return jnp.array([], jnp.float32), lambda _: []
-  from_dtypes = tuple(bu.math.get_dtype(l) for l in lst)
+  from_dtypes = tuple(u.math.get_dtype(l) for l in lst)
   to_dtype = jax.dtypes.result_type(*from_dtypes)
   sizes, shapes = jax.util.unzip2((jnp.size(x), jnp.shape(x)) for x in lst)
   indices = tuple(np.cumsum(sizes))
@@ -313,7 +349,7 @@ def _unravel_list_single_dtype(indices, shapes, arr):
 
 
 def _unravel_list(indices, shapes, from_dtypes, to_dtype, arr):
-  arr_dtype = bu.math.get_dtype(arr)
+  arr_dtype = u.math.get_dtype(arr)
   if arr_dtype != to_dtype:
     raise TypeError(
       f"unravel function given array of dtype {arr_dtype}, "
