@@ -17,11 +17,6 @@ Installation
 
           pip install -U braintools[cpu]
 
-    .. tab-item:: GPU (CUDA 11.0)
-
-       .. code-block:: bash
-
-          pip install -U braintools[cuda11]
 
     .. tab-item:: GPU (CUDA 12.0)
 
@@ -43,7 +38,7 @@ See also the BDP ecosystem
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-We are building the `BDP ecosystem <https://ecosystem-for-brain-dynamics.readthedocs.io/>`_:
+We are building the `BDP ecosystem <https://ecosystem-for-brain-dynamics.readthedocs.io/>`_.
 
 ----
 

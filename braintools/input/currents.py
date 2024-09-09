@@ -16,9 +16,10 @@
 # -*- coding: utf-8 -*-
 
 
+from typing import Sequence
+
 import brainstate as bst
-import jax.lax
-import jax.numpy as jnp
+import brainunit as u
 import numpy as np
 
 __all__ = [
@@ -33,7 +34,12 @@ __all__ = [
 ]
 
 
-def section_input(values, durations, dt=None, return_length=False):
+def section_input(
+    values: Sequence,
+    durations: Sequence,
+    dt: bst.typing.ArrayLike = None,
+    return_length: bool = False
+):
   """Format an input current with different sections.
 
   For example:
@@ -57,34 +63,40 @@ def section_input(values, durations, dt=None, return_length=False):
 
   Returns
   -------
-  current_and_duration
+  current_and_duration: tuple
+      (The formatted current, total duration)
   """
   if len(durations) != len(values):
     raise ValueError(f'"values" and "durations" must be the same length, while '
                      f'we got {len(values)} != {len(durations)}.')
-
   dt = bst.environ.get_dt() if dt is None else dt
 
-  # get input current shape, and duration
-  I_duration = sum(durations)
-  I_shape = ()
+  # get input currents
+  values = [u.math.array(val) for val in values]
+  i_shape = ()
   for val in values:
-    shape = jnp.shape(val)
-    if len(shape) > len(I_shape):
-      I_shape = shape
+    shape = u.math.shape(val)
+    if len(shape) > len(i_shape):
+      i_shape = shape
 
-  # get the current
-  start = 0
-  I_current = jnp.zeros((int(np.ceil(I_duration / dt)),) + I_shape, dtype=bst.environ.dftype())
+  # format the current
+  all_duration = None
+  currents = []
   for c_size, duration in zip(values, durations):
-    length = int(duration / dt)
-    I_current = I_current.at[start: start + length].set(c_size)
-    start += length
+    current = u.math.ones((int(np.ceil(u.maybe_decimal(duration / dt))),) + i_shape, dtype=bst.environ.dftype())
+    current = current * c_size
+    currents.append(current)
+    if all_duration is None:
+      all_duration = duration
+    else:
+      all_duration += duration
+  currents = u.math.concatenate(currents, axis=0)
 
+  # returns
   if return_length:
-    return I_current, I_duration
+    return currents, all_duration
   else:
-    return I_current
+    return currents
 
 
 def constant_input(I_and_duration, dt=None):
@@ -115,22 +127,21 @@ def constant_input(I_and_duration, dt=None):
   dt = bst.environ.get_dt() if dt is None else dt
 
   # get input current dimension, shape, and duration
-  I_duration = 0.
+  I_duration = None
   I_shape = ()
   for I in I_and_duration:
-    I_duration += I[1]
-    shape = jnp.shape(I[0])
+    I_duration = I[1] if I_duration is None else I_duration + I[1]
+    shape = u.math.shape(I[0])
     if len(shape) > len(I_shape):
       I_shape = shape
 
   # get the current
-  start = 0
-  I_current = jnp.zeros((int(np.ceil(I_duration / dt)),) + I_shape, dtype=bst.environ.dftype())
+  currents = []
   for c_size, duration in I_and_duration:
-    length = int(duration / dt)
-    I_current = I_current.at[start: start + length].set(c_size)
-    start += length
-  return I_current, I_duration
+    length = int(np.ceil(u.maybe_decimal(duration / dt)))
+    current = u.math.ones((length,) + I_shape, dtype=bst.environ.dftype()) * c_size
+    currents.append(current)
+  return u.math.concatenate(currents, axis=0), I_duration
 
 
 def spike_input(sp_times, sp_lens, sp_sizes, duration, dt=None):
@@ -167,17 +178,21 @@ def spike_input(sp_times, sp_lens, sp_sizes, duration, dt=None):
   """
   dt = bst.environ.get_dt() if dt is None else dt
   assert isinstance(sp_times, (list, tuple))
-  if isinstance(sp_lens, (float, int)):
+  if not isinstance(sp_lens, (tuple, list)):
     sp_lens = [sp_lens] * len(sp_times)
-  if isinstance(sp_sizes, (float, int)):
+  if not isinstance(sp_sizes, (tuple, list)):
     sp_sizes = [sp_sizes] * len(sp_times)
+  for size in sp_sizes[1:]:
+    u.fail_for_unit_mismatch(sp_sizes[0], size)
 
-  current = jnp.zeros(int(np.ceil(duration / dt)), dtype=bst.environ.dftype())
+  current = u.math.zeros(int(np.ceil(u.maybe_decimal(duration / dt))),
+                         dtype=bst.environ.dftype(),
+                         unit=u.get_unit(sp_sizes[0]))
   for time, dur, size in zip(sp_times, sp_lens, sp_sizes):
-    pp = int(time / dt)
-    p_len = int(dur / dt)
+    pp = int(u.maybe_decimal(time / dt))
+    p_len = int(u.maybe_decimal(dur / dt))
     current = current.at[pp: pp + p_len].set(size)
-  return current
+  return u.maybe_decimal(current)
 
 
 def ramp_input(c_start, c_end, duration, t_start=0, t_end=None, dt=None):
@@ -203,15 +218,17 @@ def ramp_input(c_start, c_end, duration, t_start=0, t_end=None, dt=None):
   current : bm.ndarray
     The formatted current
   """
+  u.fail_for_unit_mismatch(c_start, c_end)
   dt = bst.environ.get_dt() if dt is None else dt
   t_end = duration if t_end is None else t_end
-
-  current = jnp.zeros(int(np.ceil(duration / dt)), dtype=bst.environ.dftype())
-  p1 = int(np.ceil(t_start / dt))
-  p2 = int(np.ceil(t_end / dt))
-  cc = jnp.array(jnp.linspace(c_start, c_end, p2 - p1))
+  current = u.math.zeros(int(np.ceil(u.maybe_decimal(duration / dt))),
+                         dtype=bst.environ.dftype(),
+                         unit=u.get_unit(c_start))
+  p1 = int(np.ceil(u.maybe_decimal(t_start / dt)))
+  p2 = int(np.ceil(u.maybe_decimal(t_end / dt)))
+  cc = u.math.linspace(c_start, c_end, p2 - p1)
   current = current.at[p1: p2].set(cc)
-  return current
+  return u.maybe_decimal(current)
 
 
 def wiener_process(duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
@@ -233,14 +250,21 @@ def wiener_process(duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
   seed: int
     The noise seed.
   """
+  if seed is None:
+    rng = bst.random.DEFAULT
+  else:
+    rng = bst.random.RandomState(seed)
+
   dt = bst.environ.get_dt() if dt is None else dt
   t_end = duration if t_end is None else t_end
-  i_start = int(t_start / dt)
-  i_end = int(t_end / dt)
-  noises = bst.random.standard_normal((i_end - i_start, n)) * jnp.sqrt(dt)
-  currents = jnp.zeros((int(duration / dt), n), dtype=bst.environ.dftype())
+  i_start = int(u.maybe_decimal(t_start / dt))
+  i_end = int(u.maybe_decimal(t_end / dt))
+  noises = rng.standard_normal((i_end - i_start, n)) * u.math.sqrt(dt)
+  currents = u.math.zeros((int(u.maybe_decimal(duration / dt)), n),
+                          dtype=bst.environ.dftype(),
+                          unit=u.get_unit(noises))
   currents = currents.at[i_start: i_end].set(noises)
-  return currents
+  return u.maybe_decimal(currents)
 
 
 def ou_process(mean, sigma, tau, duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
@@ -272,19 +296,24 @@ def ou_process(mean, sigma, tau, duration, dt=None, n=1, t_start=0., t_end=None,
     The random seed.
   """
   dt = bst.environ.get_dt() if dt is None else dt
-  dt_sqrt = jnp.sqrt(dt)
+  dt_sqrt = u.math.sqrt(dt)
   t_end = duration if t_end is None else t_end
-  i_start = int(t_start / dt)
-  i_end = int(t_end / dt)
+  i_start = int(u.maybe_decimal(t_start / dt))
+  i_end = int(u.maybe_decimal(t_end / dt))
+  rng = bst.random.RandomState(seed) if seed is not None else bst.random.DEFAULT
 
-  def _f(x, key):
-    x = x + dt * ((mean - x) / tau) + sigma * dt_sqrt * bst.random.rand(n, key=key)
+  def _f(x, _):
+    x = x + dt * ((mean - x) / tau) + sigma * dt_sqrt * rng.rand(n)
     return x, x
 
-  _, noises = jax.lax.scan(_f, jnp.full(n, mean, dtype=bst.environ.dftype()),
-                           bst.random.split_keys(i_end - i_start))
-  currents = jnp.zeros((int(duration / dt), n), dtype=bst.environ.dftype())
-  return currents.at[i_start: i_end].set(noises)
+  _, noises = bst.transform.scan(_f,
+                                 u.math.full(n, mean, dtype=bst.environ.dftype()),
+                                 u.math.arange(i_end - i_start))
+  currents = u.math.zeros((int(u.maybe_decimal(duration / dt)), n),
+                          dtype=bst.environ.dftype(),
+                          unit=u.get_unit(noises))
+  currents = currents.at[i_start: i_end].set(noises)
+  return u.maybe_decimal(currents)
 
 
 def sinusoidal_input(amplitude, frequency, duration, dt=None, t_start=0., t_end=None, bias=False):
@@ -294,30 +323,35 @@ def sinusoidal_input(amplitude, frequency, duration, dt=None, t_start=0., t_end=
   ----------
   amplitude: float
     Amplitude of the sinusoid.
-  frequency: float
+  frequency: Quantity
     Frequency of the sinus oscillation, in Hz
-  duration: float
+  duration: Quantity
     The input duration.
-  t_start: float
+  t_start: Quantity
     The start time.
-  t_end: float
+  t_end: Quantity
     The end time.
-  dt: float
+  dt: Quantity
     The numerical precision.
   bias: bool
     Whether the sinusoid oscillates around 0 (False), or
     has a positive DC bias, thus non-negative (True).
   """
+  assert frequency.unit.dim == u.Hz.dim, f'The frequency must be in Hz. But got {frequency.unit}.'
   dt = bst.environ.get_dt() if dt is None else dt
   if t_end is None:
     t_end = duration
-  times = jnp.arange(0, t_end - t_start, dt)
-  start_i = int(t_start / dt)
-  end_i = int(t_end / dt)
-  sin_inputs = amplitude * jnp.sin(2 * jnp.pi * times * (frequency / 1000.0))
-  if bias: sin_inputs += amplitude
-  currents = jnp.zeros(int(duration / dt), dtype=bst.environ.dftype())
-  return currents.at[start_i:end_i].set(sin_inputs)
+  times = u.math.arange(0. * u.ms, t_end - t_start, dt)
+  start_i = int(u.maybe_decimal(t_start / dt))
+  end_i = int(u.maybe_decimal(t_end / dt))
+  sin_inputs = amplitude * u.math.sin(2 * u.math.pi * u.maybe_decimal(times * frequency))
+  if bias:
+    sin_inputs += amplitude
+  currents = u.math.zeros(int(u.maybe_decimal(duration / dt)),
+                          dtype=bst.environ.dftype(),
+                          unit=u.get_unit(sin_inputs))
+  currents = currents.at[start_i:end_i].set(sin_inputs)
+  return u.maybe_decimal(currents)
 
 
 def _square(t, duty=0.5):
@@ -347,33 +381,39 @@ def _square(t, duty=0.5):
   return y
 
 
-def square_input(amplitude, frequency, duration, dt=None, bias=False, t_start=0., t_end=None):
+def square_input(amplitude, frequency, duration, dt=None, bias=False, t_start=None, t_end=None):
   """Oscillatory square input.
 
   Parameters
   ----------
   amplitude: float
     Amplitude of the square oscillation.
-  frequency: float
+  frequency: Quantity
     Frequency of the square oscillation, in Hz.
-  duration: float
+  duration: Quantity
     The input duration.
-  t_start: float
+  t_start: Quantity
     The start time.
-  t_end: float
+  t_end: Quantity
     The end time.
-  dt: float
+  dt: Quantity
     The numerical precision.
   bias: bool
     Whether the sinusoid oscillates around 0 (False), or
     has a positive DC bias, thus non-negative (True).
   """
+  if t_start is None:
+    t_start = 0. * u.ms
+  assert frequency.unit.dim == u.Hz.dim, f'The frequency must be in Hz. But got {frequency.unit}.'
   dt = bst.environ.get_dt() if dt is None else dt
-  if t_end is None: t_end = duration
-  times = np.arange(0, t_end - t_start, dt)
-  sin_inputs = amplitude * _square(2 * np.pi * times * (frequency / 1000.0))
-  if bias: sin_inputs += amplitude
-  currents = jnp.zeros(int(duration / dt), dtype=bst.environ.dftype())
-  start_i = int(t_start / dt)
-  end_i = int(t_end / dt)
-  return currents.at[start_i:end_i].set(sin_inputs)
+  if t_end is None:
+    t_end = duration
+  times = u.math.arange(0. * u.ms, t_end - t_start, dt)
+  sin_inputs = amplitude * _square(2 * np.pi * u.maybe_decimal(times * frequency))
+  if bias:
+    sin_inputs += amplitude
+  currents = u.math.zeros(int(u.maybe_decimal(duration / dt)), dtype=bst.environ.dftype())
+  start_i = int(u.maybe_decimal(t_start / dt))
+  end_i = int(u.maybe_decimal(t_end / dt))
+  currents = currents.at[start_i:end_i].set(sin_inputs)
+  return u.maybe_decimal(currents)

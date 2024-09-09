@@ -60,11 +60,11 @@ setup(
   packages=packages,
   python_requires='>=3.9',
   install_requires=['numpy>=1.15', 'jax', 'brainstate', 'brainunit'],
-  url='https://github.com/brainpy/braintools',
+  url='https://github.com/chaoming0625/braintools',
   project_urls={
-    "Bug Tracker": "https://github.com/brainpy/braintools/issues",
+    "Bug Tracker": "https://github.com/chaoming0625/braintools/issues",
     "Documentation": "https://braintools.readthedocs.io/",
-    "Source Code": "https://github.com/brainpy/braintools",
+    "Source Code": "https://github.com/chaoming0625/braintools",
   },
   extras_require={
     'cpu': ['jaxlib'],
