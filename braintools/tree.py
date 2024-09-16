@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Sequence, Any, Callable, Tuple
 
-import brainunit as bu
+import brainunit as u
 import jax
 import jax.tree_util as jtu
 import numpy as np
@@ -91,8 +91,8 @@ def dot(
     is_leaf: Callable[[Any], bool] | None = None
 ) -> jax.Array:
   return jtu.tree_reduce(
-    bu.math.add,
-    jtu.tree_map(bu.math.sum, jax.tree_map(jax.lax.mul, a, b, is_leaf=is_leaf), is_leaf=is_leaf),
+    u.math.add,
+    jtu.tree_map(u.math.sum, jax.tree_map(jax.lax.mul, a, b, is_leaf=is_leaf), is_leaf=is_leaf),
     is_leaf=is_leaf
   )
 
@@ -101,7 +101,7 @@ def sum(
     tree: PyTree[jax.typing.ArrayLike],
     is_leaf: Callable[[Any], bool] | None = None
 ) -> jax.Array:
-  return jtu.tree_reduce(bu.math.add, jtu.tree_map(bu.math.sum, tree, is_leaf=is_leaf), is_leaf=is_leaf)
+  return jtu.tree_reduce(u.math.add, jtu.tree_map(u.math.sum, tree, is_leaf=is_leaf), is_leaf=is_leaf)
 
 
 def squared_norm(
@@ -109,8 +109,8 @@ def squared_norm(
     is_leaf: Callable[[Any], bool] | None = None
 ) -> jax.Array:
   return jtu.tree_reduce(
-    bu.math.add,
-    jtu.tree_map(lambda x: bu.math.einsum('...,...->', x, x), tree, is_leaf=is_leaf),
+    u.math.add,
+    jtu.tree_map(lambda x: u.math.einsum('...,...->', x, x), tree, is_leaf=is_leaf),
     is_leaf=is_leaf
   )
 
@@ -120,7 +120,7 @@ def concat(
     axis: int = 0,
     is_leaf: Callable[[Any], bool] | None = None
 ) -> PyTree:
-  return jtu.tree_map(lambda *args: bu.math.concatenate(args, axis=axis), *trees, is_leaf=is_leaf)
+  return jtu.tree_map(lambda *args: u.math.concatenate(args, axis=axis), *trees, is_leaf=is_leaf)
 
 
 def split(
@@ -150,7 +150,7 @@ def expand(
     axis,
     is_leaf: Callable[[Any], bool] | None = None
 ) -> PyTree:
-  return jtu.tree_map(lambda x: bu.math.expand_dims(x, axis), tree, is_leaf=is_leaf)
+  return jtu.tree_map(lambda x: u.math.expand_dims(x, axis), tree, is_leaf=is_leaf)
 
 
 def take(
@@ -165,7 +165,7 @@ def take(
       slices = [slice(None)] * x.ndim
       slices[axis] = idx
       return x[tuple(slices)]
-    return bu.math.take(x, indices, axis)
+    return u.math.take(x, indices, axis)
 
   return jtu.tree_map(take_, tree, is_leaf=is_leaf)
 

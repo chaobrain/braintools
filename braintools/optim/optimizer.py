@@ -254,7 +254,7 @@ class NevergradOptimizer(Optimizer):
         best = np.nanargmin(self.errors)
         return self._add_unit(self.candidates[best])
 
-  def minimize(self, n_iter: int = 1):
+  def minimize(self, n_iter: int = 1, verbose: bool = True):
     # check the number of iterations
     assert isinstance(n_iter, int), "'n_iter' must be an integer."
     assert n_iter > 0, "'n_iter' must be a positive integer."
@@ -267,7 +267,8 @@ class NevergradOptimizer(Optimizer):
     for i in range(n_iter):
       r = self._one_trial(choice_best=True)
       best_result = r
-      print(f'Iteration {i}, best error: {np.nanmin(self.errors):.5f}, best parameters: {r}')
+      if verbose:
+        print(f'Iteration {i}, best error: {np.nanmin(self.errors):.5f}, best parameters: {r}')
     return best_result
 
 

@@ -46,7 +46,7 @@ packages = find_packages(
   ]
 )
 
-all_dependencies = ['scienceplots', 'matplotlib', 'nevergrad', 'scipy']
+all_dependencies = ['scienceplots', 'matplotlib', 'nevergrad', 'scipy', 'msgpack']
 
 # setup
 setup(
