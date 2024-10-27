@@ -306,9 +306,9 @@ def ou_process(mean, sigma, tau, duration, dt=None, n=1, t_start=0., t_end=None,
     x = x + dt * ((mean - x) / tau) + sigma * dt_sqrt * rng.rand(n)
     return x, x
 
-  _, noises = bst.transform.scan(_f,
-                                 u.math.full(n, mean, dtype=bst.environ.dftype()),
-                                 u.math.arange(i_end - i_start))
+  _, noises = bst.compile.scan(_f,
+                               u.math.full(n, mean, dtype=bst.environ.dftype()),
+                               u.math.arange(i_end - i_start))
   currents = u.math.zeros((int(u.maybe_decimal(duration / dt)), n),
                           dtype=bst.environ.dftype(),
                           unit=u.get_unit(noises))

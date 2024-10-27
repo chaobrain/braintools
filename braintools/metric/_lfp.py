@@ -15,9 +15,9 @@
 
 # -*- coding: utf-8 -*-
 
+import brainstate as bst
 import jax
 from jax import numpy as jnp
-import brainstate as bst
 
 __all__ = [
   'unitary_LFP',
@@ -108,7 +108,7 @@ def unitary_LFP(
   # Distributing cells in a 2D grid
   rng = bst.random.RandomState(seed)
   num_neuron = spikes.shape[1]
-  pos_xs, pos_ys = rng.rand(2, num_neuron).value * jnp.array([[xmax], [ymax]])
+  pos_xs, pos_ys = rng.rand(2, num_neuron) * jnp.array([[xmax], [ymax]])
   pos_xs, pos_ys = jnp.asarray(pos_xs), jnp.asarray(pos_ys)
 
   # distance/coordinates
@@ -136,4 +136,4 @@ def unitary_LFP(
   tts = times[iis] + delay[ids]
   exc_amp = A[ids]
   tau = (2 * sig_e * sig_e) if spike_type == 'exc' else (2 * sig_i * sig_i)
-  return bst.transform.for_loop(lambda t: jnp.sum(exc_amp * jnp.exp(-(t - tts) ** 2 / tau)), times)
+  return bst.compile.for_loop(lambda t: jnp.sum(exc_amp * jnp.exp(-(t - tts) ** 2 / tau)), times)
