@@ -14,18 +14,9 @@
 # ==============================================================================
 
 
-__version__ = "0.0.4"
+from .spike_encoder import *
+from .spike_encoder import __all__ as encoder_all
 
-from . import file
-from . import input
-from . import metric
-from . import optim
-from . import tree
-from . import visualize
-from ._others import *
-from ._others import __all__ as _other_all
+__all__ = encoder_all
 
-
-__all__ = ['input', 'file', 'metric', 'visualize', 'optim', 'tree'] + _other_all
-
-del _other_all
+del encoder_all
