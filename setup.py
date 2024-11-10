@@ -59,7 +59,13 @@ setup(
   author_email='chao.brain@qq.com',
   packages=packages,
   python_requires='>=3.9',
-  install_requires=['numpy>=1.15', 'jax', 'brainstate>=0.1.0', 'brainunit'],
+  install_requires=[
+    'numpy>=1.15',
+    'jax',
+    'brainstate>=0.1.0',
+    'brainunit',
+    'typing_extensions',
+  ],
   url='https://github.com/chaoming0625/braintools',
   project_urls={
     "Bug Tracker": "https://github.com/chaoming0625/braintools/issues",

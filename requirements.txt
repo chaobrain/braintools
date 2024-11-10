@@ -4,3 +4,4 @@ jaxlib
 brainunit
 brainstate
 matplotlib
+typing_extensions
