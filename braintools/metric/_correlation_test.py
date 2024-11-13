@@ -25,6 +25,10 @@ import jax.numpy as jnp
 import brainstate as bst
 
 
+bst.environ.set(dt=0.1)
+
+
+
 class TestCrossCorrelation(unittest.TestCase):
   def test_c(self):
     spikes = jnp.asarray([[1, 0, 1, 0, 1, 0, 1, 0, 0], [1, 1, 1, 1, 1, 1, 1, 0, 0]]).T

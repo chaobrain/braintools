@@ -836,8 +836,6 @@ def msgpack_save(
   if async_manager:
     async_manager.wait_previous_save()
 
-  if os.path.splitext(filename)[-1] != '.bp':
-    filename = filename + '.bp'
   if os.path.dirname(filename):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
   if not overwrite and os.path.exists(filename):

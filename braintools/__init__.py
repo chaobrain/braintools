@@ -22,5 +22,10 @@ from . import metric
 from . import optim
 from . import tree
 from . import visualize
+from ._others import *
+from ._others import __all__ as _other_all
 
-__all__ = ['input', 'file', 'metric', 'visualize', 'optim', 'tree']
+
+__all__ = ['input', 'file', 'metric', 'visualize', 'optim', 'tree'] + _other_all
+
+del _other_all
