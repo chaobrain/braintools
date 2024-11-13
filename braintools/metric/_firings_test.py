@@ -22,6 +22,8 @@ import brainstate as bst
 import braintools as bt
 
 
+bst.environ.set(dt=0.1)
+
 class TestFiringRate(unittest.TestCase):
   def test_fr1(self):
     spikes = jnp.ones((1000, 10))

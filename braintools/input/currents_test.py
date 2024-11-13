@@ -33,6 +33,9 @@ except (ImportError, ModuleNotFoundError):
 block = False
 
 
+bst.environ.set(dt=0.1)
+
+
 def show(current, duration, title=''):
   if plt is not None:
     ts = np.arange(0, duration, bst.environ.get_dt())
