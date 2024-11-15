@@ -278,6 +278,12 @@ def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
     return ys
 
 
+register_serialization_state(list, _list_state_dict, _restore_list)
+register_serialization_state(tuple,
+                             _list_state_dict,
+                             lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict)))
+
+
 def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
     str_keys = set(str(k) for k in xs.keys())
     if len(str_keys) != len(xs):
@@ -295,6 +301,9 @@ def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
 
     return {key: from_state_dict(value, states[str(key)], name=str(key))
             for key, value in xs.items()}
+
+
+register_serialization_state(dict, _dict_state_dict, _restore_dict)
 
 
 def _namedtuple_state_dict(nt) -> Dict[str, Any]:
@@ -320,25 +329,36 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
     return type(xs)(**fields)
 
 
+register_serialization_state(_NamedTuple,
+                             _namedtuple_state_dict,
+                             _restore_namedtuple)
+
+
 def _quantity_dict_state(x: u.Quantity) -> Dict[str, jax.Array]:
     return {'mantissa': x.mantissa, 'scale': x.unit.scale, 'base': x.unit.base, 'dim': x.unit.dim._dims}
 
 
 def _restore_quantity(x: u.Quantity, state_dict: Dict) -> u.Quantity:
-    x.update_mantissa(state_dict['mantissa'])
-    assert x.unit == u.Unit(dim=u.Dimension(state_dict['dim']), scale=state_dict['scale'], base=state_dict['base'])
-    return x
+    unit = u.Unit(dim=u.Dimension(state_dict['dim']), scale=state_dict['scale'], base=state_dict['base'])
+    assert x.unit == unit
+    return u.Quantity(state_dict['mantissa'], unit=unit)
 
 
 register_serialization_state(u.Quantity, _quantity_dict_state, _restore_quantity)
-register_serialization_state(dict, _dict_state_dict, _restore_dict)
-register_serialization_state(list, _list_state_dict, _restore_list)
-register_serialization_state(tuple,
-                             _list_state_dict,
-                             lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict)))
-register_serialization_state(_NamedTuple,
-                             _namedtuple_state_dict,
-                             _restore_namedtuple)
+
+
+def _brainstate_dict_state(x: bst.State) -> Dict[str, Any]:
+    return to_state_dict(x.value)
+
+
+def _restore_brainstate(x: bst.State, state_dict: Dict) -> bst.State:
+    x.value = from_state_dict(x.value, state_dict)
+    return x
+
+
+register_serialization_state(bst.State, _brainstate_dict_state, _restore_brainstate)
+
+
 register_serialization_state(
     jax.tree_util.Partial,
     lambda x: {"args": to_state_dict(x.args),
