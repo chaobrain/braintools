@@ -33,7 +33,7 @@ if spec is None:
 
 
 class TestMsgCheckpoint(unittest.TestCase):
-    def test_msg_checkpoint(self):
+    def test_checkpoint_quantity(self):
         data = {
             "name": bst.random.rand(3) * u.ms,
         }
@@ -44,4 +44,28 @@ class TestMsgCheckpoint(unittest.TestCase):
             data['name'] += 1 * u.ms
 
             data2 = bts.file.msgpack_load(filename, target=data)
-            self.assertEqual(data, data2)
+            self.assertTrue('name' in data2)
+            self.assertTrue(isinstance(data2['name'], u.Quantity))
+            self.assertTrue(not u.math.allclose(data['name'], data2['name']))
+
+    def test_checkpoint_state(self):
+        data = {
+            "a": bst.State(bst.random.rand(1)),
+            "b": bst.ShortTermState(bst.random.rand(2)),
+            "c": bst.ParamState(bst.random.rand(3)),
+        }
+
+        with TemporaryDirectory() as tmpdirname:
+            filename = tmpdirname + "/test_msg_checkpoint.msg"
+            bts.file.msgpack_save(filename, data)
+
+            data2 = bts.file.msgpack_load(filename, target=data)
+            self.assertTrue('a' in data2)
+            self.assertTrue('b' in data2)
+            self.assertTrue('c' in data2)
+            self.assertTrue(isinstance(data2['a'], bst.State))
+            self.assertTrue(isinstance(data2['b'], bst.ShortTermState))
+            self.assertTrue(isinstance(data2['c'], bst.ParamState))
+            self.assertTrue(u.math.allclose(data['a'].value, data2['a'].value))
+            self.assertTrue(u.math.allclose(data['b'].value, data2['b'].value))
+            self.assertTrue(u.math.allclose(data['c'].value, data2['c'].value))

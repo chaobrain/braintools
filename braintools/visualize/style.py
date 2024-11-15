@@ -34,5 +34,5 @@ try:
   plt.style.core.update_nested_dict(plt.style.library, {'notebook2': style})
   plt.style.core.available[:] = sorted(plt.style.library.keys())
 
-except (ImportError, ModuleNotFoundError):
+except Exception:
   scienceplots = None
