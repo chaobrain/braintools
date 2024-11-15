@@ -14,3 +14,27 @@
 # ==============================================================================
 
 # -*- coding: utf-8 -*-
+
+
+import unittest
+from tempfile import TemporaryDirectory
+
+import brainstate as bst
+import brainunit as u
+
+import braintools as bts
+
+
+class TestMsgCheckpoint(unittest.TestCase):
+    def test_msg_checkpoint(self):
+        data = {
+            "name": bst.random.rand(3) * u.ms,
+        }
+
+        with TemporaryDirectory() as tmpdirname:
+            filename = tmpdirname + "/test_msg_checkpoint.msg"
+            bts.file.msgpack_save(filename, data)
+            data['name'] += 1 * u.ms
+
+            data2 = bts.file.msgpack_load(filename, target=data)
+            self.assertEqual(data, data2)
