@@ -16,13 +16,20 @@
 # -*- coding: utf-8 -*-
 
 
+import importlib.util
 import unittest
 from tempfile import TemporaryDirectory
 
 import brainstate as bst
 import brainunit as u
+import pytest
 
 import braintools as bts
+
+spec = importlib.util.find_spec("msgpack")
+
+if spec is None:
+    pytest.skip("msgpack not installed", allow_module_level=True)
 
 
 class TestMsgCheckpoint(unittest.TestCase):
