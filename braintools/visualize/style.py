@@ -13,10 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 
-import matplotlib.pyplot as plt
-from matplotlib import RcParams
 
 try:
+  import matplotlib.pyplot as plt
+  from matplotlib import RcParams
   import scienceplots  # noqa: F401
 
   def exclude(rc: RcParams, keys: list):

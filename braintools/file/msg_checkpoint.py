@@ -835,7 +835,7 @@ def msgpack_save(
     filename: str
       str or pathlib-like path to store checkpoint files in.
     target: Any
-      serializable flax object, usually a flax optimizer.
+      serializable object.
     overwrite: bool
       overwrite existing checkpoint files if a checkpoint at the
       current or a later step already exits (default: False).
@@ -864,6 +864,9 @@ def msgpack_save(
         os.makedirs(os.path.dirname(filename), exist_ok=True)
     if not overwrite and os.path.exists(filename):
         raise InvalidCheckpointPath(filename)
+
+    if isinstance(target, bst.util.FlattedDict):
+        target = target.to_nest()
     target = to_bytes(target)
 
     # Save the files via I/O sync or async.
@@ -942,6 +945,9 @@ def msgpack_load(
     sys.stdout.write(f'Loading checkpoint from {filename}\n')
     sys.stdout.flush()
     file_size = os.path.getsize(filename)
+
+    if isinstance(target, bst.util.FlattedDict):
+        target = target.to_nest()
 
     with open(filename, 'rb') as fp:
         if parallel and fp.seekable():

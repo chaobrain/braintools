@@ -18,7 +18,7 @@
 from typing import Union
 
 import brainstate as bst
-import brainunit as bu
+import brainunit as u
 import jax.numpy as jnp
 import numpy as onp
 
@@ -56,8 +56,8 @@ def raster_plot(
 
 def firing_rate(
     spikes: bst.typing.ArrayLike,
-    width: Union[float, bu.Quantity],
-    dt: Union[float, bu.Quantity] = None
+    width: Union[float, u.Quantity],
+    dt: Union[float, u.Quantity] = None
 ):
   r"""Calculate the mean firing rate over in a neuron group.
 
@@ -86,5 +86,7 @@ def firing_rate(
   """
   dt = bst.environ.get_dt() if (dt is None) else dt
   width1 = int(width / 2 / dt) * 2 + 1
-  window = jnp.ones(width1) * 1000 / width
+  window = u.math.ones(width1) / width
+  if isinstance(window, u.Quantity):
+    window = window.to_decimal(u.Hz)
   return jnp.convolve(jnp.mean(spikes, axis=1), window, mode='same')
