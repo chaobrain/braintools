@@ -219,7 +219,9 @@ def from_state_dict(target, state: Dict[str, Any], name: str = '.'):
 
 
 def to_state_dict(target) -> Dict[str, Any]:
-    """Returns a dictionary with the state of the given target."""
+    """
+    Returns a dictionary with the state of the given target.
+    """
     ty = _NamedTuple if _is_namedtuple(target) else type(target)
 
     for t in _STATE_DICT_REGISTRY.keys():
@@ -235,16 +237,16 @@ def to_state_dict(target) -> Dict[str, Any]:
         for key in state_dict.keys():
             assert isinstance(key, str), 'A state dict must only have string keys.'
         return state_dict
-    elif isinstance(state_dict, jax.Array):
-        return state_dict
     else:
-        raise TypeError
+        return state_dict
 
 
-def register_serialization_state(ty,
-                                 ty_to_state_dict,
-                                 ty_from_state_dict,
-                                 override=False):
+def register_serialization_state(
+    ty,
+    ty_to_state_dict,
+    ty_from_state_dict,
+    override=False
+):
     """Register a type for serialization.
 
     Args:
@@ -263,7 +265,10 @@ def register_serialization_state(ty,
 
 
 def _list_state_dict(xs: List[Any]) -> Dict[str, Any]:
-    return {str(i): to_state_dict(x) for i, x in enumerate(xs)}
+    return {
+        str(i): to_state_dict(x)
+        for i, x in enumerate(xs)
+    }
 
 
 def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
@@ -278,10 +283,16 @@ def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
     return ys
 
 
-register_serialization_state(list, _list_state_dict, _restore_list)
-register_serialization_state(tuple,
-                             _list_state_dict,
-                             lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict)))
+register_serialization_state(
+    list,
+    _list_state_dict,
+    _restore_list,
+)
+register_serialization_state(
+    tuple,
+    _list_state_dict,
+    lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict))
+)
 
 
 def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
@@ -289,7 +300,10 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
     if len(str_keys) != len(xs):
         raise ValueError('Dict keys do not have a unique string representation: '
                          f'{str_keys} vs given: {xs}')
-    return {str(key): to_state_dict(value) for key, value in xs.items()}
+    return {
+        str(key): to_state_dict(value)
+        for key, value in xs.items()
+    }
 
 
 def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
@@ -299,8 +313,10 @@ def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
                          f' target dict contains keys {diff} which are not present in state dict '
                          f'at path {current_path()}')
 
-    return {key: from_state_dict(value, states[str(key)], name=str(key))
-            for key, value in xs.items()}
+    return {
+        key: from_state_dict(value, states[str(key)], name=str(key))
+        for key, value in xs.items()
+    }
 
 
 register_serialization_state(dict, _dict_state_dict, _restore_dict)
@@ -329,17 +345,30 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
     return type(xs)(**fields)
 
 
-register_serialization_state(_NamedTuple,
-                             _namedtuple_state_dict,
-                             _restore_namedtuple)
+register_serialization_state(
+    _NamedTuple,
+    _namedtuple_state_dict,
+    _restore_namedtuple
+)
 
 
 def _quantity_dict_state(x: u.Quantity) -> Dict[str, jax.Array]:
-    return {'mantissa': x.mantissa, 'scale': x.unit.scale, 'base': x.unit.base, 'dim': x.unit.dim._dims}
+    return {
+        'mantissa': x.mantissa,
+        'scale': x.unit.scale,
+        'base': x.unit.base,
+        'dim': x.unit.dim._dims,
+        'factor': x.unit.factor,
+    }
 
 
 def _restore_quantity(x: u.Quantity, state_dict: Dict) -> u.Quantity:
-    unit = u.Unit(dim=u.Dimension(state_dict['dim']), scale=state_dict['scale'], base=state_dict['base'])
+    unit = u.Unit(
+        dim=u.Dimension(state_dict['dim']),
+        scale=state_dict['scale'],
+        base=state_dict['base'],
+        factor=state_dict['factor'],
+    )
     assert x.unit == unit
     return u.Quantity(state_dict['mantissa'], unit=unit)
 
@@ -358,14 +387,17 @@ def _restore_brainstate(x: bst.State, state_dict: Dict) -> bst.State:
 
 register_serialization_state(bst.State, _brainstate_dict_state, _restore_brainstate)
 
-
 register_serialization_state(
     jax.tree_util.Partial,
-    lambda x: {"args": to_state_dict(x.args),
-               "keywords": to_state_dict(x.keywords), },
-    lambda x, sd: jax.tree_util.Partial(x.func,
-                                        *from_state_dict(x.args, sd["args"]),
-                                        **from_state_dict(x.keywords, sd["keywords"]))
+    lambda x: {
+        "args": to_state_dict(x.args),
+        "keywords": to_state_dict(x.keywords),
+    },
+    lambda x, sd: jax.tree_util.Partial(
+        x.func,
+        *from_state_dict(x.args, sd["args"]),
+        **from_state_dict(x.keywords, sd["keywords"])
+    )
 )
 
 
@@ -423,13 +455,17 @@ def _msgpack_ext_pack(x):
     # If they are not fully addressable, use the GDA path for checkpointing.
     if isinstance(x, (np.ndarray, jax.Array)):
         return msgpack.ExtType(_MsgpackExtType.ndarray, _ndarray_to_bytes(x))
-    if np.issctype(type(x)):
+    if issubclass(type(x), np.generic):
         # pack scalar as ndarray
-        return msgpack.ExtType(_MsgpackExtType.npscalar,
-                               _ndarray_to_bytes(np.asarray(x)))
+        return msgpack.ExtType(
+            _MsgpackExtType.npscalar,
+            _ndarray_to_bytes(np.asarray(x))
+        )
     elif isinstance(x, complex):
-        return msgpack.ExtType(_MsgpackExtType.native_complex,
-                               msgpack.packb((x.real, x.imag)))
+        return msgpack.ExtType(
+            _MsgpackExtType.native_complex,
+            msgpack.packb((x.real, x.imag))
+        )
     return x
 
 
@@ -558,7 +594,7 @@ def from_bytes(target, encoded_bytes: bytes):
       target: template object with state-dict registrations that matches
         the structure being deserialized from `encoded_bytes`.
       encoded_bytes: msgpack serialized object structurally isomorphic to
-        `target`.  Typically a flax model or optimizer.
+        `target`.  Typically, a model or optimizer.
 
     Returns:
       A new object structurally isomorphic to `target` containing the updated
@@ -573,7 +609,7 @@ def to_bytes(target) -> bytes:
 
     Args:
       target: template object with state-dict registrations to be
-        serialized to msgpack format.  Typically a flax model or optimizer.
+        serialized to msgpack format.  Typically, a model or optimizer.
 
     Returns:
       Bytes of msgpack-encoded state-dict of `target` object.

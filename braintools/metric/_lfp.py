@@ -51,17 +51,17 @@ def unitary_LFP(
   If you have spike data of excitatory and inhibtiory neurons, you can get the LFP
   by the following methods:
 
-  >>> import braincore as bc
+  >>> import brainstate as bst
   >>> import jax
-  >>> import braintools as bt
+  >>> import braintools
   >>> n_time = 1000
   >>> n_exc = 100
   >>> n_inh = 25
   >>> times = jax.numpy.arange(n_time) * 0.1
   >>> exc_sps = bst.random.random((n_time, n_exc)) < 0.3
   >>> inh_sps = bst.random.random((n_time, n_inh)) < 0.4
-  >>> lfp = bt.metric.unitary_LFP(times, exc_sps, 'exc')
-  >>> lfp += bt.metric.unitary_LFP(times, inh_sps, 'inh')
+  >>> lfp = braintools.metric.unitary_LFP(times, exc_sps, 'exc')
+  >>> lfp += braintools.metric.unitary_LFP(times, inh_sps, 'inh')
 
   Parameters
   ----------

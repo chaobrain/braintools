@@ -20,7 +20,7 @@ name = "braintools"
 description = "The Toolbox for Brain Dynamics Programming."
 readme = 'README.md'
 license = { text = 'Apache-2.0 license' }
-requires-python = '>=3.9'
+requires-python = '>=3.10'
 authors = [{ name = 'BrainTools Developers', email = 'chao.brain@qq.com' }]
 classifiers = [
     'Natural Language :: English',
@@ -29,10 +29,10 @@ classifiers = [
     'Intended Audience :: Developers',
     'Intended Audience :: Science/Research',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
     'License :: OSI Approved :: Apache Software License',
     'Programming Language :: Python',
     'Topic :: Scientific/Engineering :: Bio-Informatics',
@@ -49,7 +49,7 @@ dependencies = [
     'jaxlib',
     'numpy',
     'brainstate>=0.1.0',
-    'brainunit',
+    'brainunit>=0.0.8',
     'typing_extensions',
 ]
 
@@ -59,8 +59,8 @@ dynamic = ['version']
 name = "braintools"
 
 [project.urls]
-homepage = 'http://github.com/chaoming0625/braintools'
-repository = 'http://github.com/chaoming0625/braintools'
+homepage = 'http://github.com/chaobrain/braintools'
+repository = 'http://github.com/chaobrain/braintools'
 
 [project.optional-dependencies]
 testing = [
