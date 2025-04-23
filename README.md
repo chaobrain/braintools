@@ -1,9 +1,8 @@
 # Tools/utilities for brain dynamics programming
 
 <p align="center">
-  	<img alt="Header image of braintools." src="https://github.com/brainpy/braintools/blob/main/docs/_static/braintools.jpg" width=50%>
-</p> 
-
+  	<img alt="Header image of braintools." src="https://raw.githubusercontent.com/chaobrain/braintools/main/docs/_static/braintools.jpg" width=50%>
+</p>
 
 
 <p align="center">
@@ -35,6 +34,6 @@ The official documentation is hosted on Read the Docs: [https://braintools.readt
 
 
 
-## See also the BDP ecosystem
+## See also the brain modeling ecosystem
 
-We are building the BDP ecosystem: https://ecosystem-for-brain-dynamics.readthedocs.io/
+We are building the brain modeling ecosystem: https://brainmodeling.readthedocs.io/
