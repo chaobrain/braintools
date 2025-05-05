@@ -31,7 +31,7 @@ from concurrent.futures import thread
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import brainstate as bst
+import brainstate
 import brainunit as u
 import jax
 import numpy as np
@@ -376,16 +376,16 @@ def _restore_quantity(x: u.Quantity, state_dict: Dict) -> u.Quantity:
 register_serialization_state(u.Quantity, _quantity_dict_state, _restore_quantity)
 
 
-def _brainstate_dict_state(x: bst.State) -> Dict[str, Any]:
+def _brainstate_dict_state(x: brainstate.State) -> Dict[str, Any]:
     return to_state_dict(x.value)
 
 
-def _restore_brainstate(x: bst.State, state_dict: Dict) -> bst.State:
+def _restore_brainstate(x: brainstate.State, state_dict: Dict) -> brainstate.State:
     x.value = from_state_dict(x.value, state_dict)
     return x
 
 
-register_serialization_state(bst.State, _brainstate_dict_state, _restore_brainstate)
+register_serialization_state(brainstate.State, _brainstate_dict_state, _restore_brainstate)
 
 register_serialization_state(
     jax.tree_util.Partial,
@@ -847,7 +847,7 @@ def _save_main_ckpt_file2(
 
 def msgpack_save(
     filename: str,
-    target: bst.typing.PyTree,
+    target: brainstate.typing.PyTree,
     overwrite: bool = True,
     async_manager: Optional[AsyncManager] = None,
     verbose: bool = True,
@@ -901,7 +901,7 @@ def msgpack_save(
     if not overwrite and os.path.exists(filename):
         raise InvalidCheckpointPath(filename)
 
-    if isinstance(target, bst.util.FlattedDict):
+    if isinstance(target, brainstate.util.FlattedDict):
         target = target.to_nest()
     target = to_bytes(target)
 
@@ -951,7 +951,7 @@ def msgpack_load(
     filename: str,
     target: Optional[Any] = None,
     parallel: bool = True,
-) -> bst.typing.PyTree:
+) -> brainstate.typing.PyTree:
     """
     Load the checkpoint from the given checkpoint path using the ``msgpack`` library.
 
@@ -982,7 +982,7 @@ def msgpack_load(
     sys.stdout.flush()
     file_size = os.path.getsize(filename)
 
-    if isinstance(target, bst.util.FlattedDict):
+    if isinstance(target, brainstate.util.FlattedDict):
         target = target.to_nest()
 
     with open(filename, 'rb') as fp:

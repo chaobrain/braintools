@@ -15,7 +15,7 @@
 
 # -*- coding: utf-8 -*-
 
-import brainstate as bst
+import brainstate
 import jax
 from jax import numpy as jnp
 
@@ -25,17 +25,17 @@ __all__ = [
 
 
 def unitary_LFP(
-    times: bst.typing.ArrayLike,
-    spikes: bst.typing.ArrayLike,
+    times: brainstate.typing.ArrayLike,
+    spikes: brainstate.typing.ArrayLike,
     spike_type: str,
-    xmax: bst.typing.ArrayLike = 0.2,
-    ymax: bst.typing.ArrayLike = 0.2,
-    va: bst.typing.ArrayLike = 200.,
-    lambda_: bst.typing.ArrayLike = 0.2,
-    sig_i: bst.typing.ArrayLike = 2.1,
-    sig_e: bst.typing.ArrayLike = 2.1 * 1.5,
+    xmax: brainstate.typing.ArrayLike = 0.2,
+    ymax: brainstate.typing.ArrayLike = 0.2,
+    va: brainstate.typing.ArrayLike = 200.,
+    lambda_: brainstate.typing.ArrayLike = 0.2,
+    sig_i: brainstate.typing.ArrayLike = 2.1,
+    sig_e: brainstate.typing.ArrayLike = 2.1 * 1.5,
     location: str = 'soma layer',
-    seed: bst.typing.SeedOrKey = None
+    seed: brainstate.typing.SeedOrKey = None
 ) -> jax.Array:
   """
   A kernel-based method to calculate unitary local field potentials (uLFP)
@@ -106,7 +106,7 @@ def unitary_LFP(
                      f'Bug we got {times.shape[0]} != {spikes.shape}.')
 
   # Distributing cells in a 2D grid
-  rng = bst.random.RandomState(seed)
+  rng = brainstate.random.RandomState(seed)
   num_neuron = spikes.shape[1]
   pos_xs, pos_ys = rng.rand(2, num_neuron) * jnp.array([[xmax], [ymax]])
   pos_xs, pos_ys = jnp.asarray(pos_xs), jnp.asarray(pos_ys)
@@ -136,4 +136,4 @@ def unitary_LFP(
   tts = times[iis] + delay[ids]
   exc_amp = A[ids]
   tau = (2 * sig_e * sig_e) if spike_type == 'exc' else (2 * sig_i * sig_i)
-  return bst.compile.for_loop(lambda t: jnp.sum(exc_amp * jnp.exp(-(t - tts) ** 2 / tau)), times)
+  return brainstate.compile.for_loop(lambda t: jnp.sum(exc_amp * jnp.exp(-(t - tts) ** 2 / tau)), times)

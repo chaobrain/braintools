@@ -17,7 +17,7 @@
 
 from typing import Union
 
-import brainstate as bst
+import brainstate
 import brainunit as u
 import jax.numpy as jnp
 import numpy as onp
@@ -29,8 +29,8 @@ __all__ = [
 
 
 def raster_plot(
-    sp_matrix: bst.typing.ArrayLike,
-    times: bst.typing.ArrayLike
+    sp_matrix: brainstate.typing.ArrayLike,
+    times: brainstate.typing.ArrayLike
 ):
   """Get spike raster plot which displays the spiking activity
   of a group of neurons over time.
@@ -55,7 +55,7 @@ def raster_plot(
 
 
 def firing_rate(
-    spikes: bst.typing.ArrayLike,
+    spikes: brainstate.typing.ArrayLike,
     width: Union[float, u.Quantity],
     dt: Union[float, u.Quantity] = None
 ):
@@ -84,7 +84,7 @@ def firing_rate(
   rate : ndarray
       The population rate in Hz, smoothed with the given window.
   """
-  dt = bst.environ.get_dt() if (dt is None) else dt
+  dt = brainstate.environ.get_dt() if (dt is None) else dt
   width1 = int(width / 2 / dt) * 2 + 1
   window = u.math.ones(width1) / width
   if isinstance(window, u.Quantity):

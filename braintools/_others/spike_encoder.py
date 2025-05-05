@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-import brainstate as bst
+import brainstate
 import brainunit as u
 import jax
 import numpy as np
@@ -99,10 +99,10 @@ class LatencyEncoder:
     self.tau = tau
     self.normalize = normalize
     self.first_spk_time = first_spk_time
-    self.first_spk_step = int(first_spk_time / bst.environ.get_dt())
+    self.first_spk_step = int(first_spk_time / brainstate.environ.get_dt())
     self.epsilon = epsilon
 
-  def __call__(self, data, n_time: Optional[bst.typing.ArrayLike] = None):
+  def __call__(self, data, n_time: Optional[brainstate.typing.ArrayLike] = None):
     """Generate latency spikes according to the given input data.
 
     Ensuring x in [0., 1.].
@@ -123,7 +123,7 @@ class LatencyEncoder:
         x = (x - self.min_val) / (self.max_val - self.min_val)
 
       # Calculate the spike time
-      dt = bst.environ.get_dt()
+      dt = brainstate.environ.get_dt()
       if self.method == 'linear':
         spike_time = (tau - self.first_spk_time - dt) * (1 - x) + self.first_spk_time
 
@@ -138,4 +138,4 @@ class LatencyEncoder:
       if self.clip:
         spike_time = u.math.where(data < self.threshold, np.inf, spike_time)
       spike_steps = u.math.round(spike_time / dt).astype(int)
-      return bst.functional.one_hot(spike_steps, num_classes=int(n_time / dt), axis=0, dtype=x.dtype)
+      return brainstate.functional.one_hot(spike_steps, num_classes=int(n_time / dt), axis=0, dtype=x.dtype)

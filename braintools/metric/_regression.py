@@ -18,8 +18,8 @@
 from typing import Optional, Union
 
 import jax.numpy as jnp
-import brainstate as bst
-import brainunit as bu
+import brainstate
+import brainunit as u
 
 from ._util import _reduce
 
@@ -36,11 +36,11 @@ __all__ = [
 ]
 
 
-def safe_norm(x: bst.typing.ArrayLike,
+def safe_norm(x: brainstate.typing.ArrayLike,
               min_norm,
               ord: Optional[Union[int, float, str]] = None,  # pylint: disable=redefined-builtin
               axis: Union[None, tuple[int, ...], int] = None,
-              keepdims: bool = False) -> bst.typing.ArrayLike:
+              keepdims: bool = False) -> brainstate.typing.ArrayLike:
   """Returns jnp.maximum(jnp.linalg.norm(x), min_norm) with correct gradients.
 
   The gradients of `jnp.maximum(jnp.linalg.norm(x), min_norm)` at 0.0 is `NaN`,
@@ -73,11 +73,11 @@ def safe_norm(x: bst.typing.ArrayLike,
 
 
 def squared_error(
-    predictions: bst.typing.ArrayLike,
-    targets: Optional[bst.typing.ArrayLike] = None,
+    predictions: brainstate.typing.ArrayLike,
+    targets: Optional[brainstate.typing.ArrayLike] = None,
     axis: Optional[Union[int, tuple[int, ...]]] = None,
     reduction: str = 'none',
-) -> bst.typing.ArrayLike:
+) -> brainstate.typing.ArrayLike:
   """Calculates the squared error for a set of predictions.
 
   Mean Squared Error can be computed as ``squared_error(a, b, reduction='mean')``.
@@ -100,7 +100,7 @@ def squared_error(
   Returns:
     elementwise squared differences, with same shape as `predictions`.
   """
-  assert bu.math.is_float(predictions), 'predictions must be float.'
+  assert u.math.is_float(predictions), 'predictions must be float.'
   if targets is not None:
     # Avoid broadcasting logic for "-" operator.
     assert predictions.shape == targets.shape, 'predictions and targets must have the same shape.'
@@ -110,11 +110,11 @@ def squared_error(
 
 
 def absolute_error(
-    predictions: bst.typing.ArrayLike,
-    targets: Optional[bst.typing.ArrayLike] = None,
+    predictions: brainstate.typing.ArrayLike,
+    targets: Optional[brainstate.typing.ArrayLike] = None,
     axis: Optional[Union[int, tuple[int, ...]]] = None,
     reduction: str = 'mean',
-) -> bst.typing.ArrayLike:
+) -> brainstate.typing.ArrayLike:
   """Calculates the absolute error for a set of predictions.
 
   Mean Absolute Error can be computed as absolute_error(a, b).mean().
@@ -130,7 +130,7 @@ def absolute_error(
   Returns:
     elementwise absolute differences, with same shape as `predictions`.
   """
-  assert bu.math.is_float(predictions), 'predictions must be float.'
+  assert u.math.is_float(predictions), 'predictions must be float.'
   if targets is not None:
     # Avoid broadcasting logic for "-" operator.
     assert predictions.shape == targets.shape, 'predictions and targets must have the same shape.'
@@ -195,13 +195,13 @@ class L1Loss:
     self.reduction = reduction
 
   def update(self,
-             input: bst.typing.ArrayLike,
-             target: bst.typing.ArrayLike) -> bst.typing.ArrayLike:
+             input: brainstate.typing.ArrayLike,
+             target: brainstate.typing.ArrayLike) -> brainstate.typing.ArrayLike:
     return l1_loss(input, target, reduction=self.reduction)
 
 
-def l1_loss(logits: bst.typing.ArrayLike,
-            targets: bst.typing.ArrayLike,
+def l1_loss(logits: brainstate.typing.ArrayLike,
+            targets: brainstate.typing.ArrayLike,
             reduction: str ='sum'):
   r"""Creates a criterion that measures the mean absolute error (MAE) between each element in
   the logits :math:`x` and targets :math:`y`. It is useful in regression problems.
@@ -256,9 +256,9 @@ def l1_loss(logits: bst.typing.ArrayLike,
 
 
 def l2_loss(
-    predictions: bst.typing.ArrayLike,
-    targets: Optional[bst.typing.ArrayLike] = None,
-) -> bst.typing.ArrayLike:
+    predictions: brainstate.typing.ArrayLike,
+    targets: Optional[brainstate.typing.ArrayLike] = None,
+) -> brainstate.typing.ArrayLike:
   """Calculates the L2 loss for a set of predictions.
 
   Note: the 0.5 term is standard in "Pattern Recognition and Machine Learning"
@@ -279,10 +279,10 @@ def l2_loss(
 
 
 def l2_norm(
-    predictions: bst.typing.ArrayLike,
-    targets: Optional[bst.typing.ArrayLike] = None,
+    predictions: brainstate.typing.ArrayLike,
+    targets: Optional[brainstate.typing.ArrayLike] = None,
     axis: Optional[Union[int, tuple[int, ...]]] = None,
-) -> bst.typing.ArrayLike:
+) -> brainstate.typing.ArrayLike:
   """Computes the L2 norm of the difference between predictions and targets.
 
   Args:
@@ -294,7 +294,7 @@ def l2_norm(
   Returns:
     elementwise l2 norm of the differences, with same shape as `predictions`.
   """
-  assert bu.math.is_float(predictions), 'predictions must be float.'
+  assert u.math.is_float(predictions), 'predictions must be float.'
   if targets is not None:
     # Avoid broadcasting logic for "-" operator.
     assert predictions.shape == targets.shape, 'predictions and targets must have the same shape.'
@@ -303,10 +303,10 @@ def l2_norm(
 
 
 def huber_loss(
-    predictions: bst.typing.ArrayLike,
-    targets: Optional[bst.typing.ArrayLike] = None,
+    predictions: brainstate.typing.ArrayLike,
+    targets: Optional[brainstate.typing.ArrayLike] = None,
     delta: float = 1.
-) -> bst.typing.ArrayLike:
+) -> brainstate.typing.ArrayLike:
   """Huber loss, similar to L2 loss close to zero, L1 loss away from zero.
 
   If gradient descent is applied to the `huber loss`, it is equivalent to
@@ -324,7 +324,7 @@ def huber_loss(
   Returns:
     elementwise huber losses, with the same shape of `predictions`.
   """
-  assert bu.math.is_float(predictions), 'predictions must be float.'
+  assert u.math.is_float(predictions), 'predictions must be float.'
   errors = (predictions - targets) if (targets is not None) else predictions
   # 0.5 * err^2                  if |err| <= d
   # 0.5 * d^2 + d * (|err| - d)  if |err| > d
@@ -336,9 +336,9 @@ def huber_loss(
 
 
 def log_cosh(
-    predictions: bst.typing.ArrayLike,
-    targets: Optional[bst.typing.ArrayLike] = None,
-) -> bst.typing.ArrayLike:
+    predictions: brainstate.typing.ArrayLike,
+    targets: Optional[brainstate.typing.ArrayLike] = None,
+) -> brainstate.typing.ArrayLike:
   """Calculates the log-cosh loss for a set of predictions.
 
   log(cosh(x)) is approximately `(x**2) / 2` for small x and `abs(x) - log(2)`
@@ -355,17 +355,17 @@ def log_cosh(
   Returns:
     the log-cosh loss, with same shape as `predictions`.
   """
-  assert bu.math.is_float(predictions), 'predictions must be float.'
+  assert u.math.is_float(predictions), 'predictions must be float.'
   errors = (predictions - targets) if (targets is not None) else predictions
   # log(cosh(x)) = log((exp(x) + exp(-x))/2) = log(exp(x) + exp(-x)) - log(2)
   return jnp.logaddexp(errors, -errors) - jnp.log(2.0).astype(errors.dtype)
 
 
 def cosine_similarity(
-    predictions: bst.typing.ArrayLike,
-    targets: bst.typing.ArrayLike,
+    predictions: brainstate.typing.ArrayLike,
+    targets: brainstate.typing.ArrayLike,
     epsilon: float = 0.,
-) -> bst.typing.ArrayLike:
+) -> brainstate.typing.ArrayLike:
   r"""Computes the cosine similarity between targets and predictions.
 
   The cosine **similarity** is a measure of similarity between vectors defined
@@ -383,8 +383,8 @@ def cosine_similarity(
   Returns:
     cosine similarity measures, with shape `[...]`.
   """
-  assert bu.math.is_float(predictions), 'predictions must be float.'
-  assert bu.math.is_float(targets), 'targets must be float.'
+  assert u.math.is_float(predictions), 'predictions must be float.'
+  assert u.math.is_float(targets), 'targets must be float.'
   # vectorize norm fn, to treat all dimensions except the last as batch dims.
   batched_norm_fn = jnp.vectorize(safe_norm, signature='(k)->()', excluded={1})
   # normalise the last dimension of targets and predictions.
@@ -397,10 +397,10 @@ def cosine_similarity(
 
 
 def cosine_distance(
-    predictions: bst.typing.ArrayLike,
-    targets: bst.typing.ArrayLike,
+    predictions: brainstate.typing.ArrayLike,
+    targets: brainstate.typing.ArrayLike,
     epsilon: float = 0.,
-) -> bst.typing.ArrayLike:
+) -> brainstate.typing.ArrayLike:
   r"""Computes the cosine distance between targets and predictions.
 
   The cosine **distance**, implemented here, measures the **dissimilarity**
@@ -417,8 +417,8 @@ def cosine_distance(
   Returns:
     cosine distances, with shape `[...]`.
   """
-  assert bu.math.is_float(predictions), 'predictions must be float.'
-  assert bu.math.is_float(targets), 'targets must be float.'
+  assert u.math.is_float(predictions), 'predictions must be float.'
+  assert u.math.is_float(targets), 'targets must be float.'
   # cosine distance = 1 - cosine similarity.
   return 1. - cosine_similarity(predictions, targets, epsilon=epsilon)
 

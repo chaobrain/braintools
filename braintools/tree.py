@@ -58,7 +58,7 @@ def scale(
     Returns:
         PyTree: A new PyTree with each element scaled by the given scalar value.
     """
-    return jtu.tree_map(lambda a: a * x, tree, is_leaf=is_leaf)
+    return jtu.tree.map(lambda a: a * x, tree, is_leaf=is_leaf)
 
 
 def mul(
@@ -83,7 +83,7 @@ def mul(
     """
     if isinstance(x, jax.typing.ArrayLike):
         return scale(tree, x)
-    return jtu.tree_map(lambda a, b: a * b, tree, x, is_leaf=is_leaf)
+    return jtu.tree.map(lambda a, b: a * b, tree, x, is_leaf=is_leaf)
 
 
 def shift(
@@ -103,7 +103,7 @@ def shift(
     Returns:
         PyTree: A new PyTree with each element shifted by the given scalar value.
     """
-    return jtu.tree_map(lambda a: a + x, tree1, is_leaf=is_leaf)
+    return jtu.tree.map(lambda a: a + x, tree1, is_leaf=is_leaf)
 
 
 def add(
@@ -128,7 +128,7 @@ def add(
     """
     if isinstance(tree2, jax.Array):
         return shift(tree1, tree2)
-    return jtu.tree_map(lambda a, b: a + b, tree1, tree2, is_leaf=is_leaf)
+    return jtu.tree.map(lambda a, b: a + b, tree1, tree2, is_leaf=is_leaf)
 
 
 def sub(
@@ -148,7 +148,7 @@ def sub(
     Returns:
         PyTree: A new PyTree with each element being the difference of the corresponding elements in `tree1` and `tree2`.
     """
-    return jtu.tree_map(lambda a, b: a - b, tree1, tree2, is_leaf=is_leaf)
+    return jtu.tree.map(lambda a, b: a - b, tree1, tree2, is_leaf=is_leaf)
 
 
 def dot(
@@ -170,9 +170,9 @@ def dot(
     Returns:
         jax.Array: A scalar value representing the dot product of the two input PyTrees.
     """
-    return jtu.tree_reduce(
+    return jtu.tree.reduce(
         u.math.add,
-        jtu.tree_map(u.math.sum, jax.tree_map(jax.lax.mul, a, b, is_leaf=is_leaf), is_leaf=is_leaf),
+        jtu.tree.map(u.math.sum, jax.tree.map(jax.lax.mul, a, b, is_leaf=is_leaf), is_leaf=is_leaf),
         is_leaf=is_leaf
     )
 
@@ -194,7 +194,7 @@ def sum(
     Returns:
         jax.Array: A scalar value representing the sum of all elements in the input PyTree.
     """
-    return jtu.tree_reduce(u.math.add, jtu.tree_map(u.math.sum, tree, is_leaf=is_leaf), is_leaf=is_leaf)
+    return jtu.tree.reduce(u.math.add, jtu.tree.map(u.math.sum, tree, is_leaf=is_leaf), is_leaf=is_leaf)
 
 
 def squared_norm(
@@ -215,9 +215,9 @@ def squared_norm(
     Returns:
         jax.Array: A scalar value representing the squared norm of all elements in the input PyTree.
     """
-    return jtu.tree_reduce(
+    return jtu.tree.reduce(
         u.math.add,
-        jtu.tree_map(lambda x: u.math.einsum('...,...->', x, x), tree, is_leaf=is_leaf),
+        jtu.tree.map(lambda x: u.math.einsum('...,...->', x, x), tree, is_leaf=is_leaf),
         is_leaf=is_leaf
     )
 
@@ -242,7 +242,7 @@ def concat(
     Returns:
         PyTree: A new PyTree with elements concatenated along the specified axis.
     """
-    return jtu.tree_map(lambda *args: u.math.concatenate(args, axis=axis), *trees, is_leaf=is_leaf)
+    return jtu.tree.map(lambda *args: u.math.concatenate(args, axis=axis), *trees, is_leaf=is_leaf)
 
 
 def split(
@@ -269,9 +269,9 @@ def split(
     idx = 0
     result: list[PyTree[jax.Array]] = []
     for s in sizes:
-        result.append(jtu.tree_map(lambda x: x[idx: idx + s], tree, is_leaf=is_leaf))
+        result.append(jtu.tree.map(lambda x: x[idx: idx + s], tree, is_leaf=is_leaf))
         idx += s
-    result.append(jtu.tree_map(lambda x: x[idx:], tree, is_leaf=is_leaf))
+    result.append(jtu.tree.map(lambda x: x[idx:], tree, is_leaf=is_leaf))
     return tuple(result)
 
 
@@ -295,7 +295,7 @@ def idx(
     Returns:
         PyTree: A new PyTree with elements extracted at the specified indices from each leaf node.
     """
-    return jtu.tree_map(lambda x: x[idx], tree, is_leaf=is_leaf)
+    return jtu.tree.map(lambda x: x[idx], tree, is_leaf=is_leaf)
 
 
 def expand(
@@ -318,7 +318,7 @@ def expand(
     Returns:
         PyTree: A new PyTree with each element's dimensions expanded along the specified axis.
     """
-    return jtu.tree_map(lambda x: u.math.expand_dims(x, axis), tree, is_leaf=is_leaf)
+    return jtu.tree.map(lambda x: u.math.expand_dims(x, axis), tree, is_leaf=is_leaf)
 
 
 def take(
@@ -351,7 +351,7 @@ def take(
             return x[tuple(slices)]
         return u.math.take(x, indices, axis)
 
-    return jtu.tree_map(take_, tree, is_leaf=is_leaf)
+    return jtu.tree.map(take_, tree, is_leaf=is_leaf)
 
 
 def as_numpy(
@@ -372,4 +372,4 @@ def as_numpy(
     Returns:
         PyTree[np.ndarray]: A new PyTree with each element converted to a NumPy array.
     """
-    return jtu.tree_map(lambda x: np.asarray(x), tree, is_leaf=is_leaf)
+    return jtu.tree.map(lambda x: np.asarray(x), tree, is_leaf=is_leaf)
