@@ -51,13 +51,13 @@ packages = find_packages(
     ]
 )
 
-all_dependencies = ['scienceplots', 'matplotlib', 'nevergrad', 'scipy', 'msgpack']
+all_dependencies = ['matplotlib', 'nevergrad', 'scipy', 'msgpack']
 
 # setup
 setup(
     name='braintools',
     version=version,
-    description='Commonly Used Toolboxes for Brain Dynamics Programming',
+    description='The Toolbox for Brain Modeling Ecosystem.',
     long_description=README,
     long_description_content_type="text/markdown",
     author='BDP',
