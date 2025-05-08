@@ -5,8 +5,13 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 exclude = [
-    "docs*", "tests*", "examples*", "build*", "dist*",
-    "braintools.egg-info*", "braintools/__pycache__*",
+    "docs*",
+    "tests*",
+    "examples*",
+    "build*",
+    "dist*",
+    "braintools.egg-info*",
+    "braintools/__pycache__*",
     "braintools/__init__.py"
 ]
 
@@ -17,7 +22,7 @@ universal = true
 
 [project]
 name = "braintools"
-description = "The Toolbox for Brain Dynamics Programming."
+description = "The Toolbox for Brain Modeling Ecosystem."
 readme = 'README.md'
 license = { text = 'Apache-2.0 license' }
 requires-python = '>=3.10'
@@ -45,8 +50,6 @@ classifiers = [
 keywords = ["brain dynamics programming", "brain simulation", "brain-inspired computing"]
 
 dependencies = [
-    'jax',
-    'jaxlib',
     'numpy',
     'brainstate>=0.1.0',
     'brainunit>=0.0.8',
@@ -54,9 +57,6 @@ dependencies = [
 ]
 
 dynamic = ['version']
-
-[tool.flit.module]
-name = "braintools"
 
 [project.urls]
 homepage = 'http://github.com/chaobrain/braintools'

@@ -18,7 +18,7 @@
 
 from typing import Sequence
 
-import brainstate as bst
+import brainstate
 import brainunit as u
 import numpy as np
 
@@ -37,7 +37,7 @@ __all__ = [
 def section_input(
     values: Sequence,
     durations: Sequence,
-    dt: bst.typing.ArrayLike = None,
+    dt: brainstate.typing.ArrayLike = None,
     return_length: bool = False
 ):
   """Format an input current with different sections.
@@ -69,7 +69,7 @@ def section_input(
   if len(durations) != len(values):
     raise ValueError(f'"values" and "durations" must be the same length, while '
                      f'we got {len(values)} != {len(durations)}.')
-  dt = bst.environ.get_dt() if dt is None else dt
+  dt = brainstate.environ.get_dt() if dt is None else dt
 
   # get input currents
   values = [u.math.array(val) for val in values]
@@ -83,7 +83,7 @@ def section_input(
   all_duration = None
   currents = []
   for c_size, duration in zip(values, durations):
-    current = u.math.ones((int(np.ceil(u.maybe_decimal(duration / dt))),) + i_shape, dtype=bst.environ.dftype())
+    current = u.math.ones((int(np.ceil(u.maybe_decimal(duration / dt))),) + i_shape, dtype=brainstate.environ.dftype())
     current = current * c_size
     currents.append(current)
     if all_duration is None:
@@ -124,7 +124,7 @@ def constant_input(I_and_duration, dt=None):
   current_and_duration : tuple
       (The formatted current, total duration)
   """
-  dt = bst.environ.get_dt() if dt is None else dt
+  dt = brainstate.environ.get_dt() if dt is None else dt
 
   # get input current dimension, shape, and duration
   I_duration = None
@@ -139,7 +139,7 @@ def constant_input(I_and_duration, dt=None):
   currents = []
   for c_size, duration in I_and_duration:
     length = int(np.ceil(u.maybe_decimal(duration / dt)))
-    current = u.math.ones((length,) + I_shape, dtype=bst.environ.dftype()) * c_size
+    current = u.math.ones((length,) + I_shape, dtype=brainstate.environ.dftype()) * c_size
     currents.append(current)
   return u.math.concatenate(currents, axis=0), I_duration
 
@@ -176,7 +176,7 @@ def spike_input(sp_times, sp_lens, sp_sizes, duration, dt=None):
   current : bm.ndarray
       The formatted input current.
   """
-  dt = bst.environ.get_dt() if dt is None else dt
+  dt = brainstate.environ.get_dt() if dt is None else dt
   assert isinstance(sp_times, (list, tuple))
   if not isinstance(sp_lens, (tuple, list)):
     sp_lens = [sp_lens] * len(sp_times)
@@ -186,7 +186,7 @@ def spike_input(sp_times, sp_lens, sp_sizes, duration, dt=None):
     u.fail_for_unit_mismatch(sp_sizes[0], size)
 
   current = u.math.zeros(int(np.ceil(u.maybe_decimal(duration / dt))),
-                         dtype=bst.environ.dftype(),
+                         dtype=brainstate.environ.dftype(),
                          unit=u.get_unit(sp_sizes[0]))
   for time, dur, size in zip(sp_times, sp_lens, sp_sizes):
     pp = int(u.maybe_decimal(time / dt))
@@ -219,10 +219,10 @@ def ramp_input(c_start, c_end, duration, t_start=0, t_end=None, dt=None):
     The formatted current
   """
   u.fail_for_unit_mismatch(c_start, c_end)
-  dt = bst.environ.get_dt() if dt is None else dt
+  dt = brainstate.environ.get_dt() if dt is None else dt
   t_end = duration if t_end is None else t_end
   current = u.math.zeros(int(np.ceil(u.maybe_decimal(duration / dt))),
-                         dtype=bst.environ.dftype(),
+                         dtype=brainstate.environ.dftype(),
                          unit=u.get_unit(c_start))
   p1 = int(np.ceil(u.maybe_decimal(t_start / dt)))
   p2 = int(np.ceil(u.maybe_decimal(t_end / dt)))
@@ -251,17 +251,17 @@ def wiener_process(duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
     The noise seed.
   """
   if seed is None:
-    rng = bst.random.DEFAULT
+    rng = brainstate.random.DEFAULT
   else:
-    rng = bst.random.RandomState(seed)
+    rng = brainstate.random.RandomState(seed)
 
-  dt = bst.environ.get_dt() if dt is None else dt
+  dt = brainstate.environ.get_dt() if dt is None else dt
   t_end = duration if t_end is None else t_end
   i_start = int(u.maybe_decimal(t_start / dt))
   i_end = int(u.maybe_decimal(t_end / dt))
   noises = rng.standard_normal((i_end - i_start, n)) * u.math.sqrt(dt)
   currents = u.math.zeros((int(u.maybe_decimal(duration / dt)), n),
-                          dtype=bst.environ.dftype(),
+                          dtype=brainstate.environ.dftype(),
                           unit=u.get_unit(noises))
   currents = currents.at[i_start: i_end].set(noises)
   return u.maybe_decimal(currents)
@@ -295,22 +295,22 @@ def ou_process(mean, sigma, tau, duration, dt=None, n=1, t_start=0., t_end=None,
   seed: optional, int
     The random seed.
   """
-  dt = bst.environ.get_dt() if dt is None else dt
+  dt = brainstate.environ.get_dt() if dt is None else dt
   dt_sqrt = u.math.sqrt(dt)
   t_end = duration if t_end is None else t_end
   i_start = int(u.maybe_decimal(t_start / dt))
   i_end = int(u.maybe_decimal(t_end / dt))
-  rng = bst.random.RandomState(seed) if seed is not None else bst.random.DEFAULT
+  rng = brainstate.random.RandomState(seed) if seed is not None else brainstate.random.DEFAULT
 
   def _f(x, _):
     x = x + dt * ((mean - x) / tau) + sigma * dt_sqrt * rng.rand(n)
     return x, x
 
-  _, noises = bst.compile.scan(_f,
-                               u.math.full(n, mean, dtype=bst.environ.dftype()),
-                               u.math.arange(i_end - i_start))
+  _, noises = brainstate.compile.scan(_f,
+                                      u.math.full(n, mean, dtype=brainstate.environ.dftype()),
+                                      u.math.arange(i_end - i_start))
   currents = u.math.zeros((int(u.maybe_decimal(duration / dt)), n),
-                          dtype=bst.environ.dftype(),
+                          dtype=brainstate.environ.dftype(),
                           unit=u.get_unit(noises))
   currents = currents.at[i_start: i_end].set(noises)
   return u.maybe_decimal(currents)
@@ -338,7 +338,7 @@ def sinusoidal_input(amplitude, frequency, duration, dt=None, t_start=0., t_end=
     has a positive DC bias, thus non-negative (True).
   """
   assert frequency.unit.dim == u.Hz.dim, f'The frequency must be in Hz. But got {frequency.unit}.'
-  dt = bst.environ.get_dt() if dt is None else dt
+  dt = brainstate.environ.get_dt() if dt is None else dt
   if t_end is None:
     t_end = duration
   times = u.math.arange(0. * u.ms, t_end - t_start, dt)
@@ -348,7 +348,7 @@ def sinusoidal_input(amplitude, frequency, duration, dt=None, t_start=0., t_end=
   if bias:
     sin_inputs += amplitude
   currents = u.math.zeros(int(u.maybe_decimal(duration / dt)),
-                          dtype=bst.environ.dftype(),
+                          dtype=brainstate.environ.dftype(),
                           unit=u.get_unit(sin_inputs))
   currents = currents.at[start_i:end_i].set(sin_inputs)
   return u.maybe_decimal(currents)
@@ -405,14 +405,14 @@ def square_input(amplitude, frequency, duration, dt=None, bias=False, t_start=No
   if t_start is None:
     t_start = 0. * u.ms
   assert frequency.unit.dim == u.Hz.dim, f'The frequency must be in Hz. But got {frequency.unit}.'
-  dt = bst.environ.get_dt() if dt is None else dt
+  dt = brainstate.environ.get_dt() if dt is None else dt
   if t_end is None:
     t_end = duration
   times = u.math.arange(0. * u.ms, t_end - t_start, dt)
   sin_inputs = amplitude * _square(2 * np.pi * u.maybe_decimal(times * frequency))
   if bias:
     sin_inputs += amplitude
-  currents = u.math.zeros(int(u.maybe_decimal(duration / dt)), dtype=bst.environ.dftype())
+  currents = u.math.zeros(int(u.maybe_decimal(duration / dt)), dtype=brainstate.environ.dftype())
   start_i = int(u.maybe_decimal(t_start / dt))
   end_i = int(u.maybe_decimal(t_end / dt))
   currents = currents.at[start_i:end_i].set(sin_inputs)
