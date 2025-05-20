@@ -29,10 +29,6 @@ here = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(here, 'braintools/', '__init__.py'), 'r') as f:
     init_py = f.read()
 version = re.search('__version__ = "(.*)"', init_py).groups()[0]
-if len(sys.argv) > 2 and sys.argv[2] == '--python-tag=py3':
-    version = version
-else:
-    version += '.post{}'.format(time.strftime("%Y%m%d", time.localtime()))
 
 # obtain long description from README
 with io.open(os.path.join(here, 'README.md'), 'r', encoding='utf-8') as f:
@@ -77,9 +73,9 @@ setup(
         "Source Code": "https://github.com/chaobrain/braintools",
     },
     extras_require={
-        'cpu': ['jax'] + all_dependencies,
-        'cuda12': ['jax[cuda12]'] + all_dependencies,
-        'tpu': ['jax[tpu]'] + all_dependencies,
+        'cpu': ['jax[cpu]', 'brainstate[cpu]', 'brainunit[cpu]'] + all_dependencies,
+        'cuda12': ['jax[cuda12]', 'brainstate[cuda12]', 'brainunit[cuda12]'] + all_dependencies,
+        'tpu': ['jax[tpu]', 'brainstate[tpu]', 'brainunit[tpu]'] + all_dependencies,
     },
     keywords=(
         'computational neuroscience, '
