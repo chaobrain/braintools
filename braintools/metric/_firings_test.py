@@ -17,27 +17,28 @@
 
 
 import unittest
-import jax.numpy as jnp
-import brainstate as bst
-import braintools as bt
 
+import brainstate as bst
+import jax.numpy as jnp
+
+import braintools as bt
 
 bst.environ.set(dt=0.1)
 
+
 class TestFiringRate(unittest.TestCase):
-  def test_fr1(self):
-    spikes = jnp.ones((1000, 10))
-    print(bt.metric.firing_rate(spikes, 1.))
+    def test_fr1(self):
+        spikes = jnp.ones((1000, 10))
+        print(bt.metric.firing_rate(spikes, 1.))
 
-  def test_fr2(self):
-    bst.random.seed()
-    spikes = bst.random.random((1000, 10)) < 0.2
-    print(bt.metric.firing_rate(spikes, 1.))
-    print(bt.metric.firing_rate(spikes, 10.))
+    def test_fr2(self):
+        bst.random.seed()
+        spikes = bst.random.random((1000, 10)) < 0.2
+        print(bt.metric.firing_rate(spikes, 1.))
+        print(bt.metric.firing_rate(spikes, 10.))
 
-  def test_fr3(self):
-    bst.random.seed()
-    spikes = bst.random.random((1000, 10)) < 0.02
-    print(bt.metric.firing_rate(spikes, 1.))
-    print(bt.metric.firing_rate(spikes, 5.))
-
+    def test_fr3(self):
+        bst.random.seed()
+        spikes = bst.random.random((1000, 10)) < 0.02
+        print(bt.metric.firing_rate(spikes, 1.))
+        print(bt.metric.firing_rate(spikes, 5.))

@@ -21,20 +21,20 @@ import numpy as np
 from brainstate.typing import PyTree
 
 __all__ = [
-  'scale',
-  'mul',
-  'shift',
-  'add',
-  'sub',
-  'dot',
-  'sum',
-  'squared_norm',
-  'concat',
-  'split',
-  'idx',
-  'expand',
-  'take',
-  'as_numpy',
+    'scale',
+    'mul',
+    'shift',
+    'add',
+    'sub',
+    'dot',
+    'sum',
+    'squared_norm',
+    'concat',
+    'split',
+    'idx',
+    'expand',
+    'take',
+    'as_numpy',
 ]
 
 
@@ -340,6 +340,7 @@ def take(
     Returns:
         PyTree: A new PyTree with elements extracted along the specified axis from each leaf node.
     """
+
     def take_(x):
         indices = idx
         if isinstance(indices, slice):

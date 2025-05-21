@@ -15,24 +15,25 @@
 
 
 try:
-  import matplotlib.pyplot as plt
-  from matplotlib import RcParams
-  import scienceplots  # noqa: F401
-
-  def exclude(rc: RcParams, keys: list):
-    rc_new = RcParams()
-    for key in rc.keys():
-      for k in keys:
-        if k in key:
-          break
-      else:
-        rc_new._set(key, rc[key])
-    return rc_new
+    import matplotlib.pyplot as plt
+    from matplotlib import RcParams
+    import scienceplots  # noqa: F401
 
 
-  style = exclude(plt.style.library['notebook'], ['font.family', 'mathtext.fontset', 'size', 'width'])
-  plt.style.core.update_nested_dict(plt.style.library, {'notebook2': style})
-  plt.style.core.available[:] = sorted(plt.style.library.keys())
+    def exclude(rc: RcParams, keys: list):
+        rc_new = RcParams()
+        for key in rc.keys():
+            for k in keys:
+                if k in key:
+                    break
+            else:
+                rc_new._set(key, rc[key])
+        return rc_new
+
+
+    style = exclude(plt.style.library['notebook'], ['font.family', 'mathtext.fontset', 'size', 'width'])
+    plt.style.core.update_nested_dict(plt.style.library, {'notebook2': style})
+    plt.style.core.available[:] = sorted(plt.style.library.keys())
 
 except Exception:
-  scienceplots = None
+    scienceplots = None

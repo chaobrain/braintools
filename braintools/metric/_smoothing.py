@@ -15,9 +15,9 @@
 
 """Smoothing functions."""
 
-import jax.numpy as jnp
 import brainstate
 import brainunit as u
+import jax.numpy as jnp
 
 __all__ = ['smooth_labels']
 
@@ -26,22 +26,22 @@ def smooth_labels(
     labels: brainstate.typing.ArrayLike,
     alpha: float,
 ) -> jnp.ndarray:
-  """Apply label smoothing.
+    """Apply label smoothing.
 
-  Label smoothing is often used in combination with a cross-entropy loss.
-  Smoothed labels favour small logit gaps, and it has been shown that this can
-  provide better model calibration by preventing overconfident predictions.
+    Label smoothing is often used in combination with a cross-entropy loss.
+    Smoothed labels favour small logit gaps, and it has been shown that this can
+    provide better model calibration by preventing overconfident predictions.
 
-  References:
-    [Müller et al, 2019](https://arxiv.org/pdf/1906.02629.pdf)
+    References:
+      [Müller et al, 2019](https://arxiv.org/pdf/1906.02629.pdf)
 
-  Args:
-    labels: One hot labels to be smoothed.
-    alpha: The smoothing factor.
+    Args:
+      labels: One hot labels to be smoothed.
+      alpha: The smoothing factor.
 
-  Returns:
-    a smoothed version of the one hot input labels.
-  """
-  assert u.math.is_float(labels), f'labels should be a float.'
-  num_categories = labels.shape[-1]
-  return (1.0 - alpha) * labels + alpha / num_categories
+    Returns:
+      a smoothed version of the one hot input labels.
+    """
+    assert u.math.is_float(labels), f'labels should be a float.'
+    num_categories = labels.shape[-1]
+    return (1.0 - alpha) * labels + alpha / num_categories
