@@ -1,5 +1,7 @@
 import unittest
+
 import jax.numpy as jnp
+
 from braintools.metric import unitary_LFP
 
 

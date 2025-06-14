@@ -43,13 +43,13 @@ Usage with a batch of data and a mask to indicate valid items.
 
 from typing import Callable, Optional
 
-import jax
-import jax.numpy as jnp
 import brainstate
 import brainunit as u
+import jax
+import jax.numpy as jnp
 
 __all__ = [
-  'ranking_softmax_loss',
+    'ranking_softmax_loss',
 ]
 
 
@@ -58,50 +58,50 @@ def _safe_reduce(
     where: Optional[brainstate.typing.ArrayLike] = None,
     reduce_fn: Optional[Callable[..., brainstate.typing.ArrayLike]] = None,
 ) -> brainstate.typing.ArrayLike:
-  """Reduces the values of given array while preventing NaN in the output.
+    """Reduces the values of given array while preventing NaN in the output.
 
-  For :func:`jax.numpy.mean` reduction, this additionally prevents ``NaN`` in
-  the output if all elements are masked. This can happen with pairwise losses
-  where there are no valid pairs because all labels are the same. In this
-  situation, 0 is returned instead.
+    For :func:`jax.numpy.mean` reduction, this additionally prevents ``NaN`` in
+    the output if all elements are masked. This can happen with pairwise losses
+    where there are no valid pairs because all labels are the same. In this
+    situation, 0 is returned instead.
 
-  When there is no ``reduce_fn``, this will set elements of ``a`` to 0 according
-  to the ``where`` mask.
+    When there is no ``reduce_fn``, this will set elements of ``a`` to 0 according
+    to the ``where`` mask.
 
-  Args:
-    a: The :class:`jax.Array` to reduce.
-    where: An optional :class:`jax.Array` indicating which elements to include
-      in the reduction.
-    reduce_fn: The function used to reduce. If None, no reduction is performed.
+    Args:
+      a: The :class:`jax.Array` to reduce.
+      where: An optional :class:`jax.Array` indicating which elements to include
+        in the reduction.
+      reduce_fn: The function used to reduce. If None, no reduction is performed.
 
-  Returns:
-    The result of reducing the values of ``a`` using given ``reduce_fn``.
-  """
-  # Reduce values if there is a reduce_fn, otherwise keep the values as-is.
-  output = reduce_fn(a, where=where) if reduce_fn is not None else a
+    Returns:
+      The result of reducing the values of ``a`` using given ``reduce_fn``.
+    """
+    # Reduce values if there is a reduce_fn, otherwise keep the values as-is.
+    output = reduce_fn(a, where=where) if reduce_fn is not None else a
 
-  if reduce_fn is jnp.mean:
-    # For mean reduction, we have to check whether the input contains any NaN
-    # values, to ensure that masked mean reduction does not hide them (see
-    # below).
-    is_input_valid = jnp.logical_not(jnp.any(jnp.isnan(a)))
+    if reduce_fn is jnp.mean:
+        # For mean reduction, we have to check whether the input contains any NaN
+        # values, to ensure that masked mean reduction does not hide them (see
+        # below).
+        is_input_valid = jnp.logical_not(jnp.any(jnp.isnan(a)))
 
-    # The standard jnp.mean implementation returns NaN if `where` is False
-    # everywhere. This can happen in our case, e.g. pairwise losses with no
-    # valid pairs. Instead, we prefer that the loss returns 0 in these cases.
-    # Note that this only hides those NaN values if the input did not contain
-    # any NaN values. Otherwise it just returns the output as-is.
-    output = jnp.where(jnp.isnan(output) & is_input_valid, 0.0, output)
+        # The standard jnp.mean implementation returns NaN if `where` is False
+        # everywhere. This can happen in our case, e.g. pairwise losses with no
+        # valid pairs. Instead, we prefer that the loss returns 0 in these cases.
+        # Note that this only hides those NaN values if the input did not contain
+        # any NaN values. Otherwise it just returns the output as-is.
+        output = jnp.where(jnp.isnan(output) & is_input_valid, 0.0, output)
 
-  if reduce_fn is None and where is not None:
-    # When there is no reduce_fn (i.e. we are returning an unreduced
-    # loss/metric), set the values of `a` to 0 for invalid (masked) items.
-    # This makes sure that manual sum reduction on an unreduced loss works as
-    # expected:
-    # `jnp.sum(loss_fn(reduce_fn=None)) == loss_fn(reduce_fn=jnp.sum)`
-    output = jnp.where(where, output, 0.0)
+    if reduce_fn is None and where is not None:
+        # When there is no reduce_fn (i.e. we are returning an unreduced
+        # loss/metric), set the values of `a` to 0 for invalid (masked) items.
+        # This makes sure that manual sum reduction on an unreduced loss works as
+        # expected:
+        # `jnp.sum(loss_fn(reduce_fn=None)) == loss_fn(reduce_fn=jnp.sum)`
+        output = jnp.where(where, output, 0.0)
 
-  return output
+    return output
 
 
 def ranking_softmax_loss(
@@ -112,53 +112,53 @@ def ranking_softmax_loss(
     weights: Optional[brainstate.typing.ArrayLike] = None,
     reduce_fn: Optional[Callable[..., brainstate.typing.ArrayLike]] = jnp.mean
 ) -> brainstate.typing.ArrayLike:
-  r"""Ranking softmax loss.
+    r"""Ranking softmax loss.
 
-  Definition:
+    Definition:
 
-  .. math::
-      \ell(s, y) = -\sum_i y_i \log \frac{\exp(s_i)}{\sum_j \exp(s_j)}
+    .. math::
+        \ell(s, y) = -\sum_i y_i \log \frac{\exp(s_i)}{\sum_j \exp(s_j)}
 
-  Args:
-    logits: A ``[..., list_size]``-:class:`~jax.Array`, indicating the score of
-      each item.
-    labels: A ``[..., list_size]``-:class:`~jax.Array`, indicating the relevance
-      label for each item.
-    where: An optional ``[..., list_size]``-:class:`~jax.Array`, indicating
-      which items are valid for computing the loss. Items for which this is
-      False will be ignored when computing the loss.
-    weights: An optional ``[..., list_size]``-:class:`~jax.Array`, indicating
-      the weight for each item.
-    reduce_fn: An optional function that reduces the loss values. Can be
-      :func:`jax.numpy.sum` or :func:`jax.numpy.mean`. If ``None``, no reduction
-      is performed.
+    Args:
+      logits: A ``[..., list_size]``-:class:`~jax.Array`, indicating the score of
+        each item.
+      labels: A ``[..., list_size]``-:class:`~jax.Array`, indicating the relevance
+        label for each item.
+      where: An optional ``[..., list_size]``-:class:`~jax.Array`, indicating
+        which items are valid for computing the loss. Items for which this is
+        False will be ignored when computing the loss.
+      weights: An optional ``[..., list_size]``-:class:`~jax.Array`, indicating
+        the weight for each item.
+      reduce_fn: An optional function that reduces the loss values. Can be
+        :func:`jax.numpy.sum` or :func:`jax.numpy.mean`. If ``None``, no reduction
+        is performed.
 
-  Returns:
-    The ranking softmax loss.
-  """
-  assert u.math.is_float(logits), "logits must be a float type."
-  labels = labels.astype(logits.dtype)
+    Returns:
+      The ranking softmax loss.
+    """
+    assert u.math.is_float(logits), "logits must be a float type."
+    labels = labels.astype(logits.dtype)
 
-  # Applies mask so that masked elements do not count towards the loss.
-  if where is not None:
-    labels = jnp.where(where, labels, jnp.zeros_like(labels))
-    logits = jnp.where(where, logits, -jnp.ones_like(logits) * jnp.inf)
+    # Applies mask so that masked elements do not count towards the loss.
+    if where is not None:
+        labels = jnp.where(where, labels, jnp.zeros_like(labels))
+        logits = jnp.where(where, logits, -jnp.ones_like(logits) * jnp.inf)
 
-  # Apply weights to labels.
-  if weights is not None:
-    labels *= weights
+    # Apply weights to labels.
+    if weights is not None:
+        labels *= weights
 
-  # Scales labels and logits to match the cross entropy loss.
-  logits_log_softmax = jax.nn.log_softmax(logits, axis=-1)
+    # Scales labels and logits to match the cross entropy loss.
+    logits_log_softmax = jax.nn.log_softmax(logits, axis=-1)
 
-  # Computes per-element cross entropy.
-  softmax_cross_entropy = labels * logits_log_softmax
+    # Computes per-element cross entropy.
+    softmax_cross_entropy = labels * logits_log_softmax
 
-  # Reduces softmax cross-entropy loss.
-  loss = -jnp.sum(softmax_cross_entropy, axis=-1, where=where)
+    # Reduces softmax cross-entropy loss.
+    loss = -jnp.sum(softmax_cross_entropy, axis=-1, where=where)
 
-  # Setup mask to ignore lists with only invalid items in reduce_fn.
-  if where is not None:
-    where = jnp.any(where, axis=-1)
+    # Setup mask to ignore lists with only invalid items in reduce_fn.
+    if where is not None:
+        where = jnp.any(where, axis=-1)
 
-  return _safe_reduce(loss, where=where, reduce_fn=reduce_fn)
+    return _safe_reduce(loss, where=where, reduce_fn=reduce_fn)

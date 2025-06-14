@@ -14,12 +14,10 @@
 # ==============================================================================
 
 
-from .style import *
 from .figures import *
 from .figures import __all__ as _figures_all
+from .style import *
 
 __all__ = list(_figures_all)
 
 del _figures_all
-
-

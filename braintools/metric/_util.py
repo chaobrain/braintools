@@ -15,11 +15,11 @@
 
 
 def _reduce(outputs, reduction, axis=None):
-  if reduction == 'mean':
-    return outputs.mean(axis)
-  elif reduction == 'sum':
-    return outputs.sum(axis)
-  elif reduction == 'none':
-    return outputs
-  else:
-    raise ValueError('Only support reduction of "mean", "sum" and "none", but we got "%s".' % reduction)
+    if reduction == 'mean':
+        return outputs.mean(axis)
+    elif reduction == 'sum':
+        return outputs.sum(axis)
+    elif reduction == 'none':
+        return outputs
+    else:
+        raise ValueError('Only support reduction of "mean", "sum" and "none", but we got "%s".' % reduction)

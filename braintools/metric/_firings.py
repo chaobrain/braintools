@@ -23,8 +23,8 @@ import jax.numpy as jnp
 import numpy as onp
 
 __all__ = [
-  'raster_plot',
-  'firing_rate',
+    'raster_plot',
+    'firing_rate',
 ]
 
 
@@ -32,26 +32,26 @@ def raster_plot(
     sp_matrix: brainstate.typing.ArrayLike,
     times: brainstate.typing.ArrayLike
 ):
-  """Get spike raster plot which displays the spiking activity
-  of a group of neurons over time.
+    """Get spike raster plot which displays the spiking activity
+    of a group of neurons over time.
 
-  Parameters
-  ----------
-  sp_matrix : bnp.ndarray
-      The matrix which record spiking activities.
-  times : bnp.ndarray
-      The time steps.
+    Parameters
+    ----------
+    sp_matrix : bnp.ndarray
+        The matrix which record spiking activities.
+    times : bnp.ndarray
+        The time steps.
 
-  Returns
-  -------
-  raster_plot : tuple
-      Include (neuron index, spike time).
-  """
-  times = onp.asarray(times)
-  elements = onp.where(sp_matrix > 0.)
-  index = elements[1]
-  time = times[elements[0]]
-  return index, time
+    Returns
+    -------
+    raster_plot : tuple
+        Include (neuron index, spike time).
+    """
+    times = onp.asarray(times)
+    elements = onp.where(sp_matrix > 0.)
+    index = elements[1]
+    time = times[elements[0]]
+    return index, time
 
 
 def firing_rate(
@@ -59,34 +59,34 @@ def firing_rate(
     width: Union[float, u.Quantity],
     dt: Union[float, u.Quantity] = None
 ):
-  r"""Calculate the mean firing rate over in a neuron group.
+    r"""Calculate the mean firing rate over in a neuron group.
 
-  This method is adopted from Brian2.
+    This method is adopted from Brian2.
 
-  The firing rate in trial :math:`k` is the spike count :math:`n_{k}^{sp}`
-  in an interval of duration :math:`T` divided by :math:`T`:
+    The firing rate in trial :math:`k` is the spike count :math:`n_{k}^{sp}`
+    in an interval of duration :math:`T` divided by :math:`T`:
 
-  .. math::
+    .. math::
 
-      v_k = {n_k^{sp} \over T}
+        v_k = {n_k^{sp} \over T}
 
-  Parameters
-  ----------
-  spikes : ndarray
-    The spike matrix which record spiking activities.
-  width : int, float, Quantity
-    The width of the ``window`` in millisecond.
-  dt : float, Quantity, optional
-    The sample rate.
+    Parameters
+    ----------
+    spikes : ndarray
+      The spike matrix which record spiking activities.
+    width : int, float, Quantity
+      The width of the ``window`` in millisecond.
+    dt : float, Quantity, optional
+      The sample rate.
 
-  Returns
-  -------
-  rate : ndarray
-      The population rate in Hz, smoothed with the given window.
-  """
-  dt = brainstate.environ.get_dt() if (dt is None) else dt
-  width1 = int(width / 2 / dt) * 2 + 1
-  window = u.math.ones(width1) / width
-  if isinstance(window, u.Quantity):
-    window = window.to_decimal(u.Hz)
-  return jnp.convolve(jnp.mean(spikes, axis=1), window, mode='same')
+    Returns
+    -------
+    rate : ndarray
+        The population rate in Hz, smoothed with the given window.
+    """
+    dt = brainstate.environ.get_dt() if (dt is None) else dt
+    width1 = int(width / 2 / dt) * 2 + 1
+    window = u.math.ones(width1) / width
+    if isinstance(window, u.Quantity):
+        window = window.to_decimal(u.Hz)
+    return jnp.convolve(jnp.mean(spikes, axis=1), window, mode='same')
