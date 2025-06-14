@@ -367,7 +367,7 @@ def _restore_quantity(x: u.Quantity, state_dict: Dict) -> u.Quantity:
         dim=u.Dimension(state_dict['dim']),
         scale=state_dict['scale'],
         base=state_dict['base'],
-        factor=state_dict['factor'],
+        factor=state_dict.get('factor', 1.),
     )
     assert x.unit == unit
     return u.Quantity(state_dict['mantissa'], unit=unit)
