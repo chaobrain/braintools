@@ -21,7 +21,7 @@ from . import input
 from . import metric
 from . import optim
 from . import tree
-from . import visualize
+from .visualize import visualize
 from ._others import *
 from ._others import __all__ as _other_all
 
