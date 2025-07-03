@@ -185,7 +185,7 @@ def raster_plot(ts,
     # plot rater
     if ax is None:
         ax = plt
-    ax.plot(time, index, marker + color, markersize=markersize, **kwargs)
+    ax.plot(time, index, marker=marker, color=color, markersize=markersize, **kwargs)
 
     # xlable
     if xlabel:
