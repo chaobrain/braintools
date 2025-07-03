@@ -114,7 +114,7 @@ def line_plot(ts,
     if ylim is not None:
         plt.ylim(ylim[0], ylim[1])
 
-    # xlable
+    # xlabel
     if xlabel:
         plt.xlabel(xlabel)
 
