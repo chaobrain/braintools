@@ -14,10 +14,15 @@
 # ==============================================================================
 
 
+from .animation import *
+from .animation import __all__ as _animation_all
 from .figures import *
 from .figures import __all__ as _figures_all
+from .plots import *
+from .plots import __all__ as _plots_all
 from .style import *
 
-__all__ = list(_figures_all)
+
+__all__ = list(_figures_all + _plots_all + _animation_all)
 
 del _figures_all
