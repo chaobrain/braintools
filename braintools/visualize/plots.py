@@ -276,18 +276,21 @@ def animate_2D(values,
 
     fig = plt.figure(figsize=(figsize[0], figsize[1]), constrained_layout=True)
     gs = GridSpec(1, 1, figure=fig)
-    fig.add_subplot(gs[0, 0])
+    ax = fig.add_subplot(gs[0, 0])
+    img = values[0]
+    mesh = ax.pcolor(img, cmap=cmap, vmin=val_min, vmax=val_max)
+    cbar = fig.colorbar(mesh, ax=ax)
+    ax.axis('off')
+    title = fig.suptitle("Time: {:.2f} ms".format(1 * dt),
+                         fontsize=title_size,
+                         fontweight='bold')
 
     def frame(t):
         img = values[t]
-        fig.clf()
-        plt.pcolor(img, cmap=cmap, vmin=val_min, vmax=val_max)
-        plt.colorbar()
-        plt.axis('off')
-        fig.suptitle(t="Time: {:.2f} ms".format((t + 1) * dt),
-                     fontsize=title_size,
-                     fontweight='bold')
-        return [fig.gca()]
+        mesh.set_array(img.ravel())
+        mesh.set_clim(vmin=val_min, vmax=val_max)
+        title.set_text("Time: {:.2f} ms".format((t + 1) * dt))
+        return [mesh, title]
 
     values = values.reshape((num_step, height, width))
     anim = animation.FuncAnimation(fig=fig,
