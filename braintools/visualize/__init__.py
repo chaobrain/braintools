@@ -14,12 +14,12 @@
 # ==============================================================================
 
 
-from .base import *
-from .base import __all__ as _base_all
 from .figures import *
 from .figures import __all__ as _figures_all
+from .plots import *
+from .plots import __all__ as _plots_all
 from .style import *
 
-__all__ = list(_figures_all + _base_all)
+__all__ = list(_figures_all + _plots_all) + ['style']
 
 del _figures_all
