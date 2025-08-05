@@ -21,6 +21,7 @@ import brainunit as u
 import jax
 import jax.numpy as jnp
 import numpy as np
+from brainstate._compatible_import import safe_zip, unzip2
 
 try:
     from scipy.optimize import minimize
@@ -245,7 +246,7 @@ class NevergradOptimizer(Optimizer):
 
         # tell the optimizer
         assert len(candidates) == len(errors), "Number of parameters and errors must be the same"
-        for candidate, error in jax.util.safe_zip(candidates, errors):
+        for candidate, error in safe_zip(candidates, errors):
             self.optimizer.tell(candidate, error)
 
         # record the tested parameters and errors
@@ -333,7 +334,7 @@ def _ravel_list(lst):
         return jnp.array([], jnp.float32), lambda _: []
     from_dtypes = tuple(u.math.get_dtype(l) for l in lst)
     to_dtype = jax.dtypes.result_type(*from_dtypes)
-    sizes, shapes = jax.util.unzip2((jnp.size(x), jnp.shape(x)) for x in lst)
+    sizes, shapes = unzip2((jnp.size(x), jnp.shape(x)) for x in lst)
     indices = tuple(np.cumsum(sizes))
 
     if all(dt == to_dtype for dt in from_dtypes):
@@ -353,7 +354,7 @@ def _ravel_list(lst):
 
 def _unravel_list_single_dtype(indices, shapes, arr):
     chunks = jnp.split(arr, indices[:-1])
-    return [chunk.reshape(shape) for chunk, shape in jax.util.safe_zip(chunks, shapes)]
+    return [chunk.reshape(shape) for chunk, shape in safe_zip(chunks, shapes)]
 
 
 def _unravel_list(indices, shapes, from_dtypes, to_dtype, arr):
@@ -368,7 +369,7 @@ def _unravel_list(indices, shapes, from_dtypes, to_dtype, arr):
         warnings.simplefilter("ignore")  # ignore complex-to-real cast warning
         return [
             jax.lax.convert_element_type(chunk.reshape(shape), dtype)
-            for chunk, shape, dtype in jax.util.safe_zip(chunks, shapes, from_dtypes)
+            for chunk, shape, dtype in safe_zip(chunks, shapes, from_dtypes)
         ]
 
 
