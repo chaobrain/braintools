@@ -73,7 +73,7 @@ def save_exp(x, max_value: float = 20.0):
     default max_value of 20.0 corresponds to exp(20) ≈ 4.85e8, which is
     typically well within the numerical range of floating-point arithmetic.
     """
-    x = u.math.clip(x, a_max=max_value)
+    x = u.math.clip(x, a_max=max_value, a_min=None)
     return u.math.exp(x)
 
 
