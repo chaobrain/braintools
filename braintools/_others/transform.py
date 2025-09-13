@@ -515,9 +515,9 @@ class NegSoftplusTransform(SoftplusTransform):
             
         Notes
         -----
-        Implemented as the negative of softplus applied to -x.
+        Implemented as: upper - softplus(-x).
         """
-        return -super().forward(-x)
+        return self.lower - jnp.log1p(save_exp(-x))
 
     def inverse(self, y: ArrayLike) -> Array:
         """
@@ -535,9 +535,10 @@ class NegSoftplusTransform(SoftplusTransform):
             
         Notes
         -----
-        Input must be strictly less than upper bound to avoid numerical issues.
+        Inverts: y = upper - softplus(-x) => x = -softplus^{-1}(upper - y).
         """
-        return -super().inverse(-y)
+        s = (self.lower - y) / self.unit
+        return -u.math.log(save_exp(s) - 1.0)
 
 
 class LogTransform(Transform):
