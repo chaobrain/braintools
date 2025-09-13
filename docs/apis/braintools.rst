@@ -13,6 +13,13 @@ Spike Encoders
    :toctree: generated/
 
     LatencyEncoder
+    spike_bitwise_or
+    spike_bitwise_and
+    spike_bitwise_iand
+    spike_bitwise_not
+    spike_bitwise_xor
+    spike_bitwise_ixor
+    spike_bitwise
 
 
 Parameter Transformations
