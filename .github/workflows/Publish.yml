@@ -36,7 +36,7 @@ jobs:
           TAG="${{ github.event.release.tag_name }}"
           PKG_VERSION=$(python - <<'PY'
           import re, pathlib
-          init = pathlib.Path('brainstate/__init__.py').read_text(encoding='utf-8')
+          init = pathlib.Path('braintools/__init__.py').read_text(encoding='utf-8')
           m = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", init)
           print(m.group(1))
           PY
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/brainstate
+      url: https://pypi.org/project/braintools
     permissions:
       contents: read
       id-token: write
