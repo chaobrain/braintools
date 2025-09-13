@@ -56,7 +56,7 @@ setup(
     description='The Toolbox for Brain Modeling Ecosystem.',
     long_description=README,
     long_description_content_type="text/markdown",
-    author='BDP',
+    author='BrainTools Developers',
     author_email='chao.brain@qq.com',
     packages=packages,
     python_requires='>=3.10',
