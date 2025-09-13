@@ -15,7 +15,7 @@
 import numpy as np
 
 import brainstate
-
+import braintools
 
 def test_sde_euler_shape_and_variance():
     # d y = sigma dW (pure diffusion)
@@ -30,8 +30,8 @@ def test_sde_euler_shape_and_variance():
     y0 = 0.0
     dt = 0.2
     with brainstate.environ.context(dt=dt):
-        y1 = brainstate.ing.sde_euler_step(df, dg, y0, 0.0)
-        y2 = brainstate.ing.sde_euler_step(df, dg, y0, 0.0)
+        y1 = braintools.quad.sde_euler_step(df, dg, y0, 0.0)
+        y2 = braintools.quad.sde_euler_step(df, dg, y0, 0.0)
 
     # shapes (scalar array)
     assert np.shape(y1) == ()
@@ -52,6 +52,6 @@ def test_sde_milstein_basic():
     y0 = 1.0
     dt = 0.05
     with brainstate.environ.context(dt=dt):
-        y1 = brainstate.ing.sde_milstein_step(df, dg, y0, 0.0)
+        y1 = braintools.quad.sde_milstein_step(df, dg, y0, 0.0)
 
     assert np.isfinite(y1)

@@ -17,7 +17,7 @@
 import numpy as np
 import jax.numpy as jnp
 import brainstate
-
+import braintools
 
 
 def test_ode_integrators_scalar_linear():
@@ -30,10 +30,10 @@ def test_ode_integrators_scalar_linear():
     dt = 0.1
 
     with brainstate.environ.context(dt=dt):
-        y_euler = brainstate.ing.ode_euler_step(f, y0, 0.0)
-        y_rk2 = brainstate.ing.ode_rk2_step(f, y0, 0.0)
-        y_rk3 = brainstate.ing.ode_rk3_step(f, y0, 0.0)
-        y_rk4 = brainstate.ing.ode_rk4_step(f, y0, 0.0)
+        y_euler = braintools.quad.ode_euler_step(f, y0, 0.0)
+        y_rk2 = braintools.quad.ode_rk2_step(f, y0, 0.0)
+        y_rk3 = braintools.quad.ode_rk3_step(f, y0, 0.0)
+        y_rk4 = braintools.quad.ode_rk4_step(f, y0, 0.0)
 
     # True solution: y = e^{a dt}
     y_true = np.exp(a * dt)
@@ -53,7 +53,7 @@ def test_ode_integrators_vector_tree():
     dt = 0.01
 
     with brainstate.environ.context(dt=dt):
-        y1 = brainstate.ing.ode_rk4_step(f, y0, 0.0)
+        y1 = braintools.quad.ode_rk4_step(f, y0, 0.0)
 
     assert y1.shape == (2,)
 
