@@ -14,11 +14,13 @@
 # ==============================================================================
 
 
+from .spike_operation import *
+from .spike_operation import __all__ as operation_all
 from .spike_encoder import *
 from .spike_encoder import __all__ as encoder_all
 from .transform import *
 from .transform import __all__ as transform_all
 
-__all__ = encoder_all + transform_all
+__all__ = encoder_all + transform_all + operation_all
 
-del encoder_all, transform_all
+del encoder_all, transform_all, operation_all
