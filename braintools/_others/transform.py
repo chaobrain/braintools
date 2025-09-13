@@ -29,6 +29,10 @@ __all__ = [
     'SigmoidTransform',
     'SoftplusTransform',
     'NegSoftplusTransform',
+    'LogTransform',
+    'ExpTransform',
+    'TanhTransform',
+    'SoftsignTransform',
     'AffineTransform',
     'ChainTransform',
     'MaskedTransform',
@@ -534,6 +538,96 @@ class NegSoftplusTransform(SoftplusTransform):
         Input must be strictly less than upper bound to avoid numerical issues.
         """
         return -super().inverse(-y)
+
+
+class LogTransform(Transform):
+    """
+    Log transformation mapping (lower, +inf) to (-inf, +inf).
+
+    Forward maps unconstrained input x to the positive domain via:
+        y = lower + exp(x) * unit
+    Inverse maps back using:
+        x = log((y - lower) / unit)
+
+    Parameters
+    ----------
+    lower : array_like
+        Lower bound of the target interval.
+    """
+
+    def __init__(self, lower: ArrayLike) -> None:
+        super().__init__()
+        self.lower = lower
+        self.unit = u.get_unit(lower)
+
+    def forward(self, x: ArrayLike) -> Array:
+        return self.lower + save_exp(x) * self.unit
+
+    def inverse(self, y: ArrayLike) -> Array:
+        return u.math.log((y - self.lower) / self.unit)
+
+
+class ExpTransform(Transform):
+    """
+    Exponential transformation mapping (-inf, +inf) to (lower, +inf).
+
+    Equivalent to LogTransform; provided for explicit naming.
+    """
+
+    def __init__(self, lower: ArrayLike) -> None:
+        super().__init__()
+        self.lower = lower
+        self.unit = u.get_unit(lower)
+
+    def forward(self, x: ArrayLike) -> Array:
+        return self.lower + save_exp(x) * self.unit
+
+    def inverse(self, y: ArrayLike) -> Array:
+        return u.math.log((y - self.lower) / self.unit)
+
+
+class TanhTransform(Transform):
+    """
+    Tanh-based transformation mapping (-inf, +inf) to (lower, upper).
+
+    y = lower + width * (tanh(x) + 1) / 2
+    x = arctanh(2 * (y - lower) / width - 1)
+    """
+
+    def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
+        super().__init__()
+        self.lower = lower
+        self.width = upper - lower
+        self.unit = u.get_unit(lower)
+
+    def forward(self, x: ArrayLike) -> Array:
+        return self.lower + self.width * (jnp.tanh(x) + 1.0) / 2.0
+
+    def inverse(self, y: ArrayLike) -> Array:
+        z = 2.0 * (y - self.lower) / self.width - 1.0
+        return jnp.arctanh(z)
+
+
+class SoftsignTransform(Transform):
+    """
+    Softsign-based transformation mapping (-inf, +inf) to (lower, upper).
+
+    y = lower + width * (x / (1 + |x|) + 1) / 2
+    x = z / (1 - |z|), where z = 2 * (y - lower) / width - 1, z in (-1, 1)
+    """
+
+    def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
+        super().__init__()
+        self.lower = lower
+        self.width = upper - lower
+        self.unit = u.get_unit(lower)
+
+    def forward(self, x: ArrayLike) -> Array:
+        return self.lower + self.width * (x / (1.0 + u.math.abs(x)) + 1.0) / 2.0
+
+    def inverse(self, y: ArrayLike) -> Array:
+        z = 2.0 * (y - self.lower) / self.width - 1.0
+        return z / (1.0 - u.math.abs(z))
 
 
 class AffineTransform(Transform):

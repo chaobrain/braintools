@@ -1,7 +1,7 @@
 numpy
 jax
 jaxlib
-brainunit>=0.0.8
+brainunit
 brainstate
 matplotlib
 typing_extensions
