@@ -14,9 +14,10 @@
 # ==============================================================================
 
 
-__version__ = "0.0.8"
+__version__ = "0.0.10"
 
 from . import file
+from . import quad
 from . import input
 from . import metric
 from . import optim
@@ -25,6 +26,6 @@ from . import visualize
 from ._others import *
 from ._others import __all__ as _other_all
 
-__all__ = ['input', 'file', 'metric', 'visualize', 'optim', 'tree'] + _other_all
+__all__ = ['input', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad'] + _other_all
 
 del _other_all

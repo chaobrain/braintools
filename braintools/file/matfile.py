@@ -24,7 +24,11 @@ __all__ = [
 ]
 
 
-def load_matfile(filename: str, header_info: bool = True, **kwargs) -> Dict:
+def load_matfile(
+    filename: str,
+    header_info: bool = True,
+    **kwargs
+) -> Dict:
     """
     A simple function to load a .mat file using scipy from Python.
     It uses a recursive approach for parsing properly Matlab' objects.

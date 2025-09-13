@@ -35,7 +35,6 @@ import brainstate
 import brainunit as u
 import jax
 import numpy as np
-from jax import monitoring
 
 try:
     import msgpack
@@ -761,33 +760,8 @@ class AsyncManager(object):
         self.save_future = self.executor.submit(task)  # type: ignore
 
 
-def _record_saved_duration(checkpoint_start_time: float):
-    """Record program duration that is accounted for by this checkpoint.
-
-    For the very first checkpoint, this is the interval between program init and
-    current checkpoint start time.
-
-    Note that we use the checkpoint start time instead of end time. The saved
-    duration should not include prallel training duration while the async
-    checkpoint is being written in the background.
-
-    Args:
-      checkpoint_start_time: Start time of current checkpoint.
-    """
-    global _LAST_CHECKPOINT_WRITE_TIME
-    # Note: for the very first checkpoint, this is the interval between program
-    # init and the current checkpoint start time.
-    duration_since_last_checkpoint = checkpoint_start_time - _LAST_CHECKPOINT_WRITE_TIME
-    if monitoring is not None:
-        monitoring.record_event_duration_secs(
-            '/jax/checkpoint/write/duration_since_last_checkpoint_secs',
-            duration_since_last_checkpoint)
-    _LAST_CHECKPOINT_WRITE_TIME = checkpoint_start_time
-
-
 def _save_commit2(filename: str,
                   overwrite: bool,
-                  ckpt_start_time: float,
                   has_mpa: bool,
                   write_commit_success: bool,
                   async_manager: Optional[AsyncManager] = None) -> None:
@@ -826,23 +800,19 @@ def _save_commit2(filename: str,
     _rename_fn(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
     logging.info('Saved checkpoint at %s', ckpt_path)
 
-    # Remove newer and older invalid checkpoints.
-    _record_saved_duration(ckpt_start_time)
-
 
 def _save_main_ckpt_file2(
     target: bytes,
     has_mpa: bool,
     filename: str,
     overwrite: bool,
-    ckpt_start_time: float
 ):
     """Save the main checkpoint file via file system."""
     with open(filename, 'wb') as fp:
         fp.write(target)
     # Postpone the commitment of checkpoint to after MPA writes are done.
     if not has_mpa:
-        _save_commit2(filename, overwrite, ckpt_start_time, has_mpa=False, write_commit_success=False)
+        _save_commit2(filename, overwrite, has_mpa=False, write_commit_success=False)
 
 
 def msgpack_save(
@@ -890,9 +860,9 @@ def msgpack_save(
     check_msgpack()
     if verbose:
         print(f'Saving checkpoint into {filename}')
-    start_time = time.time()
-    # Make sure all saves are finished before the logic of checking and removing
-    # outdated checkpoints happens.
+
+    # Make sure all saves are finished before the logic
+    # of checking and removing outdated checkpoints happens.
     if async_manager:
         async_manager.wait_previous_save()
 
@@ -907,16 +877,12 @@ def msgpack_save(
 
     # Save the files via I/O sync or async.
     def save_main_ckpt_task():
-        return _save_main_ckpt_file2(target, False, filename, overwrite, start_time)
+        return _save_main_ckpt_file2(target, False, filename, overwrite)
 
     if async_manager:
         async_manager.save_async(save_main_ckpt_task)
     else:
         save_main_ckpt_task()
-    end_time = time.time()
-    if monitoring is not None:
-        monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT,
-                                              end_time - start_time)
 
 
 def _use_multiprocess_serialization(value: Any) -> bool:
@@ -982,9 +948,6 @@ def msgpack_load(
     sys.stdout.flush()
     file_size = os.path.getsize(filename)
 
-    if isinstance(target, brainstate.util.FlattedDict):
-        target = target.to_nest()
-
     with open(filename, 'rb') as fp:
         if parallel and fp.seekable():
             buf_size = 128 << 20  # 128M buffer.
@@ -1012,11 +975,9 @@ def msgpack_load(
             checkpoint_contents = fp.read()
 
     state_dict = msgpack_restore(checkpoint_contents)
+    if isinstance(target, brainstate.util.FlattedDict):
+        target = target.to_nest()
     if target is not None:
         state_dict = from_state_dict(target, state_dict)
-
-    end_time = time.time()
-    if monitoring is not None:
-        monitoring.record_event_duration_secs(_READ_CHECKPOINT_EVENT, end_time - start_time)
 
     return state_dict
