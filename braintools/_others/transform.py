@@ -406,7 +406,7 @@ class SoftplusTransform(Transform):
         Uses log1p for numerical stability: log1p(exp(x)) = log(1 + exp(x)).
         For large x, this avoids overflow in the exponential.
         """
-        return jnp.log1p(save_exp(x)) + self.lower
+        return jnp.log1p(save_exp(x)) * self.unit + self.lower
 
     def inverse(self, y: ArrayLike) -> Array:
         """
@@ -517,7 +517,7 @@ class NegSoftplusTransform(SoftplusTransform):
         -----
         Implemented as: upper - softplus(-x).
         """
-        return self.lower - jnp.log1p(save_exp(-x))
+        return self.lower - jnp.log1p(save_exp(-x)) * self.unit
 
     def inverse(self, y: ArrayLike) -> Array:
         """
