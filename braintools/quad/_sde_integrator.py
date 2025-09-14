@@ -33,14 +33,14 @@ draw Gaussian noise using ``brainstate.random``. Noise is applied per PyTree
 leaf and scaled by ``sqrt(dt)``.
 """
 
-from typing import Callable
+from typing import Callable, Any
 
 import brainunit as u
+import jax
 import jax.numpy as jnp
 from brainstate import environ, random
 from brainstate.augment import vector_grad
 from brainstate.typing import PyTree, ArrayLike
-from jax.tree_util import tree_map
 
 __all__ = [
     'sde_euler_step',
@@ -51,6 +51,10 @@ __all__ = [
 DT = ArrayLike
 DF = Callable[[PyTree, DT, ...], PyTree]
 DG = Callable[[PyTree, DT, ...], PyTree]
+
+
+def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
+    return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
 
 
 def sde_euler_step(

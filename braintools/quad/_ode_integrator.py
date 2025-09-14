@@ -13,11 +13,11 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Callable
+from typing import Callable, Any
 
 import brainunit as u
 import jax.numpy as jnp
-from jax.tree_util import tree_map
+import jax
 
 from brainstate import environ
 from brainstate.augment import vector_grad
@@ -33,6 +33,10 @@ __all__ = [
 
 DT = ArrayLike
 ODE = Callable[[PyTree, float, ...], PyTree]
+
+
+def tree_map(f: Callable[..., Any],tree: Any,*rest: Any):
+    return jax.tree.map(f,tree,*rest, is_leaf=u.math.is_quantity)
 
 
 def ode_euler_step(
