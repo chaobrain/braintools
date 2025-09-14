@@ -61,7 +61,7 @@ def sde_euler_step(
     *args,
     sde_type: str = 'ito',
 ):
-    """One Euler–Maruyama step for Ito SDEs.
+    r"""One Euler–Maruyama step for Ito SDEs.
 
     This integrates an Ito SDE of the form
 
@@ -118,7 +118,7 @@ def sde_milstein_step(
     *args,
     sde_type: str = 'ito',
 ):
-    """One Milstein step for Ito or Stratonovich SDEs.
+    r"""One Milstein step for Ito or Stratonovich SDEs.
 
     This integrates an SDE of the form
 
