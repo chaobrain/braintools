@@ -155,6 +155,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     :caption: Optimizations
 
     nevergrad_optimizer.ipynb
+    scipy_optimizer.ipynb
 
 
 .. toctree::
