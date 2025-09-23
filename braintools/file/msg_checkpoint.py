@@ -249,7 +249,7 @@ msgpack_register_serialization(
 msgpack_register_serialization(
     tuple,
     _list_state_dict,
-    lambda xs, state_dict, mismatch='error': tuple(_restore_list(list(xs), state_dict))
+    lambda xs, state_dict, mismatch='error': tuple(_restore_list(list(xs), state_dict, mismatch))
 )
 
 
