@@ -27,7 +27,8 @@ __all__ = [
 
 
 class LatencyEncoder:
-    r"""Encode the rate input as the spike train using the latency encoding.
+    r"""
+    Encode the rate input as the spike train using the latency encoding.
 
     Use input features to determine time-to-first spike.
 
