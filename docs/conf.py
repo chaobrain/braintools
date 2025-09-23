@@ -33,12 +33,11 @@ sys.path.insert(0, os.path.abspath('../'))
 
 import braintools
 
-
 # -- Project information -----------------------------------------------------
 
 project = 'braintools'
 copyright = '2024, braintools'
-author = 'BDP Ecosystem'
+author = 'BrainTools Developers'
 
 # The full version, including alpha/beta/rc tags
 release = braintools.__version__
@@ -49,17 +48,17 @@ release = braintools.__version__
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-  'sphinx.ext.autodoc',
-  'sphinx.ext.autosummary',
-  'sphinx.ext.intersphinx',
-  'sphinx.ext.mathjax',
-  'sphinx.ext.napoleon',
-  'sphinx.ext.viewcode',
-  'sphinx_autodoc_typehints',
-  'myst_nb',
-  'matplotlib.sphinxext.plot_directive',
-  'sphinx_thebe',
-  'sphinx_design'
+    'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.napoleon',
+    'sphinx.ext.viewcode',
+    'sphinx_autodoc_typehints',
+    'myst_nb',
+    'matplotlib.sphinxext.plot_directive',
+    'sphinx_thebe',
+    'sphinx_design'
 ]
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -67,7 +66,6 @@ extensions = [
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 source_suffix = ['.rst', '.ipynb', '.md']
-
 
 # source_suffix = '.rst'
 autosummary_generate = True
@@ -116,7 +114,6 @@ thebe_config = {
     "repository_url": "https://github.com/binder-examples/jupyter-stacks-datascience",
     "repository_branch": "master",
 }
-
 
 html_theme_options = {
     'show_toc_level': 2,

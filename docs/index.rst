@@ -60,6 +60,7 @@ BrainTools is one part of our `brain modeling ecosystem <https://brainmodeling.r
     :caption: Metric Functions
 
 
+    classification_losses.ipynb
     loss_functions.ipynb
 
 
