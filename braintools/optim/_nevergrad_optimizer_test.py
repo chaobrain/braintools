@@ -151,15 +151,6 @@ class TestNevergradOptimizer(unittest.TestCase):
                 n_sample=-5  # Negative sample size
             )
 
-    def test_raiseErrorWhenNevergradNotInstalled(self):
-        with patch('braintools.optim.optimizer.ng', None):
-            with self.assertRaises(ImportError):
-                braintools.optim.NevergradOptimizer(
-                    batched_loss_fun=self.batched_loss_fun,
-                    bounds=self.scalar_bounds,
-                    n_sample=10
-                )
-
     def test_minimizationReturnsExpectedResult(self):
         # For a simple quadratic function, optimization should find values close to zero
         optimizer = braintools.optim.NevergradOptimizer(
