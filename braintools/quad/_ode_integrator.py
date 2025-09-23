@@ -39,6 +39,10 @@ __all__ = [
     'ode_heun_step',
     'ode_rk4_38_step',
     'ode_rk45_step',
+    'ode_rk23_step',
+    'ode_dopri5_step',
+    'ode_rkf45_step',
+    'ode_ssprk33_step',
 ]
 
 DT = brainstate.typing.ArrayLike
@@ -525,3 +529,283 @@ def ode_rk45_step(
     )
     err = tree_map(lambda a, b: a - b, y5th, y4th)
     return y5th, err
+
+
+def ode_rk23_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+    return_error: bool = False,
+):
+    """
+    Bogacki–Shampine embedded Runge–Kutta 2(3) step (RK23).
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+    return_error : bool, default False
+        If True, also return a PyTree error estimate ``(y3 - y2)``.
+
+    Returns
+    -------
+    PyTree or tuple
+        The updated state (3rd-order). If ``return_error`` is True, returns
+        ``(y_next, error_estimate)``.
+    """
+    dt = brainstate.environ.get_dt()
+
+    k1 = f(y, t, *args)
+    y2 = tree_map(lambda x, a: x + dt * 0.5 * a, y, k1)
+    k2 = f(y2, t + dt * 0.5, *args)
+
+    y3 = tree_map(lambda x, _k1, _k2: x + dt * (0.0 * _k1 + 0.75 * _k2), y, k1, k2)
+    k3 = f(y3, t + dt * 0.75, *args)
+
+    # 3rd-order solution (no k4 in combination)
+    y3rd = tree_map(
+        lambda x, _k1, _k2, _k3: x + dt * ((2.0 / 9.0) * _k1 + (1.0 / 3.0) * _k2 + (4.0 / 9.0) * _k3),
+        y, k1, k2, k3
+    )
+
+    if not return_error:
+        return y3rd
+
+    # Compute k4 at full step for 2nd-order embedded estimate
+    k4 = f(y3rd, t + dt, *args)
+    y2nd = tree_map(
+        lambda x, _k1, _k2, _k3, _k4: x + dt * (
+            (7.0 / 24.0) * _k1 + (1.0 / 4.0) * _k2 + (1.0 / 3.0) * _k3 + (1.0 / 8.0) * _k4),
+        y, k1, k2, k3, k4
+    )
+    err = tree_map(lambda a, b: a - b, y3rd, y2nd)
+    return y3rd, err
+
+
+def ode_dopri5_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+    return_error: bool = False,
+):
+    """
+    Dormand–Prince embedded Runge–Kutta 5(4) step (DOPRI5/ode45).
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+    return_error : bool, default False
+        If True, also return a PyTree error estimate ``(y5 - y4)``.
+
+    Returns
+    -------
+    PyTree or tuple
+        The updated state (5th-order). If ``return_error`` is True, returns
+        ``(y_next, error_estimate)``.
+    """
+    dt = brainstate.environ.get_dt()
+
+    k1 = f(y, t, *args)
+    y2 = tree_map(lambda x, a: x + dt * (1.0 / 5.0) * a, y, k1)
+    k2 = f(y2, t + dt * (1.0 / 5.0), *args)
+
+    y3 = tree_map(lambda x, _k1, _k2: x + dt * ((3.0 / 40.0) * _k1 + (9.0 / 40.0) * _k2), y, k1, k2)
+    k3 = f(y3, t + dt * (3.0 / 10.0), *args)
+
+    y4 = tree_map(
+        lambda x, _k1, _k2, _k3: x + dt * ((44.0 / 45.0) * _k1 + (-56.0 / 15.0) * _k2 + (32.0 / 9.0) * _k3),
+        y, k1, k2, k3
+    )
+    k4 = f(y4, t + dt * (4.0 / 5.0), *args)
+
+    y5 = tree_map(
+        lambda x, _k1, _k2, _k3, _k4: x + dt * ((19372.0 / 6561.0) * _k1 +
+                                                (-25360.0 / 2187.0) * _k2 +
+                                                (64448.0 / 6561.0) * _k3 +
+                                                (-212.0 / 729.0) * _k4),
+        y, k1, k2, k3, k4
+    )
+    k5 = f(y5, t + dt * (8.0 / 9.0), *args)
+
+    y6 = tree_map(
+        lambda x, _k1, _k2, _k3, _k4, _k5: x + dt * ((9017.0 / 3168.0) * _k1 +
+                                                     (-355.0 / 33.0) * _k2 +
+                                                     (46732.0 / 5247.0) * _k3 +
+                                                     (49.0 / 176.0) * _k4 +
+                                                     (-5103.0 / 18656.0) * _k5),
+        y, k1, k2, k3, k4, k5
+    )
+    k6 = f(y6, t + dt * 1.0, *args)
+
+    # Compute k7 stage at t+dt
+    y7 = tree_map(
+        lambda x, _k1, _k3, _k4, _k5, _k6: x + dt * ((35.0 / 384.0) * _k1 +
+                                                     (500.0 / 1113.0) * _k3 +
+                                                     (125.0 / 192.0) * _k4 +
+                                                     (-2187.0 / 6784.0) * _k5 +
+                                                     (11.0 / 84.0) * _k6),
+        y, k1, k3, k4, k5, k6
+    )
+    k7 = f(y7, t + dt, *args)
+
+    # 5th-order solution (b5)
+    y5th = tree_map(
+        lambda x, _k1, _k3, _k4, _k5, _k6: x + dt * ((35.0 / 384.0) * _k1 +
+                                                     (500.0 / 1113.0) * _k3 +
+                                                     (125.0 / 192.0) * _k4 +
+                                                     (-2187.0 / 6784.0) * _k5 +
+                                                     (11.0 / 84.0) * _k6),
+        y, k1, k3, k4, k5, k6
+    )
+
+    if not return_error:
+        return y5th
+
+    # 4th-order embedded (b4) uses k7
+    y4th = tree_map(lambda x, _k1, _k3, _k4, _k5, _k6, _k7: x + dt * ((5179.0 / 57600.0) * _k1 +
+                                                                      (7571.0 / 16695.0) * _k3 +
+                                                                      (393.0 / 640.0) * _k4 +
+                                                                      (-92097.0 / 339200.0) * _k5 +
+                                                                      (187.0 / 2100.0) * _k6 +
+                                                                      (1.0 / 40.0) * _k7),
+                    y, k1, k3, k4, k5, k6, k7
+                    )
+    err = tree_map(lambda a, b: a - b, y5th, y4th)
+    return y5th, err
+
+
+def ode_rkf45_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+    return_error: bool = False,
+):
+    """
+    Runge–Kutta–Fehlberg 4(5) embedded step (RKF45).
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+    return_error : bool, default False
+        If True, also return a PyTree error estimate ``(y5 - y4)``.
+
+    Returns
+    -------
+    PyTree or tuple
+        The updated state (5th-order). If ``return_error`` is True, returns
+        ``(y_next, error_estimate)``.
+    """
+    dt = brainstate.environ.get_dt()
+
+    k1 = f(y, t, *args)
+    y2 = tree_map(lambda x, a: x + dt * (1.0 / 4.0) * a, y, k1)
+    k2 = f(y2, t + dt * (1.0 / 4.0), *args)
+
+    y3 = tree_map(
+        lambda x, _k1, _k2: x + dt * ((3.0 / 32.0) * _k1 + (9.0 / 32.0) * _k2),
+        y, k1, k2
+    )
+    k3 = f(y3, t + dt * (3.0 / 8.0), *args)
+
+    y4 = tree_map(
+        lambda x, _k1, _k2, _k3: x + dt * (
+            (1932.0 / 2197.0) * _k1 + (-7200.0 / 2197.0) * _k2 + (7296.0 / 2197.0) * _k3),
+        y, k1, k2, k3
+    )
+    k4 = f(y4, t + dt * (12.0 / 13.0), *args)
+
+    y5 = tree_map(
+        lambda x, _k1, _k2, _k3, _k4: x + dt * (
+            (439.0 / 216.0) * _k1 + (-8.0) * _k2 + (3680.0 / 513.0) * _k3 + (-845.0 / 4104.0) * _k4),
+        y, k1, k2, k3, k4
+    )
+    k5 = f(y5, t + dt * 1.0, *args)
+
+    y6 = tree_map(
+        lambda x, _k1, _k2, _k3, _k4, _k5: x + dt * (
+            (-8.0 / 27.0) * _k1 + 2.0 * _k2 + (-3544.0 / 2565.0) * _k3 + (1859.0 / 4104.0) * _k4 + (
+            -11.0 / 40.0) * _k5),
+        y, k1, k2, k3, k4, k5
+    )
+    k6 = f(y6, t + dt * 0.5, *args)
+
+    # 5th-order solution
+    y5th = tree_map(
+        lambda x, _k1, _k3, _k4, _k5, _k6: x + dt * (
+            (16.0 / 135.0) * _k1 + (6656.0 / 12825.0) * _k3 + (28561.0 / 56430.0) * _k4 + (-9.0 / 50.0) * _k5 + (
+            2.0 / 55.0) * _k6),
+        y, k1, k3, k4, k5, k6
+    )
+
+    if not return_error:
+        return y5th
+
+    # 4th-order embedded
+    y4th = tree_map(
+        lambda x, _k1, _k3, _k4, _k5: x + dt * (
+            (25.0 / 216.0) * _k1 + (1408.0 / 2565.0) * _k3 + (2197.0 / 4104.0) * _k4 + (-1.0 / 5.0) * _k5),
+        y, k1, k3, k4, k5
+    )
+    err = tree_map(lambda a, b: a - b, y5th, y4th)
+    return y5th, err
+
+
+def ode_ssprk33_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args
+):
+    """
+    Strong-stability-preserving RK(3,3) (Shu–Osher) step.
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+
+    Returns
+    -------
+    PyTree
+        The updated state after one SSPRK(3,3) step.
+    """
+    dt = brainstate.environ.get_dt()
+
+    k1 = f(y, t, *args)
+    y1 = tree_map(lambda x, a: x + dt * a, y, k1)
+
+    k2 = f(y1, t + dt, *args)
+    y2 = tree_map(lambda x, y1_, a2: (3.0 / 4.0) * x + (1.0 / 4.0) * (y1_ + dt * a2), y, y1, k2)
+
+    k3 = f(y2, t + dt * 0.5, *args)
+    y3 = tree_map(lambda x, y2_, a3: (1.0 / 3.0) * x + (2.0 / 3.0) * (y2_ + dt * a3), y, y2, k3)
+    return y3
