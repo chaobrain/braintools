@@ -34,17 +34,46 @@ Installation
 ----
 
 
-See also the brain modeling ecosystem
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+See also the ecosystem
+^^^^^^^^^^^^^^^^^^^^^^
 
 
-We are building the `brain modeling ecosystem <https://brainmodeling.readthedocs.io/>`_.
+BrainTools is one part of our `brain modeling ecosystem <https://brainmodeling.readthedocs.io/>`_.
 
 ----
 
-.. toctree::
-   :hidden:
-   :maxdepth: 2
 
-   apis/index.rst
+
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+    :caption: Numerical Integrations
+
+    ode_integration.ipynb
+
+
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+    :caption: Metric Functions
+
+
+    loss_functions.ipynb
+
+
+
+
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+    :caption: File Processing
+
+
+
+
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+
+    apis/index.rst
 

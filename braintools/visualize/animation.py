@@ -31,7 +31,14 @@ __all__ = [
 ]
 
 
-def animator(data, fig, ax, num_steps=False, interval=40, cmap="plasma"):
+def animator(
+    data,
+    fig,
+    ax,
+    num_steps=False,
+    interval=40,
+    cmap="plasma"
+):
     """Generate an animation by looping through the first dimension of a
     sample of spiking data.
     Time must be the first dimension of ``data``.

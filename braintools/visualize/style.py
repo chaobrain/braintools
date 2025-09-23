@@ -72,5 +72,8 @@ try:
         }
         rcParams.update(params)
 
-except Exception:
-    scienceplots = None
+except:
+    pass
+
+finally:
+    pass

@@ -99,6 +99,7 @@ def ode_euler_step(
     - First-order accurate with local truncation error :math:`\mathcal{O}(\Delta t)`.
     - Uses ``dt = brainstate.environ.get_dt()`` as the step size.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     return tree_map(lambda x, _k1: x + dt * _k1, y, k1)
@@ -142,6 +143,7 @@ def ode_rk2_step(
     -----
     Second-order accurate with local truncation error :math:`\mathcal{O}(\Delta t^2)`.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     k2 = f(tree_map(lambda x, k: x + dt * k, y, k1), t + dt, *args)
@@ -187,6 +189,7 @@ def ode_rk3_step(
     -----
     Third-order accurate with local truncation error :math:`\mathcal{O}(\Delta t^3)`.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args)
@@ -234,6 +237,7 @@ def ode_rk4_step(
     -----
     Fourth-order accurate with local truncation error :math:`\mathcal{O}(\Delta t^4)`.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args)
@@ -336,6 +340,7 @@ def ode_midpoint_step(
     ode_rk2_step : Heun/modified Euler variant of RK2.
     ode_rk4_step : Classical fourth-order Runge-Kutta.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     y_mid = tree_map(lambda x, k: x + (dt * 0.5) * k, y, k1)
@@ -379,6 +384,7 @@ def ode_heun_step(
     ode_rk3_step : A different third-order RK scheme.
     ode_rk4_step : Classical fourth-order Runge-Kutta.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     y2 = tree_map(lambda x, k: x + (dt * (1.0 / 3.0)) * k, y, k1)
@@ -425,6 +431,7 @@ def ode_rk4_38_step(
     --------
     ode_rk4_step : Classical RK4 (1/6, 1/3, 1/3, 1/6 weights).
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     y2 = tree_map(lambda x, k: x + (dt * (1.0 / 3.0)) * k, y, k1)
@@ -486,6 +493,7 @@ def ode_rk45_step(
     - b5  = [37/378, 0, 250/621, 125/594, 0, 512/1771]
     - b4  = [2825/27648, 0, 18575/48384, 13525/55296, 277/14336, 1/4]
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
     k1 = f(y, t, *args)
@@ -572,6 +580,7 @@ def ode_rk23_step(
         The updated state (3rd-order). If ``return_error`` is True, returns
         ``(y_next, error_estimate)``.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
     k1 = f(y, t, *args)
@@ -631,6 +640,7 @@ def ode_dopri5_step(
         The updated state (5th-order). If ``return_error`` is True, returns
         ``(y_next, error_estimate)``.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
     k1 = f(y, t, *args)
@@ -735,6 +745,7 @@ def ode_rkf45_step(
         The updated state (5th-order). If ``return_error`` is True, returns
         ``(y_next, error_estimate)``.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
     k1 = f(y, t, *args)
@@ -816,6 +827,7 @@ def ode_ssprk33_step(
     PyTree
         The updated state after one SSPRK(3,3) step.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
     k1 = f(y, t, *args)
@@ -889,6 +901,7 @@ def ode_ralston2_step(
     PyTree
         The updated state after one Ralston RK2 step.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     y2 = tree_map(lambda x, a: x + dt * (2.0 / 3.0) * a, y, k1)
@@ -933,6 +946,7 @@ def ode_ralston3_step(
     PyTree
         The updated state after one Ralston RK3 step.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     y2 = tree_map(lambda x, a: x + dt * 0.5 * a, y, k1)
@@ -983,6 +997,7 @@ def ode_dopri8_step(
     Uses ``dt = brainstate.environ.get_dt()`` for the step size. Error estimate
     follows the DOP853 strategy combining 5th- and 3rd-order differences.
     """
+    assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
     # Time fractions for stages (first 12 entries are used for stages k0..k11)

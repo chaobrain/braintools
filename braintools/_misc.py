@@ -14,6 +14,13 @@
 # ==============================================================================
 
 
+from typing import Callable, Any, Union, Sequence
+
+import brainstate
+import brainunit as u
+import jax
+
+
 def set_module_as(module: str):
     def wrapper(fun: callable):
         fun.__module__ = module
@@ -21,3 +28,10 @@ def set_module_as(module: str):
 
     return wrapper
 
+
+def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
+    return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
+
+
+def randn_like(y):
+    return brainstate.random.randn(*u.math.shape(y))

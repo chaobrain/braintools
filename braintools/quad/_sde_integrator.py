@@ -333,7 +333,7 @@ def sde_heun_step(
     g0 = dg(y, t, *args)
 
     # shared Brownian increment dW for all stages
-    dW = jax.tree.map(lambda y0: randn_like(y0) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+    dW = tree_map(lambda y0: randn_like(y0) * dt_sqrt, y)
 
     # predictor state
     y_pred = tree_map(lambda y0, a, b, z: y0 + a * dt + b * z, y, f0, g0, dW)
@@ -450,7 +450,7 @@ def sde_implicit_euler_step(
 
     # Explicit pieces at start
     g0 = dg(y, t, *args)
-    dW = jax.tree.map(lambda y0: randn_like(y0) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+    dW = tree_map(lambda y0: randn_like(y0) * dt_sqrt, y)
     diff_inc = tree_map(lambda b, z: b * z, g0, dW)
 
     # Predictor (explicit Euler)
@@ -466,7 +466,7 @@ def sde_implicit_euler_step(
 
 def _brownian_like(y, dt):
     dt_sqrt = u.math.sqrt(dt)
-    return jax.tree.map(lambda y0: randn_like(y0) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+    return tree_map(lambda y0: randn_like(y0) * dt_sqrt, y)
 
 
 @set_module_as('braintools.quad')

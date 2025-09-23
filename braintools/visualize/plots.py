@@ -18,12 +18,11 @@
 
 import logging
 
+import brainstate
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
 from matplotlib.gridspec import GridSpec
-
-import brainstate
 
 __all__ = [
     'line_plot',
@@ -34,18 +33,20 @@ __all__ = [
 ]
 
 
-def line_plot(ts,
-              val_matrix,
-              plot_ids=None,
-              ax=None,
-              xlim=None,
-              ylim=None,
-              xlabel='Time (ms)',
-              ylabel=None,
-              legend=None,
-              title=None,
-              show=False,
-              **kwargs):
+def line_plot(
+    ts,
+    val_matrix,
+    plot_ids=None,
+    ax=None,
+    xlim=None,
+    ylim=None,
+    xlabel='Time (ms)',
+    ylabel=None,
+    legend=None,
+    title=None,
+    show=False,
+    **kwargs
+):
     """Show the specified value in the given object (Neurons or Synapses.)
 
     Parameters
@@ -131,19 +132,21 @@ def line_plot(ts,
         plt.show()
 
 
-def raster_plot(ts,
-                sp_matrix,
-                ax=None,
-                marker='.',
-                markersize=2,
-                color='k',
-                xlabel='Time (ms)',
-                ylabel='Neuron index',
-                xlim=None,
-                ylim=None,
-                title=None,
-                show=False,
-                **kwargs):
+def raster_plot(
+    ts,
+    sp_matrix,
+    ax=None,
+    marker='.',
+    markersize=2,
+    color='k',
+    xlabel='Time (ms)',
+    ylabel='Neuron index',
+    xlim=None,
+    ylim=None,
+    title=None,
+    show=False,
+    **kwargs
+):
     """Show the rater plot of the spikes.
 
     Parameters
@@ -208,20 +211,22 @@ def raster_plot(ts,
         plt.show()
 
 
-def animate_2D(values,
-               net_size,
-               dt=None,
-               val_min=None,
-               val_max=None,
-               cmap=None,
-               frame_delay=10,
-               frame_step=1,
-               title_size=10,
-               figsize=None,
-               gif_dpi=None,
-               video_fps=None,
-               save_path=None,
-               show=True):
+def animate_2D(
+    values,
+    net_size,
+    dt=None,
+    val_min=None,
+    val_max=None,
+    cmap=None,
+    frame_delay=10,
+    frame_step=1,
+    title_size=10,
+    figsize=None,
+    gif_dpi=None,
+    video_fps=None,
+    save_path=None,
+    show=True
+):
     """Animate the potentials of the neuron group.
 
     Parameters
@@ -313,22 +318,24 @@ def animate_2D(values,
     return anim
 
 
-def animate_1D(dynamical_vars,
-               static_vars=(),
-               dt=None,
-               xlim=None,
-               ylim=None,
-               xlabel=None,
-               ylabel=None,
-               frame_delay=50.,
-               frame_step=1,
-               title_size=10,
-               figsize=None,
-               gif_dpi=None,
-               video_fps=None,
-               save_path=None,
-               show=True,
-               **kwargs):
+def animate_1D(
+    dynamical_vars,
+    static_vars=(),
+    dt=None,
+    xlim=None,
+    ylim=None,
+    xlabel=None,
+    ylabel=None,
+    frame_delay=50.,
+    frame_step=1,
+    title_size=10,
+    figsize=None,
+    gif_dpi=None,
+    video_fps=None,
+    save_path=None,
+    show=True,
+    **kwargs
+):
     """Animation of one-dimensional data.
 
     Parameters
