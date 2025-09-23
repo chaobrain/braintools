@@ -19,13 +19,13 @@ import math
 import brainstate
 import jax.numpy as jnp
 import jax.tree
-import numpy as np
 
 import braintools
 
 
 def test_dde_euler_single_delay():
     """Test DDE Euler method with single delay term."""
+
     # Simple DDE: y'(t) = -y(t) + y(t-τ)
     def f(t, y, y_delayed):
         return -y + y_delayed
@@ -49,6 +49,7 @@ def test_dde_euler_single_delay():
 
 def test_dde_euler_multiple_delays():
     """Test DDE Euler method with multiple delay terms."""
+
     # DDE with two delays: y'(t) = -y(t) + 0.5*y(t-τ₁) + 0.3*y(t-τ₂)
     def f(t, y, y_delay1, y_delay2):
         return -y + 0.5 * y_delay1 + 0.3 * y_delay2
@@ -70,6 +71,7 @@ def test_dde_euler_multiple_delays():
 
 def test_dde_heun_method():
     """Test DDE Heun method."""
+
     def f(t, y, y_delayed):
         return -0.5 * y + y_delayed
 
@@ -90,6 +92,7 @@ def test_dde_heun_method():
 
 def test_dde_rk4_method():
     """Test DDE RK4 method."""
+
     def f(t, y, y_delayed):
         return -y + 0.8 * y_delayed
 
@@ -110,6 +113,7 @@ def test_dde_rk4_method():
 
 def test_dde_predictor_corrector_methods():
     """Test DDE predictor-corrector methods."""
+
     def f(t, y, y_delayed):
         return -2.0 * y + y_delayed
 
@@ -135,6 +139,7 @@ def test_dde_predictor_corrector_methods():
 
 def test_dde_pytree_structure_preserved():
     """Test that DDE integrators preserve PyTree structure."""
+
     def f(t, y, y_delayed):
         return jax.tree.map(lambda a, b: -0.5 * a + 0.8 * b, y, y_delayed)
 
@@ -165,6 +170,7 @@ def test_dde_pytree_structure_preserved():
 
 def test_dde_linear_stability():
     """Test DDE methods on a simple linear DDE with known behavior."""
+
     # Test case: y'(t) = -y(t) + 0.5*y(t-1)
     # With constant initial condition y(t) = 1 for t <= 0
     def f(t, y, y_delayed):

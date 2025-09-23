@@ -41,13 +41,13 @@ Notes
 - DDE steppers require a history function to evaluate delayed terms.
 """
 
+from ._dde_integrator import *
+from ._dde_integrator import __all__ as dde_all
+from ._imex_integrator import *
+from ._imex_integrator import __all__ as imex_all
 from ._ode_integrator import *
 from ._ode_integrator import __all__ as ode_all
 from ._sde_integrator import *
 from ._sde_integrator import __all__ as sde_all
-from ._imex_integrator import *
-from ._imex_integrator import __all__ as imex_all
-from ._dde_integrator import *
-from ._dde_integrator import __all__ as dde_all
 
 __all__ = ode_all + sde_all + imex_all + dde_all

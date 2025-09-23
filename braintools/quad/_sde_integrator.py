@@ -33,13 +33,14 @@ draw Gaussian noise using ``brainstate.random``. Noise is applied per PyTree
 leaf and scaled by ``sqrt(dt)``.
 """
 
-from typing import Callable, Any, Union
+from typing import Callable, Union
 
 import brainstate
 import brainunit as u
 import jax
 import jax.numpy as jnp
-from braintools._misc import set_module_as
+
+from braintools._misc import set_module_as, tree_map, randn_like
 
 __all__ = [
     'sde_euler_step',
@@ -57,13 +58,6 @@ DT = Union[float, u.Quantity]
 DF = Callable[[brainstate.typing.PyTree, DT, ...], brainstate.typing.PyTree]
 DG = Callable[[brainstate.typing.PyTree, DT, ...], brainstate.typing.PyTree]
 
-
-def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
-    return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
-
-
-def randn_like(y):
-    return brainstate.random.randn(*jnp.shape(y))
 
 @set_module_as('braintools.quad')
 def sde_euler_step(
@@ -126,6 +120,7 @@ def sde_euler_step(
         dg(y, t, *args),
     )
     return y_bars
+
 
 @set_module_as('braintools.quad')
 def sde_milstein_step(
@@ -207,6 +202,7 @@ def sde_milstein_step(
     integrals = tree_map(f_integral, y, drifts, diffusions, diffusion_bars)
     return integrals
 
+
 @set_module_as('braintools.quad')
 def sde_expeuler_step(
     df: DF,
@@ -282,6 +278,7 @@ def sde_expeuler_step(
     x_next += diffusion_part
     return x_next
 
+
 @set_module_as('braintools.quad')
 def sde_heun_step(
     df: DF,
@@ -353,6 +350,7 @@ def sde_heun_step(
     y_next = tree_map(lambda y0, a, b, z: y0 + a * dt + b * z, y, f_use, g_use, dW)
     return y_next
 
+
 @set_module_as('braintools.quad')
 def sde_tamed_euler_step(
     df: DF,
@@ -403,6 +401,7 @@ def sde_tamed_euler_step(
         y, f_tamed, g0
     )
     return y_next
+
 
 @set_module_as('braintools.quad')
 def sde_implicit_euler_step(
@@ -469,6 +468,7 @@ def _brownian_like(y, dt):
     dt_sqrt = u.math.sqrt(dt)
     return jax.tree.map(lambda y0: randn_like(y0) * dt_sqrt, y, is_leaf=u.math.is_quantity)
 
+
 @set_module_as('braintools.quad')
 def sde_srk2_step(
     df: DF,
@@ -506,6 +506,7 @@ def sde_srk2_step(
     k2 = tree_map(lambda a, b, z: a * dt + b * z, df(y2, t + dt, *args), dg(y2, t + dt, *args), dW)
     y_next = tree_map(lambda y0, a, b: y0 + 0.5 * (a + b), y, k1, k2)
     return y_next
+
 
 @set_module_as('braintools.quad')
 def sde_srk3_step(
@@ -548,6 +549,7 @@ def sde_srk3_step(
     k3 = F(y3, t + dt)
     y_next = tree_map(lambda y0, a, b, c: y0 + (a + 4.0 * b + c) / 6.0, y, k1, k2, k3)
     return y_next
+
 
 @set_module_as('braintools.quad')
 def sde_srk4_step(

@@ -30,10 +30,8 @@ number of iterations or substitute a more robust nonlinear solver externally.
 from typing import Callable, Any
 
 import brainstate
-import brainunit as u
-import jax
 
-from braintools._misc import set_module_as
+from braintools._misc import set_module_as, tree_map
 
 __all__ = [
     'imex_euler_step',
@@ -41,14 +39,9 @@ __all__ = [
     'imex_cnab_step',
 ]
 
-
 DT = brainstate.typing.ArrayLike
 PyTree = brainstate.typing.PyTree
 F = Callable[[PyTree, DT, Any], PyTree]
-
-
-def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
-    return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
 
 
 def _fixed_point(update, y0: PyTree, max_iter: int = 2) -> PyTree:
@@ -104,6 +97,7 @@ def imex_euler_step(
         return tree_map(lambda y0, fe, fi: y0 + dt * (fe + fi), y, rhs_exp, f_imp(Y, t + dt, *args))
 
     return _fixed_point(G, y, max_iter=max_iter)
+
 
 @set_module_as('braintools.quad')
 def imex_ars222_step(
@@ -175,10 +169,12 @@ def imex_ars222_step(
     fI2 = f_imp(Y2, t + dt, *args)
 
     y_next = tree_map(
-        lambda y0, fe1, fe2, fi1, fi2: y0 + dt * ((1.0 - gamma) * fe1 + gamma * fe2 + (1.0 - gamma) * fi1 + gamma * fi2),
+        lambda y0, fe1, fe2, fi1, fi2: y0 + dt * (
+                (1.0 - gamma) * fe1 + gamma * fe2 + (1.0 - gamma) * fi1 + gamma * fi2),
         y, fE1, fE2, fI1, fI2
     )
     return y_next
+
 
 @set_module_as('braintools.quad')
 def imex_cnab_step(
@@ -236,4 +232,3 @@ def imex_cnab_step(
         return tree_map(lambda yp, fi: yp + 0.5 * dt * fi, y_pred, f_imp(Y, t + dt, *args))
 
     return _fixed_point(G, y_pred, max_iter=max_iter)
-

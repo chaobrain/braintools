@@ -32,13 +32,11 @@ Key concepts:
 - Initial conditions: require specification of solution over delay interval
 """
 
-from typing import Callable, Any, Union, Sequence
+from typing import Callable, Union, Sequence
 
 import brainstate
-import brainunit as u
-import jax
 
-from braintools._misc import set_module_as
+from braintools._misc import set_module_as, tree_map
 
 __all__ = [
     'dde_euler_step',
@@ -52,10 +50,6 @@ DT = brainstate.typing.ArrayLike
 PyTree = brainstate.typing.PyTree
 HistoryFn = Callable[[DT], PyTree]
 DDE = Callable[[DT, PyTree, PyTree, ...], PyTree]
-
-
-def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
-    return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
 
 
 @set_module_as('braintools.quad')

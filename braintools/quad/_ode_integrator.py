@@ -22,13 +22,14 @@ Runge–Kutta families as well as an exponential Euler variant for stiff linear
 parts.
 """
 
-from typing import Callable, Any
+from typing import Callable
 
 import brainstate
 import brainunit as u
 import jax
 import jax.numpy as jnp
-from braintools._misc import set_module_as
+
+from braintools._misc import set_module_as, tree_map
 
 __all__ = [
     'ode_euler_step',
@@ -53,9 +54,6 @@ __all__ = [
 DT = brainstate.typing.ArrayLike
 ODE = Callable[[brainstate.typing.PyTree, float | u.Quantity, ...], brainstate.typing.PyTree]
 
-
-def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
-    return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
 
 @set_module_as('braintools.quad')
 def ode_euler_step(
@@ -105,6 +103,7 @@ def ode_euler_step(
     k1 = f(y, t, *args)
     return tree_map(lambda x, _k1: x + dt * _k1, y, k1)
 
+
 @set_module_as('braintools.quad')
 def ode_rk2_step(
     f: ODE,
@@ -147,6 +146,7 @@ def ode_rk2_step(
     k1 = f(y, t, *args)
     k2 = f(tree_map(lambda x, k: x + dt * k, y, k1), t + dt, *args)
     return tree_map(lambda x, _k1, _k2: x + dt / 2 * (_k1 + _k2), y, k1, k2)
+
 
 @set_module_as('braintools.quad')
 def ode_rk3_step(
@@ -192,6 +192,7 @@ def ode_rk3_step(
     k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args)
     k3 = f(tree_map(lambda x, k1_val, k2_val: x - dt * k1_val + 2 * dt * k2_val, y, k1, k2), t + dt, *args)
     return tree_map(lambda x, _k1, _k2, _k3: x + dt / 6 * (_k1 + 4 * _k2 + _k3), y, k1, k2, k3)
+
 
 @set_module_as('braintools.quad')
 def ode_rk4_step(
@@ -242,6 +243,7 @@ def ode_rk4_step(
         lambda x, _k1, _k2, _k3, _k4: x + dt / 6 * (_k1 + 2 * _k2 + 2 * _k3 + _k4),
         y, k1, k2, k3, k4
     )
+
 
 @set_module_as('braintools.quad')
 def ode_expeuler_step(
@@ -296,6 +298,7 @@ def ode_expeuler_step(
     x_next = y + dt * phi * derivative
     return x_next
 
+
 @set_module_as('braintools.quad')
 def ode_midpoint_step(
     f: ODE,
@@ -338,6 +341,7 @@ def ode_midpoint_step(
     y_mid = tree_map(lambda x, k: x + (dt * 0.5) * k, y, k1)
     k2 = f(y_mid, t + dt * 0.5, *args)
     return tree_map(lambda x, _k2: x + dt * _k2, y, k2)
+
 
 @set_module_as('braintools.quad')
 def ode_heun_step(
@@ -382,6 +386,7 @@ def ode_heun_step(
     y3 = tree_map(lambda x, k: x + (dt * (2.0 / 3.0)) * k, y, k2)
     k3 = f(y3, t + dt * (2.0 / 3.0), *args)
     return tree_map(lambda x, _k1, _k3: x + dt * ((1.0 / 4.0) * _k1 + (3.0 / 4.0) * _k3), y, k1, k3)
+
 
 @set_module_as('braintools.quad')
 def ode_rk4_38_step(
@@ -433,6 +438,7 @@ def ode_rk4_38_step(
             (1.0 / 8.0) * _k1 + (3.0 / 8.0) * _k2 + (3.0 / 8.0) * _k3 + (1.0 / 8.0) * _k4),
         y, k1, k2, k3, k4
     )
+
 
 @set_module_as('braintools.quad')
 def ode_rk45_step(
@@ -535,6 +541,7 @@ def ode_rk45_step(
     err = tree_map(lambda a, b: a - b, y5th, y4th)
     return y5th, err
 
+
 @set_module_as('braintools.quad')
 def ode_rk23_step(
     f: ODE,
@@ -592,6 +599,7 @@ def ode_rk23_step(
     )
     err = tree_map(lambda a, b: a - b, y3rd, y2nd)
     return y3rd, err
+
 
 @set_module_as('braintools.quad')
 def ode_dopri5_step(
@@ -696,6 +704,7 @@ def ode_dopri5_step(
 
 ode_rk45_dopri_step = ode_dopri5_step
 
+
 @set_module_as('braintools.quad')
 def ode_rkf45_step(
     f: ODE,
@@ -780,6 +789,7 @@ def ode_rkf45_step(
     err = tree_map(lambda a, b: a - b, y5th, y4th)
     return y5th, err
 
+
 @set_module_as('braintools.quad')
 def ode_ssprk33_step(
     f: ODE,
@@ -818,6 +828,7 @@ def ode_ssprk33_step(
     y3 = tree_map(lambda x, y2_, a3: (1.0 / 3.0) * x + (2.0 / 3.0) * (y2_ + dt * a3), y, y2, k3)
     return y3
 
+
 @set_module_as('braintools.quad')
 def ode_bs32_step(
     f: ODE,
@@ -844,6 +855,7 @@ def ode_bs32_step(
         ``(y_next, error_estimate)``.
     """
     return ode_rk23_step(f, y, t, *args, return_error=return_error)
+
 
 @set_module_as('braintools.quad')
 def ode_ralston2_step(
@@ -882,6 +894,7 @@ def ode_ralston2_step(
     y2 = tree_map(lambda x, a: x + dt * (2.0 / 3.0) * a, y, k1)
     k2 = f(y2, t + dt * (2.0 / 3.0), *args)
     return tree_map(lambda x, _k1, _k2: x + dt * ((1.0 / 4.0) * _k1 + (3.0 / 4.0) * _k2), y, k1, k2)
+
 
 @set_module_as('braintools.quad')
 def ode_ralston3_step(
@@ -928,6 +941,7 @@ def ode_ralston3_step(
     k3 = f(y3, t + dt * 0.75, *args)
     return tree_map(lambda x, _k1, _k2, _k3: x + dt * ((2.0 / 9.0) * _k1 + (1.0 / 3.0) * _k2 + (4.0 / 9.0) * _k3),
                     y, k1, k2, k3)
+
 
 @set_module_as('braintools.quad')
 def ode_dopri8_step(
