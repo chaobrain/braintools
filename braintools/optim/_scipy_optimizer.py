@@ -404,6 +404,7 @@ class ScipyOptimizer(Optimizer):
       See `scipy.optimize.OptimizeResult` for a description of other attributes.
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,

@@ -1,7 +1,7 @@
 ``braintools`` documentation
 ============================
 
-`braintools <https://github.com/brainpy/braintools>`_ implements the common toolboxes for brain dynamics programming (BDP).
+`braintools <https://github.com/brainpy/braintools>`_ implements the common toolboxes for brain modeling.
 
 ----
 
@@ -28,17 +28,17 @@ Installation
 
        .. code-block:: bash
 
-          pip install -U braintools[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+          pip install -U braintools[tpu]
 
 
 ----
 
 
-See also the BDP ecosystem
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+See also the brain modeling ecosystem
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-We are building the `BDP ecosystem <https://ecosystem-for-brain-dynamics.readthedocs.io/>`_.
+We are building the `brain modeling ecosystem <https://brainmodeling.readthedocs.io/>`_.
 
 ----
 

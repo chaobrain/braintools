@@ -35,17 +35,26 @@ __all__ = [
 
 def concat_parameters(*parameters):
     """
-    Concatenate parameters from a list of dictionaries into a single dictionary.
+    Stack candidate parameters across the first dimension per-leaf.
 
     Parameters
     ----------
-    parameters: list of pytree
-        A list of dictionaries containing parameters.
+    parameters : sequence of PyTree
+        Candidate parameter values returned by Nevergrad (e.g., tuples or
+        dicts of scalars/arrays). All items must share the same PyTree
+        structure and compatible leaf shapes.
 
     Returns
     -------
-    dict
-        A dictionary containing all the parameters.
+    PyTree
+        A PyTree with the same structure where each leaf is a JAX array of
+        shape ``(n_candidates, ...)``, created by stacking corresponding
+        leaves from ``parameters``.
+
+    Notes
+    -----
+    This utility prepares a batched set of parameters to pass to a batched
+    loss function. Broadcasting and dtype follow JAX semantics.
     """
     final_parameters = jax.tree.map(lambda *ps: jax.numpy.asarray(ps), *parameters)
     return final_parameters
@@ -53,39 +62,90 @@ def concat_parameters(*parameters):
 
 class NevergradOptimizer(Optimizer):
     """
-    ``NevergradOptimizer`` instance creates all the tools necessary for the user
-    to use it with ``Nevergrad`` library.
+    Ask/tell optimizer wrapper around Nevergrad with batched evaluation support.
+
+    This optimizer draws ``n_sample`` candidate parameter sets per iteration
+    (via ``ask``), evaluates them in batch using a user-provided loss function,
+    and reports the losses back to Nevergrad (via ``tell``). It then returns
+    the current best parameters according to either the lowest observed loss
+    or Nevergrad's recommendation.
 
     Parameters
     ----------
-    batched_loss_fun: callable
-        The loss function to be minimized. It should be a JAX function that
-        takes as input the parameters to optimize and returns the loss value.
-    bounds: dict or list
-        The bounds for the parameters to optimize. If a dictionary, the keys
-        are the parameter names and the values are tuples of the lower and upper
-        bounds. If a list, it should be a list of tuples of the lower and upper
-        bounds. The order of the list must be the same as the order of the
-        parameters in the loss function.
-    n_sample: int
-        The number of samples to evaluate at each iteration.
-    method: `str`, optional
-        The optimization method. By default, ``DE``: differential evolution. But
-        it can be chosen from any method in Nevergrad registry.
-    use_nevergrad_recommendation: bool, optional
-        Whether to use Nevergrad's recommendation as the "best result". This
-        recommendation takes several evaluations of the same parameters (for
-        stochastic simulations) into account. The alternative is to simply
-        return the parameters with the lowest error so far (the default). The
-        problem with Nevergrad's recommendation is that it can give wrong result
-        for errors that are very close in magnitude due.
-    budget: int or None
-        The number of allowed evaluations.
-    num_workers: int
-        The number of parallel workers.
-    method_params: dict, optional
-        Additional parameters for the optimization method.
+    batched_loss_fun : callable
+        Callable evaluating a batch of candidate parameters and returning one
+        scalar loss per candidate. Its signature depends on ``bounds``:
+          - If ``bounds`` is a sequence/tuple, the callable is invoked as
+            ``batched_loss_fun(*params)`` where each element of ``params`` is a
+            JAX array stacked over the candidate dimension, e.g., shape
+            ``(n_sample, ...)`` per argument.
+          - If ``bounds`` is a dict, the callable is invoked as
+            ``batched_loss_fun(**params)`` where each value is a stacked JAX
+            array of shape ``(n_sample, ...)``.
+
+        The return value must be a 1D array-like of length ``n_sample`` with
+        the loss per candidate.
+    bounds : dict or sequence of tuple
+        Search space bounds. Each bound is a pair ``(min, max)``. Values can be
+        scalars or arrays (broadcasting not applied), optionally wrapped as
+        ``brainunit.Quantity`` to specify units. All leaves within a pair must
+        have identical shapes. Two forms are supported:
+          - dict: ``{"name": (min, max), ...}`` producing named parameters;
+          - sequence/tuple: ``[(min, max), ...]`` producing positional
+            parameters passed to ``batched_loss_fun`` in the given order.
+    n_sample : int
+        Number of candidates to evaluate per iteration.
+    method : str, default: 'DE'
+        Nevergrad optimizer name, e.g. ``'DE'``, ``'TwoPointsDE'``, ``'CMA'``,
+        ``'PSO'``, ``'OnePlusOne'``, or any valid key from
+        ``nevergrad.optimizers.registry``.
+    use_nevergrad_recommendation : bool, default: False
+        If True, return Nevergrad's recommendation (based on its internal
+        sampling history) instead of the parameters with the lowest observed
+        loss so far. For very close losses under noise, recommendations can
+        sometimes be preferable.
+    budget : int or None, default: None
+        Maximum number of evaluations given to Nevergrad. ``None`` lets the
+        optimizer run without an explicit budget limit.
+    num_workers : int, default: 1
+        Degree of parallelism hinted to Nevergrad.
+    method_params : dict, optional
+        Extra keyword arguments forwarded to the Nevergrad optimizer
+        constructor.
+
+    Attributes
+    ----------
+    candidates : list
+        History of all parameter sets evaluated (one entry per candidate).
+    errors : numpy.ndarray
+        Aggregated losses corresponding to ``candidates``.
+
+    Examples
+    --------
+    Optimize two scalars with tuple bounds and a simple quadratic loss:
+
+    >>> import jax.numpy as jnp
+    >>> def batched_loss_fun(x, y):
+    ...     # x, y have shape (n_sample,)
+    ...     return (x**2 + y**2)
+    >>> bounds = [(-5.0, 5.0), (-3.0, 3.0)]
+    >>> opt = NevergradOptimizer(batched_loss_fun, bounds, n_sample=8, method='OnePlusOne')
+    >>> best = opt.minimize(n_iter=5, verbose=False)
+    >>> len(best) == 2
+    True
+
+    Optimize named parameters using dict bounds:
+
+    >>> def batched_loss_fun(**p):
+    ...     # p['a'], p['b'] have shape (n_sample,)
+    ...     return p['a']**2 + (p['b']-1.0)**2
+    >>> bounds = {"a": (-5.0, 5.0), "b": (-3.0, 3.0)}
+    >>> opt = NevergradOptimizer(batched_loss_fun, bounds, n_sample=8, method='DE')
+    >>> best = opt.minimize(n_iter=3, verbose=False)
+    >>> set(best.keys()) == {"a", "b"}
+    True
     """
+    __module__ = 'braintools.optim'
 
     candidates: List
     errors: np.ndarray
@@ -117,7 +177,9 @@ class NevergradOptimizer(Optimizer):
         self.optimizer: ng.optimizers.base.ConfiguredOptimizer | ng.optimizers.base.Optimizer
 
         # bounds
-        bounds = () if bounds is None else bounds
+        if bounds is None:
+            raise ValueError("'bounds' must be provided as a dict or a sequence of (min, max) pairs.")
+        bounds = bounds
         self.bounds = bounds
         if isinstance(self.bounds, dict):
             bound_units = dict()
@@ -128,7 +190,8 @@ class NevergradOptimizer(Optimizer):
                 u.fail_for_unit_mismatch(bound[0], bound[1])
                 bound = (bound[0], bound[1].in_unit(bound[0].unit))
                 bound_units[key] = bound[0].unit
-                if np.size(bound[0].mantissa) == 1 and np.size(bound[1].mantissa) == 1:
+                # treat only true 0-d arrays as scalars; (1,) remains an Array
+                if np.ndim(np.asarray(bound[0].mantissa)) == 0 and np.ndim(np.asarray(bound[1].mantissa)) == 0:
                     parameters[key] = ng.p.Scalar(
                         lower=float(np.asarray(bound[0].mantissa)),
                         upper=float(np.asarray(bound[1].mantissa))
@@ -151,7 +214,8 @@ class NevergradOptimizer(Optimizer):
                 u.fail_for_unit_mismatch(bound[0], bound[1])
                 bound = (bound[0], bound[1].in_unit(bound[0].unit))
                 bound_units.append(bound[0].unit)
-                if np.size(bound[0]) == 1 and np.size(bound[1]) == 1:
+                # treat only true 0-d arrays as scalars; (1,) remains an Array
+                if np.ndim(np.asarray(bound[0].mantissa)) == 0 and np.ndim(np.asarray(bound[1].mantissa)) == 0:
                     parameters.append(
                         ng.p.Scalar(lower=float(np.asarray(bound[0].mantissa)),
                                     upper=float(np.asarray(bound[1].mantissa)))
@@ -196,7 +260,15 @@ class NevergradOptimizer(Optimizer):
             self.optimizer = ng.optimizers.OnePlusOne(**parameters)
         else:
             self.optimizer = ng.optimizers.registry[self.method](**parameters)
-        self.optimizer._llambda = self.n_sample
+        # Some optimizers expose internal population size as a private attribute.
+        # Avoid relying on private API unless it exists and is writable.
+        for attr in ("_llambda", "llambda"):
+            try:
+                if hasattr(self.optimizer, attr):
+                    setattr(self.optimizer, attr, self.n_sample)
+                    break
+            except Exception:
+                pass
 
         # initialize the candidates and errors
         self.candidates = []
@@ -246,7 +318,8 @@ class NevergradOptimizer(Optimizer):
         if choice_best:
             if self.use_nevergrad_recommendation:
                 res = self.optimizer.provide_recommendation()
-                return self._add_unit(res.args)
+                # use value which matches the parametrization structure
+                return self._add_unit(res.value)
             else:
                 best = np.nanargmin(self.errors)
                 return self._add_unit(self.candidates[best])

@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import brainstate
 import numpy as np
 
-import brainstate
 import braintools
+
 
 def test_sde_euler_shape_and_variance():
     # d y = sigma dW (pure diffusion)
