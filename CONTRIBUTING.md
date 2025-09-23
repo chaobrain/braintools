@@ -1,4 +1,3 @@
-# Contributing to BrainPy
+# Contributing to BrainTools
 
-For information on how to contribute to BrainPy, see
-[Contributing to BrainPy](https://brainpy.readthedocs.io/en/latest/tutorial_advanced/contributing.html).
+We welcome contributions from the community! Whether you're fixing a bug, adding a new feature, or improving documentation, your help is appreciated.
