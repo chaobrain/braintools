@@ -46,13 +46,11 @@ Compute functional connectivity and its dynamics::
 
 Advance an ODE with RK4::
 
-  from braintools.quad import ode_rk4_step
-
   def f(y, t):
       return -y  # dy/dt = -y
 
   y, t = jnp.array(1.0), 0.0
-  y_next = ode_rk4_step(f, y, t)
+  y_next = braintools.quad.ode_rk4_step(f, y, t)
 
 
 Design Principles
@@ -125,7 +123,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     ranking_learning_to_rank.ipynb
     pairwise_embedding_similarity.ipynb
     spiking_metrics.ipynb
-    advanced_spiking_metrics.ipynb
+    spiking_sync.ipynb
     lfp_analysis.ipynb
 
 
