@@ -50,6 +50,8 @@ BrainTools is one part of our `brain modeling ecosystem <https://brainmodeling.r
     :caption: Numerical Integrations
 
     ode_integration.ipynb
+    sde_integration.ipynb
+
 
 
 .. toctree::
@@ -73,7 +75,13 @@ BrainTools is one part of our `brain modeling ecosystem <https://brainmodeling.r
 
 .. toctree::
     :hidden:
-    :maxdepth: 2
+    :maxdepth: 1
+    :caption: API Reference
 
-    apis/index.rst
-
+    apis/changelog.md
+    apis/braintools.rst
+    apis/quad.rst
+    apis/metric.rst
+    apis/optim.rst
+    apis/input.rst
+    apis/tree.rst
