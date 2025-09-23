@@ -103,7 +103,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 .. toctree::
     :hidden:
     :maxdepth: 2
-    :caption: Numerical Integrations
+    :caption: Numerical Integration
 
     ode_integration.ipynb
     sde_integration.ipynb
@@ -113,7 +113,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 .. toctree::
     :hidden:
     :maxdepth: 2
-    :caption: Metric Functions
+    :caption: Metric Function
 
 
     classification_losses.ipynb
@@ -129,7 +129,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 .. toctree::
     :hidden:
     :maxdepth: 2
-    :caption: Spike Encodings
+    :caption: Spike Encoding
 
     spike_encoding.ipynb
 
@@ -147,6 +147,17 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     :maxdepth: 2
     :caption: Visualization
 
+
+    neural_data_visualization.ipynb
+    advanced_neural_plots.ipynb
+    statistical_visualization.ipynb
+    model_evaluation_plots.ipynb
+    interactive_visualization.ipynb
+    3d_visualization.ipynb
+    styling_and_themes.ipynb
+    animation_and_dynamics.ipynb
+    real_world_applications.ipynb
+    custom_extensions.ipynb
 
 
 .. toctree::
