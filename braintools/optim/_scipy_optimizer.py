@@ -15,7 +15,7 @@
 
 
 import warnings
-from typing import Callable, Optional, Sequence, Dict, Tuple
+from typing import Callable, Optional, Sequence, Dict, Tuple, Union, Any
 
 import brainstate
 import brainunit as u
@@ -269,7 +269,7 @@ def scipy_minimize_with_jax(
         return float(r)
 
     # Wrap the gradient in a similar manner
-    jac = jax.jit(jax.grad(loss_fun)) if jac is None else jac
+    jac = brainstate.transform.jit(brainstate.transform.grad(loss_fun)) if jac is None else jac
 
     def jac_wrapper(x_flat, *fun_args):
         x = unravel(x_flat)
@@ -303,113 +303,73 @@ def scipy_minimize_with_jax(
 
 class ScipyOptimizer(Optimizer):
     """
-    A simple wrapper for scipy.optimize.minimize using JAX.
+    SciPy-based optimizer with dict/sequence bounds compatible with Nevergrad.
+
+    This optimizer accepts the same bounds structure as
+    ``braintools.optim.NevergradOptimizer`` and a loss function with matching
+    signature:
+      - If ``bounds`` is a sequence of ``(min, max)`` pairs, ``loss_fun`` is
+        called positionally as ``loss_fun(*params)``.
+      - If ``bounds`` is a dict mapping names to ``(min, max)`` pairs,
+        ``loss_fun`` is called by keyword as ``loss_fun(**params)``.
+
+    Bounds can be scalars or arrays, and may optionally be provided as
+    ``brainunit.Quantity``. Internally, SciPy works on the numeric mantissas
+    while your ``loss_fun`` receives values in the same structure as the
+    bounds (without units).
 
     Parameters
     ----------
-    loss_fun: Callable
-      The objective function to be minimized, written in JAX code
-      so that it is automatically differentiable.  It is of type,
-      ```fun: x, *args -> float``` where `x` is a PyTree and args
-      is a tuple of the fixed parameters needed to completely specify the function.
+    loss_fun : callable
+        Objective function returning a scalar (0-D array-like). Its signature
+        must match the structure of ``bounds`` as described above.
+    bounds : dict or sequence of tuple
+        Search space bounds, as in Nevergrad: each value is ``(min, max)``
+        where elements are scalars or arrays, optionally ``u.Quantity``. All
+        elements in a pair must share shape, and units (if any) must be
+        compatible. For dict bounds, names define keyword arguments to
+        ``loss_fun``.
+    method : str, optional
+        SciPy method (e.g., ``'L-BFGS-B'``, ``'TNC'``, ``'SLSQP'``, ``'Powell'``).
+        If omitted, SciPy selects a default based on constraints/bounds.
+    constraints, tol, callback, options
+        Passed through to ``scipy.optimize.minimize``.
 
-    method : str or callable, optional
-      Type of solver.  Should be one of
-          - 'Nelder-Mead' :ref:`(see here) <optimize.minimize-neldermead>`
-          - 'Powell'      :ref:`(see here) <optimize.minimize-powell>`
-          - 'CG'          :ref:`(see here) <optimize.minimize-cg>`
-          - 'BFGS'        :ref:`(see here) <optimize.minimize-bfgs>`
-          - 'Newton-CG'   :ref:`(see here) <optimize.minimize-newtoncg>`
-          - 'L-BFGS-B'    :ref:`(see here) <optimize.minimize-lbfgsb>`
-          - 'TNC'         :ref:`(see here) <optimize.minimize-tnc>`
-          - 'COBYLA'      :ref:`(see here) <optimize.minimize-cobyla>`
-          - 'SLSQP'       :ref:`(see here) <optimize.minimize-slsqp>`
-          - 'trust-constr':ref:`(see here) <optimize.minimize-trustconstr>`
-          - 'dogleg'      :ref:`(see here) <optimize.minimize-dogleg>`
-          - 'trust-ncg'   :ref:`(see here) <optimize.minimize-trustncg>`
-          - 'trust-exact' :ref:`(see here) <optimize.minimize-trustexact>`
-          - 'trust-krylov' :ref:`(see here) <optimize.minimize-trustkrylov>`
-          - custom - a callable object (added in version 0.14.0),
-            see below for description.
-      If not given, chosen to be one of ``BFGS``, ``L-BFGS-B``, ``SLSQP``,
-      depending on if the problem has constraints or bounds.
+    Notes
+    -----
+    - This wrapper flattens parameters to a 1-D vector for SciPy and
+      unflattens results back to the same structure found in ``bounds``.
+    - Gradients are computed via JAX auto-differentiation.
 
-    bounds : sequence or `Bounds`, optional
-      Bounds on variables for L-BFGS-B, TNC, SLSQP, Powell, and
-      trust-constr methods. There are two ways to specify the bounds:
-          1. Instance of `Bounds` class.
-          2. Sequence of ``(min, max)`` pairs for each element in `x`. None
-          is used to specify no bound.
-      Note that in order to use `bounds` you will need to manually flatten
-      them in the same order as your inputs `x0`.
+    Examples
+    --------
+    Minimize a simple quadratic with tuple bounds:
 
-    constraints : {Constraint, dict} or List of {Constraint, dict}, optional
-      Constraints definition (only for COBYLA, SLSQP and trust-constr).
-      Constraints for 'trust-constr' are defined as a single object or a
-      list of objects specifying constraints to the optimization problem.
-      Available constraints are:
-          - `LinearConstraint`
-          - `NonlinearConstraint`
-      Constraints for COBYLA, SLSQP are defined as a list of dictionaries.
-      Each dictionary with fields:
-          type : str
-              Constraint type: 'eq' for equality, 'ineq' for inequality.
-          fun : callable
-              The function defining the constraint.
-          jac : callable, optional
-              The Jacobian of `fun` (only for SLSQP).
-          args : sequence, optional
-              Extra arguments to be passed to the function and Jacobian.
-      Equality constraint means that the constraint function result is to
-      be zero whereas inequality means that it is to be non-negative.
-      Note that COBYLA only supports inequality constraints.
+    >>> import jax.numpy as jnp
+    >>> def loss(x, y):
+    ...     return (x - 1.0)**2 + (y + 2.0)**2
+    >>> bounds = [(-5.0, 5.0), (-3.0, 3.0)]
+    >>> opt = ScipyOptimizer(loss_fun=loss, bounds=bounds, method='L-BFGS-B')
+    >>> res = opt.minimize(n_iter=3)  # doctest: +SKIP
+    >>> isinstance(res.x, (list, tuple))  # same structure as bounds  # doctest: +SKIP
+    True
 
-      Note that in order to use `constraints` you will need to manually flatten
-      them in the same order as your inputs `x0`.
+    With named parameters using dict bounds:
 
-    tol : float, optional
-      Tolerance for termination. For detailed control, use solver-specific
-      options.
-
-    options : dict, optional
-        A dictionary of solver options. All methods accept the following
-        generic options:
-            maxiter : int
-                Maximum number of iterations to perform. Depending on the
-                method each iteration may use several function evaluations.
-            disp : bool
-                Set to True to print convergence messages.
-        For method-specific options, see :func:`show_options()`.
-
-    callback : callable, optional
-        Called after each iteration. For 'trust-constr' it is a callable with
-        the signature:
-            ``callback(xk, OptimizeResult state) -> bool``
-        where ``xk`` is the current parameter vector represented as a PyTree,
-         and ``state`` is an `OptimizeResult` object, with the same fields
-        as the ones from the return. If callback returns True the algorithm
-        execution is terminated.
-
-        For all the other methods, the signature is:
-            ```callback(xk)```
-        where `xk` is the current parameter vector, represented as a PyTree.
-
-    Returns
-    -------
-    res : The optimization result represented as a ``OptimizeResult`` object.
-      Important attributes are:
-          ``x``: the solution array, represented as a JAX PyTree
-          ``success``: a Boolean flag indicating if the optimizer exited successfully
-          ``message``: describes the cause of the termination.
-      See `scipy.optimize.OptimizeResult` for a description of other attributes.
-
+    >>> def loss(**p):  # doctest: +SKIP
+    ...     return (p['a'] - 1.0)**2 + (p['b'] + 2.0)**2
+    >>> bounds = {"a": (-5.0, 5.0), "b": (-3.0, 3.0)}  # doctest: +SKIP
+    >>> opt = ScipyOptimizer(loss_fun=loss, bounds=bounds, method='TNC')  # doctest: +SKIP
+    >>> res = opt.minimize(n_iter=2)  # doctest: +SKIP
+    >>> isinstance(res.x, dict)  # doctest: +SKIP
+    True
     """
     __module__ = 'braintools.optim'
 
     def __init__(
         self,
         loss_fun: Callable,
-        bounds: np.ndarray | Sequence,
+        bounds: Union[Sequence, Dict[str, Any]],
         method: Optional[str] = None,
         constraints=(),
         tol=None,
@@ -419,42 +379,109 @@ class ScipyOptimizer(Optimizer):
         if minimize is None:
             raise ImportError("Scipy is not installed. Please install it using 'pip install scipy'.")
 
-        # The loss function
+        if bounds is None:
+            raise ValueError("'bounds' must be provided as a dict or a sequence of (min, max) pairs.")
+
         self.loss_fun = loss_fun
-        # Wrap the gradient in a similar manner
-        self.jac = brainstate.transform.jit(brainstate.transform.grad(loss_fun))
-        # The optimization method
-        assert method in ['Nelder-Mead', 'L-BFGS-B', 'TNC', 'SLSQP', 'Powell', 'trust-constr', 'COBYLA']
         self.method = method
-        # The bounds
-        self.bounds = bounds
-        assert len(bounds) == 2, "Bounds must be a tuple of two elements: (min, max)"
-        # other parameters
         self.constraints = constraints
         self.tol = tol
         self.callback = callback
         self.options = options
 
-    def minimize(self, n_iter: int = 1):
-        bounds = np.asarray(self.bounds)
-        xs = np.random.uniform(self.bounds[0], self.bounds[1], size=(n_iter, len(self.bounds[0])))
-        xs = np.asarray(xs, dtype=brainstate.environ.dftype())
-        best_l = np.inf
-        best_r = None
+        # Parse bounds into per-leaf low/high arrays preserving structure
+        self._is_dict = isinstance(bounds, dict)
+        self._keys: Optional[Sequence[str]] = None
+        if self._is_dict:
+            self._keys = list(bounds.keys())
+            low_struct: Dict[str, Any] = {}
+            high_struct: Dict[str, Any] = {}
+            for k, bnd in bounds.items():
+                assert len(bnd) == 2, f"Each bound must be (min, max); got {bnd}."
+                lo = u.Quantity(bnd[0])
+                hi = u.Quantity(bnd[1])
+                u.fail_for_unit_mismatch(lo, hi)
+                hi = hi.in_unit(lo.unit)
+                l_arr = np.asarray(lo.mantissa)
+                h_arr = np.asarray(hi.mantissa)
+                assert l_arr.shape == h_arr.shape, (
+                    f"Bounds for '{k}' must share shape, got {l_arr.shape} and {h_arr.shape}.")
+                low_struct[k] = jnp.asarray(l_arr)
+                high_struct[k] = jnp.asarray(h_arr)
+            self._low_struct = low_struct
+            self._high_struct = high_struct
+        elif isinstance(bounds, (list, tuple)):
+            low_list = []
+            high_list = []
+            for i, bnd in enumerate(bounds):
+                assert len(bnd) == 2, f"Each bound must be (min, max); got {bnd}."
+                lo = u.Quantity(bnd[0])
+                hi = u.Quantity(bnd[1])
+                u.fail_for_unit_mismatch(lo, hi)
+                hi = hi.in_unit(lo.unit)
+                l_arr = np.asarray(lo.mantissa)
+                h_arr = np.asarray(hi.mantissa)
+                assert l_arr.shape == h_arr.shape, (
+                    f"Bounds at index {i} must share shape, got {l_arr.shape} and {h_arr.shape}.")
+                low_list.append(jnp.asarray(l_arr))
+                high_list.append(jnp.asarray(h_arr))
+            self._low_struct = tuple(low_list)
+            self._high_struct = tuple(high_list)
+        else:
+            raise ValueError(f"Unknown type of 'bounds': {type(bounds)}")
 
-        for x0 in xs:
+        # Build flat SciPy bounds (list of (low, high) for each scalar variable)
+        lows, _ = jax.tree.flatten(self._low_struct)
+        highs, _ = jax.tree.flatten(self._high_struct)
+        self._flat_bounds: list[tuple[float, float]] = []
+        for lo_leaf, hi_leaf in safe_zip(lows, highs):
+            lo_flat = np.ravel(np.asarray(lo_leaf))
+            hi_flat = np.ravel(np.asarray(hi_leaf))
+            self._flat_bounds.extend(list(zip(lo_flat, hi_flat)))
+
+    def _sample_x0(self) -> Any:
+        def sample(lo, hi):
+            lo_np = np.asarray(lo)
+            hi_np = np.asarray(hi)
+            x = np.random.uniform(lo_np, hi_np, size=lo_np.shape)
+            return jnp.asarray(x, dtype=brainstate.environ.dftype())
+
+        return jax.tree.map(sample, self._low_struct, self._high_struct)
+
+    def _struct_to_args(self, x_struct: Any):
+        if self._is_dict:
+            return {k: x_struct[k] for k in self._keys}
+        else:
+            return tuple(x_struct)
+
+    def _objective(self, x_struct: Any):
+        params = self._struct_to_args(x_struct)
+        if self._is_dict:
+            r = self.loss_fun(**params)
+        else:
+            r = self.loss_fun(*params)
+        return jnp.asarray(r)
+
+    def minimize(self, n_iter: int = 1):
+        assert isinstance(n_iter, int) and n_iter > 0, "'n_iter' must be a positive integer."
+
+        best_res = None
+        best_fun = np.inf
+
+        for _ in range(n_iter):
+            x0_struct = self._sample_x0()
             results = scipy_minimize_with_jax(
-                x0,
-                self.loss_fun,
-                jac=self.jac,
+                x0_struct,
+                self._objective,
+                jac=None,
                 method=self.method,
                 callback=self.callback,
-                bounds=bounds,
+                bounds=self._flat_bounds,
                 constraints=self.constraints,
                 tol=self.tol,
                 options=self.options
             )
-            if results.fun < best_l:
-                best_l = results.fun
-                best_r = results
-        return best_r
+            if results.fun < best_fun:
+                best_fun = results.fun
+                best_res = results
+        return best_res
