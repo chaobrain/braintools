@@ -61,6 +61,10 @@ def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
     return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
 
 
+def randn_like(y):
+    return brainstate.random.randn(*jnp.shape(y))
+
+
 def sde_euler_step(
     df: DF,
     dg: DG,
@@ -115,7 +119,7 @@ def sde_euler_step(
     dt = brainstate.environ.get_dt()
     dt_sqrt = jnp.sqrt(dt)
     y_bars = tree_map(
-        lambda y0, drift, diffusion: y0 + drift * dt + diffusion * brainstate.random.randn(*y0.shape) * dt_sqrt,
+        lambda y0, drift, diffusion: y0 + drift * dt + diffusion * randn_like(y0) * dt_sqrt,
         y,
         df(y, t, *args),
         dg(y, t, *args),
@@ -194,7 +198,7 @@ def sde_milstein_step(
 
     # integral results
     def f_integral(y0, drift, diffusion, diffusion_bar):
-        noise = brainstate.random.randn(*y0.shape) * dt_sqrt
+        noise = randn_like(y0) * dt_sqrt
         noise_p2 = (noise ** 2 - dt) if sde_type == 'ito' else noise ** 2
         minus = (diffusion_bar - diffusion) / 2 / dt_sqrt
         return y0 + drift * dt + diffusion * noise + minus * noise_p2
@@ -265,7 +269,7 @@ def sde_expeuler_step(
     x_next = y + dt * phi * derivative
 
     # diffusion
-    diffusion_part = dg(y, t, *args) * u.math.sqrt(dt) * brainstate.random.randn(*args[0].shape)
+    diffusion_part = dg(y, t, *args) * u.math.sqrt(dt) * randn_like(args[0])
     if u.get_dim(x_next) != u.get_dim(diffusion_part):
         drift_unit = u.get_unit(x_next)
         time_unit = u.get_unit(dt)
@@ -331,7 +335,7 @@ def sde_heun_step(
     g0 = dg(y, t, *args)
 
     # shared Brownian increment dW for all stages
-    dW = jax.tree.map(lambda y0: brainstate.random.randn(*y0.shape) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+    dW = jax.tree.map(lambda y0: randn_like(y0) * dt_sqrt, y, is_leaf=u.math.is_quantity)
 
     # predictor state
     y_pred = tree_map(lambda y0, a, b, z: y0 + a * dt + b * z, y, f0, g0, dW)
@@ -394,7 +398,7 @@ def sde_tamed_euler_step(
 
     f_tamed = tree_map(lambda a: a / (1.0 + dt * u.math.abs(a)), f0)
     y_next = tree_map(
-        lambda y0, a, b: y0 + a * dt + b * brainstate.random.randn(*y0.shape) * dt_sqrt,
+        lambda y0, a, b: y0 + a * dt + b * randn_like(y0) * dt_sqrt,
         y, f_tamed, g0
     )
     return y_next
@@ -446,7 +450,7 @@ def sde_implicit_euler_step(
 
     # Explicit pieces at start
     g0 = dg(y, t, *args)
-    dW = jax.tree.map(lambda y0: brainstate.random.randn(*y0.shape) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+    dW = jax.tree.map(lambda y0: randn_like(y0) * dt_sqrt, y, is_leaf=u.math.is_quantity)
     diff_inc = tree_map(lambda b, z: b * z, g0, dW)
 
     # Predictor (explicit Euler)
@@ -462,7 +466,7 @@ def sde_implicit_euler_step(
 
 def _brownian_like(y, dt):
     dt_sqrt = u.math.sqrt(dt)
-    return jax.tree.map(lambda y0: brainstate.random.randn(*y0.shape) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+    return jax.tree.map(lambda y0: randn_like(y0) * dt_sqrt, y, is_leaf=u.math.is_quantity)
 
 
 def sde_srk2_step(
