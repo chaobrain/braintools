@@ -16,7 +16,14 @@
 </p>
 
 
-[``braintools``](https://github.com/brainpy/braintools) provides common toolboxes for brain modeling. 
+[``braintools``](https://github.com/brainpy/braintools) is a lightweight, JAX‑friendly toolbox of practical utilities for brain modeling. It focuses on:
+
+- Metric functions for model training/evaluation (classification, regression, ranking, connectivity, LFP helpers)
+- Numerical one‑step integrators for ODE/SDE/DDE (PyTree‑aware, JAX‑ready)
+- Input generators and small optimization helpers for quick prototyping
+- And more to come...
+
+It plays nicely with the rest of our brain simulation ecosystem (e.g., `brainstate`, `brainunit`) and follows a simple, functional style that works with jit/vmap.
 
 
 ## Installation
@@ -27,7 +34,20 @@ You can install ``braintools`` via pip:
 pip install braintools --upgrade
 ```
 
-Alternatively, you can install `BrainX`, which bundles `braintools` with other compatible packages for a comprehensive brain modeling ecosystem:
+GPU/TPU builds and extras (see docs for details):
+
+```bash
+# CPU (default)
+pip install -U braintools[cpu]
+
+# CUDA 12.x wheels
+pip install -U braintools[cuda12]
+
+# TPU
+pip install -U braintools[tpu]
+```
+
+Alternatively, install `BrainX`, which bundles `braintools` with other compatible packages for a comprehensive brain modeling ecosystem:
 
 ```bash
 pip install BrainX -U
@@ -36,11 +56,20 @@ pip install BrainX -U
 
 ## Documentation
 
-The official documentation is hosted on Read the Docs: [https://braintools.readthedocs.io](https://braintools.readthedocs.io)
+The official docs are at: https://braintools.readthedocs.io
 
 
 
+## Ecosystem
 
-## See the ecosystem
+``braintools`` is part of our brain simulation ecosystem: https://brainmodeling.readthedocs.io/
 
-``braintools`` is one part of our brain simulation ecosystem: https://brainmodeling.readthedocs.io/
+
+## Contributing
+
+Contributions and issue reports are welcome! Please see `CONTRIBUTING.md` and open a PR/issue on GitHub.
+
+
+## License
+
+Apache 2.0. See `LICENSE` for details.
