@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BDP Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,13 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 
+__all__ = [
+    'Optimizer',
+]
 
-from ._base import *
-from ._base import __all__ as base__all
-from ._nevergrad_optimizer import *
-from ._nevergrad_optimizer import __all__ as ng_optim_all
-from ._scipy_optimizer import *
-from ._scipy_optimizer import __all__ as scipy_optimizer__all
 
-__all__ = ng_optim_all + base__all + scipy_optimizer__all
-del base__all, ng_optim_all, scipy_optimizer__all
+class Optimizer:
+    def minimize(self, *args):
+        raise NotImplementedError("minimize method is not implemented.")
+
+

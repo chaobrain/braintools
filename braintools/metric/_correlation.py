@@ -15,9 +15,11 @@
 
 # -*- coding: utf-8 -*-
 
-from typing import Union
+from typing import Union, Optional
 
 import brainstate
+import brainunit as u
+import jax
 import numpy as onp
 from jax import vmap, lax, numpy as jnp
 
@@ -31,10 +33,13 @@ __all__ = [
 ]
 
 
-def cross_correlation(spikes: brainstate.typing.ArrayLike,
-                      bin: Union[int, float],
-                      dt: Union[int, float] = None,
-                      method: str = 'loop'):
+
+def cross_correlation(
+    spikes: brainstate.typing.ArrayLike,
+    bin: Union[int, float],
+    dt: Union[int, float] = None,
+    method: str = 'loop'
+):
     r"""Calculate cross correlation index between neurons.
 
     The coherence [1]_ between two neurons i and j is measured by their
@@ -122,7 +127,10 @@ def _f_signal(signal):
     return jnp.mean(signal * signal) - jnp.mean(signal) ** 2
 
 
-def voltage_fluctuation(potentials, method='loop'):
+def voltage_fluctuation(
+    potentials,
+    method='loop'
+):
     r"""Calculate neuronal synchronization via voltage variance.
 
     The method comes from [1]_ [2]_ [3]_.
@@ -244,7 +252,11 @@ def functional_connectivity(activities):
     return jnp.nan_to_num(fc)
 
 
-def functional_connectivity_dynamics(activities, window_size=30, step_size=5):
+def functional_connectivity_dynamics(
+    activities,
+    window_size=30,
+    step_size=5
+):
     """Computes functional connectivity dynamics (FCD) matrix.
 
     Parameters
@@ -264,7 +276,11 @@ def functional_connectivity_dynamics(activities, window_size=30, step_size=5):
     pass
 
 
-def weighted_correlation(x, y, w):
+def weighted_correlation(
+    x,
+    y,
+    w,
+):
     """Weighted Pearson correlation of two data series.
 
     Parameters

@@ -72,6 +72,7 @@ class LatencyEncoder:
       epsilon: float. A tiny positive value to avoid rounding errors when
         using torch.arange, defaults to ``1e-7``.
     """
+    __module__ = 'braintools'
 
     def __init__(
         self,

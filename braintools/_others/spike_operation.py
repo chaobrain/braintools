@@ -1,5 +1,3 @@
-
-
 # Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +14,7 @@
 # ==============================================================================
 
 
-from typing import Optional
-
-import brainstate
-import brainunit as u
-import jax
-import numpy as np
+from braintools._misc import set_module_as
 
 __all__ = [
     'spike_bitwise_or',
@@ -34,6 +27,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools')
 def spike_bitwise_or(x, y):
     """
     Perform a bitwise OR operation on spike tensors.
@@ -57,6 +51,7 @@ def spike_bitwise_or(x, y):
     return x + y - x * y
 
 
+@set_module_as('braintools')
 def spike_bitwise_and(x, y):
     """
     Perform a bitwise AND operation on spike tensors.
@@ -79,6 +74,7 @@ def spike_bitwise_and(x, y):
     return x * y
 
 
+@set_module_as('braintools')
 def spike_bitwise_iand(x, y):
     """
     Perform a bitwise IAND (Inverse AND) operation on spike tensors.
@@ -101,6 +97,7 @@ def spike_bitwise_iand(x, y):
     return (1 - x) * y
 
 
+@set_module_as('braintools')
 def spike_bitwise_not(x):
     """
     Perform a bitwise NOT operation on spike tensors.
@@ -122,6 +119,7 @@ def spike_bitwise_not(x):
     return 1 - x
 
 
+@set_module_as('braintools')
 def spike_bitwise_xor(x, y):
     """
     Perform a bitwise XOR operation on spike tensors.
@@ -144,6 +142,7 @@ def spike_bitwise_xor(x, y):
     return x + y - 2 * x * y
 
 
+@set_module_as('braintools')
 def spike_bitwise_ixor(x, y):
     """
     Perform a bitwise IXOR (Inverse XOR) operation on spike tensors.
@@ -166,6 +165,7 @@ def spike_bitwise_ixor(x, y):
     return x * (1 - y) + (1 - x) * y
 
 
+@set_module_as('braintools')
 def spike_bitwise(x, y, op: str):
     r"""
     Perform bitwise operations on spike tensors.
