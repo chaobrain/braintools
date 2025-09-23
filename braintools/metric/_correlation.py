@@ -403,33 +403,66 @@ def functional_connectivity_dynamics(
     Returns
     -------
     brainstate.typing.ArrayLike
-        FCD matrix measuring correlations between connectivity patterns
-        across different time windows.
+        FCD matrix of shape ``(num_windows, num_windows)`` measuring correlations
+        between connectivity patterns across different time windows.
 
     Notes
     -----
-    This function is currently not implemented and will raise a NotImplementedError.
-    The FCD computation involves:
+    FCD computation steps:
     
-    1. Computing FC matrices for sliding windows
-    2. Vectorizing upper triangular elements of each FC matrix  
-    3. Computing correlations between these vectors across time windows
+    1. Compute FC matrices for sliding windows (Pearson correlations)
+    2. Vectorize upper triangular elements of each FC matrix (exclude diagonal)
+    3. Compute Pearson correlations between these vectors across windows
 
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> import braintools as bt
-    >>> activities = jnp.random.rand(200, 10)  # 200 time points, 10 signals
-    >>> # fcd = bt.metric.functional_connectivity_dynamics(activities)
-    >>> # Currently raises NotImplementedError
+    >>> import brainstate as bst
+    >>> activities = bst.random.rand(200, 10)
+    >>> fcd = bt.metric.functional_connectivity_dynamics(activities)
     """
-    raise NotImplementedError(
-        "Functional connectivity dynamics computation is not yet implemented. "
-        "The FCD computation would involve: "
-        "1) Computing FC matrices for sliding windows, "
-        "2) Vectorizing upper triangular elements of each FC matrix, "
-        "3) Computing correlations between these vectors across time windows."
-    )
+
+    if activities.ndim != 2:
+        raise ValueError('Only support 2d array with shape of "(num_time, num_sample)". '
+                         f'But we got a array with the shape of {activities.shape}')
+
+    t_len, n_sig = activities.shape
+    if window_size <= 1:
+        raise ValueError('window_size must be > 1.')
+    if step_size <= 0:
+        raise ValueError('step_size must be > 0.')
+
+    # Determine window start indices
+    if t_len < window_size:
+        return jnp.zeros((0, 0), dtype=activities.dtype)
+    starts = jnp.arange(0, t_len - window_size + 1, step_size)
+    n_windows = starts.shape[0]
+
+    # Indices for vectorizing FC (upper triangle, excluding diagonal)
+    iu = jnp.triu_indices(n_sig, k=1)
+    vec_len = iu[0].shape[0]
+
+    def _slice_fc_vec(start):
+        seg = lax.dynamic_slice(activities, (start, 0), (window_size, n_sig))
+        fc = functional_connectivity(seg)
+        return fc[iu]
+
+    # Compute FC vectors for all windows
+    fc_vectors = jax.vmap(_slice_fc_vec)(starts)  # shape: (n_windows, vec_len)
+
+    # Center each vector (remove mean across edges)
+    centered = fc_vectors - jnp.mean(fc_vectors, axis=1, keepdims=True)
+    # Normalize to unit norm to get Pearson correlation via cosine similarity
+    norms = jnp.linalg.norm(centered, axis=1)
+    norms = jnp.where(norms > 0, norms, 1.0)
+    normalized = centered / norms[:, None]
+
+    # Correlation matrix between windows
+    fcd = normalized @ normalized.T
+    # Ensure exact ones on diagonal
+    fcd = fcd - jnp.diag(jnp.diag(fcd)) + jnp.eye(n_windows, dtype=fcd.dtype)
+    return fcd
 
 
 @set_module_as('braintools.metric')
