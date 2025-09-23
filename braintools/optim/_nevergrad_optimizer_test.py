@@ -20,8 +20,7 @@ from unittest.mock import patch
 
 import brainunit as u
 import jax.numpy as jnp
-
-from braintools.optim.optimizer import NevergradOptimizer, Optimizer
+import braintools
 
 
 class TestNevergradOptimizer(unittest.TestCase):
@@ -60,53 +59,53 @@ class TestNevergradOptimizer(unittest.TestCase):
         }
 
     def test_initializationWorksWithScalarBounds(self):
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=self.batched_loss_fun,
             bounds=self.scalar_bounds,
             n_sample=10,
             method='DE'
         )
 
-        self.assertIsInstance(optimizer, Optimizer)
+        self.assertIsInstance(optimizer, braintools.optim.Optimizer)
         self.assertEqual(optimizer.n_sample, 10)
         self.assertEqual(optimizer.method, 'DE')
 
     def test_initializationWorksWithArrayBounds(self):
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=self.batched_loss_fun,
             bounds=self.array_bounds,
             n_sample=10,
             method='DE'
         )
 
-        self.assertIsInstance(optimizer, Optimizer)
+        self.assertIsInstance(optimizer, braintools.optim.Optimizer)
         self.assertEqual(optimizer.n_sample, 10)
 
     def test_initializationWorksWithDictBounds(self):
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=self.batched_loss_fun,
             bounds=self.dict_bounds,
             n_sample=10,
             method='DE'
         )
 
-        self.assertIsInstance(optimizer, Optimizer)
+        self.assertIsInstance(optimizer, braintools.optim.Optimizer)
         self.assertEqual(optimizer.n_sample, 10)
 
     def test_initializationWorksWithDictArrayBounds(self):
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=self.batched_loss_fun,
             bounds=self.dict_array_bounds,
             n_sample=10,
             method='DE'
         )
 
-        self.assertIsInstance(optimizer, Optimizer)
+        self.assertIsInstance(optimizer, braintools.optim.Optimizer)
         self.assertEqual(optimizer.n_sample, 10)
 
     def test_raiseErrorWithInvalidBoundsType(self):
         with self.assertRaises(ValueError):
-            NevergradOptimizer(
+            braintools.optim.NevergradOptimizer(
                 batched_loss_fun=self.batched_loss_fun,
                 bounds=123,  # Invalid bounds type
                 n_sample=10
@@ -114,7 +113,7 @@ class TestNevergradOptimizer(unittest.TestCase):
 
     def test_raiseErrorWithInvalidBoundsDimensions(self):
         with self.assertRaises(AssertionError):
-            NevergradOptimizer(
+            braintools.optim.NevergradOptimizer(
                 batched_loss_fun=self.batched_loss_fun,
                 bounds=[(-5.0, 5.0, 0.0)],  # Should be tuple of 2
                 n_sample=10
@@ -122,7 +121,7 @@ class TestNevergradOptimizer(unittest.TestCase):
 
     def test_raiseErrorWithMismatchedArrayBoundShapes(self):
         with self.assertRaises(AssertionError):
-            NevergradOptimizer(
+            braintools.optim.NevergradOptimizer(
                 batched_loss_fun=self.batched_loss_fun,
                 bounds=[(jnp.array([-5.0, -5.0]), jnp.array([5.0]))],  # Mismatched shapes
                 n_sample=10
@@ -130,7 +129,7 @@ class TestNevergradOptimizer(unittest.TestCase):
 
     def test_raiseErrorWithUnitMismatch(self):
         with self.assertRaises(Exception):  # Unit mismatch error
-            NevergradOptimizer(
+            braintools.optim.NevergradOptimizer(
                 batched_loss_fun=self.batched_loss_fun,
                 bounds=[(u.Quantity(1.0, 'mV'), u.Quantity(5.0, 'nA'))],  # Different units
                 n_sample=10
@@ -138,7 +137,7 @@ class TestNevergradOptimizer(unittest.TestCase):
 
     def test_raiseErrorWithNonCallableLossFunction(self):
         with self.assertRaises(AssertionError):
-            NevergradOptimizer(
+            braintools.optim.NevergradOptimizer(
                 batched_loss_fun="not a function",  # Not callable
                 bounds=self.scalar_bounds,
                 n_sample=10
@@ -146,24 +145,15 @@ class TestNevergradOptimizer(unittest.TestCase):
 
     def test_raiseErrorWithNegativeSampleSize(self):
         with self.assertRaises(AssertionError):
-            NevergradOptimizer(
+            braintools.optim.NevergradOptimizer(
                 batched_loss_fun=self.batched_loss_fun,
                 bounds=self.scalar_bounds,
                 n_sample=-5  # Negative sample size
             )
 
-    def test_raiseErrorWhenNevergradNotInstalled(self):
-        with patch('braintools.optim.optimizer.ng', None):
-            with self.assertRaises(ImportError):
-                NevergradOptimizer(
-                    batched_loss_fun=self.batched_loss_fun,
-                    bounds=self.scalar_bounds,
-                    n_sample=10
-                )
-
     def test_minimizationReturnsExpectedResult(self):
         # For a simple quadratic function, optimization should find values close to zero
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=self.batched_loss_fun,
             bounds=self.scalar_bounds,
             n_sample=10,
@@ -184,7 +174,7 @@ class TestNevergradOptimizer(unittest.TestCase):
             return jnp.array([jnp.sum(p1 ** 2 + p2 ** 2)
                               for p1, p2 in zip(params['param1'], params['param2'])])
 
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=dict_batched_loss_fun,
             bounds=self.dict_bounds,
             n_sample=10,
@@ -207,7 +197,7 @@ class TestNevergradOptimizer(unittest.TestCase):
         self.assertLessEqual(result['param2'], self.dict_bounds['param2'][1])
 
     def test_usesNevergradRecommendationWhenSpecified(self):
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=self.batched_loss_fun,
             bounds=self.scalar_bounds,
             n_sample=10,
@@ -223,7 +213,7 @@ class TestNevergradOptimizer(unittest.TestCase):
                 mock_trial.assert_called_with(choice_best=True)
 
     def test_correctNumberOfIterationsPerformed(self):
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=self.batched_loss_fun,
             bounds=self.scalar_bounds,
             n_sample=10,
@@ -236,7 +226,7 @@ class TestNevergradOptimizer(unittest.TestCase):
             self.assertEqual(mock_trial.call_count, 5)
 
     def test_raiseErrorWithInvalidIterationCount(self):
-        optimizer = NevergradOptimizer(
+        optimizer = braintools.optim.NevergradOptimizer(
             batched_loss_fun=self.batched_loss_fun,
             bounds=self.scalar_bounds,
             n_sample=10

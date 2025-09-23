@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BDP Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,12 +14,24 @@
 # ==============================================================================
 
 
-from ._base import *
-from ._base import __all__ as base__all
-from ._nevergrad_optimizer import *
-from ._nevergrad_optimizer import __all__ as ng_optim_all
-from ._scipy_optimizer import *
-from ._scipy_optimizer import __all__ as scipy_optimizer__all
+from typing import Callable, Any, Union, Sequence
 
-__all__ = ng_optim_all + base__all + scipy_optimizer__all
-del base__all, ng_optim_all, scipy_optimizer__all
+import brainstate
+import brainunit as u
+import jax
+
+
+def set_module_as(module: str):
+    def wrapper(fun: callable):
+        fun.__module__ = module
+        return fun
+
+    return wrapper
+
+
+def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
+    return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
+
+
+def randn_like(y):
+    return brainstate.random.randn(*u.math.shape(y))

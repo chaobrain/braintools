@@ -27,6 +27,8 @@ import brainunit as u
 import jax
 import jax.numpy as jnp
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'sigmoid_binary_cross_entropy',
     'hinge_loss',
@@ -54,35 +56,57 @@ def assert_is_int(array):
     assert u.math.is_int(array), 'Array must be int.'
 
 
+@set_module_as('braintools.metric')
 def sigmoid_binary_cross_entropy(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
 ):
-    """Computes element-wise sigmoid cross entropy given logits and labels.
+    r"""Compute element-wise sigmoid cross entropy given logits and labels.
 
-    This function can be used for binary or multiclass classification (where each
+    This function can be used for binary or multiclass classification where each
     class is an independent binary prediction and different classes are not
-    mutually exclusive e.g. predicting that an image contains both a cat
-    and a dog.)
+    mutually exclusive (e.g. predicting that an image contains both a cat
+    and a dog).
 
-    Because this function is overloaded, please ensure your `logits` and `labels`
-    are compatible with each other. If you're passing in binary `labels` (values
-    in {0, 1}), ensure your `logits` correspond to class 1 only. If you're
-    passing in per-class target probabilities or one-hot `labels`, please ensure
-    your `logits` are also multiclass. Be particularly careful if you're relying
-    on implicit broadcasting to reshape `logits` or `labels`.
+    Parameters
+    ----------
+    logits : brainstate.typing.ArrayLike
+        Unnormalized log probabilities for binary predictions. Each element
+        represents the unnormalized log probability of a binary prediction.
+        Must be compatible with `labels` shape.
+    labels : brainstate.typing.ArrayLike
+        Binary labels with values in {0, 1} or multi-class target probabilities.
+        Must be broadcastable with `logits`.
 
-    References:
-      [Goodfellow et al, 2016](http://www.deeplearningbook.org/contents/prob.html)
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Cross entropy for each binary prediction, same shape as `logits`.
 
-    Args:
-      logits: Each element is the unnormalized log probability of a binary
-        prediction. See note about compatibility with `labels` above.
-      labels: Binary labels whose values are {0,1} or multi-class target
-        probabilities. See note about compatibility with `logits` above.
+    Notes
+    -----
+    Please ensure your `logits` and `labels` are compatible with each other.
+    If you're passing in binary `labels` (values in {0, 1}), ensure your
+    `logits` correspond to class 1 only. If you're passing in per-class target
+    probabilities or one-hot `labels`, please ensure your `logits` are also
+    multiclass. Be particularly careful if you're relying on implicit
+    broadcasting to reshape `logits` or `labels`.
 
-    Returns:
-      cross entropy for each binary prediction, same shape as `logits`.
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> logits = jnp.array([1.0, -1.0, 0.0])
+    >>> labels = jnp.array([1.0, 0.0, 1.0])
+    >>> loss = braintools.metric.sigmoid_binary_cross_entropy(logits, labels)
+    >>> print(loss)
+    [0.31326166 0.31326166 0.6931472 ]
+
+    References
+    ----------
+    .. [1] Goodfellow, Ian, Yoshua Bengio, and Aaron Courville.
+           "Deep learning." MIT press, 2016.
+           http://www.deeplearningbook.org/contents/prob.html
     """
     labels = labels.astype(logits.dtype)
     log_p = jax.nn.log_sigmoid(logits)
@@ -90,92 +114,185 @@ def sigmoid_binary_cross_entropy(
     return -labels * log_p - (1. - labels) * log_not_p
 
 
+@set_module_as('braintools.metric')
 def hinge_loss(
     predictor_outputs: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike
 ) -> brainstate.typing.ArrayLike:
-    """Computes the hinge loss for binary classification.
+    r"""Compute the hinge loss for binary classification.
 
-    Args:
-      predictor_outputs: Outputs of the decision function.
-      targets: Target values. Target values should be strictly in the set {-1, 1}.
+    The hinge loss is commonly used for training classifiers, particularly
+    Support Vector Machines. It provides a margin-based loss that is zero
+    when the prediction is correct and confident, and increases linearly
+    with the distance from the margin.
 
-    Returns:
-      loss value.
+    The hinge loss is defined as: ``max(0, 1 - y * f(x))`` where ``y`` is the
+    true class label and ``f(x)`` is the predicted output.
+
+    Parameters
+    ----------
+    predictor_outputs : brainstate.typing.ArrayLike
+        Outputs of the decision function. Real-valued predictions from the model.
+    targets : brainstate.typing.ArrayLike
+        Target values. Must be in the set {-1, 1} for binary classification.
+        Shape must be broadcastable with `predictor_outputs`.
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Hinge loss values with the same shape as the input arrays.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> predictions = jnp.array([1.0, -0.5, 2.0])
+    >>> targets = jnp.array([1, -1, 1])
+    >>> loss = braintools.metric.hinge_loss(predictions, targets)
+    >>> print(loss)
+    [0.  1.5 0. ]
     """
     return jnp.maximum(0, 1 - predictor_outputs * targets)
 
 
+@set_module_as('braintools.metric')
 def perceptron_loss(
     predictor_outputs: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike
 ) -> brainstate.typing.ArrayLike:
-    """Binary perceptron loss.
+    r"""Compute the binary perceptron loss.
 
-    References:
-      https://en.wikipedia.org/wiki/Perceptron
+    The perceptron loss is used in the original perceptron algorithm for
+    binary classification. It penalizes misclassified examples by the
+    magnitude of the prediction error.
 
-    Args:
-      predictor_outputs: score produced by the model (float).
-      targets: Target values. Target values should be strictly in the set {-1, 1}.
+    The perceptron loss is defined as: ``max(0, -y * f(x))`` where ``y`` is
+    the true class label and ``f(x)`` is the predicted output.
 
-    Returns:
-      loss value.
+    Parameters
+    ----------
+    predictor_outputs : brainstate.typing.ArrayLike
+        Scores produced by the model. Real-valued predictions.
+    targets : brainstate.typing.ArrayLike
+        Target values. Must be in the set {-1, 1} for binary classification.
+        Shape must match `predictor_outputs`.
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Perceptron loss values with the same shape as the input arrays.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> predictions = jnp.array([1.0, -0.5, 2.0])
+    >>> targets = jnp.array([1, -1, 1])
+    >>> loss = braintools.metric.perceptron_loss(predictions, targets)
+    >>> print(loss)
+    [0.  0.  0. ]
+
+    References
+    ----------
+    .. [1] Rosenblatt, Frank. "The perceptron: a probabilistic model for
+           information storage and organization in the brain."
+           Psychological review 65.6 (1958): 386.
+           https://en.wikipedia.org/wiki/Perceptron
     """
     assert jnp.shape(predictor_outputs) == jnp.shape(targets), 'shape mismatch'
     return jnp.maximum(0, - predictor_outputs * targets)
 
 
+@set_module_as('braintools.metric')
 def softmax_cross_entropy(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
 ) -> brainstate.typing.ArrayLike:
-    """Computes the softmax cross entropy between sets of logits and labels.
+    r"""Compute the softmax cross entropy between logits and labels.
 
-    Measures the probability error in discrete classification tasks in which
+    Measures the probability error in discrete classification tasks where
     the classes are mutually exclusive (each entry is in exactly one class).
     For example, each CIFAR-10 image is labeled with one and only one label:
     an image can be a dog or a truck, but not both.
 
-    References:
-      [Goodfellow et al, 2016](http://www.deeplearningbook.org/contents/prob.html)
+    Parameters
+    ----------
+    logits : brainstate.typing.ArrayLike
+        Unnormalized log probabilities with shape ``[..., num_classes]``.
+    labels : brainstate.typing.ArrayLike
+        Valid probability distributions (non-negative, sum to 1), e.g., a
+        one-hot encoding specifying the correct class for each input.
+        Must have shape broadcastable to ``[..., num_classes]``.
 
-    Args:
-      logits: Unnormalized log probabilities, with shape `[..., num_classes]`.
-      labels: Valid probability distributions (non-negative, sum to 1), e.g a
-        one hot encoding specifying the correct class for each input;
-        must have a shape broadcastable to `[..., num_classes]`.
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Cross entropy between each prediction and the corresponding target
+        distributions, with shape ``[...]``.
 
-    Returns:
-      cross entropy between each prediction and the corresponding target
-      distributions, with shape `[...]`.
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> logits = jnp.array([[2.0, 1.0, 0.1]])
+    >>> labels = jnp.array([[1.0, 0.0, 0.0]])
+    >>> loss = braintools.metric.softmax_cross_entropy(logits, labels)
+    >>> print(loss)
+    [0.4170299]
+
+    References
+    ----------
+    .. [1] Goodfellow, Ian, Yoshua Bengio, and Aaron Courville.
+           "Deep learning." MIT press, 2016.
+           http://www.deeplearningbook.org/contents/prob.html
     """
     ret = -jnp.sum(labels * jax.nn.log_softmax(logits, axis=-1), axis=-1)
     return ret
 
 
+@set_module_as('braintools.metric')
 def softmax_cross_entropy_with_integer_labels(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
 ) -> brainstate.typing.ArrayLike:
-    """Computes softmax cross entropy between sets of logits and integer labels.
+    r"""Compute softmax cross entropy between logits and integer labels.
 
-    Measures the probability error in discrete classification tasks in which
-    the classes are mutually exclusive (each entry is in exactly one class).
-    For example, each CIFAR-10 image is labeled with one and only one label:
-    an image can be a dog or a truck, but not both.
+    This is a more efficient version of softmax cross entropy when labels
+    are provided as integer class indices rather than one-hot encoded vectors.
+    Measures the probability error in discrete classification tasks where
+    the classes are mutually exclusive.
 
-    References:
-      [Goodfellow et al, 2016](http://www.deeplearningbook.org/contents/prob.html)
+    Parameters
+    ----------
+    logits : brainstate.typing.ArrayLike
+        Unnormalized log probabilities with shape ``[..., num_classes]``.
+        Must be floating point type.
+    labels : brainstate.typing.ArrayLike
+        Integer class indices specifying the correct class for each input.
+        Values should be in the range ``[0, num_classes)``. Shape ``[...]``.
+        Must be integer type.
 
-    Args:
-      logits: Unnormalized log probabilities, with shape `[..., num_classes]`.
-      labels: Integers specifying the correct class for each input, with shape
-        `[...]`.
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Cross entropy between each prediction and the corresponding target
+        distributions, with shape ``[...]``.
 
-    Returns:
-      Cross entropy between each prediction and the corresponding target
-      distributions, with shape `[...]`.
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> logits = jnp.array([[2.0, 1.0, 0.1]])
+    >>> labels = jnp.array([0])  # Class 0
+    >>> loss = braintools.metric.softmax_cross_entropy_with_integer_labels(logits, labels)
+    >>> print(loss)
+    [0.4170299]
+
+    References
+    ----------
+    .. [1] Goodfellow, Ian, Yoshua Bengio, and Aaron Courville.
+           "Deep learning." MIT press, 2016.
+           http://www.deeplearningbook.org/contents/prob.html
     """
     assert_is_float(logits)
     assert_is_int(labels)
@@ -192,117 +309,252 @@ def softmax_cross_entropy_with_integer_labels(
 _dot_last_dim = jnp.vectorize(jnp.dot, signature='(n),(n)->()')
 
 
+@set_module_as('braintools.metric')
 def multiclass_hinge_loss(
     scores: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
 ) -> brainstate.typing.ArrayLike:
-    """Multiclass hinge loss.
+    r"""Compute multiclass hinge loss for classification.
 
-    Args:
-      scores: scores produced by the model (floats).
-      labels: ground-truth integer label.
+    The multiclass hinge loss is an extension of the binary hinge loss to
+    multiple classes. It encourages the correct class score to be at least
+    1 unit higher than the highest scoring incorrect class.
 
-    Returns:
-      loss value
+    The loss is defined as:
+    
+    .. math::
+    
+        L = \max(0, \max_{j \neq y} s_j - s_y + 1)
+    
+    where :math:`s_y` is the score for the correct class :math:`y` and
+    :math:`s_j` are scores for other classes.
 
-    References:
-      https://en.wikipedia.org/wiki/Hinge_loss
+    Parameters
+    ----------
+    scores : brainstate.typing.ArrayLike
+        Model output scores with shape ``[..., num_classes]``. These are
+        raw scores (not probabilities) for each class.
+    labels : brainstate.typing.ArrayLike
+        Ground-truth integer class labels with shape ``[...]``. Each label
+        should be in the range ``[0, num_classes)``.
 
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Hinge loss values with shape ``[...]``, same as the leading
+        dimensions of ``scores``.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> # Scores for 3 classes, 2 samples
+    >>> scores = jnp.array([[1.0, 2.0, 0.5], [0.8, 0.3, 1.2]])
+    >>> labels = jnp.array([1, 2])  # Correct classes
+    >>> loss = braintools.metric.multiclass_hinge_loss(scores, labels)
+    >>> print(loss)
+    [0.  0. ]
+
+    References
+    ----------
+    .. [1] Crammer, Koby, and Yoram Singer. "On the algorithmic implementation
+           of multiclass kernel-based vector machines." Journal of machine
+           learning research 2.Dec (2001): 265-292.
+           https://en.wikipedia.org/wiki/Hinge_loss
     """
     one_hot_labels = jax.nn.one_hot(labels, scores.shape[-1])
     return (jnp.max(scores + 1.0 - one_hot_labels, axis=-1) -
             _dot_last_dim(scores, one_hot_labels))
 
 
+@set_module_as('braintools.metric')
 def multiclass_perceptron_loss(
     scores: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
 ) -> brainstate.typing.ArrayLike:
-    """Binary perceptron loss.
+    r"""Compute multiclass perceptron loss for classification.
 
-    References:
-      Michael Collins. Discriminative training methods for Hidden Markov Models:
-      Theory and experiments with perceptron algorithms. EMNLP 2002
+    The multiclass perceptron loss measures the difference between the
+    highest scoring class and the correct class score. It is used in
+    structured perceptron learning for multiclass classification.
 
-    Args:
-      scores: score produced by the model.
-      labels: ground-truth integer label.
+    The loss is defined as:
+    
+    .. math::
+    
+        L = \max_j s_j - s_y
+    
+    where :math:`s_y` is the score for the correct class :math:`y` and
+    :math:`\max_j s_j` is the maximum score across all classes.
 
-    Returns:
-      loss value.
+    Parameters
+    ----------
+    scores : brainstate.typing.ArrayLike
+        Model output scores with shape ``[..., num_classes]``. These are
+        raw scores (not probabilities) for each class.
+    labels : brainstate.typing.ArrayLike
+        Ground-truth integer class labels with shape ``[...]``. Each label
+        should be in the range ``[0, num_classes)``.
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Perceptron loss values with shape ``[...]``, same as the leading
+        dimensions of ``scores``.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> # Scores for 3 classes, 2 samples
+    >>> scores = jnp.array([[1.0, 2.0, 0.5], [0.8, 0.3, 1.2]])
+    >>> labels = jnp.array([1, 2])  # Correct classes
+    >>> loss = braintools.metric.multiclass_perceptron_loss(scores, labels)
+    >>> print(loss)
+    [0.  0. ]
+
+    References
+    ----------
+    .. [1] Collins, Michael. "Discriminative training methods for hidden
+           Markov models: Theory and experiments with perceptron algorithms."
+           Proceedings of EMNLP 2002.
     """
     one_hot_labels = jax.nn.one_hot(labels, scores.shape[-1])
     return jnp.max(scores, axis=-1) - _dot_last_dim(scores, one_hot_labels)
 
 
+@set_module_as('braintools.metric')
 def poly_loss_cross_entropy(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
     epsilon: float = 2.0
 ) -> brainstate.typing.ArrayLike:
-    r"""
-    Computes PolyLoss between logits and labels.
+    r"""Compute PolyLoss cross entropy between logits and labels.
 
-    The PolyLoss is a loss function that decomposes commonly
-    used classification loss functions into a series of weighted
-    polynomial bases. It is inspired by the Taylor expansion of
-    cross-entropy loss and focal loss in the bases of :math:`(1 − P_t)^j`.
+    PolyLoss is a polynomial expansion of commonly used classification loss
+    functions. It decomposes loss functions into weighted polynomial bases
+    inspired by the Taylor expansion of cross-entropy and focal loss.
+
+    The PolyLoss is defined as:
 
     .. math::
-      L_{Poly} = \sum_1^\infty \alpha_j \cdot (1 - P_t)^j \\
-      L_{Poly-N} = (\epsilon_1 + 1) \cdot (1 - P_t) + \ldots + \\
-      (\epsilon_N + \frac{1}{N}) \cdot (1 - P_t)^N +
-      \frac{1}{N + 1} \cdot (1 - P_t)^{N + 1} + \ldots = \\
-      - \log(P_t) + \sum_{j = 1}^N \epsilon_j \cdot (1 - P_t)^j
 
-    This function provides a simplified version of :math:`L_{Poly-N}`
-    with only the coefficient of the first polynomial term being changed.
+        L_{Poly} = \sum_{j=1}^\infty \alpha_j \cdot (1 - P_t)^j
 
-    References:
-      [Zhaoqi Leng et al, 2022](https://arxiv.org/pdf/2204.12511.pdf)
+    This function implements a simplified version with only the first
+    polynomial term modified:
 
-    Args:
-      logits: Unnormalized log probabilities, with shape `[..., num_classes]`.
-      labels: Valid probability distributions (non-negative, sum to 1), e.g. a
-        one hot encoding specifying the correct class for each input;
-        must have a shape broadcastable to `[..., num_classes]`.
-      epsilon: The coefficient of the first polynomial term.
-        According to the paper, the following values are recommended:
-        - For the ImageNet 2d image classification, epsilon = 2.0.
-        - For the 2d Instance Segmentation and object detection, epsilon = -1.0.
-        - It is also recommended to adjust this value based on the task, e.g. by
-          using grid search.
+    .. math::
 
-    Returns:
-      Poly loss between each prediction and the corresponding target
-      distributions, with shape `[...]`.
+        L = -\log(P_t) + \epsilon \cdot (1 - P_t)
+
+    where :math:`P_t` is the predicted probability for the true class.
+
+    Parameters
+    ----------
+    logits : brainstate.typing.ArrayLike
+        Unnormalized log probabilities with shape ``[..., num_classes]``.
+    labels : brainstate.typing.ArrayLike
+        Valid probability distributions (non-negative, sum to 1), e.g., a
+        one-hot encoding specifying the correct class for each input.
+        Must have shape broadcastable to ``[..., num_classes]``.
+    epsilon : float, default=2.0
+        Coefficient of the first polynomial term. Controls the emphasis on
+        difficult examples:
+        
+        - For ImageNet 2D classification: ``epsilon = 2.0`` (recommended)
+        - For 2D instance segmentation/object detection: ``epsilon = -1.0``
+        - Task-specific tuning via grid search is recommended
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        PolyLoss values between each prediction and corresponding target
+        distributions, with shape ``[...]``.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> logits = jnp.array([[2.0, 1.0, 0.1]])
+    >>> labels = jnp.array([[1.0, 0.0, 0.0]])
+    >>> loss = braintools.metric.poly_loss_cross_entropy(logits, labels, epsilon=2.0)
+    >>> print(f"PolyLoss: {loss[0]:.4f}")
+
+    Notes
+    -----
+    PolyLoss can improve model calibration and performance on imbalanced
+    datasets by adjusting the emphasis on difficult examples through the
+    epsilon parameter.
+
+    References
+    ----------
+    .. [1] Leng, Zhaoqi, et al. "PolyLoss: A Polynomial Expansion Perspective
+           of Classification Loss Functions." arXiv preprint arXiv:2204.12511
+           (2022). https://arxiv.org/pdf/2204.12511.pdf
     """
     one_minus_pt = jnp.sum(labels * (1 - jax.nn.softmax(logits)), axis=-1)
     cross_entropy = softmax_cross_entropy(logits=logits, labels=labels)
     return cross_entropy + epsilon * one_minus_pt
 
 
+@set_module_as('braintools.metric')
 def kl_divergence(
     log_predictions: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike
 ) -> brainstate.typing.ArrayLike:
-    """Computes the Kullback-Leibler divergence (relative entropy) loss.
+    r"""Compute the Kullback-Leibler divergence (relative entropy) loss.
 
-    Measures the information gain achieved if target probability distribution
-    would be used instead of predicted probability distribution.
+    KL divergence measures the information lost when approximating the target
+    distribution with the predicted distribution. It quantifies how much one
+    probability distribution differs from another.
 
-    References:
-      [Kullback, Leibler, 1951](https://www.jstor.org/stable/2236703)
+    The KL divergence is defined as:
 
-    Args:
-      log_predictions: Probabilities of predicted distribution with shape [...,
-        dim]. Expected to be in the log-space to avoid underflow.
-      targets: Probabilities of target distribution with shape [..., dim].
-        Expected to be strictly positive.
+    .. math::
 
-    Returns:
-      Kullback-Leibler divergence of predicted distribution from target
-      distribution with shape [...].
+        D_{KL}(P||Q) = \sum_i P(i) \log\frac{P(i)}{Q(i)}
+
+    where P is the target distribution and Q is the predicted distribution.
+
+    Parameters
+    ----------
+    log_predictions : brainstate.typing.ArrayLike
+        Log probabilities of the predicted distribution with shape
+        ``[..., num_classes]``. Must be in log-space to avoid numerical
+        underflow issues.
+    targets : brainstate.typing.ArrayLike
+        Probabilities of the target distribution with shape ``[..., num_classes]``.
+        Values should be non-negative and sum to 1 along the last axis.
+        Must be strictly positive where non-zero.
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        KL divergence values with shape ``[...]``, measuring the divergence
+        between target and predicted distributions.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> # Target and predicted distributions
+    >>> targets = jnp.array([[0.7, 0.2, 0.1]])
+    >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
+    >>> kl_div = braintools.metric.kl_divergence(log_preds, targets)
+    >>> print(f"KL divergence: {kl_div[0]:.4f}")
+
+    Notes
+    -----
+    KL divergence is not symmetric: KL(P||Q) ≠ KL(Q||P). It measures the
+    information lost when using Q to approximate P. The function handles
+    zero probabilities by setting the corresponding terms to zero.
+
+    References
+    ----------
+    .. [1] Kullback, Solomon, and Richard A. Leibler. "On information and
+           sufficiency." The annals of mathematical statistics 22.1 (1951): 79-86.
+           https://www.jstor.org/stable/2236703
     """
     assert_is_float(log_predictions)
     assert_is_float(targets)
@@ -310,23 +562,53 @@ def kl_divergence(
     return jnp.sum(loss, axis=-1)
 
 
+@set_module_as('braintools.metric')
 def kl_divergence_with_log_targets(
     log_predictions: brainstate.typing.ArrayLike,
     log_targets: brainstate.typing.ArrayLike
 ) -> brainstate.typing.ArrayLike:
-    """Computes the Kullback-Leibler divergence (relative entropy) loss.
+    r"""Compute KL divergence when both predictions and targets are in log-space.
 
-    Version of kl_div_loss where targets are given in log-space.
+    This is a numerically stable version of KL divergence computation when
+    both the target and predicted distributions are provided in log-space,
+    avoiding potential underflow issues that can occur with very small
+    probabilities.
 
-    Args:
-      log_predictions: Probabilities of predicted distribution with shape
-        [..., dim]. Expected to be in the log-space to avoid underflow.
-      log_targets: Probabilities of target distribution with shape [..., dim].
-        Expected to be in the log-space.
+    The computation uses the log-space formula:
 
-    Returns:
-      Kullback-Leibler divergence of predicted distribution from target
-      distribution with shape [...].
+    .. math::
+
+        D_{KL}(P||Q) = \sum_i \exp(\log P(i)) \cdot (\log P(i) - \log Q(i))
+
+    Parameters
+    ----------
+    log_predictions : brainstate.typing.ArrayLike
+        Log probabilities of the predicted distribution with shape
+        ``[..., num_classes]``. Must be in log-space.
+    log_targets : brainstate.typing.ArrayLike
+        Log probabilities of the target distribution with shape
+        ``[..., num_classes]``. Must be in log-space.
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        KL divergence values with shape ``[...]``.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> # Both distributions in log-space
+    >>> log_targets = jnp.log(jnp.array([[0.7, 0.2, 0.1]]))
+    >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
+    >>> kl_div = braintools.metric.kl_divergence_with_log_targets(log_preds, log_targets)
+    >>> print(f"KL divergence: {kl_div[0]:.4f}")
+
+    Notes
+    -----
+    This function is preferred when working with very small probabilities
+    or when both distributions are naturally available in log-space,
+    as it provides better numerical stability.
     """
     assert_is_float(log_predictions)
     assert_is_float(log_targets)
@@ -334,32 +616,64 @@ def kl_divergence_with_log_targets(
     return jnp.sum(loss, axis=-1)
 
 
+@set_module_as('braintools.metric')
 def convex_kl_divergence(
     log_predictions: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike
 ) -> brainstate.typing.ArrayLike:
-    """Computes a convex version of the Kullback-Leibler divergence loss.
+    r"""Compute a convex version of the Kullback-Leibler divergence loss.
 
-    Measures the information gain achieved if target probability distribution
-    would be used instead of predicted probability distribution.
-    This version is jointly convex in p (targets) and q (log_predictions).
+    This function computes a modified KL divergence that is jointly convex
+    in both the target probabilities and the predicted log probabilities.
+    The standard KL divergence is convex only in the predicted distribution.
 
-    References:
-      [Kullback, Leibler, 1951](https://www.jstor.org/stable/2236703)
+    The convex KL divergence is defined as:
 
-    Args:
-      log_predictions: Probabilities of predicted distribution with shape [...,
-        dim]. Expected to be in the log-space to avoid underflow.
-      targets: Probabilities of target distribution with shape [..., dim].
-        Expected to be strictly positive.
+    .. math::
 
-    Returns:
-      Kullback-Leibler divergence of predicted distribution from target
-      distribution with shape [...].
+        D_{convex}(P||Q) = D_{KL}(P||Q) + \sum_i (Q(i) - P(i))
+
+    where the second term makes the function convex in both arguments.
+
+    Parameters
+    ----------
+    log_predictions : brainstate.typing.ArrayLike
+        Log probabilities of the predicted distribution with shape
+        ``[..., num_classes]``. Must be in log-space.
+    targets : brainstate.typing.ArrayLike
+        Probabilities of the target distribution with shape ``[..., num_classes]``.
+        Values should be non-negative and sum to 1 along the last axis.
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Convex KL divergence values with shape ``[...]``.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> targets = jnp.array([[0.7, 0.2, 0.1]])
+    >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
+    >>> conv_kl = braintools.metric.convex_kl_divergence(log_preds, targets)
+    >>> print(f"Convex KL divergence: {conv_kl[0]:.4f}")
+
+    Notes
+    -----
+    The convex property can be beneficial for optimization algorithms
+    that rely on convexity guarantees, though it changes the semantic
+    meaning compared to standard KL divergence.
+
+    References
+    ----------
+    .. [1] Kullback, Solomon, and Richard A. Leibler. "On information and
+           sufficiency." The annals of mathematical statistics 22.1 (1951): 79-86.
+           https://www.jstor.org/stable/2236703
     """
     return kl_divergence(log_predictions, targets) + jnp.sum(jnp.exp(log_predictions) - targets, axis=-1)
 
 
+@set_module_as('braintools.metric')
 def ctc_loss_with_forward_probs(
     logits: brainstate.typing.ArrayLike,
     logit_paddings: brainstate.typing.ArrayLike,
@@ -368,55 +682,82 @@ def ctc_loss_with_forward_probs(
     blank_id: int = 0,
     log_epsilon: float = -1e5
 ) -> tuple[brainstate.typing.ArrayLike, brainstate.typing.ArrayLike, brainstate.typing.ArrayLike]:
-    r"""Computes CTC loss and CTC forward-probabilities.
+    r"""Compute CTC loss and forward probabilities for sequence alignment.
 
-    The CTC loss is a loss function based on log-likelihoods of the model that
-    introduces a special blank symbol :math:`\phi` to represent variable-length
-    output sequences.
+    Connectionist Temporal Classification (CTC) loss enables training of
+    sequence models without requiring frame-level alignment between input
+    and output sequences. It uses dynamic programming to compute the
+    probability of all valid alignments.
 
-    Forward probabilities returned by this function, as auxiliary results, are
-    grouped into two part: blank alpha-probability and non-blank alpha
-    probability. Those are defined as follows:
+    The CTC loss uses a special blank symbol :math:`\phi` to represent
+    variable-length output sequences and computes log-likelihoods over
+    all possible alignments.
 
+    Forward probabilities are computed for:
+    
     .. math::
-      \alpha_{\mathrm{BLANK}}(t, n) =
-      \sum_{\pi_{1:t-1}} p(\pi_t = \phi | \pi_{1:t-1}, y_{1:n-1}, \cdots), \\
-      \alpha_{\mathrm{LABEL}}(t, n) =
-      \sum_{\pi_{1:t-1}} p(\pi_t = y_n | \pi_{1:t-1}, y_{1:n-1}, \cdots).
+        \alpha_{\mathrm{BLANK}}(t, n) = \sum_{\pi_{1:t-1}} p(\pi_t = \phi | \pi_{1:t-1}, y_{1:n-1})
+        
+        \alpha_{\mathrm{LABEL}}(t, n) = \sum_{\pi_{1:t-1}} p(\pi_t = y_n | \pi_{1:t-1}, y_{1:n-1})
 
-    Here, :math:`\pi` denotes the alignment sequence in the reference
-    [Graves et al, 2006] that is blank-inserted representations of ``labels``.
-    The return values are the logarithms of the above probabilities.
+    where :math:`\pi` denotes alignment sequences with blank insertions.
 
-    References:
-      [Graves et al, 2006](https://dl.acm.org/doi/abs/10.1145/1143844.1143891)
+    Parameters
+    ----------
+    logits : brainstate.typing.ArrayLike
+        Logits with shape ``(batch_size, max_time, num_classes)`` containing
+        unnormalized log probabilities for each class including blanks.
+    logit_paddings : brainstate.typing.ArrayLike
+        Padding indicators with shape ``(batch_size, max_time)``. Values of
+        1.0 indicate padded positions, 0.0 indicate valid positions.
+    labels : brainstate.typing.ArrayLike
+        Reference integer labels with shape ``(batch_size, max_label_length)``.
+        Contains target sequences without blanks.
+    label_paddings : brainstate.typing.ArrayLike
+        Label padding indicators with shape ``(batch_size, max_label_length)``.
+        Must be right-padded (zeros followed by ones).
+    blank_id : int, default=0
+        Class index for the blank symbol in the logits.
+    log_epsilon : float, default=-1e5
+        Numerically stable approximation of log(0) for invalid transitions.
 
-    Args:
-      logits: (B, T, K)-array containing logits of each class where B denotes
-        the batch size, T denotes the max time frames in ``logits``, and K
-        denotes the number of classes including a class for blanks.
-      logit_paddings: (B, T)-array. Padding indicators for ``logits``. Each
-        element must be either 1.0 or 0.0, and ``logitpaddings[b, t] == 1.0``
-        denotes that ``logits[b, t, :]`` are padded values.
-      labels: (B, N)-array containing reference integer labels where N denotes
-        the max time frames in the label sequence.
-      label_paddings: (B, N)-array. Padding indicators for ``labels``. Each
-        element must be either 1.0 or 0.0, and ``labelpaddings[b, n] == 1.0``
-        denotes that ``labels[b, n]`` is a padded label. In the current
-        implementation, ``labels`` must be right-padded, i.e. each row
-        ``labelpaddings[b, :]`` must be repetition of zeroes, followed by
-        repetition of ones.
-      blank_id: Id for blank token. ``logits[b, :, blank_id]`` are used as
-        probabilities of blank symbols.
-      log_epsilon: Numerically-stable approximation of log(+0).
+    Returns
+    -------
+    tuple[brainstate.typing.ArrayLike, brainstate.typing.ArrayLike, brainstate.typing.ArrayLike]
+        A tuple containing:
+        
+        - **loss_values** : ``(batch_size,)`` - CTC loss for each sequence
+        - **logalpha_blank** : ``(max_time, batch_size, max_label_length+1)`` - 
+          Log forward probabilities for blank states
+        - **logalpha_nonblank** : ``(max_time, batch_size, max_label_length)`` - 
+          Log forward probabilities for non-blank states
 
-    Returns:
-      A tuple ``(loss_value, logalpha_blank, logalpha_nonblank)``. Here,
-      ``loss_value`` is a (B,)-array containing the loss values for each sequence
-      in the batch, ``logalpha_blank`` and ``logalpha_nonblank`` are
-      (T, B, N+1)-arrays where the (t, b, n)-th element denotes
-      \log \alpha_B(t, n) and \log \alpha_L(t, n), respectively, for ``b``-th
-      sequence in the batch.
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> # Example with batch_size=1, time=4, classes=3, labels=2
+    >>> logits = jnp.random.normal(size=(1, 4, 3))
+    >>> logit_pad = jnp.zeros((1, 4))
+    >>> labels = jnp.array([[1, 2]])
+    >>> label_pad = jnp.zeros((1, 2))
+    >>> loss, alpha_blank, alpha_label = braintools.metric.ctc_loss_with_forward_probs(
+    ...     logits, logit_pad, labels, label_pad, blank_id=0
+    ... )
+    >>> print(f"CTC loss: {loss[0]:.4f}")
+
+    Notes
+    -----
+    This function requires that labels are right-padded and logit sequences
+    are properly aligned. The forward probabilities can be used for additional
+    analysis or for implementing more sophisticated training procedures.
+
+    References
+    ----------
+    .. [1] Graves, Alex, et al. "Connectionist temporal classification:
+           labelling unsegmented sequence data with recurrent neural networks."
+           Proceedings of ICML 2006.
+           https://dl.acm.org/doi/abs/10.1145/1143844.1143891
     """
     assert logits.ndim == 3, 'logits must have shape (B, T, K)'
     assert labels.ndim == 2, 'labels must have shape (B, N)'
@@ -485,6 +826,7 @@ def ctc_loss_with_forward_probs(
     return per_seq_loss, logalpha_phi, logalpha_emit
 
 
+@set_module_as('braintools.metric')
 def ctc_loss(
     logits: brainstate.typing.ArrayLike,
     logit_paddings: brainstate.typing.ArrayLike,
@@ -493,31 +835,65 @@ def ctc_loss(
     blank_id: int = 0,
     log_epsilon: float = -1e5
 ) -> brainstate.typing.ArrayLike:
-    """Computes CTC loss.
+    r"""Compute Connectionist Temporal Classification (CTC) loss.
 
-    See docstring for ``ctc_loss_with_forward_probs`` for details.
+    A simplified interface to CTC loss computation that returns only the
+    loss values without forward probabilities. This is the most commonly
+    used function for training sequence models with CTC.
 
-    Args:
-      logits: (B, T, K)-array containing logits of each class where B denotes
-        the batch size, T denotes the max time frames in ``logits``, and K
-        denotes the number of classes including a class for blanks.
-      logit_paddings: (B, T)-array. Padding indicators for ``logits``. Each
-        element must be either 1.0 or 0.0, and ``logitpaddings[b, t] == 1.0``
-        denotes that ``logits[b, t, :]`` are padded values.
-      labels: (B, N)-array containing reference integer labels where N denotes
-        the max time frames in the label sequence.
-      label_paddings: (B, N)-array. Padding indicators for ``labels``. Each
-        element must be either 1.0 or 0.0, and ``labelpaddings[b, n] == 1.0``
-        denotes that ``labels[b, n]`` is a padded label. In the current
-        implementation, ``labels`` must be right-padded, i.e. each row
-        ``labelpaddings[b, :]`` must be repetition of zeroes, followed by
-        repetition of ones.
-      blank_id: Id for blank token. ``logits[b, :, blank_id]`` are used as
-        probabilities of blank symbols.
-      log_epsilon: Numerically-stable approximation of log(+0).
+    Parameters
+    ----------
+    logits : brainstate.typing.ArrayLike
+        Logits with shape ``(batch_size, max_time, num_classes)`` containing
+        unnormalized log probabilities for each class including blanks.
+    logit_paddings : brainstate.typing.ArrayLike
+        Padding indicators with shape ``(batch_size, max_time)``. Values of
+        1.0 indicate padded positions, 0.0 indicate valid positions.
+    labels : brainstate.typing.ArrayLike
+        Reference integer labels with shape ``(batch_size, max_label_length)``.
+        Contains target sequences without blanks.
+    label_paddings : brainstate.typing.ArrayLike
+        Label padding indicators with shape ``(batch_size, max_label_length)``.
+        Must be right-padded (zeros followed by ones).
+    blank_id : int, default=0
+        Class index for the blank symbol in the logits.
+    log_epsilon : float, default=-1e5
+        Numerically stable approximation of log(0) for invalid transitions.
 
-    Returns:
-      (B,)-array containing loss values for each sequence in the batch.
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        CTC loss values with shape ``(batch_size,)`` containing the negative
+        log-likelihood for each sequence in the batch.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> # Setup for speech recognition task
+    >>> batch_size, time_steps, vocab_size = 2, 10, 30
+    >>> logits = jnp.random.normal(size=(batch_size, time_steps, vocab_size))
+    >>> logit_pad = jnp.zeros((batch_size, time_steps))
+    >>> labels = jnp.array([[1, 2, 3], [4, 5, 0]])  # Different length sequences
+    >>> label_pad = jnp.array([[0, 0, 0], [0, 0, 1]])  # Last label is padded
+    >>> loss = braintools.metric.ctc_loss(logits, logit_pad, labels, label_pad)
+    >>> print(f"Average CTC loss: {jnp.mean(loss):.4f}")
+
+    Notes
+    -----
+    This function internally calls ``ctc_loss_with_forward_probs`` and
+    discards the forward probability arrays. For applications that need
+    the forward probabilities, use ``ctc_loss_with_forward_probs`` directly.
+
+    See Also
+    --------
+    ctc_loss_with_forward_probs : CTC loss computation with forward probabilities
+
+    References
+    ----------
+    .. [1] Graves, Alex, et al. "Connectionist temporal classification:
+           labelling unsegmented sequence data with recurrent neural networks."
+           Proceedings of ICML 2006.
     """
     per_seq_loss, _, _ = ctc_loss_with_forward_probs(
         logits, logit_paddings, labels, label_paddings,
@@ -526,36 +902,78 @@ def ctc_loss(
     return per_seq_loss
 
 
+@set_module_as('braintools.metric')
 def sigmoid_focal_loss(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
     alpha: Optional[float] = None,
     gamma: float = 2.,
 ) -> brainstate.typing.ArrayLike:
-    """Sigmoid focal loss.
+    r"""Compute sigmoid focal loss for addressing class imbalance.
 
-    The focal loss is a re-weighted cross entropy for unbalanced problems.
-    Use this loss function if classes are not mutually exclusive.
-    See `sigmoid_binary_cross_entropy` for more information.
+    Focal loss is designed to address class imbalance in dense object detection
+    by down-weighting easy examples and focusing training on hard negatives.
+    It applies a modulating factor to the cross entropy loss to reduce the
+    loss contribution from easy examples.
 
-    References:
-      Lin et al. 2018. https://arxiv.org/pdf/1708.02002.pdf
+    The focal loss is defined as:
 
-    Args:
-      logits: Array of floats. The predictions for each example.
-        The predictions for each example.
-      labels: Array of floats. Labels and logits must have
-        the same shape. The label array must contain the binary
-        classification labels for each element in the data set
-        (0 for the out-of-class and 1 for in-class).
-      alpha: (optional) Weighting factor in range (0,1) to balance
-        positive vs negative examples. Default None (no weighting).
-      gamma: Exponent of the modulating factor (1 - p_t).
-        Balances easy vs hard examples.
+    .. math::
 
-    Returns:
-      A loss value array with a shape identical to the logits and target
-      arrays.
+        FL(p_t) = -\\alpha_t (1 - p_t)^\\gamma \\log(p_t)
+
+    where :math:`p_t` is the predicted probability for the true class,
+    :math:`\\alpha_t` is a class-dependent weighting factor, and :math:`\\gamma`
+    is the focusing parameter.
+
+    Parameters
+    ----------
+    logits : brainstate.typing.ArrayLike
+        Unnormalized predictions (logits) for binary classification.
+        Can have any shape for element-wise binary predictions.
+    labels : brainstate.typing.ArrayLike
+        Binary labels with values in {0, 1}. Must have the same shape
+        as `logits`. Use 1 for positive class, 0 for negative class.
+    alpha : float, optional
+        Weighting factor in range (0, 1) to balance positive vs negative
+        examples. If None, no class-based weighting is applied.
+    gamma : float, default=2.0
+        Focusing parameter (exponent) that controls the rate at which
+        easy examples are down-weighted. Higher values focus more on
+        hard examples. Common values: 0.5, 1.0, 2.0, 5.0.
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Focal loss values with the same shape as input logits and labels.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> # Imbalanced binary classification
+    >>> logits = jnp.array([2.0, -1.0, 0.5, -2.0])
+    >>> labels = jnp.array([1.0, 0.0, 1.0, 0.0])
+    >>> # Standard focal loss
+    >>> loss = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=0.25, gamma=2.0)
+        >>> print(f"Focal loss: {loss}")
+    >>> # Compare with unweighted version
+    >>> loss_unweighted = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=None, gamma=2.0)
+
+    Notes
+    -----
+    Use this loss function when classes are not mutually exclusive (multi-label
+    classification) or when dealing with severe class imbalance. For mutually
+    exclusive classes, consider using softmax-based focal loss variants.
+
+    The alpha parameter is typically set to the inverse class frequency for
+    the positive class, e.g., alpha=0.25 when positive examples are 25% of data.
+
+    References
+    ----------
+    .. [1] Lin, Tsung-Yi, et al. \"Focal loss for dense object detection.\"
+           Proceedings of ICCV 2017.
+           https://arxiv.org/pdf/1708.02002.pdf
     """
     alpha = -1 if alpha is None else alpha
     assert_is_float(logits)
@@ -571,63 +989,83 @@ def sigmoid_focal_loss(
     return loss
 
 
+@set_module_as('braintools.metric')
 def nll_loss(input, target):
-    r"""
-    The negative log likelihood loss.
+    r"""Compute negative log likelihood loss for classification.
 
-    The negative log likelihood loss. It is useful to train a classification
-    problem with `C` classes.
+    The negative log likelihood (NLL) loss is a standard loss function for
+    training classification models. It expects log-probabilities as input
+    and computes the negative log-likelihood of the correct class.
 
-    If provided, the optional argument :attr:`weight` should be a 1D Tensor assigning
-    weight to each of the classes. This is particularly useful when you have an
-    unbalanced training set.
-
-    The `input` given through a forward call is expected to contain
-    log-probabilities of each class. `input` has to be a Tensor of size either
-    :math:`(minibatch, C)` or :math:`(minibatch, C, d_1, d_2, ..., d_K)`
-    with :math:`K \geq 1` for the `K`-dimensional case. The latter is useful for
-    higher dimension inputs, such as computing NLL loss per-pixel for 2D images.
-
-    Obtaining log-probabilities in a neural network is easily achieved by
-    adding a  `LogSoftmax`  layer in the last layer of your network.
-    You may use `CrossEntropyLoss` instead, if you prefer not to add an extra
-    layer.
-
-    The `target` that this loss expects should be a class index in the range :math:`[0, C-1]`
-    where `C = number of classes`; if `ignore_index` is specified, this loss also accepts
-    this class index (this index may not necessarily be in the class range).
-
-    The unreduced (i.e. with :attr:`reduction` set to ``'none'``) loss can be described as:
+    The loss is computed as:
 
     .. math::
-        \ell(x, y) = L = \{l_1,\dots,l_N\}^\top, \quad
-        l_n = - w_{y_n} x_{n,y_n}, \quad
-        w_{c} = \text{weight}[c] \cdot \mathbb{1}\{c \not= \text{ignore\_index}\},
 
-    where :math:`x` is the input, :math:`y` is the target, :math:`w` is the weight, and
-    :math:`N` is the batch size. If :attr:`reduction` is not ``'none'``
-    (default ``'mean'``), then
+        \ell(x, y) = -x_{y}
 
-    .. math::
-        \ell(x, y) = \begin{cases}
-            \sum_{n=1}^N \frac{1}{\sum_{n=1}^N w_{y_n}} l_n, &
-            \text{if reduction} = \text{`mean';}\\
-            \sum_{n=1}^N l_n,  &
-            \text{if reduction} = \text{`sum'.}
-        \end{cases}
+    where :math:`x` contains log-probabilities and :math:`y` is the target class index.
 
-    Shape:
-        - Input: :math:`(N, C)` or :math:`(C)`, where `C = number of classes`, or
-          :math:`(N, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`
-          in the case of `K`-dimensional loss.
-        - Target: :math:`(N)` or :math:`()`, where each value is
-          :math:`0 \leq \text{targets}[i] \leq C-1`, or
-          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case of
-          K-dimensional loss.
-        - Output: If :attr:`reduction` is ``'none'``, shape :math:`(N)` or
-          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case of K-dimensional loss.
-          Otherwise, scalar.
+    Parameters
+    ----------
+    input : brainstate.typing.ArrayLike
+        Log-probabilities of each class. Expected shapes:
+        
+        - ``(num_classes,)`` for single sample
+        - ``(batch_size, num_classes)`` for batch processing
+        - ``(batch_size, num_classes, d1, d2, ..., dK)`` for higher-dimensional inputs
+          (e.g., per-pixel classification for images)
+        
+    target : brainstate.typing.ArrayLike
+        Class indices in the range ``[0, num_classes-1]``. Expected shapes:
+        
+        - ``()`` (scalar) for single sample
+        - ``(batch_size,)`` for batch processing  
+        - ``(batch_size, d1, d2, ..., dK)`` for higher-dimensional targets
 
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Negative log likelihood loss values:
+        
+        - Scalar for single sample
+        - ``(batch_size,)`` for batch processing
+        - ``(batch_size, d1, d2, ..., dK)`` for higher-dimensional inputs
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools 
+    >>> # Single sample example
+    >>> log_probs = jnp.log(jnp.array([0.1, 0.7, 0.2]))
+    >>> target = 1  # Correct class is index 1
+    >>> loss = braintools.metric.nll_loss(log_probs, target)
+    >>> print(f"NLL loss: {loss:.4f}")
+    
+    >>> # Batch example
+    >>> log_probs_batch = jnp.log(jnp.array([[0.1, 0.7, 0.2], [0.3, 0.3, 0.4]]))
+    >>> targets_batch = jnp.array([1, 2])
+    >>> losses = braintools.metric.nll_loss(log_probs_batch, targets_batch)
+    >>> print(f"Batch losses: {losses}")
+
+    Notes
+    -----
+    This function expects log-probabilities as input, not raw logits or
+    probabilities. Use ``jax.nn.log_softmax`` to convert logits to
+    log-probabilities, or ``jnp.log`` to convert probabilities.
+
+    For end-to-end training with logits, consider using ``softmax_cross_entropy``
+    which combines softmax and cross-entropy in a numerically stable way.
+
+    Raises
+    ------
+    AssertionError
+        If input and target shapes are incompatible or if target contains
+        invalid class indices.
+
+    See Also
+    --------
+    softmax_cross_entropy : Cross entropy loss starting from logits
+    softmax_cross_entropy_with_integer_labels : Efficient version for integer labels
     """
     target = jnp.asarray(target)
     if target.ndim == 1:

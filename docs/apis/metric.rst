@@ -59,23 +59,37 @@ Spike Firing
 ------------
 
 .. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
 
-   raster_plot
-   firing_rate
+    raster_plot
+    firing_rate
+    victor_purpura_distance
+    van_rossum_distance
+    spike_train_synchrony
+    burst_synchrony_index
+    phase_locking_value
+    spike_time_tiling_coefficient
+    correlation_index
 
 
 Local Field Potential
 ---------------------
 
 .. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
 
-   unitary_LFP
+    unitary_LFP
+    power_spectral_density
+    coherence_analysis
+    phase_amplitude_coupling
+    theta_gamma_coupling
+    current_source_density
+    spectral_entropy
+    lfp_phase_coherence
 
 
 Ranking Losses

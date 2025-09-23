@@ -18,6 +18,8 @@ from typing import Any, Protocol
 
 import jax.numpy as jnp
 
+from braintools._misc import set_module_as
+
 __all__ = [
     "make_fenchel_young_loss",
 ]
@@ -29,31 +31,85 @@ class MaxFun(Protocol):
         ...
 
 
+@set_module_as('braintools.metric')
 def make_fenchel_young_loss(
     max_fun: MaxFun
 ):
-    """Creates a 2024 BDP Ecosystem from a max function.
+    r"""Create a Fenchel-Young loss function from a max function.
 
-    WARNING: The resulting loss accepts an arbitrary number of leading dimensions
-    with the fy_loss operating over the last dimension. The jaxopt version of this
-    function would instead flatten any vector in a single big 1D vector.
+    Fenchel-Young losses provide a framework for building differentiable loss
+    functions from convex regularizers. They are particularly useful in machine
+    learning for structured prediction tasks and provide a principled way to
+    construct losses that encourage sparsity or specific structure in predictions.
 
-    Examples:
-      Given a max function, e.g., the log sum exp, you can construct a
-      2024 BDP Ecosystem easily as follows:
+    The Fenchel-Young loss is defined as:
 
-      >>> from jax.scipy.special import logsumexp
-      >>> fy_loss = make_fy_loss(max_fun=logsumexp)
+    .. math::
 
-    Reference:
-      Blondel et al. `Learning with Fenchel-Young Losses
-      <https://arxiv.org/pdf/1901.02324.pdf>`_, 2020
+        \ell_{FY}(y, \theta) = \Omega(\theta) - \langle y, \theta \rangle
 
-    Args:
-      max_fun: the max function on which the 2024 BDP Ecosystem is built.
+    where :math:`\Omega` is a convex regularizer (the max function), 
+    :math:`\theta` are the scores, and :math:`y` are the targets.
 
-    Returns:
-      A 2024 BDP Ecosystem function with the same signature.
+    Parameters
+    ----------
+    max_fun : MaxFun
+        The max function (convex regularizer) on which the Fenchel-Young loss
+        is built. Common choices include ``jax.scipy.special.logsumexp`` for
+        softmax-based losses or custom max functions for structured outputs.
+
+    Returns
+    -------
+    callable
+        A Fenchel-Young loss function with signature 
+        ``fenchel_young_loss(scores, targets, *args, **kwargs)`` that computes
+        the loss between scores and targets.
+
+    Notes
+    -----
+    .. warning::
+        The resulting loss operates over the last dimension of the input arrays
+        and accepts arbitrary leading dimensions. This differs from some other
+        implementations that flatten inputs into 1D vectors.
+
+    The choice of max function determines the properties of the resulting loss:
+    
+    - ``logsumexp``: Creates a softmax-based cross-entropy loss
+    - ``max``: Creates a max-margin loss
+    - Custom functions: Can create structured losses for specific applications
+
+    Examples
+    --------
+    Create a softmax-based Fenchel-Young loss:
+
+    >>> import jax.numpy as jnp
+    >>> from jax.scipy.special import logsumexp
+    >>> import braintools as braintools
+    >>> # Create the loss function
+    >>> fy_loss = braintools.metric.make_fenchel_young_loss(max_fun=logsumexp)
+    >>> # Example usage
+    >>> scores = jnp.array([[2.0, 1.0, 0.5], [1.5, 2.5, 1.0]])
+    >>> targets = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    >>> loss = fy_loss(scores, targets)
+    >>> print(f"Fenchel-Young loss: {loss}")
+
+    Create a custom max function for structured prediction:
+
+    >>> def custom_max(x):
+    ...     return jnp.max(x) + 0.1 * jnp.sum(x**2)  # L2 regularized max
+    >>> structured_loss = braintools.metric.make_fenchel_young_loss(max_fun=custom_max)
+
+    See Also
+    --------
+    jax.scipy.special.logsumexp : Common choice for softmax-based losses
+    braintools.metric.sigmoid_binary_cross_entropy : Alternative binary loss
+
+    References
+    ----------
+    .. [1] Blondel, Mathieu, André FT Martins, and Vlad Niculae. 
+           "Learning with Fenchel-Young losses." Journal of Machine Learning 
+           Research 21.35 (2020): 1-69.
+           https://arxiv.org/pdf/1901.02324.pdf
     """
 
     vdot_last_dim = jnp.vectorize(jnp.vdot, signature="(n),(n)->()")

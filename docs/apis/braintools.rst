@@ -10,9 +10,20 @@ Spike Encoders
 --------------
 
 .. autosummary::
-   :toctree: generated/
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
 
     LatencyEncoder
+    RateEncoder
+    PoissonEncoder
+    PopulationEncoder
+    BernoulliEncoder
+    DeltaEncoder
+    StepCurrentEncoder
+    SpikeCountEncoder
+    TemporalEncoder
+    RankOrderEncoder
 
 
 
@@ -20,7 +31,9 @@ Spike Operations
 ----------------
 
 .. autosummary::
-   :toctree: generated/
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
 
     spike_bitwise_or
     spike_bitwise_and
@@ -36,7 +49,9 @@ Parameter Transformations
 -------------------------
 
 .. autosummary::
-   :toctree: generated/
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
 
     Transform
     IdentityTransform

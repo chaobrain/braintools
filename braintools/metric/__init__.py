@@ -23,6 +23,8 @@ from ._firings import *
 from ._firings import __all__ as _firings_all
 from ._lfp import *
 from ._lfp import __all__ as _lfp_all
+from ._pariwise import *
+from ._pariwise import __all__ as _pariwise_all
 from ._ranking import *
 from ._ranking import __all__ as _ranking_all
 from ._regression import *
@@ -30,17 +32,15 @@ from ._regression import __all__ as _regression_all
 from ._smoothing import *
 from ._smoothing import __all__ as _smoothing_all
 
-__all__ = (
-    _classification_all
-    + _correlation_all
-    + _fenchel_young_all
-    + _firings_all
-    + _lfp_all
-    + _ranking_all
-    + _regression_all
-    + _smoothing_all
+__all__ = _classification_all + _correlation_all + _fenchel_young_all + _firings_all + _lfp_all
+__all__ = __all__ + _ranking_all + _regression_all + _smoothing_all + _pariwise_all
+del (
+    _classification_all,
+    _correlation_all,
+    _fenchel_young_all,
+    _firings_all,
+    _lfp_all, _ranking_all,
+    _regression_all,
+    _smoothing_all,
+    _pariwise_all,
 )
-del (_classification_all, _correlation_all,
-     _fenchel_young_all, _firings_all,
-     _lfp_all, _ranking_all,
-     _regression_all, _smoothing_all)

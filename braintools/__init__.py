@@ -14,13 +14,14 @@
 # ==============================================================================
 
 
-__version__ = "0.0.11"
+__version_info__ = (0, 0, 12)
+__version__ = "0.0.12"
 
 from . import file
-from . import quad
 from . import input
 from . import metric
 from . import optim
+from . import quad
 from . import tree
 from . import visualize
 from ._others import *

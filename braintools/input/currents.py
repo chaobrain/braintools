@@ -83,8 +83,10 @@ def section_input(
     all_duration = None
     currents = []
     for c_size, duration in zip(values, durations):
-        current = u.math.ones((int(np.ceil(u.maybe_decimal(duration / dt))),) + i_shape,
-                              dtype=brainstate.environ.dftype())
+        current = u.math.ones(
+            (int(np.ceil(u.maybe_decimal(duration / dt))),) + i_shape,
+            dtype=brainstate.environ.dftype()
+        )
         current = current * c_size
         currents.append(current)
         if all_duration is None:
@@ -100,7 +102,10 @@ def section_input(
         return currents
 
 
-def constant_input(I_and_duration, dt=None):
+def constant_input(
+    I_and_duration,
+    dt=None
+):
     """Format constant input in durations.
 
     For example:
@@ -145,7 +150,13 @@ def constant_input(I_and_duration, dt=None):
     return u.math.concatenate(currents, axis=0), I_duration
 
 
-def spike_input(sp_times, sp_lens, sp_sizes, duration, dt=None):
+def spike_input(
+    sp_times,
+    sp_lens,
+    sp_sizes,
+    duration,
+    dt=None
+):
     """Format current input like a series of short-time spikes.
 
     For example:
@@ -196,7 +207,14 @@ def spike_input(sp_times, sp_lens, sp_sizes, duration, dt=None):
     return u.maybe_decimal(current)
 
 
-def ramp_input(c_start, c_end, duration, t_start=0, t_end=None, dt=None):
+def ramp_input(
+    c_start,
+    c_end,
+    duration,
+    t_start=0,
+    t_end=None,
+    dt=None
+):
     """Get the gradually changed input current.
 
     Parameters
@@ -232,7 +250,14 @@ def ramp_input(c_start, c_end, duration, t_start=0, t_end=None, dt=None):
     return u.maybe_decimal(current)
 
 
-def wiener_process(duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
+def wiener_process(
+    duration,
+    dt=None,
+    n=1,
+    t_start=0.,
+    t_end=None,
+    seed=None
+):
     """Stimulus sampled from a Wiener process, i.e.
     drawn from standard normal distribution N(0, sqrt(dt)).
 
@@ -268,7 +293,17 @@ def wiener_process(duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
     return u.maybe_decimal(currents)
 
 
-def ou_process(mean, sigma, tau, duration, dt=None, n=1, t_start=0., t_end=None, seed=None):
+def ou_process(
+    mean,
+    sigma,
+    tau,
+    duration,
+    dt=None,
+    n=1,
+    t_start=0.,
+    t_end=None,
+    seed=None
+):
     r"""Ornstein–Uhlenbeck input.
 
     .. math::
@@ -317,7 +352,15 @@ def ou_process(mean, sigma, tau, duration, dt=None, n=1, t_start=0., t_end=None,
     return u.maybe_decimal(currents)
 
 
-def sinusoidal_input(amplitude, frequency, duration, dt=None, t_start=0., t_end=None, bias=False):
+def sinusoidal_input(
+    amplitude,
+    frequency,
+    duration,
+    dt=None,
+    t_start=0.,
+    t_end=None,
+    bias=False
+):
     """Sinusoidal input.
 
     Parameters
@@ -382,7 +425,15 @@ def _square(t, duty=0.5):
     return y
 
 
-def square_input(amplitude, frequency, duration, dt=None, bias=False, t_start=None, t_end=None):
+def square_input(
+    amplitude,
+    frequency,
+    duration,
+    dt=None,
+    bias=False,
+    t_start=None,
+    t_end=None
+):
     """Oscillatory square input.
 
     Parameters
