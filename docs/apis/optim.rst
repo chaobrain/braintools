@@ -9,5 +9,6 @@
    :nosignatures:
    :template: classtemplate.rst
 
+   Optimizer
    NevergradOptimizer
    ScipyOptimizer
