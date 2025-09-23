@@ -36,6 +36,19 @@ ODE Numerical Integrators
 
 
 
+IMEX Numerical Integrators
+--------------------------
+
+.. autosummary::
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
+
+    imex_euler_step
+    imex_ars222_step
+    imex_cnab_step
+
+
 SDE Numerical Integrators
 -------------------------
 
