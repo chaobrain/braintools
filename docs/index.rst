@@ -135,6 +135,8 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     :maxdepth: 2
     :caption: Spike Encodings
 
+    spike_encoding.ipynb
+
 
 
 .. toctree::

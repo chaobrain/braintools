@@ -1,4 +1,4 @@
-# Tools/utilities for brain dynamics programming
+# Common tools for brain modeling
 
 <p align="center">
   	<img alt="Header image of braintools." src="https://raw.githubusercontent.com/chaobrain/braintools/main/docs/_static/braintools.jpg" width=50%>
@@ -16,7 +16,7 @@
 </p>
 
 
-[``braintools``](https://github.com/brainpy/braintools) provides common toolboxes for brain dynamics programming (BDP). 
+[``braintools``](https://github.com/brainpy/braintools) provides common toolboxes for brain modeling. 
 
 
 ## Installation
