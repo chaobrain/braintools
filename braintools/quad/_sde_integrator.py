@@ -33,14 +33,12 @@ draw Gaussian noise using ``brainstate.random``. Noise is applied per PyTree
 leaf and scaled by ``sqrt(dt)``.
 """
 
-from typing import Callable, Any
+from typing import Callable, Any, Union
 
+import brainstate
 import brainunit as u
 import jax
 import jax.numpy as jnp
-from brainstate import environ, random
-from brainstate.augment import vector_grad
-from brainstate.typing import PyTree, ArrayLike
 
 __all__ = [
     'sde_euler_step',
@@ -48,9 +46,9 @@ __all__ = [
     'sde_expeuler_step',
 ]
 
-DT = ArrayLike
-DF = Callable[[PyTree, DT, ...], PyTree]
-DG = Callable[[PyTree, DT, ...], PyTree]
+DT = Union[float, u.Quantity]
+DF = Callable[[brainstate.typing.PyTree, DT, ...], brainstate.typing.PyTree]
+DG = Callable[[brainstate.typing.PyTree, DT, ...], brainstate.typing.PyTree]
 
 
 def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
@@ -60,7 +58,7 @@ def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
 def sde_euler_step(
     df: DF,
     dg: DG,
-    y: PyTree,
+    y: brainstate.typing.PyTree,
     t: DT,
     *args,
     sde_type: str = 'ito',
@@ -83,7 +81,7 @@ def sde_euler_step(
         Diffusion function ``g(y, t, *args)`` returning a PyTree matching ``y``.
     y : PyTree
         Current state.
-    t : ArrayLike
+    t : float or brainunit.Quantity
         Current time (scalar or array broadcastable with ``y`` leaves).
     *args
         Extra arguments passed to ``df`` and ``dg``.
@@ -95,6 +93,11 @@ def sde_euler_step(
     PyTree
         The updated state ``y_{n+1}`` with the same tree structure as ``y``.
 
+    See Also
+    --------
+    sde_milstein_step : Milstein scheme (strong order 1.0).
+    sde_expeuler_step : Exponential Euler with linearized drift.
+
     Notes
     -----
     - Strong order 0.5, weak order 1.0.
@@ -103,10 +106,10 @@ def sde_euler_step(
     """
     assert sde_type in ['ito']
 
-    dt = environ.get_dt()
+    dt = brainstate.environ.get_dt()
     dt_sqrt = jnp.sqrt(dt)
     y_bars = tree_map(
-        lambda y0, drift, diffusion: y0 + drift * dt + diffusion * random.randn_like(y0) * dt_sqrt,
+        lambda y0, drift, diffusion: y0 + drift * dt + diffusion * brainstate.random.randn(*y0.shape) * dt_sqrt,
         y,
         df(y, t, *args),
         dg(y, t, *args),
@@ -117,7 +120,7 @@ def sde_euler_step(
 def sde_milstein_step(
     df: DF,
     dg: DG,
-    y: PyTree,
+    y: brainstate.typing.PyTree,
     t: DT,
     *args,
     sde_type: str = 'ito',
@@ -145,7 +148,7 @@ def sde_milstein_step(
         Diffusion function ``g(y, t, *args)``.
     y : PyTree
         Current state.
-    t : ArrayLike
+    t : float or brainunit.Quantity
         Current time.
     *args
         Extra arguments forwarded to ``df`` and ``dg``.
@@ -157,6 +160,11 @@ def sde_milstein_step(
     PyTree
         The updated state ``y_{n+1}``.
 
+    See Also
+    --------
+    sde_euler_step : Euler–Maruyama scheme.
+    sde_expeuler_step : Exponential Euler with linearized drift.
+
     Notes
     -----
     - Strong order 1.0 (Ito), offering higher accuracy than Euler–Maruyama.
@@ -165,8 +173,8 @@ def sde_milstein_step(
     """
     assert sde_type in ['ito', 'stra']
 
-    dt = environ.get_dt()
-    dt_sqrt = jnp.sqrt(dt)
+    dt = brainstate.environ.get_dt()
+    dt_sqrt = u.math.sqrt(dt)
 
     # drift values
     drifts = df(y, t, *args)
@@ -180,7 +188,7 @@ def sde_milstein_step(
 
     # integral results
     def f_integral(y0, drift, diffusion, diffusion_bar):
-        noise = random.randn_like(y0) * dt_sqrt
+        noise = brainstate.random.randn(*y0.shape) * dt_sqrt
         noise_p2 = (noise ** 2 - dt) if sde_type == 'ito' else noise ** 2
         minus = (diffusion_bar - diffusion) / 2 / dt_sqrt
         return y0 + drift * dt + diffusion * noise + minus * noise_p2
@@ -192,7 +200,7 @@ def sde_milstein_step(
 def sde_expeuler_step(
     df: DF,
     dg: DG,
-    y: PyTree,
+    y: brainstate.typing.ArrayLike,
     t: DT,
     *args,
 ):
@@ -211,7 +219,7 @@ def sde_expeuler_step(
         Diffusion function ``g(y, t, *args)``.
     y : PyTree
         Current state. Must have a floating dtype.
-    t : ArrayLike
+    t : float or brainunit.Quantity
         Current time.
     *args
         Extra arguments forwarded to ``df`` and ``dg``. The first extra argument
@@ -222,6 +230,11 @@ def sde_expeuler_step(
     -------
     PyTree
         The updated state ``y_{n+1}`` with the same structure as ``y``.
+
+    See Also
+    --------
+    sde_euler_step : Euler–Maruyama scheme.
+    sde_milstein_step : Milstein scheme (strong order 1.0).
 
     Notes
     -----
@@ -239,14 +252,14 @@ def sde_expeuler_step(
         )
 
     # drift
-    dt = environ.get('dt')
-    linear, derivative = vector_grad(df, argnums=0, return_value=True)(y, t, *args)
+    dt = brainstate.environ.get('dt')
+    linear, derivative = brainstate.transform.vector_grad(df, argnums=0, return_value=True)(y, t, *args)
     linear = u.Quantity(u.get_mantissa(linear), u.get_unit(derivative) / u.get_unit(linear))
     phi = u.math.exprel(dt * linear)
     x_next = y + dt * phi * derivative
 
     # diffusion
-    diffusion_part = dg(y, t, *args) * u.math.sqrt(dt) * random.randn_like(args[0])
+    diffusion_part = dg(y, t, *args) * u.math.sqrt(dt) * brainstate.random.randn(*args[0].shape)
     if u.get_dim(x_next) != u.get_dim(diffusion_part):
         drift_unit = u.get_unit(x_next)
         time_unit = u.get_unit(dt)

@@ -13,6 +13,28 @@
 # limitations under the License.
 # ==============================================================================
 
+"""
+Lightweight one-step integrators for ODEs and SDEs.
+
+This submodule provides compact, JAX-friendly stepping functions for ordinary
+and stochastic differential equations that operate directly on JAX PyTrees. All
+steppers use the global time step ``dt`` from ``brainstate.environ`` so they can
+be dropped into simulation loops with minimal boilerplate.
+
+Available
+---------
+- ODE: ``ode_euler_step``, ``ode_rk2_step``, ``ode_rk3_step``, ``ode_rk4_step``,
+  ``ode_expeuler_step``.
+- SDE: ``sde_euler_step`` (Euler–Maruyama), ``sde_milstein_step``,
+  ``sde_expeuler_step``.
+
+Notes
+-----
+- Steppers accept arbitrary PyTrees as state and return an updated PyTree with
+  the same structure.
+- Where applicable, units are handled via ``brainunit``; pass times and states
+  as quantities to keep dimensionality consistent.
+"""
 
 from ._ode_integrator import *
 from ._ode_integrator import __all__ as ode_all

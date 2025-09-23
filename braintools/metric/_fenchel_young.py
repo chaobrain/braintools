@@ -32,7 +32,7 @@ class MaxFun(Protocol):
 def make_fenchel_young_loss(
     max_fun: MaxFun
 ):
-    """Creates a 2024 BDP Ecosystem from a max function.
+    """Make a Fenchel-Young loss from a max function.
 
     WARNING: The resulting loss accepts an arbitrary number of leading dimensions
     with the fy_loss operating over the last dimension. The jaxopt version of this

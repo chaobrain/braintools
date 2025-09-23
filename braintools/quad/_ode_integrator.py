@@ -13,15 +13,21 @@
 # limitations under the License.
 # ==============================================================================
 
+"""
+Ordinary differential equation (ODE) one-step integrators.
+
+Compact, JAX-friendly steppers that operate on arbitrary PyTrees and use the
+global time step ``dt`` from ``brainstate.environ``. Methods include Euler and
+Runge–Kutta families as well as an exponential Euler variant for stiff linear
+parts.
+"""
+
 from typing import Callable, Any
 
+import brainstate
 import brainunit as u
-import jax.numpy as jnp
 import jax
-
-from brainstate import environ
-from brainstate.augment import vector_grad
-from brainstate.typing import PyTree, ArrayLike
+import jax.numpy as jnp
 
 __all__ = [
     'ode_euler_step',
@@ -31,17 +37,17 @@ __all__ = [
     'ode_expeuler_step',
 ]
 
-DT = ArrayLike
-ODE = Callable[[PyTree, float, ...], PyTree]
+DT = brainstate.typing.ArrayLike
+ODE = Callable[[brainstate.typing.PyTree, float | u.Quantity, ...], brainstate.typing.PyTree]
 
 
-def tree_map(f: Callable[..., Any],tree: Any,*rest: Any):
-    return jax.tree.map(f,tree,*rest, is_leaf=u.math.is_quantity)
+def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
+    return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
 
 
 def ode_euler_step(
     f: ODE,
-    y: PyTree,
+    y: brainstate.typing.PyTree,
     t: DT,
     *args
 ):
@@ -61,8 +67,8 @@ def ode_euler_step(
         the time-derivative at ``(y, t)``.
     y : PyTree
         Current state at time ``t``. Any JAX-compatible pytree.
-    t : float
-        Current time.
+    t : float or brainunit.Quantity
+        Current time. If a quantity, units may propagate through derivatives.
     *args
         Additional positional arguments forwarded to ``f``.
 
@@ -71,19 +77,25 @@ def ode_euler_step(
     PyTree
         The updated state ``y_{n+1}`` after one Euler step.
 
+    See Also
+    --------
+    ode_rk2_step : Second-order Runge–Kutta.
+    ode_rk4_step : Fourth-order Runge–Kutta.
+    ode_expeuler_step : Exponential Euler step.
+
     Notes
     -----
     - First-order accurate with local truncation error :math:`\mathcal{O}(\Delta t)`.
-    - Minimal cost, but least accurate among the provided ODE solvers.
+    - Uses ``dt = brainstate.environ.get_dt()`` as the step size.
     """
-    dt = environ.get_dt()
+    dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     return tree_map(lambda x, _k1: x + dt * _k1, y, k1)
 
 
 def ode_rk2_step(
     f: ODE,
-    y: PyTree,
+    y: brainstate.typing.PyTree,
     t: DT,
     *args
 ):
@@ -104,7 +116,7 @@ def ode_rk2_step(
         Right-hand side function ``f(y, t, *args) -> PyTree``.
     y : PyTree
         Current state at time ``t``.
-    t : float
+    t : float or brainunit.Quantity
         Current time.
     *args
         Additional positional arguments forwarded to ``f``.
@@ -118,7 +130,7 @@ def ode_rk2_step(
     -----
     Second-order accurate with local truncation error :math:`\mathcal{O}(\Delta t^2)`.
     """
-    dt = environ.get_dt()
+    dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     k2 = f(tree_map(lambda x, k: x + dt * k, y, k1), t + dt, *args)
     return tree_map(lambda x, _k1, _k2: x + dt / 2 * (_k1 + _k2), y, k1, k2)
@@ -126,7 +138,7 @@ def ode_rk2_step(
 
 def ode_rk3_step(
     f: ODE,
-    y: PyTree,
+    y: brainstate.typing.PyTree,
     t: DT,
     *args
 ):
@@ -148,7 +160,7 @@ def ode_rk3_step(
         Right-hand side function ``f(y, t, *args) -> PyTree``.
     y : PyTree
         Current state at time ``t``.
-    t : float
+    t : float or brainunit.Quantity
         Current time.
     *args
         Additional positional arguments forwarded to ``f``.
@@ -162,7 +174,7 @@ def ode_rk3_step(
     -----
     Third-order accurate with local truncation error :math:`\mathcal{O}(\Delta t^3)`.
     """
-    dt = environ.get_dt()
+    dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args)
     k3 = f(tree_map(lambda x, k1_val, k2_val: x - dt * k1_val + 2 * dt * k2_val, y, k1, k2), t + dt, *args)
@@ -171,7 +183,7 @@ def ode_rk3_step(
 
 def ode_rk4_step(
     f: ODE,
-    y: PyTree,
+    y: brainstate.typing.PyTree,
     t: DT,
     *args
 ):
@@ -182,7 +194,7 @@ def ode_rk4_step(
 
     .. math::
 
-        k_1 = f(y_n, t_n),\quad
+        k_1 = f(y_n, t_n),\\
         k_2 = f\big(y_n + \tfrac{\Delta t}{2}k_1,\ t_n + \tfrac{\Delta t}{2}\big),\\
         k_3 = f\big(y_n + \tfrac{\Delta t}{2}k_2,\ t_n + \tfrac{\Delta t}{2}\big),\\
         k_4 = f\big(y_n + \Delta t\,k_3,\ t_n + \Delta t\big),\\
@@ -208,7 +220,7 @@ def ode_rk4_step(
     -----
     Fourth-order accurate with local truncation error :math:`\mathcal{O}(\Delta t^4)`.
     """
-    dt = environ.get_dt()
+    dt = brainstate.environ.get_dt()
     k1 = f(y, t, *args)
     k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args)
     k3 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k2), t + dt / 2, *args)
@@ -221,12 +233,12 @@ def ode_rk4_step(
 
 def ode_expeuler_step(
     f: ODE,
-    y: PyTree,
+    y: brainstate.typing.ArrayLike,
     t: DT,
     *args
 ):
     r"""
-    One-step Exponential Euler method for solving ODEs.
+    One-step Exponential Euler method for ODEs with linearized drift.
 
     Examples
     --------
@@ -242,14 +254,21 @@ def ode_expeuler_step(
     If the variable ( x ) has units of ( [X] ), then the diffusion term ( \text{diffusion_fn}(x) )
     should have units of ( [X]/\sqrt{[T]} ).
 
-    Args:
-        fun: Callable. The function to be solved.
-        diffusion: Callable. The diffusion function.
-        *args: The input arguments.
-        drift: Callable. The drift function.
+    Parameters
+    ----------
+    f : callable
+        Drift function ``f(y, t, *args)`` used in the exponential update.
+    y : PyTree
+        Current state. Must have a floating dtype.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
 
-    Returns:
-        The one-step solution of the ODE.
+    Returns
+    -------
+    PyTree
+        The updated state ``y_{n+1}``.
     """
     assert callable(f), 'The input function should be callable.'
     if u.math.get_dtype(y) not in [jnp.float32, jnp.float64, jnp.float16, jnp.bfloat16]:
@@ -257,8 +276,8 @@ def ode_expeuler_step(
             f'The input data type should be float64, float32, float16, or bfloat16 '
             f'when using Exponential Euler method. But we got {y.dtype}.'
         )
-    dt = environ.get('dt')
-    linear, derivative = vector_grad(f, argnums=0, return_value=True)(y, t, *args)
+    dt = brainstate.environ.get('dt')
+    linear, derivative = brainstate.transform.vector_grad(f, argnums=0, return_value=True)(y, t, *args)
     linear = u.Quantity(u.get_mantissa(linear), u.get_unit(derivative) / u.get_unit(linear))
     phi = u.math.exprel(dt * linear)
     x_next = y + dt * phi * derivative
