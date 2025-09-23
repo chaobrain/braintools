@@ -38,12 +38,15 @@ __all__ = [
     'ode_midpoint_step',
     'ode_heun_step',
     'ode_rk4_38_step',
-    'ode_rk45_step',
-    'ode_rk23_step',
-    'ode_dopri5_step',
-    'ode_rkf45_step',
-    'ode_ssprk33_step',
-    'ode_dopri8_step',
+    'ode_rk45_step',  # Cash–Karp 4(5)
+    'ode_rk23_step',  # Bogacki–Shampine 2(3)
+    'ode_dopri5_step', 'ode_rk45_dopri_step',  # Dormand–Prince 5(4)
+    'ode_rkf45_step',  # RK–Fehlberg 4(5)
+    'ode_ssprk33_step',  # SSPRK(3,3)
+    'ode_dopri8_step', 'ode_rk87_dopri_step',  # Dormand–Prince 8(7) (DOP853)
+    'ode_bs32_step',  # Bogacki–Shampine 3(2) alias
+    'ode_ralston2_step',  # Ralston RK2
+    'ode_ralston3_step',  # Ralston RK3
 ]
 
 DT = brainstate.typing.ArrayLike
@@ -690,6 +693,9 @@ def ode_dopri5_step(
     return y5th, err
 
 
+ode_rk45_dopri_step = ode_dopri5_step
+
+
 def ode_rkf45_step(
     f: ODE,
     y: brainstate.typing.PyTree,
@@ -810,6 +816,117 @@ def ode_ssprk33_step(
     k3 = f(y2, t + dt * 0.5, *args)
     y3 = tree_map(lambda x, y2_, a3: (1.0 / 3.0) * x + (2.0 / 3.0) * (y2_ + dt * a3), y, y2, k3)
     return y3
+
+
+def ode_bs32_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+    return_error: bool = False,
+):
+    r"""
+    Bogacki–Shampine 3(2) (BS32) embedded one-step method.
+
+    Alias of ``ode_rk23_step`` using the 3(2) naming convention. Produces a
+    3rd-order solution with a 2nd-order embedded error estimate.
+
+    Parameters
+    ----------
+    f, y, t, *args, return_error
+        Same as for ``ode_rk23_step``.
+
+    Returns
+    -------
+    PyTree or tuple
+        3rd-order updated state. If ``return_error=True``, returns
+        ``(y_next, error_estimate)``.
+    """
+    return ode_rk23_step(f, y, t, *args, return_error=return_error)
+
+
+def ode_ralston2_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args
+):
+    r"""
+    Ralston's 2nd-order Runge–Kutta method (minimized truncation error).
+
+    Butcher tableau
+    ----------------
+    - c = [0, 2/3]
+    - a21 = 2/3
+    - b = [1/4, 3/4]
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+
+    Returns
+    -------
+    PyTree
+        The updated state after one Ralston RK2 step.
+    """
+    dt = brainstate.environ.get_dt()
+    k1 = f(y, t, *args)
+    y2 = tree_map(lambda x, a: x + dt * (2.0 / 3.0) * a, y, k1)
+    k2 = f(y2, t + dt * (2.0 / 3.0), *args)
+    return tree_map(lambda x, _k1, _k2: x + dt * ((1.0 / 4.0) * _k1 + (3.0 / 4.0) * _k2), y, k1, k2)
+
+
+def ode_ralston3_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args
+):
+    r"""
+    Ralston's 3rd-order Runge–Kutta method (optimized RK3).
+
+    Butcher tableau
+    ----------------
+    - c = [0, 1/2, 3/4]
+    - a21 = 1/2; a31 = 0, a32 = 3/4
+    - b = [2/9, 1/3, 4/9]
+
+    Note
+    ----
+    This RK3 equals the 3rd-order solution of the Bogacki–Shampine 3(2) pair;
+    see ``ode_rk23_step``/``ode_bs32_step`` for the embedded variant.
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+
+    Returns
+    -------
+    PyTree
+        The updated state after one Ralston RK3 step.
+    """
+    dt = brainstate.environ.get_dt()
+    k1 = f(y, t, *args)
+    y2 = tree_map(lambda x, a: x + dt * 0.5 * a, y, k1)
+    k2 = f(y2, t + dt * 0.5, *args)
+    y3 = tree_map(lambda x, a: x + dt * 0.75 * a, y, k2)
+    k3 = f(y3, t + dt * 0.75, *args)
+    return tree_map(lambda x, _k1, _k2, _k3: x + dt * ((2.0 / 9.0) * _k1 + (1.0 / 3.0) * _k2 + (4.0 / 9.0) * _k3),
+                    y, k1, k2, k3)
 
 
 def ode_dopri8_step(
@@ -1010,3 +1127,6 @@ def ode_dopri8_step(
 
     err = jax.tree.map(err_leaf, err5, err3, is_leaf=u.math.is_quantity)
     return y8, err
+
+
+ode_rk87_dopri_step = ode_dopri8_step
