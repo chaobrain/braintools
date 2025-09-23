@@ -33,6 +33,11 @@ sys.path.insert(0, os.path.abspath('../'))
 
 import braintools
 
+import shutil
+
+shutil.copy('../changelog.md', 'apis/changelog.md')
+
+
 # -- Project information -----------------------------------------------------
 
 project = 'braintools'

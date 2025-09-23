@@ -3,8 +3,6 @@
 
 `braintools <https://github.com/brainpy/braintools>`_ implements the common toolboxes for brain simulation.
 
-----
-
 
 Overview
 ^^^^^^^^
@@ -21,7 +19,7 @@ utilities used throughout computational neuroscience workflows:
 - And more to come...
 
 The project favors a simple, well‑typed functional style that plays nicely with
-JIT/VMAP and works out‑of‑the‑box with `brainstate <https://brainstate.readthedocs.io/>`_
+jit/vmap and works out‑of‑the‑box with `brainstate <https://brainstate.readthedocs.io/>`_
 and `brainunit <https://brainunit.readthedocs.io/>`_.
 
 
@@ -150,6 +148,13 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     :caption: Visualization
 
 
+
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+    :caption: Optimizations
+
+    nevergrad_optimizer.ipynb
 
 
 .. toctree::
