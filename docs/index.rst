@@ -64,6 +64,7 @@ BrainTools is one part of our `brain modeling ecosystem <https://brainmodeling.r
     regression_losses.ipynb
     ranking_learning_to_rank.ipynb
     pairwise_embedding_similarity.ipynb
+    spiking_metrics.ipynb
 
 
 
