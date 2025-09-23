@@ -21,7 +21,6 @@ This module is rewritten from the Flax APIs (https://github.com/google/flax).
 import enum
 import logging
 import os
-import re
 import shutil
 import sys
 import threading
@@ -29,7 +28,7 @@ import time
 import warnings
 from concurrent.futures import thread
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 import brainstate
 import brainunit as u
@@ -42,7 +41,9 @@ except (ModuleNotFoundError, ImportError):
     msgpack = None
 
 __all__ = [
-    'msgpack_save', 'msgpack_load', 'AsyncManager',
+    'msgpack_save',
+    'msgpack_load',
+    'AsyncManager',
 ]
 
 
@@ -55,24 +56,6 @@ class AlreadyExistsError(Exception):
 
     def __init__(self, path):
         super().__init__(f'Trying overwrite an existing file: "{path}".')
-
-
-class MPACheckpointingRequiredError(Exception):
-    """To optimally save and restore a multiprocess array (GDA or jax Array outputted from pjit), use GlobalAsyncCheckpointManager.
-
-    You can create an GlobalAsyncCheckpointManager at top-level and pass it as
-    argument::
-
-      from jax.experimental.gda_serialization import serialization as gdas
-      gda_manager = gdas.GlobalAsyncCheckpointManager()
-      brainpy.checkpoints.save(..., gda_manager=gda_manager)
-    """
-
-    def __init__(self, path, step):
-        super().__init__(
-            f'Checkpoint failed at step: "{step}" and path: "{path}": Target '
-            'contains a multiprocess array should be saved/restored with a '
-            'GlobalAsyncCheckpointManager.')
 
 
 class InvalidCheckpointPath(Exception):
@@ -88,50 +71,15 @@ class InvalidCheckpointPath(Exception):
         super().__init__(f'Invalid checkpoint at "{path}".')
 
 
-class InvalidCheckpointError(Exception):
-    """A checkpoint cannot be stored in a directory that already has
-
-    a checkpoint at the current or a later step.
-
-    You can pass ``overwrite=True`` to disable this behavior and
-    overwrite existing checkpoints in the target directory.
-    """
-
-    def __init__(self, path, step):
-        super().__init__(
-            f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".'
-        )
-
-
-_LAST_CHECKPOINT_WRITE_TIME = time.time()
-_READ_CHECKPOINT_EVENT: str = '/jax/checkpoint/read/durations_sec'
-_WRITE_CHECKPOINT_EVENT: str = '/jax/checkpoint/write/durations_sec'
-
-# Single-group reg-exps for int or float numerical substrings.
-# captures sign:
-SIGNED_FLOAT_RE = re.compile(r'([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
-# does not capture sign:
-UNSIGNED_FLOAT_RE = re.compile(r'[-+]?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
-# Module name followed by number.
-MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
-# Alternative schemes handled by `gfile`, e.g. on Google Cloud Storage (GCS).
-SCHEME_RE = re.compile('^(?P<scheme>[a-z][a-z0-9.+-]+://)?(?P<path>.*)', re.I)
-
 # Multiprocess arrays (GlobalDeviceArray, or JAX array with multiprocess
 # sharding) is across processes and will be stored in directories with this
 # postfix, seperated from the non-distributed data (e.g. the larger pytree)
 MP_ARRAY_POSTFIX = '_gda'
-# Occurrences of multiprocess arrays in the target pytree will be
-# replaced by this string placeholder.
-MP_ARRAY_PH = '//GDAPlaceholder:'
 
 # Add a copy-success file to a distributed array directory to indicate the
 # array save is complete.
 # We need this for GCS because GCS's directory move is not atomic.
 COMMIT_SUCCESS_FILE = 'commit_success.txt'
-
-# Orbax main checkpoint file name.
-ORBAX_CKPT_FILENAME = 'checkpoint'
 
 # Chunking array leaves
 
@@ -366,7 +314,7 @@ def _restore_quantity(x: u.Quantity, state_dict: Dict) -> u.Quantity:
         dim=u.Dimension(state_dict['dim']),
         scale=state_dict['scale'],
         base=state_dict['base'],
-        factor=state_dict.get('factor', 1.),
+        factor=state_dict['factor']
     )
     assert x.unit == unit
     return u.Quantity(state_dict['mantissa'], unit=unit)
@@ -729,11 +677,10 @@ def _rename_fn(src, dst, overwrite=False):
 
 
 class AsyncManager(object):
-    """A simple object to track async checkpointing.
+    """
+    A simple object to track async checkpointing.
 
-    How to use: create an instance and pass to `brainpy.checkpoints.save()` calls:
-      am = AsyncManager()
-      brainpy.checkpoints.save(..., async_manager=am)
+    This class is rewritten from the Flax APIs (https://github.com/google/flax).
     """
 
     def __init__(self, max_workers: int = 1):
@@ -760,11 +707,13 @@ class AsyncManager(object):
         self.save_future = self.executor.submit(task)  # type: ignore
 
 
-def _save_commit2(filename: str,
-                  overwrite: bool,
-                  has_mpa: bool,
-                  write_commit_success: bool,
-                  async_manager: Optional[AsyncManager] = None) -> None:
+def _save_commit2(
+    filename: str,
+    overwrite: bool,
+    has_mpa: bool,
+    write_commit_success: bool,
+    async_manager: Optional[AsyncManager] = None
+) -> None:
     """Commit changes after saving checkpoints to disk.
 
     This function does the following, sequentially:
@@ -824,6 +773,8 @@ def msgpack_save(
 ) -> None:
     """
     Save a checkpoint of the model. Suitable for single-host using the ``msgpack`` library.
+
+    This function is rewritten from the Flax APIs (https://github.com/google/flax).
 
     In this method, every JAX process saves the checkpoint on its own. Do not
     use it if you have multiple processes and you intend for them to save data
@@ -885,34 +836,6 @@ def msgpack_save(
         save_main_ckpt_task()
 
 
-def _use_multiprocess_serialization(value: Any) -> bool:
-    """Use GlobalAsyncCheckpointManager to save the array if it's only partially available on this host."""
-    if isinstance(value, jax.Array):
-        return not value.is_fully_addressable
-    return False
-
-
-def _split_mp_arrays(
-    target: Dict[str, Any]
-) -> Tuple[Dict[str, Any], List[Tuple[MultiprocessArrayType, str]]]:
-    """Split out the multiprocess arrays from the target pytree to save."""
-    # When target is a single leaf instead of a pytree dict.
-    if not isinstance(target, dict):
-        if _use_multiprocess_serialization(target):
-            return MP_ARRAY_PH, [(target, '')]
-        return target, []
-    # Traverse the target and handle distributed arrays.
-    flattened = flatten_dict(target, keep_empty_nodes=True)
-    mpa_targets = []
-    for key, value in flattened.items():
-        if _use_multiprocess_serialization(value):
-            subpath = '/'.join(key)
-            mpa_targets.append((value, subpath))
-            flattened[key] = MP_ARRAY_PH + subpath
-    target = unflatten_dict(flattened)
-    return target, mpa_targets
-
-
 def msgpack_load(
     filename: str,
     target: Optional[Any] = None,
@@ -920,6 +843,8 @@ def msgpack_load(
 ) -> brainstate.typing.PyTree:
     """
     Load the checkpoint from the given checkpoint path using the ``msgpack`` library.
+
+    This function is rewritten from the Flax APIs (https://github.com/google/flax).
 
     Parameters
     ----------

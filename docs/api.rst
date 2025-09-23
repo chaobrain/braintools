@@ -2,7 +2,7 @@ API Documentation
 =================
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
    apis/changelog.md
    apis/quad.rst

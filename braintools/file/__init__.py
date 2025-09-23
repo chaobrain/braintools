@@ -19,3 +19,4 @@ from .msg_checkpoint import *
 from .msg_checkpoint import __all__ as _msg_checkpoint_all
 
 __all__ = _matfile_all + _msg_checkpoint_all
+del _matfile_all, _msg_checkpoint_all
