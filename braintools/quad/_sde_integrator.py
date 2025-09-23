@@ -37,7 +37,6 @@ from typing import Callable, Union
 
 import brainstate
 import brainunit as u
-import jax
 import jax.numpy as jnp
 
 from braintools._misc import set_module_as, tree_map, randn_like
@@ -67,6 +66,7 @@ def sde_euler_step(
     t: DT,
     *args,
     sde_type: str = 'ito',
+    **kwargs,
 ):
     r"""One Euler–Maruyama step for Ito SDEs.
 
@@ -109,6 +109,8 @@ def sde_euler_step(
     - Uses ``dt = brainstate.environ.get_dt()`` and Gaussian noise scaled by
       ``sqrt(dt)`` via ``brainstate.random.randn_like`` for each leaf of ``y``.
     """
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     assert sde_type in ['ito']
 
     dt = brainstate.environ.get_dt()
@@ -116,8 +118,8 @@ def sde_euler_step(
     y_bars = tree_map(
         lambda y0, drift, diffusion: y0 + drift * dt + diffusion * randn_like(y0) * dt_sqrt,
         y,
-        df(y, t, *args),
-        dg(y, t, *args),
+        df(y, t, *args, **kwargs),
+        dg(y, t, *args, **kwargs),
     )
     return y_bars
 
@@ -130,6 +132,7 @@ def sde_milstein_step(
     t: DT,
     *args,
     sde_type: str = 'ito',
+    **kwargs,
 ):
     r"""One Milstein step for Ito or Stratonovich SDEs.
 
@@ -177,20 +180,22 @@ def sde_milstein_step(
     - The derivative term is realized via a finite-difference correction using an
       auxiliary diffusion evaluation at an intermediate state.
     """
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     assert sde_type in ['ito', 'stra']
 
     dt = brainstate.environ.get_dt()
     dt_sqrt = u.math.sqrt(dt)
 
     # drift values
-    drifts = df(y, t, *args)
+    drifts = df(y, t, *args, **kwargs)
 
     # diffusion values
-    diffusions = dg(y, t, *args)
+    diffusions = dg(y, t, *args, **kwargs)
 
     # intermediate results
     y_bars = tree_map(lambda y0, drift, diffusion: y0 + drift * dt + diffusion * dt_sqrt, y, drifts, diffusions)
-    diffusion_bars = dg(y_bars, t, *args)
+    diffusion_bars = dg(y_bars, t, *args, **kwargs)
 
     # integral results
     def f_integral(y0, drift, diffusion, diffusion_bar):
@@ -210,6 +215,7 @@ def sde_expeuler_step(
     y: brainstate.typing.ArrayLike,
     t: DT,
     *args,
+    **kwargs,
 ):
     r"""One Exponential Euler step for SDEs with linearized drift.
 
@@ -250,8 +256,8 @@ def sde_expeuler_step(
     - Unit consistency is validated using ``brainunit``; a mismatch between the
       drift update and diffusion units raises a ``ValueError``.
     """
-    assert callable(df), 'The input function should be callable.'
-    assert callable(dg), 'The input function should be callable.'
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     if u.math.get_dtype(y) not in [jnp.float32, jnp.float64, jnp.float16, jnp.bfloat16]:
         raise ValueError(
             f'The input data type should be float64, float32, float16, or bfloat16 '
@@ -260,13 +266,13 @@ def sde_expeuler_step(
 
     # drift
     dt = brainstate.environ.get('dt')
-    linear, derivative = brainstate.transform.vector_grad(df, argnums=0, return_value=True)(y, t, *args)
+    linear, derivative = brainstate.transform.vector_grad(df, argnums=0, return_value=True)(y, t, *args, **kwargs)
     linear = u.Quantity(u.get_mantissa(linear), u.get_unit(derivative) / u.get_unit(linear))
     phi = u.math.exprel(dt * linear)
     x_next = y + dt * phi * derivative
 
     # diffusion
-    diffusion_part = dg(y, t, *args) * u.math.sqrt(dt) * randn_like(args[0])
+    diffusion_part = dg(y, t, *args, **kwargs) * u.math.sqrt(dt) * randn_like(args[0])
     if u.get_dim(x_next) != u.get_dim(diffusion_part):
         drift_unit = u.get_unit(x_next)
         time_unit = u.get_unit(dt)
@@ -287,6 +293,7 @@ def sde_heun_step(
     t: DT,
     *args,
     sde_type: str = 'ito',
+    **kwargs,
 ):
     r"""Stochastic Heun (predictor–corrector) step.
 
@@ -323,14 +330,16 @@ def sde_heun_step(
     PyTree
         The updated state ``y_{n+1}``.
     """
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     assert sde_type in ['ito', 'stra']
 
     dt = brainstate.environ.get_dt()
     dt_sqrt = u.math.sqrt(dt)
 
     # evaluate at start
-    f0 = df(y, t, *args)
-    g0 = dg(y, t, *args)
+    f0 = df(y, t, *args, **kwargs)
+    g0 = dg(y, t, *args, **kwargs)
 
     # shared Brownian increment dW for all stages
     dW = tree_map(lambda y0: randn_like(y0) * dt_sqrt, y)
@@ -339,9 +348,9 @@ def sde_heun_step(
     y_pred = tree_map(lambda y0, a, b, z: y0 + a * dt + b * z, y, f0, g0, dW)
 
     # evaluate at end
-    f1 = df(y_pred, t + dt, *args)
+    f1 = df(y_pred, t + dt, *args, **kwargs)
     if sde_type == 'stra':
-        g1 = dg(y_pred, t + dt, *args)
+        g1 = dg(y_pred, t + dt, *args, **kwargs)
         g_use = tree_map(lambda a, b: 0.5 * (a + b), g0, g1)
     else:
         g_use = g0
@@ -358,6 +367,7 @@ def sde_tamed_euler_step(
     y: brainstate.typing.PyTree,
     t: DT,
     *args,
+    **kwargs,
 ):
     r"""Tamed Euler–Maruyama step (drift taming for superlinear growth).
 
@@ -389,11 +399,13 @@ def sde_tamed_euler_step(
     - Taming is performed elementwise via ``f / (1 + dt * |f|)`` on each leaf.
     - Uses Brownian increment ``dW ~ Normal(0, dt)`` per leaf.
     """
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     dt = brainstate.environ.get_dt()
     dt_sqrt = u.math.sqrt(dt)
 
-    f0 = df(y, t, *args)
-    g0 = dg(y, t, *args)
+    f0 = df(y, t, *args, **kwargs)
+    g0 = dg(y, t, *args, **kwargs)
 
     f_tamed = tree_map(lambda a: a / (1.0 + dt * u.math.abs(a)), f0)
     y_next = tree_map(
@@ -411,6 +423,7 @@ def sde_implicit_euler_step(
     t: DT,
     *args,
     max_iter: int = 2,
+    **kwargs,
 ):
     r"""Implicit (drift-implicit) Euler–Maruyama step via fixed-point iteration.
 
@@ -443,23 +456,25 @@ def sde_implicit_euler_step(
       or provide a more robust nonlinear solver.
     - Diffusion is treated explicitly with ``g(y_n, t_n) dW``.
     """
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     assert max_iter >= 1
 
     dt = brainstate.environ.get_dt()
     dt_sqrt = u.math.sqrt(dt)
 
     # Explicit pieces at start
-    g0 = dg(y, t, *args)
+    g0 = dg(y, t, *args, **kwargs)
     dW = tree_map(lambda y0: randn_like(y0) * dt_sqrt, y)
     diff_inc = tree_map(lambda b, z: b * z, g0, dW)
 
     # Predictor (explicit Euler)
-    y_pred = tree_map(lambda y0, a, inc: y0 + a * dt + inc, y, df(y, t, *args), diff_inc)
+    y_pred = tree_map(lambda y0, a, inc: y0 + a * dt + inc, y, df(y, t, *args, **kwargs), diff_inc)
 
     # Fixed-point iterations on the drift term at t+dt
     y_k = y_pred
     for _ in range(max_iter):
-        y_k = tree_map(lambda y0, inc, fnew: y0 + inc + dt * fnew, y, diff_inc, df(y_k, t + dt, *args))
+        y_k = tree_map(lambda y0, inc, fnew: y0 + inc + dt * fnew, y, diff_inc, df(y_k, t + dt, *args, **kwargs))
 
     return y_k
 
@@ -476,6 +491,7 @@ def sde_srk2_step(
     y: brainstate.typing.PyTree,
     t: DT,
     *args,
+    **kwargs,
 ):
     r"""Stochastic Runge–Kutta 2 (Heun) for Stratonovich SDEs.
 
@@ -498,12 +514,14 @@ def sde_srk2_step(
     PyTree
         The updated state ``y_{n+1}``.
     """
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     dt = brainstate.environ.get_dt()
     dW = _brownian_like(y, dt)
 
-    k1 = tree_map(lambda a, b, z: a * dt + b * z, df(y, t, *args), dg(y, t, *args), dW)
+    k1 = tree_map(lambda a, b, z: a * dt + b * z, df(y, t, *args, **kwargs), dg(y, t, *args, **kwargs), dW)
     y2 = tree_map(lambda y0, k: y0 + k, y, k1)
-    k2 = tree_map(lambda a, b, z: a * dt + b * z, df(y2, t + dt, *args), dg(y2, t + dt, *args), dW)
+    k2 = tree_map(lambda a, b, z: a * dt + b * z, df(y2, t + dt, *args, **kwargs), dg(y2, t + dt, *args, **kwargs), dW)
     y_next = tree_map(lambda y0, a, b: y0 + 0.5 * (a + b), y, k1, k2)
     return y_next
 
@@ -515,6 +533,7 @@ def sde_srk3_step(
     y: brainstate.typing.PyTree,
     t: DT,
     *args,
+    **kwargs,
 ):
     r"""Stochastic Runge–Kutta 3 (Stratonovich; Heun-RK3).
 
@@ -536,11 +555,13 @@ def sde_srk3_step(
     PyTree
         The updated state ``y_{n+1}``.
     """
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     dt = brainstate.environ.get_dt()
     dW = _brownian_like(y, dt)
 
     def F(y_, t_):
-        return tree_map(lambda a, b, z: a * dt + b * z, df(y_, t_, *args), dg(y_, t_, *args), dW)
+        return tree_map(lambda a, b, z: a * dt + b * z, df(y_, t_, *args, **kwargs), dg(y_, t_, *args, **kwargs), dW)
 
     k1 = F(y, t)
     y2 = tree_map(lambda y0, k: y0 + 0.5 * k, y, k1)
@@ -558,6 +579,7 @@ def sde_srk4_step(
     y: brainstate.typing.PyTree,
     t: DT,
     *args,
+    **kwargs,
 ):
     r"""Stochastic Runge–Kutta 4 (Stratonovich; classical RK4).
 
@@ -580,11 +602,13 @@ def sde_srk4_step(
     PyTree
         The updated state ``y_{n+1}``.
     """
+    assert callable(df), 'The drift function should be callable.'
+    assert callable(dg), 'The diffusion function should be callable.'
     dt = brainstate.environ.get_dt()
     dW = _brownian_like(y, dt)
 
     def F(y_, t_):
-        return tree_map(lambda a, b, z: a * dt + b * z, df(y_, t_, *args), dg(y_, t_, *args), dW)
+        return tree_map(lambda a, b, z: a * dt + b * z, df(y_, t_, *args, **kwargs), dg(y_, t_, *args, **kwargs), dW)
 
     k1 = F(y, t)
     y2 = tree_map(lambda y0, k: y0 + 0.5 * k, y, k1)

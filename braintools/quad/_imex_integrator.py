@@ -59,6 +59,7 @@ def imex_euler_step(
     t: DT,
     *args,
     max_iter: int = 2,
+    **kwargs,
 ) -> PyTree:
     """
     First-order IMEX Euler step (explicit + drift-implicit).
@@ -91,10 +92,10 @@ def imex_euler_step(
         The updated state ``y_{n+1}``.
     """
     dt = brainstate.environ.get_dt()
-    rhs_exp = f_exp(y, t, *args)
+    rhs_exp = f_exp(y, t, *args, **kwargs)
 
     def G(Y):
-        return tree_map(lambda y0, fe, fi: y0 + dt * (fe + fi), y, rhs_exp, f_imp(Y, t + dt, *args))
+        return tree_map(lambda y0, fe, fi: y0 + dt * (fe + fi), y, rhs_exp, f_imp(Y, t + dt, *args, **kwargs))
 
     return _fixed_point(G, y, max_iter=max_iter)
 
@@ -107,6 +108,7 @@ def imex_ars222_step(
     t: DT,
     *args,
     max_iter: int = 2,
+    **kwargs,
 ) -> PyTree:
     """
     ARS(2,2,2) IMEX Runge–Kutta step (Ascher–Ruuth–Spiteri).
@@ -148,29 +150,29 @@ def imex_ars222_step(
 
     # Stage 1 (implicit only)
     def G1(Y1):
-        return tree_map(lambda y0, fi: y0 + dt * gamma * fi, y, f_imp(Y1, t + gamma * dt, *args))
+        return tree_map(lambda y0, fi: y0 + dt * gamma * fi, y, f_imp(Y1, t + gamma * dt, *args, **kwargs))
 
     Y1 = _fixed_point(G1, y, max_iter=max_iter)
 
     # Stage 2 (explicit from stage 1, implicit on itself)
-    fE1 = f_exp(Y1, t, *args)  # c_E1 = 0
-    fI1 = f_imp(Y1, t + gamma * dt, *args)
+    fE1 = f_exp(Y1, t, *args, **kwargs)  # c_E1 = 0
+    fI1 = f_imp(Y1, t + gamma * dt, *args, **kwargs)
 
     def G2(Y2):
         return tree_map(
             lambda y0, fe1, fi1, fi2: y0 + dt * (fe1 + (1.0 - gamma) * fi1 + gamma * fi2),
-            y, fE1, fI1, f_imp(Y2, t + dt, *args)
+            y, fE1, fI1, f_imp(Y2, t + dt, *args, **kwargs)
         )
 
     Y2 = _fixed_point(G2, y, max_iter=max_iter)
 
     # Combine stages
-    fE2 = f_exp(Y2, t + dt, *args)
-    fI2 = f_imp(Y2, t + dt, *args)
+    fE2 = f_exp(Y2, t + dt, *args, **kwargs)
+    fI2 = f_imp(Y2, t + dt, *args, **kwargs)
 
     y_next = tree_map(
         lambda y0, fe1, fe2, fi1, fi2: y0 + dt * (
-                (1.0 - gamma) * fe1 + gamma * fe2 + (1.0 - gamma) * fi1 + gamma * fi2),
+            (1.0 - gamma) * fe1 + gamma * fe2 + (1.0 - gamma) * fi1 + gamma * fi2),
         y, fE1, fE2, fI1, fI2
     )
     return y_next
@@ -185,6 +187,7 @@ def imex_cnab_step(
     t: DT,
     *args,
     max_iter: int = 2,
+    **kwargs,
 ) -> PyTree:
     """
     CNAB (Crank–Nicolson / Adams–Bashforth) IMEX step (second order).
@@ -218,9 +221,9 @@ def imex_cnab_step(
     dt = brainstate.environ.get_dt()
 
     # Explicit AB2 predictor
-    fE_n = f_exp(y, t, *args)
-    fE_nm1 = f_exp(y_prev, t - dt, *args)
-    fI_n = f_imp(y, t, *args)
+    fE_n = f_exp(y, t, *args, **kwargs)
+    fE_nm1 = f_exp(y_prev, t - dt, *args, **kwargs)
+    fI_n = f_imp(y, t, *args, **kwargs)
 
     y_pred = tree_map(
         lambda y0, fe, fem1, fi: y0 + dt * (1.5 * fe - 0.5 * fem1) + 0.5 * dt * fi,
@@ -229,6 +232,6 @@ def imex_cnab_step(
 
     # Implicit CN corrector: y_{n+1} = y_pred + 0.5 dt * f_imp(y_{n+1})
     def G(Y):
-        return tree_map(lambda yp, fi: yp + 0.5 * dt * fi, y_pred, f_imp(Y, t + dt, *args))
+        return tree_map(lambda yp, fi: yp + 0.5 * dt * fi, y_pred, f_imp(Y, t + dt, *args, **kwargs))
 
     return _fixed_point(G, y_pred, max_iter=max_iter)

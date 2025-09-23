@@ -60,7 +60,8 @@ def ode_euler_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     r"""
     Explicit Euler step for ordinary differential equations.
@@ -101,7 +102,7 @@ def ode_euler_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     return tree_map(lambda x, _k1: x + dt * _k1, y, k1)
 
 
@@ -110,7 +111,8 @@ def ode_rk2_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     r"""
     Second-order Runge–Kutta (RK2) step for ODEs.
@@ -145,8 +147,8 @@ def ode_rk2_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
-    k2 = f(tree_map(lambda x, k: x + dt * k, y, k1), t + dt, *args)
+    k1 = f(y, t, *args, **kwargs)
+    k2 = f(tree_map(lambda x, k: x + dt * k, y, k1), t + dt, *args, **kwargs)
     return tree_map(lambda x, _k1, _k2: x + dt / 2 * (_k1 + _k2), y, k1, k2)
 
 
@@ -155,7 +157,8 @@ def ode_rk3_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     r"""
     Third-order Runge–Kutta (RK3) step for ODEs.
@@ -191,9 +194,9 @@ def ode_rk3_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
-    k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args)
-    k3 = f(tree_map(lambda x, k1_val, k2_val: x - dt * k1_val + 2 * dt * k2_val, y, k1, k2), t + dt, *args)
+    k1 = f(y, t, *args, **kwargs)
+    k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args, **kwargs)
+    k3 = f(tree_map(lambda x, k1_val, k2_val: x - dt * k1_val + 2 * dt * k2_val, y, k1, k2), t + dt, *args, **kwargs)
     return tree_map(lambda x, _k1, _k2, _k3: x + dt / 6 * (_k1 + 4 * _k2 + _k3), y, k1, k2, k3)
 
 
@@ -202,7 +205,8 @@ def ode_rk4_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     r"""
     Classical fourth-order Runge–Kutta (RK4) step for ODEs.
@@ -239,10 +243,10 @@ def ode_rk4_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
-    k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args)
-    k3 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k2), t + dt / 2, *args)
-    k4 = f(tree_map(lambda x, k: x + dt * k, y, k3), t + dt, *args)
+    k1 = f(y, t, *args, **kwargs)
+    k2 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k1), t + dt / 2, *args, **kwargs)
+    k3 = f(tree_map(lambda x, k: x + dt / 2 * k, y, k2), t + dt / 2, *args, **kwargs)
+    k4 = f(tree_map(lambda x, k: x + dt * k, y, k3), t + dt, *args, **kwargs)
     return tree_map(
         lambda x, _k1, _k2, _k3, _k4: x + dt / 6 * (_k1 + 2 * _k2 + 2 * _k3 + _k4),
         y, k1, k2, k3, k4
@@ -254,7 +258,8 @@ def ode_expeuler_step(
     f: ODE,
     y: brainstate.typing.ArrayLike,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     r"""
     One-step Exponential Euler method for ODEs with linearized drift.
@@ -296,7 +301,7 @@ def ode_expeuler_step(
             f'when using Exponential Euler method. But we got {y.dtype}.'
         )
     dt = brainstate.environ.get('dt')
-    linear, derivative = brainstate.transform.vector_grad(f, argnums=0, return_value=True)(y, t, *args)
+    linear, derivative = brainstate.transform.vector_grad(f, argnums=0, return_value=True)(y, t, *args, **kwargs)
     linear = u.Quantity(u.get_mantissa(linear), u.get_unit(derivative) / u.get_unit(linear))
     phi = u.math.exprel(dt * linear)
     x_next = y + dt * phi * derivative
@@ -308,7 +313,8 @@ def ode_midpoint_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     """
     Second-order Runge-Kutta (midpoint) step for ODEs.
@@ -342,9 +348,9 @@ def ode_midpoint_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y_mid = tree_map(lambda x, k: x + (dt * 0.5) * k, y, k1)
-    k2 = f(y_mid, t + dt * 0.5, *args)
+    k2 = f(y_mid, t + dt * 0.5, *args, **kwargs)
     return tree_map(lambda x, _k2: x + dt * _k2, y, k2)
 
 
@@ -353,7 +359,8 @@ def ode_heun_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     """
     Third-order Runge-Kutta (Heun's RK3) step for ODEs.
@@ -386,11 +393,11 @@ def ode_heun_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y2 = tree_map(lambda x, k: x + (dt * (1.0 / 3.0)) * k, y, k1)
-    k2 = f(y2, t + dt * (1.0 / 3.0), *args)
+    k2 = f(y2, t + dt * (1.0 / 3.0), *args, **kwargs)
     y3 = tree_map(lambda x, k: x + (dt * (2.0 / 3.0)) * k, y, k2)
-    k3 = f(y3, t + dt * (2.0 / 3.0), *args)
+    k3 = f(y3, t + dt * (2.0 / 3.0), *args, **kwargs)
     return tree_map(lambda x, _k1, _k3: x + dt * ((1.0 / 4.0) * _k1 + (3.0 / 4.0) * _k3), y, k1, k3)
 
 
@@ -399,7 +406,8 @@ def ode_rk4_38_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     """
     Fourth-order Runge-Kutta (3/8-rule) step for ODEs.
@@ -433,13 +441,13 @@ def ode_rk4_38_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y2 = tree_map(lambda x, k: x + (dt * (1.0 / 3.0)) * k, y, k1)
-    k2 = f(y2, t + dt * (1.0 / 3.0), *args)
+    k2 = f(y2, t + dt * (1.0 / 3.0), *args, **kwargs)
     y3 = tree_map(lambda x, _k1, _k2: x + dt * ((-1.0 / 3.0) * _k1 + 1.0 * _k2), y, k1, k2)
-    k3 = f(y3, t + dt * (2.0 / 3.0), *args)
+    k3 = f(y3, t + dt * (2.0 / 3.0), *args, **kwargs)
     y4 = tree_map(lambda x, _k1, _k2, _k3: x + dt * (1.0 * _k1 + (-1.0) * _k2 + 1.0 * _k3), y, k1, k2, k3)
-    k4 = f(y4, t + dt, *args)
+    k4 = f(y4, t + dt, *args, **kwargs)
     return tree_map(
         lambda x, _k1, _k2, _k3, _k4: x + dt * (
             (1.0 / 8.0) * _k1 + (3.0 / 8.0) * _k2 + (3.0 / 8.0) * _k3 + (1.0 / 8.0) * _k4),
@@ -454,6 +462,7 @@ def ode_rk45_step(
     t: DT,
     *args,
     return_error: bool = False,
+    **kwargs,
 ):
     """
     One step of the Cash-Karp embedded Runge-Kutta 4(5) method.
@@ -496,24 +505,24 @@ def ode_rk45_step(
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y2 = tree_map(lambda x, a: x + dt * (1.0 / 5.0) * a, y, k1)
-    k2 = f(y2, t + dt * (1.0 / 5.0), *args)
+    k2 = f(y2, t + dt * (1.0 / 5.0), *args, **kwargs)
 
     y3 = tree_map(lambda x, _k1, _k2: x + dt * ((3.0 / 40.0) * _k1 + (9.0 / 40.0) * _k2), y, k1, k2)
-    k3 = f(y3, t + dt * (3.0 / 10.0), *args)
+    k3 = f(y3, t + dt * (3.0 / 10.0), *args, **kwargs)
 
     y4 = tree_map(
         lambda x, _k1, _k2, _k3: x + dt * ((3.0 / 10.0) * _k1 + (-9.0 / 10.0) * _k2 + (6.0 / 5.0) * _k3),
         y, k1, k2, k3)
-    k4 = f(y4, t + dt * (3.0 / 5.0), *args)
+    k4 = f(y4, t + dt * (3.0 / 5.0), *args, **kwargs)
 
     y5 = tree_map(
         lambda x, _k1, _k2, _k3, _k4: x + dt * (
             (-11.0 / 54.0) * _k1 + (5.0 / 2.0) * _k2 + (-70.0 / 27.0) * _k3 + (35.0 / 27.0) * _k4),
         y, k1, k2, k3, k4
     )
-    k5 = f(y5, t + dt * 1.0, *args)
+    k5 = f(y5, t + dt * 1.0, *args, **kwargs)
 
     y6 = tree_map(
         lambda x, _k1, _k2, _k3, _k4, _k5: x + dt * (
@@ -525,7 +534,7 @@ def ode_rk45_step(
         ),
         y, k1, k2, k3, k4, k5
     )
-    k6 = f(y6, t + dt * (7.0 / 8.0), *args)
+    k6 = f(y6, t + dt * (7.0 / 8.0), *args, **kwargs)
 
     # 5th-order solution
     y5th = tree_map(
@@ -557,6 +566,7 @@ def ode_rk23_step(
     t: DT,
     *args,
     return_error: bool = False,
+    **kwargs,
 ):
     """
     Bogacki–Shampine embedded Runge–Kutta 2(3) step (RK23).
@@ -583,12 +593,12 @@ def ode_rk23_step(
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y2 = tree_map(lambda x, a: x + dt * 0.5 * a, y, k1)
-    k2 = f(y2, t + dt * 0.5, *args)
+    k2 = f(y2, t + dt * 0.5, *args, **kwargs)
 
     y3 = tree_map(lambda x, _k1, _k2: x + dt * (0.0 * _k1 + 0.75 * _k2), y, k1, k2)
-    k3 = f(y3, t + dt * 0.75, *args)
+    k3 = f(y3, t + dt * 0.75, *args, **kwargs)
 
     # 3rd-order solution (no k4 in combination)
     y3rd = tree_map(
@@ -600,7 +610,7 @@ def ode_rk23_step(
         return y3rd
 
     # Compute k4 at full step for 2nd-order embedded estimate
-    k4 = f(y3rd, t + dt, *args)
+    k4 = f(y3rd, t + dt, *args, **kwargs)
     y2nd = tree_map(
         lambda x, _k1, _k2, _k3, _k4: x + dt * (
             (7.0 / 24.0) * _k1 + (1.0 / 4.0) * _k2 + (1.0 / 3.0) * _k3 + (1.0 / 8.0) * _k4),
@@ -617,6 +627,7 @@ def ode_dopri5_step(
     t: DT,
     *args,
     return_error: bool = False,
+    **kwargs,
 ):
     """
     Dormand–Prince embedded Runge–Kutta 5(4) step (DOPRI5/ode45).
@@ -643,18 +654,18 @@ def ode_dopri5_step(
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y2 = tree_map(lambda x, a: x + dt * (1.0 / 5.0) * a, y, k1)
-    k2 = f(y2, t + dt * (1.0 / 5.0), *args)
+    k2 = f(y2, t + dt * (1.0 / 5.0), *args, **kwargs)
 
     y3 = tree_map(lambda x, _k1, _k2: x + dt * ((3.0 / 40.0) * _k1 + (9.0 / 40.0) * _k2), y, k1, k2)
-    k3 = f(y3, t + dt * (3.0 / 10.0), *args)
+    k3 = f(y3, t + dt * (3.0 / 10.0), *args, **kwargs)
 
     y4 = tree_map(
         lambda x, _k1, _k2, _k3: x + dt * ((44.0 / 45.0) * _k1 + (-56.0 / 15.0) * _k2 + (32.0 / 9.0) * _k3),
         y, k1, k2, k3
     )
-    k4 = f(y4, t + dt * (4.0 / 5.0), *args)
+    k4 = f(y4, t + dt * (4.0 / 5.0), *args, **kwargs)
 
     y5 = tree_map(
         lambda x, _k1, _k2, _k3, _k4: x + dt * ((19372.0 / 6561.0) * _k1 +
@@ -663,7 +674,7 @@ def ode_dopri5_step(
                                                 (-212.0 / 729.0) * _k4),
         y, k1, k2, k3, k4
     )
-    k5 = f(y5, t + dt * (8.0 / 9.0), *args)
+    k5 = f(y5, t + dt * (8.0 / 9.0), *args, **kwargs)
 
     y6 = tree_map(
         lambda x, _k1, _k2, _k3, _k4, _k5: x + dt * ((9017.0 / 3168.0) * _k1 +
@@ -673,7 +684,7 @@ def ode_dopri5_step(
                                                      (-5103.0 / 18656.0) * _k5),
         y, k1, k2, k3, k4, k5
     )
-    k6 = f(y6, t + dt * 1.0, *args)
+    k6 = f(y6, t + dt * 1.0, *args, **kwargs)
 
     # Compute k7 stage at t+dt
     y7 = tree_map(
@@ -684,7 +695,7 @@ def ode_dopri5_step(
                                                      (11.0 / 84.0) * _k6),
         y, k1, k3, k4, k5, k6
     )
-    k7 = f(y7, t + dt, *args)
+    k7 = f(y7, t + dt, *args, **kwargs)
 
     # 5th-order solution (b5)
     y5th = tree_map(
@@ -722,6 +733,7 @@ def ode_rkf45_step(
     t: DT,
     *args,
     return_error: bool = False,
+    **kwargs,
 ):
     """
     Runge–Kutta–Fehlberg 4(5) embedded step (RKF45).
@@ -748,29 +760,29 @@ def ode_rkf45_step(
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y2 = tree_map(lambda x, a: x + dt * (1.0 / 4.0) * a, y, k1)
-    k2 = f(y2, t + dt * (1.0 / 4.0), *args)
+    k2 = f(y2, t + dt * (1.0 / 4.0), *args, **kwargs)
 
     y3 = tree_map(
         lambda x, _k1, _k2: x + dt * ((3.0 / 32.0) * _k1 + (9.0 / 32.0) * _k2),
         y, k1, k2
     )
-    k3 = f(y3, t + dt * (3.0 / 8.0), *args)
+    k3 = f(y3, t + dt * (3.0 / 8.0), *args, **kwargs)
 
     y4 = tree_map(
         lambda x, _k1, _k2, _k3: x + dt * (
             (1932.0 / 2197.0) * _k1 + (-7200.0 / 2197.0) * _k2 + (7296.0 / 2197.0) * _k3),
         y, k1, k2, k3
     )
-    k4 = f(y4, t + dt * (12.0 / 13.0), *args)
+    k4 = f(y4, t + dt * (12.0 / 13.0), *args, **kwargs)
 
     y5 = tree_map(
         lambda x, _k1, _k2, _k3, _k4: x + dt * (
             (439.0 / 216.0) * _k1 + (-8.0) * _k2 + (3680.0 / 513.0) * _k3 + (-845.0 / 4104.0) * _k4),
         y, k1, k2, k3, k4
     )
-    k5 = f(y5, t + dt * 1.0, *args)
+    k5 = f(y5, t + dt * 1.0, *args, **kwargs)
 
     y6 = tree_map(
         lambda x, _k1, _k2, _k3, _k4, _k5: x + dt * (
@@ -778,7 +790,7 @@ def ode_rkf45_step(
             -11.0 / 40.0) * _k5),
         y, k1, k2, k3, k4, k5
     )
-    k6 = f(y6, t + dt * 0.5, *args)
+    k6 = f(y6, t + dt * 0.5, *args, **kwargs)
 
     # 5th-order solution
     y5th = tree_map(
@@ -806,7 +818,8 @@ def ode_ssprk33_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     """
     Strong-stability-preserving RK(3,3) (Shu–Osher) step.
@@ -830,13 +843,13 @@ def ode_ssprk33_step(
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
 
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y1 = tree_map(lambda x, a: x + dt * a, y, k1)
 
-    k2 = f(y1, t + dt, *args)
+    k2 = f(y1, t + dt, *args, **kwargs)
     y2 = tree_map(lambda x, y1_, a2: (3.0 / 4.0) * x + (1.0 / 4.0) * (y1_ + dt * a2), y, y1, k2)
 
-    k3 = f(y2, t + dt * 0.5, *args)
+    k3 = f(y2, t + dt * 0.5, *args, **kwargs)
     y3 = tree_map(lambda x, y2_, a3: (1.0 / 3.0) * x + (2.0 / 3.0) * (y2_ + dt * a3), y, y2, k3)
     return y3
 
@@ -848,6 +861,7 @@ def ode_bs32_step(
     t: DT,
     *args,
     return_error: bool = False,
+    **kwargs,
 ):
     r"""
     Bogacki–Shampine 3(2) (BS32) embedded one-step method.
@@ -866,7 +880,7 @@ def ode_bs32_step(
         3rd-order updated state. If ``return_error=True``, returns
         ``(y_next, error_estimate)``.
     """
-    return ode_rk23_step(f, y, t, *args, return_error=return_error)
+    return ode_rk23_step(f, y, t, *args, return_error=return_error, **kwargs)
 
 
 @set_module_as('braintools.quad')
@@ -874,7 +888,8 @@ def ode_ralston2_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     r"""
     Ralston's 2nd-order Runge–Kutta method (minimized truncation error).
@@ -903,9 +918,9 @@ def ode_ralston2_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y2 = tree_map(lambda x, a: x + dt * (2.0 / 3.0) * a, y, k1)
-    k2 = f(y2, t + dt * (2.0 / 3.0), *args)
+    k2 = f(y2, t + dt * (2.0 / 3.0), *args, **kwargs)
     return tree_map(lambda x, _k1, _k2: x + dt * ((1.0 / 4.0) * _k1 + (3.0 / 4.0) * _k2), y, k1, k2)
 
 
@@ -914,7 +929,8 @@ def ode_ralston3_step(
     f: ODE,
     y: brainstate.typing.PyTree,
     t: DT,
-    *args
+    *args,
+    **kwargs
 ):
     r"""
     Ralston's 3rd-order Runge–Kutta method (optimized RK3).
@@ -948,11 +964,11 @@ def ode_ralston3_step(
     """
     assert callable(f), 'The input function should be callable.'
     dt = brainstate.environ.get_dt()
-    k1 = f(y, t, *args)
+    k1 = f(y, t, *args, **kwargs)
     y2 = tree_map(lambda x, a: x + dt * 0.5 * a, y, k1)
-    k2 = f(y2, t + dt * 0.5, *args)
+    k2 = f(y2, t + dt * 0.5, *args, **kwargs)
     y3 = tree_map(lambda x, a: x + dt * 0.75 * a, y, k2)
-    k3 = f(y3, t + dt * 0.75, *args)
+    k3 = f(y3, t + dt * 0.75, *args, **kwargs)
     return tree_map(lambda x, _k1, _k2, _k3: x + dt * ((2.0 / 9.0) * _k1 + (1.0 / 3.0) * _k2 + (4.0 / 9.0) * _k3),
                     y, k1, k2, k3)
 
@@ -964,6 +980,7 @@ def ode_dopri8_step(
     t: DT,
     *args,
     return_error: bool = False,
+    **kwargs,
 ):
     """
     Dormand–Prince 8(7) (DOP853) one-step integrator with error estimate.
@@ -1119,7 +1136,7 @@ def ode_dopri8_step(
 
     # Stages K[0..11], plus K[12] = f(y8, t+dt)
     K = [None] * 13
-    K[0] = f(y, t, *args)
+    K[0] = f(y, t, *args, **kwargs)
 
     for s in range(1, 12):
         row = A[s]
@@ -1130,11 +1147,11 @@ def ode_dopri8_step(
         else:
             y_s = y
         t_s = t + C[s] * dt
-        K[s] = f(y_s, t_s, *args)
+        K[s] = f(y_s, t_s, *args, **kwargs)
 
     # 8th-order solution and final stage
     y8 = affine_sum(y, B, K[:12])
-    K[12] = f(y8, t + dt, *args)
+    K[12] = f(y8, t + dt, *args, **kwargs)
 
     if not return_error:
         return y8

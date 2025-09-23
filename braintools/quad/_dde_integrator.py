@@ -59,7 +59,8 @@ def dde_euler_step(
     t: DT,
     history_fn: HistoryFn,
     delays: Union[DT, Sequence[DT]],
-    *args
+    *args,
+    **kwargs
 ) -> PyTree:
     """
     Explicit Euler step for delay differential equations.
@@ -120,7 +121,7 @@ def dde_euler_step(
     delayed_states = [history_fn(t - delay) for delay in delays]
 
     # Compute derivative
-    dydt = f(t, y, *delayed_states, *args)
+    dydt = f(t, y, *delayed_states, *args, **kwargs)
 
     # Euler update
     return tree_map(lambda y_val, dy_val: y_val + dt * dy_val, y, dydt)
@@ -133,7 +134,8 @@ def dde_heun_step(
     t: DT,
     history_fn: HistoryFn,
     delays: Union[DT, Sequence[DT]],
-    *args
+    *args,
+    **kwargs
 ) -> PyTree:
     """
     Heun's method (improved Euler) for delay differential equations.
@@ -167,14 +169,14 @@ def dde_heun_step(
     delayed_states_t = [history_fn(t - delay) for delay in delays]
 
     # Predictor step (Euler)
-    k1 = f(t, y, *delayed_states_t, *args)
+    k1 = f(t, y, *delayed_states_t, *args, **kwargs)
     y_pred = tree_map(lambda y_val, k1_val: y_val + dt * k1_val, y, k1)
 
     # Get delayed states at next time (for corrector)
     delayed_states_t1 = [history_fn(t + dt - delay) for delay in delays]
 
     # Corrector step
-    k2 = f(t + dt, y_pred, *delayed_states_t1, *args)
+    k2 = f(t + dt, y_pred, *delayed_states_t1, *args, **kwargs)
 
     # Combine predictor and corrector
     return tree_map(
@@ -190,7 +192,8 @@ def dde_rk4_step(
     t: DT,
     history_fn: HistoryFn,
     delays: Union[DT, Sequence[DT]],
-    *args
+    *args,
+    **kwargs
 ) -> PyTree:
     """
     Fourth-order Runge-Kutta method for delay differential equations.
@@ -220,22 +223,22 @@ def dde_rk4_step(
 
     # Stage 1
     delayed_1 = [history_fn(t - delay) for delay in delays]
-    k1 = f(t, y, *delayed_1, *args)
+    k1 = f(t, y, *delayed_1, *args, **kwargs)
 
     # Stage 2  
     y2 = tree_map(lambda y_val, k1_val: y_val + 0.5 * dt * k1_val, y, k1)
     delayed_2 = [history_fn(t + 0.5 * dt - delay) for delay in delays]
-    k2 = f(t + 0.5 * dt, y2, *delayed_2, *args)
+    k2 = f(t + 0.5 * dt, y2, *delayed_2, *args, **kwargs)
 
     # Stage 3
     y3 = tree_map(lambda y_val, k2_val: y_val + 0.5 * dt * k2_val, y, k2)
     delayed_3 = [history_fn(t + 0.5 * dt - delay) for delay in delays]
-    k3 = f(t + 0.5 * dt, y3, *delayed_3, *args)
+    k3 = f(t + 0.5 * dt, y3, *delayed_3, *args, **kwargs)
 
     # Stage 4
     y4 = tree_map(lambda y_val, k3_val: y_val + dt * k3_val, y, k3)
     delayed_4 = [history_fn(t + dt - delay) for delay in delays]
-    k4 = f(t + dt, y4, *delayed_4, *args)
+    k4 = f(t + dt, y4, *delayed_4, *args, **kwargs)
 
     # Combine stages
     return tree_map(
@@ -253,7 +256,8 @@ def dde_euler_pc_step(
     history_fn: HistoryFn,
     delays: Union[DT, Sequence[DT]],
     *args,
-    max_iter: int = 3
+    max_iter: int = 3,
+    **kwargs
 ) -> PyTree:
     """
     Euler predictor-corrector method for delay differential equations.
@@ -287,7 +291,7 @@ def dde_euler_pc_step(
 
     # Predictor step (explicit Euler)
     delayed_states_t = [history_fn(t - delay) for delay in delays]
-    k_pred = f(t, y, *delayed_states_t, *args)
+    k_pred = f(t, y, *delayed_states_t, *args, **kwargs)
     y_pred = tree_map(lambda y_val, k_val: y_val + dt * k_val, y, k_pred)
 
     # Corrector iterations (implicit Euler)
@@ -295,7 +299,7 @@ def dde_euler_pc_step(
     delayed_states_t1 = [history_fn(t + dt - delay) for delay in delays]
 
     for _ in range(max_iter):
-        k_corr = f(t + dt, y_corr, *delayed_states_t1, *args)
+        k_corr = f(t + dt, y_corr, *delayed_states_t1, *args, **kwargs)
         y_corr = tree_map(lambda y_val, k_val: y_val + dt * k_val, y, k_corr)
 
     return y_corr
@@ -309,7 +313,8 @@ def dde_heun_pc_step(
     history_fn: HistoryFn,
     delays: Union[DT, Sequence[DT]],
     *args,
-    max_iter: int = 3
+    max_iter: int = 3,
+    **kwargs
 ) -> PyTree:
     """
     Heun predictor-corrector method for delay differential equations.
@@ -341,17 +346,17 @@ def dde_heun_pc_step(
         delays = [delays]
 
     # Predictor step (explicit Heun)
-    y_pred = dde_heun_step(f, y, t, history_fn, delays, *args)
+    y_pred = dde_heun_step(f, y, t, history_fn, delays, *args, **kwargs)
 
     # Corrector iterations (implicit trapezoidal)
     y_corr = y_pred
     delayed_states_t = [history_fn(t - delay) for delay in delays]
     delayed_states_t1 = [history_fn(t + dt - delay) for delay in delays]
 
-    k1 = f(t, y, *delayed_states_t, *args)
+    k1 = f(t, y, *delayed_states_t, *args, **kwargs)
 
     for _ in range(max_iter):
-        k2 = f(t + dt, y_corr, *delayed_states_t1, *args)
+        k2 = f(t + dt, y_corr, *delayed_states_t1, *args, **kwargs)
         y_corr = tree_map(
             lambda y_val, k1_val, k2_val: y_val + 0.5 * dt * (k1_val + k2_val),
             y, k1, k2
