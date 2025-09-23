@@ -41,6 +41,6 @@ The official documentation is hosted on Read the Docs: [https://braintools.readt
 
 
 
-## See also the brain modeling ecosystem
+## See the ecosystem
 
-We are building the brain modeling ecosystem: https://brainmodeling.readthedocs.io/
+``braintools`` is one part of our brain simulation ecosystem: https://brainmodeling.readthedocs.io/
