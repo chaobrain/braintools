@@ -46,5 +46,5 @@ We are building the `brain modeling ecosystem <https://brainmodeling.readthedocs
    :hidden:
    :maxdepth: 2
 
-   api.rst
+   apis/index.rst
 

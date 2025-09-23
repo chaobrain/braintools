@@ -40,11 +40,18 @@ SDE Numerical Integrators
 -------------------------
 
 .. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
 
-   sde_euler_step
-   sde_milstein_step
-   sde_expeuler_step
+    sde_euler_step
+    sde_milstein_step
+    sde_expeuler_step
+    sde_heun_step
+    sde_tamed_euler_step
+    sde_implicit_euler_step
+    sde_srk2_step
+    sde_srk3_step
+    sde_srk4_step
+
 

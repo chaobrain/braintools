@@ -44,6 +44,12 @@ __all__ = [
     'sde_euler_step',
     'sde_milstein_step',
     'sde_expeuler_step',
+    'sde_heun_step',
+    'sde_tamed_euler_step',
+    'sde_implicit_euler_step',
+    'sde_srk2_step',
+    'sde_srk3_step',
+    'sde_srk4_step',
 ]
 
 DT = Union[float, u.Quantity]
@@ -270,3 +276,315 @@ def sde_expeuler_step(
         )
     x_next += diffusion_part
     return x_next
+
+
+def sde_heun_step(
+    df: DF,
+    dg: DG,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+    sde_type: str = 'ito',
+):
+    r"""Stochastic Heun (predictor–corrector) step.
+
+    Implements a predictor–corrector scheme. For Stratonovich SDEs, both drift
+    and diffusion are averaged between the predictor and corrector; for Itô SDEs
+    only the drift is averaged while diffusion is evaluated at the start.
+
+    Predictor
+    ---------
+    ``y* = y + f(y, t) dt + g(y, t) dW``
+
+    Corrector
+    ---------
+    - Itô: ``y_{n+1} = y + 0.5 (f(y, t) + f(y*, t+dt)) dt + g(y, t) dW``
+    - Stratonovich: ``y_{n+1} = y + 0.5 (f(y, t) + f(y*, t+dt)) dt + 0.5 (g(y, t) + g(y*, t+dt)) dW``
+
+    Parameters
+    ----------
+    df : callable
+        Drift function ``f(y, t, *args)``.
+    dg : callable
+        Diffusion function ``g(y, t, *args)``.
+    y : PyTree
+        Current state.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Extra arguments forwarded to ``df`` and ``dg``.
+    sde_type : {'ito', 'stra'}, optional
+        Interpretation of the SDE.
+
+    Returns
+    -------
+    PyTree
+        The updated state ``y_{n+1}``.
+    """
+    assert sde_type in ['ito', 'stra']
+
+    dt = brainstate.environ.get_dt()
+    dt_sqrt = u.math.sqrt(dt)
+
+    # evaluate at start
+    f0 = df(y, t, *args)
+    g0 = dg(y, t, *args)
+
+    # shared Brownian increment dW for all stages
+    dW = jax.tree.map(lambda y0: brainstate.random.randn(*y0.shape) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+
+    # predictor state
+    y_pred = tree_map(lambda y0, a, b, z: y0 + a * dt + b * z, y, f0, g0, dW)
+
+    # evaluate at end
+    f1 = df(y_pred, t + dt, *args)
+    if sde_type == 'stra':
+        g1 = dg(y_pred, t + dt, *args)
+        g_use = tree_map(lambda a, b: 0.5 * (a + b), g0, g1)
+    else:
+        g_use = g0
+
+    f_use = tree_map(lambda a, b: 0.5 * (a + b), f0, f1)
+    y_next = tree_map(lambda y0, a, b, z: y0 + a * dt + b * z, y, f_use, g_use, dW)
+    return y_next
+
+
+def sde_tamed_euler_step(
+    df: DF,
+    dg: DG,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+):
+    r"""Tamed Euler–Maruyama step (drift taming for superlinear growth).
+
+    Applies componentwise taming to the drift to prevent explosion when the
+    drift exhibits superlinear growth:
+
+    ``y_{n+1} = y_n + [f(y_n, t_n) / (1 + dt * |f(y_n, t_n)|)] dt + g(y_n, t_n) dW_n``.
+
+    Parameters
+    ----------
+    df : callable
+        Drift function ``f(y, t, *args)``.
+    dg : callable
+        Diffusion function ``g(y, t, *args)``.
+    y : PyTree
+        Current state.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Extra arguments forwarded to ``df`` and ``dg``.
+
+    Returns
+    -------
+    PyTree
+        The updated state ``y_{n+1}``.
+
+    Notes
+    -----
+    - Taming is performed elementwise via ``f / (1 + dt * |f|)`` on each leaf.
+    - Uses Brownian increment ``dW ~ Normal(0, dt)`` per leaf.
+    """
+    dt = brainstate.environ.get_dt()
+    dt_sqrt = u.math.sqrt(dt)
+
+    f0 = df(y, t, *args)
+    g0 = dg(y, t, *args)
+
+    f_tamed = tree_map(lambda a: a / (1.0 + dt * u.math.abs(a)), f0)
+    y_next = tree_map(
+        lambda y0, a, b: y0 + a * dt + b * brainstate.random.randn(*y0.shape) * dt_sqrt,
+        y, f_tamed, g0
+    )
+    return y_next
+
+
+def sde_implicit_euler_step(
+    df: DF,
+    dg: DG,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+    max_iter: int = 2,
+):
+    r"""Implicit (drift-implicit) Euler–Maruyama step via fixed-point iteration.
+
+    Solves ``y_{n+1} = y_n + f(y_{n+1}, t_{n+1}) dt + g(y_n, t_n) dW`` using a
+    few fixed-point iterations starting from an explicit predictor.
+
+    Parameters
+    ----------
+    df : callable
+        Drift function ``f(y, t, *args)``.
+    dg : callable
+        Diffusion function ``g(y, t, *args)``.
+    y : PyTree
+        Current state.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Extra arguments forwarded to ``df`` and ``dg``.
+    max_iter : int, default 2
+        Number of fixed-point iterations for the implicit corrector.
+
+    Returns
+    -------
+    PyTree
+        The updated state ``y_{n+1}``.
+
+    Notes
+    -----
+    - Uses a simple Picard iteration; for stiff problems increase ``max_iter``
+      or provide a more robust nonlinear solver.
+    - Diffusion is treated explicitly with ``g(y_n, t_n) dW``.
+    """
+    assert max_iter >= 1
+
+    dt = brainstate.environ.get_dt()
+    dt_sqrt = u.math.sqrt(dt)
+
+    # Explicit pieces at start
+    g0 = dg(y, t, *args)
+    dW = jax.tree.map(lambda y0: brainstate.random.randn(*y0.shape) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+    diff_inc = tree_map(lambda b, z: b * z, g0, dW)
+
+    # Predictor (explicit Euler)
+    y_pred = tree_map(lambda y0, a, inc: y0 + a * dt + inc, y, df(y, t, *args), diff_inc)
+
+    # Fixed-point iterations on the drift term at t+dt
+    y_k = y_pred
+    for _ in range(max_iter):
+        y_k = tree_map(lambda y0, inc, fnew: y0 + inc + dt * fnew, y, diff_inc, df(y_k, t + dt, *args))
+
+    return y_k
+
+
+def _brownian_like(y, dt):
+    dt_sqrt = u.math.sqrt(dt)
+    return jax.tree.map(lambda y0: brainstate.random.randn(*y0.shape) * dt_sqrt, y, is_leaf=u.math.is_quantity)
+
+
+def sde_srk2_step(
+    df: DF,
+    dg: DG,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+):
+    r"""Stochastic Runge–Kutta 2 (Heun) for Stratonovich SDEs.
+
+    Applies the deterministic RK2 (Heun) tableau to the combined Stratonovich
+    increment ``f dt + g dW`` using a single Brownian increment ``dW`` shared
+    across stages:
+
+    - ``k1 = f(y, t) dt + g(y, t) dW``
+    - ``k2 = f(y + k1, t + dt) dt + g(y + k1, t + dt) dW``
+    - ``y_{n+1} = y + 0.5 (k1 + k2)``
+
+    Parameters
+    ----------
+    df, dg, y, t, *args
+        Same semantics as other steppers. Interprets the SDE in Stratonovich
+        sense.
+
+    Returns
+    -------
+    PyTree
+        The updated state ``y_{n+1}``.
+    """
+    dt = brainstate.environ.get_dt()
+    dW = _brownian_like(y, dt)
+
+    k1 = tree_map(lambda a, b, z: a * dt + b * z, df(y, t, *args), dg(y, t, *args), dW)
+    y2 = tree_map(lambda y0, k: y0 + k, y, k1)
+    k2 = tree_map(lambda a, b, z: a * dt + b * z, df(y2, t + dt, *args), dg(y2, t + dt, *args), dW)
+    y_next = tree_map(lambda y0, a, b: y0 + 0.5 * (a + b), y, k1, k2)
+    return y_next
+
+
+def sde_srk3_step(
+    df: DF,
+    dg: DG,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+):
+    r"""Stochastic Runge–Kutta 3 (Stratonovich; Heun-RK3).
+
+    Uses a classic 3-stage RK3 scheme on the Stratonovich increment
+    ``F(y,t) = f(y,t) dt + g(y,t) dW`` with a single shared ``dW``:
+
+    - ``k1 = F(y, t)``
+    - ``k2 = F(y + 0.5 k1, t + 0.5 dt)``
+    - ``k3 = F(y - k1 + 2 k2, t + dt)``
+    - ``y_{n+1} = y + (k1 + 4 k2 + k3) / 6``
+
+    Parameters
+    ----------
+    df, dg, y, t, *args
+        As usual; Stratonovich interpretation assumed.
+
+    Returns
+    -------
+    PyTree
+        The updated state ``y_{n+1}``.
+    """
+    dt = brainstate.environ.get_dt()
+    dW = _brownian_like(y, dt)
+
+    def F(y_, t_):
+        return tree_map(lambda a, b, z: a * dt + b * z, df(y_, t_, *args), dg(y_, t_, *args), dW)
+
+    k1 = F(y, t)
+    y2 = tree_map(lambda y0, k: y0 + 0.5 * k, y, k1)
+    k2 = F(y2, t + 0.5 * dt)
+    y3 = tree_map(lambda y0, kk1, kk2: y0 - kk1 + 2.0 * kk2, y, k1, k2)
+    k3 = F(y3, t + dt)
+    y_next = tree_map(lambda y0, a, b, c: y0 + (a + 4.0 * b + c) / 6.0, y, k1, k2, k3)
+    return y_next
+
+
+def sde_srk4_step(
+    df: DF,
+    dg: DG,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+):
+    r"""Stochastic Runge–Kutta 4 (Stratonovich; classical RK4).
+
+    Applies the classical 4-stage RK4 tableau to the Stratonovich increment
+    ``F(y,t) = f(y,t) dt + g(y,t) dW`` with a single shared Brownian ``dW``:
+
+    - ``k1 = F(y, t)``
+    - ``k2 = F(y + 0.5 k1, t + 0.5 dt)``
+    - ``k3 = F(y + 0.5 k2, t + 0.5 dt)``
+    - ``k4 = F(y + k3, t + dt)``
+    - ``y_{n+1} = y + (k1 + 2 k2 + 2 k3 + k4)/6``
+
+    Notes
+    -----
+    - Suitable for Stratonovich SDEs. For Itô SDEs, conversions require
+      additional correction terms (not included here).
+
+    Returns
+    -------
+    PyTree
+        The updated state ``y_{n+1}``.
+    """
+    dt = brainstate.environ.get_dt()
+    dW = _brownian_like(y, dt)
+
+    def F(y_, t_):
+        return tree_map(lambda a, b, z: a * dt + b * z, df(y_, t_, *args), dg(y_, t_, *args), dW)
+
+    k1 = F(y, t)
+    y2 = tree_map(lambda y0, k: y0 + 0.5 * k, y, k1)
+    k2 = F(y2, t + 0.5 * dt)
+    y3 = tree_map(lambda y0, k: y0 + 0.5 * k, y, k2)
+    k3 = F(y3, t + 0.5 * dt)
+    y4 = tree_map(lambda y0, k: y0 + k, y, k3)
+    k4 = F(y4, t + dt)
+    y_next = tree_map(lambda y0, a, b, c, d: y0 + (a + 2.0 * b + 2.0 * c + d) / 6.0, y, k1, k2, k3, k4)
+    return y_next
