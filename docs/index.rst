@@ -66,6 +66,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     pairwise_embedding_similarity.ipynb
     spiking_metrics.ipynb
     advanced_spiking_metrics.ipynb
+    lfp_analysis.ipynb
 
 
 

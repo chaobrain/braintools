@@ -83,8 +83,10 @@ def section_input(
     all_duration = None
     currents = []
     for c_size, duration in zip(values, durations):
-        current = u.math.ones((int(np.ceil(u.maybe_decimal(duration / dt))),) + i_shape,
-                              dtype=brainstate.environ.dftype())
+        current = u.math.ones(
+            (int(np.ceil(u.maybe_decimal(duration / dt))),) + i_shape,
+            dtype=brainstate.environ.dftype()
+        )
         current = current * c_size
         currents.append(current)
         if all_duration is None:

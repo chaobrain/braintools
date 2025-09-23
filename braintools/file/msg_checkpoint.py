@@ -135,7 +135,12 @@ def _is_namedtuple(x):
     return isinstance(x, tuple) and hasattr(x, '_fields')
 
 
-def from_state_dict(target, state: Dict[str, Any], name: str = '.'):
+def from_state_dict(
+    target,
+    state: Dict[str, Any],
+    name: str = '.',
+    mismatch: str = 'error'
+):
     """Restores the state of the given target using a state dict.
 
     This function takes the current target as an argument. This
@@ -707,7 +712,7 @@ class AsyncManager(object):
         self.save_future = self.executor.submit(task)  # type: ignore
 
 
-def _save_commit2(
+def _save_commit(
     filename: str,
     overwrite: bool,
     has_mpa: bool,
@@ -750,7 +755,7 @@ def _save_commit2(
     logging.info('Saved checkpoint at %s', ckpt_path)
 
 
-def _save_main_ckpt_file2(
+def _save_main_ckpt_file(
     target: bytes,
     has_mpa: bool,
     filename: str,
@@ -761,7 +766,7 @@ def _save_main_ckpt_file2(
         fp.write(target)
     # Postpone the commitment of checkpoint to after MPA writes are done.
     if not has_mpa:
-        _save_commit2(filename, overwrite, has_mpa=False, write_commit_success=False)
+        _save_commit(filename, overwrite, has_mpa=False, write_commit_success=False)
 
 
 def msgpack_save(
@@ -828,7 +833,7 @@ def msgpack_save(
 
     # Save the files via I/O sync or async.
     def save_main_ckpt_task():
-        return _save_main_ckpt_file2(target, False, filename, overwrite)
+        return _save_main_ckpt_file(target, False, filename, overwrite)
 
     if async_manager:
         async_manager.save_async(save_main_ckpt_task)

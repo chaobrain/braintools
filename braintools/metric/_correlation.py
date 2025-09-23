@@ -418,8 +418,8 @@ def functional_connectivity_dynamics(
     --------
     >>> import jax.numpy as jnp
     >>> import braintools as braintools
-    >>> import brainstate as bst
-    >>> activities = bst.random.rand(200, 10)
+    >>> import brainstate as brainstate
+    >>> activities = brainstate.random.rand(200, 10)
     >>> fcd = braintools.metric.functional_connectivity_dynamics(activities)
     """
 

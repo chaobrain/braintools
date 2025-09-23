@@ -403,10 +403,10 @@ class L1Loss:
 
     Examples::
 
-        >>> import brainstate as bst
+        >>> import brainstate as brainstate
         >>> loss = nn.L1Loss()
-        >>> input = bst.random.randn(3, 5)
-        >>> target = bst.random.randn(3, 5)
+        >>> input = brainstate.random.randn(3, 5)
+        >>> target = brainstate.random.randn(3, 5)
         >>> output = loss(input, target)
         >>> output.backward()
     """
@@ -454,9 +454,9 @@ def l1_loss(logits: brainstate.typing.ArrayLike,
 
     Parameters
     ----------
-    logits : bst.typing.ArrayLike
+    logits : brainstate.typing.ArrayLike
       :math:`(N, *)` where :math:`*` means, any number of additional dimensions.
-    targets : bst.typing.ArrayLike
+    targets : brainstate.typing.ArrayLike
       :math:`(N, *)`, same shape as the input.
     reduction : str
       Specifies the reduction to apply to the output: ``'none'`` | ``'mean'`` | ``'sum'``.
