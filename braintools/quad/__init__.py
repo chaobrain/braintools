@@ -14,10 +14,11 @@
 # ==============================================================================
 
 """
-Lightweight one-step integrators for ODEs and SDEs.
+Lightweight one-step integrators for ODEs, SDEs, and DDEs.
 
 This submodule provides compact, JAX-friendly stepping functions for ordinary
-and stochastic differential equations that operate directly on JAX PyTrees. All
+differential equations (ODEs), stochastic differential equations (SDEs), and
+delay differential equations (DDEs) that operate directly on JAX PyTrees. All
 steppers use the global time step ``dt`` from ``brainstate.environ`` so they can
 be dropped into simulation loops with minimal boilerplate.
 
@@ -27,6 +28,9 @@ Available
   ``ode_expeuler_step``.
 - SDE: ``sde_euler_step`` (Euler–Maruyama), ``sde_milstein_step``,
   ``sde_expeuler_step``.
+- IMEX: ``imex_euler_step``, ``imex_ars222_step``, ``imex_cnab_step``.
+- DDE: ``dde_euler_step``, ``dde_heun_step``, ``dde_rk4_step``,
+  ``dde_euler_pc_step``, ``dde_heun_pc_step``.
 
 Notes
 -----
@@ -34,6 +38,7 @@ Notes
   the same structure.
 - Where applicable, units are handled via ``brainunit``; pass times and states
   as quantities to keep dimensionality consistent.
+- DDE steppers require a history function to evaluate delayed terms.
 """
 
 from ._ode_integrator import *
@@ -42,5 +47,7 @@ from ._sde_integrator import *
 from ._sde_integrator import __all__ as sde_all
 from ._imex_integrator import *
 from ._imex_integrator import __all__ as imex_all
+from ._dde_integrator import *
+from ._dde_integrator import __all__ as dde_all
 
-__all__ = ode_all + sde_all + imex_all
+__all__ = ode_all + sde_all + imex_all + dde_all

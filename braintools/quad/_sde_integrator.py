@@ -39,6 +39,7 @@ import brainstate
 import brainunit as u
 import jax
 import jax.numpy as jnp
+from braintools._misc import set_module_as
 
 __all__ = [
     'sde_euler_step',
@@ -64,7 +65,7 @@ def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
 def randn_like(y):
     return brainstate.random.randn(*jnp.shape(y))
 
-
+@set_module_as('braintools.quad')
 def sde_euler_step(
     df: DF,
     dg: DG,
@@ -126,7 +127,7 @@ def sde_euler_step(
     )
     return y_bars
 
-
+@set_module_as('braintools.quad')
 def sde_milstein_step(
     df: DF,
     dg: DG,
@@ -206,7 +207,7 @@ def sde_milstein_step(
     integrals = tree_map(f_integral, y, drifts, diffusions, diffusion_bars)
     return integrals
 
-
+@set_module_as('braintools.quad')
 def sde_expeuler_step(
     df: DF,
     dg: DG,
@@ -281,7 +282,7 @@ def sde_expeuler_step(
     x_next += diffusion_part
     return x_next
 
-
+@set_module_as('braintools.quad')
 def sde_heun_step(
     df: DF,
     dg: DG,
@@ -352,7 +353,7 @@ def sde_heun_step(
     y_next = tree_map(lambda y0, a, b, z: y0 + a * dt + b * z, y, f_use, g_use, dW)
     return y_next
 
-
+@set_module_as('braintools.quad')
 def sde_tamed_euler_step(
     df: DF,
     dg: DG,
@@ -403,7 +404,7 @@ def sde_tamed_euler_step(
     )
     return y_next
 
-
+@set_module_as('braintools.quad')
 def sde_implicit_euler_step(
     df: DF,
     dg: DG,
@@ -468,7 +469,7 @@ def _brownian_like(y, dt):
     dt_sqrt = u.math.sqrt(dt)
     return jax.tree.map(lambda y0: randn_like(y0) * dt_sqrt, y, is_leaf=u.math.is_quantity)
 
-
+@set_module_as('braintools.quad')
 def sde_srk2_step(
     df: DF,
     dg: DG,
@@ -506,7 +507,7 @@ def sde_srk2_step(
     y_next = tree_map(lambda y0, a, b: y0 + 0.5 * (a + b), y, k1, k2)
     return y_next
 
-
+@set_module_as('braintools.quad')
 def sde_srk3_step(
     df: DF,
     dg: DG,
@@ -548,7 +549,7 @@ def sde_srk3_step(
     y_next = tree_map(lambda y0, a, b, c: y0 + (a + 4.0 * b + c) / 6.0, y, k1, k2, k3)
     return y_next
 
-
+@set_module_as('braintools.quad')
 def sde_srk4_step(
     df: DF,
     dg: DG,

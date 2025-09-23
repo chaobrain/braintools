@@ -33,6 +33,8 @@ import brainstate
 import brainunit as u
 import jax
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'imex_euler_step',
     'imex_ars222_step',
@@ -56,6 +58,7 @@ def _fixed_point(update, y0: PyTree, max_iter: int = 2) -> PyTree:
     return y
 
 
+@set_module_as('braintools.quad')
 def imex_euler_step(
     f_exp: F,
     f_imp: F,
@@ -102,7 +105,7 @@ def imex_euler_step(
 
     return _fixed_point(G, y, max_iter=max_iter)
 
-
+@set_module_as('braintools.quad')
 def imex_ars222_step(
     f_exp: F,
     f_imp: F,
@@ -177,7 +180,7 @@ def imex_ars222_step(
     )
     return y_next
 
-
+@set_module_as('braintools.quad')
 def imex_cnab_step(
     f_exp: F,
     f_imp: F,
