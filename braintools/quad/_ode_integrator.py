@@ -35,6 +35,10 @@ __all__ = [
     'ode_rk3_step',
     'ode_rk4_step',
     'ode_expeuler_step',
+    'ode_midpoint_step',
+    'ode_heun_step',
+    'ode_rk4_38_step',
+    'ode_rk45_step',
 ]
 
 DT = brainstate.typing.ArrayLike
@@ -282,3 +286,242 @@ def ode_expeuler_step(
     phi = u.math.exprel(dt * linear)
     x_next = y + dt * phi * derivative
     return x_next
+
+
+def ode_midpoint_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args
+):
+    """
+    Second-order Runge-Kutta (midpoint) step for ODEs.
+
+    Uses the explicit midpoint variant:
+
+    - k1 = f(y, t)
+    - k2 = f(y + 0.5*dt*k1, t + 0.5*dt)
+    - y_{n+1} = y + dt*k2
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+
+    Returns
+    -------
+    PyTree
+        The updated state after one RK2-midpoint step.
+
+    See Also
+    --------
+    ode_rk2_step : Heun/modified Euler variant of RK2.
+    ode_rk4_step : Classical fourth-order Runge-Kutta.
+    """
+    dt = brainstate.environ.get_dt()
+    k1 = f(y, t, *args)
+    y_mid = tree_map(lambda x, k: x + (dt * 0.5) * k, y, k1)
+    k2 = f(y_mid, t + dt * 0.5, *args)
+    return tree_map(lambda x, _k2: x + dt * _k2, y, k2)
+
+
+def ode_heun_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args
+):
+    """
+    Third-order Runge-Kutta (Heun's RK3) step for ODEs.
+
+    Coefficients (c,a,b):
+    - c = [0, 1/3, 2/3]
+    - a21 = 1/3; a32 = 2/3
+    - b = [1/4, 0, 3/4]
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+
+    Returns
+    -------
+    PyTree
+        The updated state after one RK3 (Heun) step.
+
+    See Also
+    --------
+    ode_rk3_step : A different third-order RK scheme.
+    ode_rk4_step : Classical fourth-order Runge-Kutta.
+    """
+    dt = brainstate.environ.get_dt()
+    k1 = f(y, t, *args)
+    y2 = tree_map(lambda x, k: x + (dt * (1.0 / 3.0)) * k, y, k1)
+    k2 = f(y2, t + dt * (1.0 / 3.0), *args)
+    y3 = tree_map(lambda x, k: x + (dt * (2.0 / 3.0)) * k, y, k2)
+    k3 = f(y3, t + dt * (2.0 / 3.0), *args)
+    return tree_map(lambda x, _k1, _k3: x + dt * ((1.0 / 4.0) * _k1 + (3.0 / 4.0) * _k3), y, k1, k3)
+
+
+def ode_rk4_38_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args
+):
+    """
+    Fourth-order Runge-Kutta (3/8-rule) step for ODEs.
+
+    Butcher tableau:
+    - c = [0, 1/3, 2/3, 1]
+    - a21 = 1/3
+    - a31 = -1/3, a32 = 1
+    - a41 = 1, a42 = -1, a43 = 1
+    - b = [1/8, 3/8, 3/8, 1/8]
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+
+    Returns
+    -------
+    PyTree
+        The updated state after one RK4 (3/8 rule) step.
+
+    See Also
+    --------
+    ode_rk4_step : Classical RK4 (1/6, 1/3, 1/3, 1/6 weights).
+    """
+    dt = brainstate.environ.get_dt()
+    k1 = f(y, t, *args)
+    y2 = tree_map(lambda x, k: x + (dt * (1.0 / 3.0)) * k, y, k1)
+    k2 = f(y2, t + dt * (1.0 / 3.0), *args)
+    y3 = tree_map(lambda x, _k1, _k2: x + dt * ((-1.0 / 3.0) * _k1 + 1.0 * _k2), y, k1, k2)
+    k3 = f(y3, t + dt * (2.0 / 3.0), *args)
+    y4 = tree_map(lambda x, _k1, _k2, _k3: x + dt * (1.0 * _k1 + (-1.0) * _k2 + 1.0 * _k3), y, k1, k2, k3)
+    k4 = f(y4, t + dt, *args)
+    return tree_map(
+        lambda x, _k1, _k2, _k3, _k4: x + dt * (
+            (1.0 / 8.0) * _k1 + (3.0 / 8.0) * _k2 + (3.0 / 8.0) * _k3 + (1.0 / 8.0) * _k4),
+        y, k1, k2, k3, k4
+    )
+
+
+def ode_rk45_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+    return_error: bool = False,
+):
+    """
+    One step of the Cash-Karp embedded Runge-Kutta 4(5) method.
+
+    Computes a 5th-order solution and a 4th-order embedded solution using six
+    stages. Optionally returns a PyTree error estimate ``y5 - y4`` for adaptive
+    step-size controllers.
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+    return_error : bool, default False
+        If True, also return a PyTree error estimate ``(y5 - y4)``.
+
+    Returns
+    -------
+    PyTree or tuple
+        The updated state (5th-order). If ``return_error`` is True, returns
+        ``(y_next, error_estimate)`` where both are PyTrees matching ``y``.
+
+    Notes
+    -----
+    Butcher tableau (c, a, b5, b4):
+    - c = [0, 1/5, 3/10, 3/5, 1, 7/8]
+    - a21 = 1/5
+    - a31 = 3/40,  a32 = 9/40
+    - a41 = 3/10,  a42 = -9/10, a43 = 6/5
+    - a51 = -11/54, a52 = 5/2, a53 = -70/27, a54 = 35/27
+    - a61 = 1631/55296, a62 = 175/512, a63 = 575/13824, a64 = 44275/110592, a65 = 253/4096
+    - b5  = [37/378, 0, 250/621, 125/594, 0, 512/1771]
+    - b4  = [2825/27648, 0, 18575/48384, 13525/55296, 277/14336, 1/4]
+    """
+    dt = brainstate.environ.get_dt()
+
+    k1 = f(y, t, *args)
+    y2 = tree_map(lambda x, a: x + dt * (1.0 / 5.0) * a, y, k1)
+    k2 = f(y2, t + dt * (1.0 / 5.0), *args)
+
+    y3 = tree_map(lambda x, _k1, _k2: x + dt * ((3.0 / 40.0) * _k1 + (9.0 / 40.0) * _k2), y, k1, k2)
+    k3 = f(y3, t + dt * (3.0 / 10.0), *args)
+
+    y4 = tree_map(
+        lambda x, _k1, _k2, _k3: x + dt * ((3.0 / 10.0) * _k1 + (-9.0 / 10.0) * _k2 + (6.0 / 5.0) * _k3),
+        y, k1, k2, k3)
+    k4 = f(y4, t + dt * (3.0 / 5.0), *args)
+
+    y5 = tree_map(
+        lambda x, _k1, _k2, _k3, _k4: x + dt * (
+            (-11.0 / 54.0) * _k1 + (5.0 / 2.0) * _k2 + (-70.0 / 27.0) * _k3 + (35.0 / 27.0) * _k4),
+        y, k1, k2, k3, k4
+    )
+    k5 = f(y5, t + dt * 1.0, *args)
+
+    y6 = tree_map(
+        lambda x, _k1, _k2, _k3, _k4, _k5: x + dt * (
+            (1631.0 / 55296.0) * _k1 +
+            (175.0 / 512.0) * _k2 +
+            (575.0 / 13824.0) * _k3 +
+            (44275.0 / 110592.0) * _k4 +
+            (253.0 / 4096.0) * _k5
+        ),
+        y, k1, k2, k3, k4, k5
+    )
+    k6 = f(y6, t + dt * (7.0 / 8.0), *args)
+
+    # 5th-order solution
+    y5th = tree_map(
+        lambda x, _k1, _k3, _k4, _k6: x + dt * (
+            (37.0 / 378.0) * _k1 + (250.0 / 621.0) * _k3 + (125.0 / 594.0) * _k4 + (512.0 / 1771.0) * _k6
+        ),
+        y, k1, k3, k4, k6
+    )
+
+    if not return_error:
+        return y5th
+
+    # 4th-order solution (embedded)
+    y4th = tree_map(
+        lambda x, _k1, _k3, _k4, _k5, _k6: x + dt * (
+            (2825.0 / 27648.0) * _k1 + (18575.0 / 48384.0) * _k3 + (13525.0 / 55296.0) * _k4 + (
+            277.0 / 14336.0) * _k5 + (1.0 / 4.0) * _k6
+        ),
+        y, k1, k3, k4, k5, k6
+    )
+    err = tree_map(lambda a, b: a - b, y5th, y4th)
+    return y5th, err
