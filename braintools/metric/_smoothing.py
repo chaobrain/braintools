@@ -160,6 +160,6 @@ def smooth_labels(
     .. [3] Pereyra, Gabriel, et al. "Regularizing neural networks by penalizing 
            confident output distributions." arXiv preprint arXiv:1701.06548 (2017).
     """
-        assert u.math.is_float(labels), f'labels should be of float type.'
+    assert u.math.is_float(labels), f'labels should be of float type.'
     num_categories = labels.shape[-1]
     return (1.0 - alpha) * labels + alpha / num_categories

@@ -448,9 +448,9 @@ def weighted_correlation(
 
     .. math::
 
-        r_w = \frac{\text{Cov}_w(X,Y)}{\sqrt{\text{Cov}_w(X,X) \cdot \text{Cov}_w(Y,Y)}}
+        r_w = \frac{\mathrm{Cov}_w(X,Y)}{\sqrt{\mathrm{Var}_w(X) \cdot \mathrm{Var}_w(Y)}}
 
-    where :math:`\text{Cov}_w` is the weighted covariance.
+    where :math:`\mathrm{Cov}_w` is the weighted covariance.
 
     Parameters
     ----------
@@ -471,13 +471,13 @@ def weighted_correlation(
     ------
     ValueError
         If any input array is not 1-dimensional or if arrays have different lengths.
-    
+
     Notes
     -----
     The weighted correlation reduces to the standard Pearson correlation when
     all weights are equal. Weights should be non-negative; zero weights
     effectively exclude those data points from the calculation.
-    
+
     For numerical stability, avoid using weights with very large differences
     in magnitude, as this can lead to precision issues.
 
@@ -492,11 +492,11 @@ def weighted_correlation(
     >>> w = jnp.array([1.0, 1.0, 2.0, 2.0, 1.0])
     >>> corr = bt.metric.weighted_correlation(x, y, w)
     >>> print(f"Weighted correlation: {corr:.3f}")
-    >>> 
+    >>>
     >>> # Compare with unweighted correlation
     >>> unweighted = jnp.corrcoef(x, y)[0, 1]
     >>> print(f"Unweighted correlation: {unweighted:.3f}")
-    >>> 
+    >>>
     >>> # Example with reliability weights (higher for more reliable measurements)
     >>> reliability = jnp.array([0.5, 0.8, 0.9, 0.7, 0.6])
     >>> corr_reliable = bt.metric.weighted_correlation(x, y, reliability)
