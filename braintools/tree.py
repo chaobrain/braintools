@@ -15,6 +15,7 @@
 
 from typing import Sequence, Any, Callable, Tuple
 
+import brainstate
 import brainunit as u
 import jax
 import numpy as np
@@ -41,19 +42,35 @@ __all__ = [
 def scale(
     tree: PyTree[jax.typing.ArrayLike],
     x: jax.typing.ArrayLike,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Scales each element in a PyTree by a given scalar value.
+    Multiply every leaf array in a PyTree by a value.
 
-    Args:
-        tree (PyTree[jax.typing.ArrayLike]): The input PyTree containing elements to be scaled.
-        x (jax.typing.ArrayLike): The scalar value by which each element in the PyTree is multiplied.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Parameters
+    ----------
+    tree : PyTree of array_like
+        Input PyTree whose leaves are multiplied.
+    x : array_like
+        Value broadcast and multiplied with each leaf of `tree`.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity` so unit-quantities are considered leaves.
 
-    Returns:
-        PyTree: A new PyTree with each element scaled by the given scalar value.
+    Returns
+    -------
+    PyTree
+        PyTree with each leaf multiplied by `x` (with broadcasting).
+
+    See Also
+    --------
+    mul : Elementwise multiplication with a PyTree or value.
+    add : Elementwise addition with a PyTree or value.
+
+    Notes
+    -----
+    - Broadcasting follows the semantics of the underlying array type
+      (e.g., JAX/NumPy). The structure of `tree` is preserved.
     """
     return jax.tree.map(lambda a: a * x, tree, is_leaf=is_leaf)
 
@@ -61,24 +78,40 @@ def scale(
 def mul(
     tree: PyTree[jax.typing.ArrayLike],
     x: PyTree[jax.typing.ArrayLike] | jax.typing.ArrayLike,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Multiplies each element in a PyTree by a corresponding element in another PyTree or a scalar.
+    Elementwise multiplication of a PyTree with a value or another PyTree.
 
-    If `x` is a scalar, each element in `tree` is multiplied by `x`.
-    If `x` is a PyTree, each element in `tree` is multiplied by the corresponding element in `x`.
+    Parameters
+    ----------
+    tree : PyTree of array_like
+        Left operand; PyTree whose leaves are multiplied.
+    x : PyTree of array_like or array_like
+        Right operand. If a PyTree, its structure must match `tree` and
+        corresponding leaves are multiplied elementwise. If a value
+        (scalar/array_like), it is broadcast to each leaf of `tree`.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree (PyTree[jax.typing.ArrayLike]): The input PyTree containing elements to be multiplied.
-        x (PyTree[jax.typing.ArrayLike] | jax.typing.ArrayLike): The PyTree or scalar value by which each element in the PyTree is multiplied.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Returns
+    -------
+    PyTree
+        PyTree with elementwise products.
 
-    Returns:
-        PyTree: A new PyTree with each element multiplied by the corresponding element in `x` or by the scalar `x`.
+    See Also
+    --------
+    scale : Multiply every leaf by a single value.
+    add : Elementwise addition with a PyTree or value.
+    sub : Elementwise subtraction of PyTrees.
+
+    Notes
+    -----
+    - When `x` is a PyTree, both `tree` and `x` must have identical PyTree
+      structures. Broadcasting applies per-leaf when `x` is array_like.
     """
-    if isinstance(x, jax.typing.ArrayLike):
+    if isinstance(x, brainstate.typing.ArrayLike):
         return scale(tree, x)
     return jax.tree.map(lambda a, b: a * b, tree, x, is_leaf=is_leaf)
 
@@ -86,19 +119,30 @@ def mul(
 def shift(
     tree1: PyTree[jax.typing.ArrayLike],
     x: jax.typing.ArrayLike,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Shifts each element in a PyTree by a given scalar value.
+    Add a value to every leaf array in a PyTree.
 
-    Args:
-        tree1 (PyTree[jax.typing.ArrayLike]): The input PyTree containing elements to be shifted.
-        x (jax.typing.ArrayLike): The scalar value to add to each element in the PyTree.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Parameters
+    ----------
+    tree1 : PyTree of array_like
+        Input PyTree.
+    x : array_like
+        Value broadcast and added to each leaf of `tree1`.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Returns:
-        PyTree: A new PyTree with each element shifted by the given scalar value.
+    Returns
+    -------
+    PyTree
+        PyTree with each leaf shifted by `x`.
+
+    See Also
+    --------
+    add : Elementwise addition with a PyTree or value.
+    sub : Elementwise subtraction of PyTrees.
     """
     return jax.tree.map(lambda a: a + x, tree1, is_leaf=is_leaf)
 
@@ -106,24 +150,35 @@ def shift(
 def add(
     tree1: PyTree[jax.typing.ArrayLike],
     tree2: PyTree[jax.typing.ArrayLike] | jax.typing.ArrayLike,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Adds corresponding elements of two PyTrees or a PyTree and a scalar.
+    Elementwise addition of PyTrees or a PyTree and a value.
 
-    If `tree2` is a scalar, each element in `tree1` is incremented by `tree2`.
-    If `tree2` is a PyTree, each element in `tree1` is added to the corresponding element in `tree2`.
+    Parameters
+    ----------
+    tree1 : PyTree of array_like
+        Left operand.
+    tree2 : PyTree of array_like or array_like
+        Right operand. If a PyTree, its structure must match `tree1` and
+        corresponding leaves are added elementwise. If a value
+        (scalar/array_like), it is broadcast to each leaf of `tree1`.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree1 (PyTree[jax.typing.ArrayLike]): The first input PyTree containing elements to be added.
-        tree2 (PyTree[jax.typing.ArrayLike] | jax.typing.ArrayLike): The second PyTree or scalar value to add to each element in `tree1`.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Returns
+    -------
+    PyTree
+        PyTree with elementwise sums.
 
-    Returns:
-        PyTree: A new PyTree with each element being the sum of the corresponding elements in `tree1` and `tree2`, or `tree1` and the scalar `tree2`.
+    See Also
+    --------
+    sub : Elementwise subtraction of PyTrees.
+    mul : Elementwise multiplication.
+    shift : Add a single value to every leaf.
     """
-    if isinstance(tree2, jax.Array):
+    if isinstance(tree2, brainstate.typing.ArrayLike):
         return shift(tree1, tree2)
     return jax.tree.map(lambda a, b: a + b, tree1, tree2, is_leaf=is_leaf)
 
@@ -131,19 +186,30 @@ def add(
 def sub(
     tree1: PyTree[jax.typing.ArrayLike],
     tree2: PyTree[jax.typing.ArrayLike],
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Subtracts corresponding elements of two PyTrees.
+    Elementwise subtraction of two PyTrees.
 
-    Args:
-        tree1 (PyTree[jax.typing.ArrayLike]): The first input PyTree containing elements to be subtracted from.
-        tree2 (PyTree[jax.typing.ArrayLike]): The second PyTree containing elements to subtract from the corresponding elements in `tree1`.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Parameters
+    ----------
+    tree1 : PyTree of array_like
+        Minuend PyTree.
+    tree2 : PyTree of array_like
+        Subtrahend PyTree. Must share the same PyTree structure as `tree1`.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Returns:
-        PyTree: A new PyTree with each element being the difference of the corresponding elements in `tree1` and `tree2`.
+    Returns
+    -------
+    PyTree
+        PyTree where each leaf is `tree1 - tree2` elementwise.
+
+    See Also
+    --------
+    add : Elementwise addition of PyTrees.
+    mul : Elementwise multiplication.
     """
     return jax.tree.map(lambda a, b: a - b, tree1, tree2, is_leaf=is_leaf)
 
@@ -151,21 +217,39 @@ def sub(
 def dot(
     a: PyTree,
     b: PyTree,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> jax.Array:
     """
-    Computes the dot product of two PyTrees.
+    Inner product over all leaves of two PyTrees.
 
-    This function multiplies corresponding elements of two PyTrees and sums the results to produce a single scalar value.
+    For each pair of corresponding leaves, compute the elementwise product,
+    reduce with a full sum over all axes, and then sum across leaves.
 
-    Args:
-        a (PyTree): The first input PyTree containing elements to be multiplied.
-        b (PyTree): The second input PyTree containing elements to be multiplied with the corresponding elements in `a`.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Parameters
+    ----------
+    a : PyTree of array_like
+        First operand.
+    b : PyTree of array_like
+        Second operand with the same PyTree structure as `a`.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Returns:
-        jax.Array: A scalar value representing the dot product of the two input PyTrees.
+    Returns
+    -------
+    jax.Array
+        Scalar representing the inner product across the entire PyTree.
+
+    See Also
+    --------
+    sum : Sum of all elements in a PyTree.
+    squared_norm : Sum of squares of all elements (i.e., `dot(x, x)`).
+
+    Notes
+    -----
+    - Leaf arrays must be broadcast-compatible for multiplication.
+    - When leaves carry units (brainunit quantities), units propagate through
+      the multiplications and sums according to quantity rules.
     """
     return jax.tree.reduce(
         u.math.add,
@@ -176,41 +260,59 @@ def dot(
 
 def sum(
     tree: PyTree[jax.typing.ArrayLike],
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> jax.Array:
     """
-    Computes the sum of all elements in a PyTree.
+    Sum all elements across every leaf in a PyTree.
 
-    This function traverses the input PyTree, summing all elements to produce a single scalar value.
+    Parameters
+    ----------
+    tree : PyTree of array_like
+        Input PyTree whose elements are reduced.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree (PyTree[jax.typing.ArrayLike]): The input PyTree containing elements to be summed.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Returns
+    -------
+    jax.Array
+        Scalar sum across all leaves and their elements.
 
-    Returns:
-        jax.Array: A scalar value representing the sum of all elements in the input PyTree.
+    See Also
+    --------
+    dot : Inner product across leaves.
+    squared_norm : Sum of squares across leaves.
     """
     return jax.tree.reduce(u.math.add, jax.tree.map(u.math.sum, tree, is_leaf=is_leaf), is_leaf=is_leaf)
 
 
 def squared_norm(
     tree: PyTree[jax.typing.ArrayLike],
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> jax.Array:
     """
-    Computes the squared norm of all elements in a PyTree.
+    Sum of squares of all elements in a PyTree.
 
-    This function traverses the input PyTree, computing the squared norm of each element
-    and summing the results to produce a single scalar value.
+    Parameters
+    ----------
+    tree : PyTree of array_like
+        Input PyTree.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree (PyTree[jax.typing.ArrayLike]): The input PyTree containing elements for which the squared norm is computed.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Returns
+    -------
+    jax.Array
+        Scalar representing ``sum_i sum(x_i**2)`` across all leaves `x_i`.
 
-    Returns:
-        jax.Array: A scalar value representing the squared norm of all elements in the input PyTree.
+    See Also
+    --------
+    dot : Inner product across leaves.
+
+    Notes
+    -----
+    Equivalent to ``dot(tree, tree)``.
     """
     return jax.tree.reduce(
         u.math.add,
@@ -222,46 +324,67 @@ def squared_norm(
 def concat(
     trees: Sequence[PyTree[jax.typing.ArrayLike]],
     axis: int = 0,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Concatenates a sequence of PyTrees along a specified axis.
+    Concatenate corresponding leaves from a sequence of PyTrees.
 
-    This function takes multiple PyTrees and concatenates their corresponding elements
-    along the specified axis, resulting in a single PyTree.
+    Parameters
+    ----------
+    trees : sequence of PyTree of array_like
+        PyTrees with identical structure whose leaves are concatenated.
+    axis : int, default: 0
+        Axis along which to concatenate leaves.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        trees (Sequence[PyTree[jax.typing.ArrayLike]]): A sequence of PyTrees to be concatenated.
-        axis (int, optional): The axis along which the PyTrees will be concatenated. Defaults to 0.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Returns
+    -------
+    PyTree
+        PyTree with each leaf given by ``concatenate([t[i] for t in trees], axis=axis)``.
 
-    Returns:
-        PyTree: A new PyTree with elements concatenated along the specified axis.
+    Notes
+    -----
+    All PyTrees in `trees` must share the same PyTree structure, and their
+    corresponding leaves must be compatible for concatenation along `axis`.
     """
-    return jax.tree.map(lambda *args: u.math.concatenate(args, axis=axis), *trees, is_leaf=is_leaf)
+    return jax.tree.map(
+        lambda *args: u.math.concatenate(args, axis=axis),
+        *trees,
+        is_leaf=is_leaf
+    )
 
 
 def split(
     tree: PyTree[jax.Array],
     sizes: Tuple[int],
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> Tuple[PyTree[jax.Array], ...]:
     """
-    Splits a PyTree into multiple sub-PyTrees based on specified sizes.
+    Split each leaf of a PyTree along axis 0 according to sizes.
 
-    This function divides the input PyTree into a sequence of sub-PyTrees,
-    where each sub-PyTree corresponds to a specified size in the `sizes` tuple.
+    Parameters
+    ----------
+    tree : PyTree of jax.Array
+        Input PyTree. Each leaf is sliced along its first axis.
+    sizes : tuple of int
+        Sizes for consecutive splits along axis 0. The remainder (if any)
+        after ``sum(sizes)`` is returned as a final chunk.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree (PyTree[jax.Array]): The input PyTree to be split.
-        sizes (Tuple[int]): A tuple of integers specifying the sizes of each split.
-            The sum of the sizes should be less than or equal to the size of the PyTree.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Returns
+    -------
+    tuple of PyTree
+        Tuple of length ``len(sizes) + 1`` where each element is a PyTree
+        containing the corresponding slice. The last PyTree may be empty if
+        ``sum(sizes)`` equals the size along axis 0.
 
-    Returns:
-        Tuple[PyTree[jax.Array], ...]: A tuple of sub-PyTrees, each corresponding to a specified size in `sizes`.
+    Notes
+    -----
+    This function operates on axis 0 only.
     """
     idx = 0
     result: list[PyTree[jax.Array]] = []
@@ -275,22 +398,25 @@ def split(
 def idx(
     tree: PyTree[jax.typing.ArrayLike],
     idx,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Extracts elements from a PyTree at specified indices.
+    Index every leaf of a PyTree.
 
-    This function traverses the input PyTree and extracts elements at the specified
-    indices from each leaf node.
+    Parameters
+    ----------
+    tree : PyTree of array_like
+        Input PyTree.
+    idx : int, slice or array_like
+        Indices used to index each leaf ``x`` as ``x[idx]``.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree (PyTree[jax.typing.ArrayLike]): The input PyTree from which elements are to be extracted.
-        idx: The indices at which elements are to be extracted. This can be an integer, slice, or array-like object.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
-
-    Returns:
-        PyTree: A new PyTree with elements extracted at the specified indices from each leaf node.
+    Returns
+    -------
+    PyTree
+        PyTree with leaves indexed by `idx`.
     """
     return jax.tree.map(lambda x: x[idx], tree, is_leaf=is_leaf)
 
@@ -298,22 +424,25 @@ def idx(
 def expand(
     tree: PyTree[jax.typing.ArrayLike],
     axis,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Expands the dimensions of each element in a PyTree along a specified axis.
+    Insert a length-1 axis into every leaf of a PyTree.
 
-    This function traverses the input PyTree and applies a dimension expansion
-    to each leaf node along the specified axis.
+    Parameters
+    ----------
+    tree : PyTree of array_like
+        Input PyTree.
+    axis : int
+        Position in the expanded shape where the new axis is placed.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree (PyTree[jax.typing.ArrayLike]): The input PyTree containing elements to be expanded.
-        axis: The axis along which to expand the dimensions of each element.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
-
-    Returns:
-        PyTree: A new PyTree with each element's dimensions expanded along the specified axis.
+    Returns
+    -------
+    PyTree
+        PyTree with ``expand_dims(x, axis)`` applied to each leaf ``x``.
     """
     return jax.tree.map(lambda x: u.math.expand_dims(x, axis), tree, is_leaf=is_leaf)
 
@@ -322,23 +451,28 @@ def take(
     tree: PyTree[jax.typing.ArrayLike],
     idx,
     axis: int,
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
-    Extracts elements from a PyTree along a specified axis using given indices.
+    Take elements from every leaf of a PyTree along a given axis.
 
-    This function traverses the input PyTree and extracts elements from each leaf node
-    along the specified axis using the provided indices.
+    Parameters
+    ----------
+    tree : PyTree of array_like
+        Input PyTree.
+    idx : int, slice or array_like
+        Indices used for selection. If a slice, it is applied by standard
+        indexing; otherwise ``u.math.take`` is used per leaf.
+    axis : int
+        Axis along which to take values.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree (PyTree[jax.typing.ArrayLike]): The input PyTree from which elements are to be extracted.
-        idx: The indices or slice at which elements are to be extracted. This can be an integer, slice, or array-like object.
-        axis (int): The axis along which to extract elements.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
-
-    Returns:
-        PyTree: A new PyTree with elements extracted along the specified axis from each leaf node.
+    Returns
+    -------
+    PyTree
+        PyTree with elements selected along `axis`.
     """
 
     def take_(x):
@@ -354,20 +488,27 @@ def take(
 
 def as_numpy(
     tree: PyTree[jax.typing.ArrayLike],
-    is_leaf: Callable[[Any], bool] | None = None
+    is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree[np.ndarray]:
     """
-    Converts all elements in a PyTree to NumPy arrays.
+    Convert all leaves of a PyTree to NumPy arrays.
 
-    This function traverses the input PyTree and converts each leaf node
-    to a NumPy array using `np.asarray`.
+    Parameters
+    ----------
+    tree : PyTree of array_like
+        Input PyTree whose leaves will be converted.
+    is_leaf : callable, optional
+        Predicate to treat a node as a leaf during traversal. Defaults to
+        `u.math.is_quantity`.
 
-    Args:
-        tree (PyTree[jax.typing.ArrayLike]): The input PyTree containing elements to be converted.
-        is_leaf (Callable[[Any], bool] | None, optional): A function that determines whether a node is a leaf.
-            If None, all non-sequence nodes are considered leaves.
+    Returns
+    -------
+    PyTree of numpy.ndarray
+        PyTree with ``np.asarray`` applied to each leaf.
 
-    Returns:
-        PyTree[np.ndarray]: A new PyTree with each element converted to a NumPy array.
+    Notes
+    -----
+    This performs a best-effort conversion using ``np.asarray``; for JAX
+    arrays this typically results in host NumPy arrays.
     """
     return jax.tree.map(lambda x: np.asarray(x), tree, is_leaf=is_leaf)

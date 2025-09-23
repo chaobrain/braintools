@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BDP Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,19 +14,10 @@
 # ==============================================================================
 
 
-__version_info__ = (0, 0, 11)
-__version__ = "0.0.11"
+def set_module_as(module: str):
+    def wrapper(fun: callable):
+        fun.__module__ = module
+        return fun
 
-from . import file
-from . import input
-from . import metric
-from . import optim
-from . import quad
-from . import tree
-from . import visualize
-from ._others import *
-from ._others import __all__ as _other_all
+    return wrapper
 
-__all__ = ['input', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad'] + _other_all
-
-del _other_all
