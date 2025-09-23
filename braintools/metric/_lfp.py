@@ -19,11 +19,14 @@ import brainstate
 import jax
 from jax import numpy as jnp
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'unitary_LFP',
 ]
 
 
+@set_module_as('braintools.metric')
 def unitary_LFP(
     times: brainstate.typing.ArrayLike,
     spikes: brainstate.typing.ArrayLike,

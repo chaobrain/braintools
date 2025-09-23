@@ -19,11 +19,14 @@ import brainstate
 import brainunit as u
 import jax
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'cosine_similarity',
 ]
 
 
+@set_module_as('braintools.metric')
 def cosine_similarity(
     X: brainstate.typing.ArrayLike,
     Y: Optional[brainstate.typing.ArrayLike] = None,

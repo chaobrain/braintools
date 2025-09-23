@@ -23,6 +23,8 @@ import jax
 import numpy as onp
 from jax import vmap, lax, numpy as jnp
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'cross_correlation',
     'voltage_fluctuation',
@@ -34,6 +36,7 @@ __all__ = [
 
 
 
+@set_module_as('braintools.metric')
 def cross_correlation(
     spikes: brainstate.typing.ArrayLike,
     bin: Union[int, float],
@@ -127,6 +130,7 @@ def _f_signal(signal):
     return jnp.mean(signal * signal) - jnp.mean(signal) ** 2
 
 
+@set_module_as('braintools.metric')
 def voltage_fluctuation(
     potentials,
     method='loop'
@@ -197,6 +201,7 @@ def voltage_fluctuation(
     return r
 
 
+@set_module_as('braintools.metric')
 def matrix_correlation(x, y):
     """Pearson correlation of the lower triagonal of two matrices.
 
@@ -229,6 +234,7 @@ def matrix_correlation(x, y):
     return cc
 
 
+@set_module_as('braintools.metric')
 def functional_connectivity(activities):
     """Functional connectivity matrix of timeseries activities.
 
@@ -252,6 +258,7 @@ def functional_connectivity(activities):
     return jnp.nan_to_num(fc)
 
 
+@set_module_as('braintools.metric')
 def functional_connectivity_dynamics(
     activities,
     window_size=30,
@@ -276,6 +283,7 @@ def functional_connectivity_dynamics(
     pass
 
 
+@set_module_as('braintools.metric')
 def weighted_correlation(
     x,
     y,

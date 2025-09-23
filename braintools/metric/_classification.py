@@ -27,6 +27,8 @@ import brainunit as u
 import jax
 import jax.numpy as jnp
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'sigmoid_binary_cross_entropy',
     'hinge_loss',
@@ -54,6 +56,7 @@ def assert_is_int(array):
     assert u.math.is_int(array), 'Array must be int.'
 
 
+@set_module_as('braintools.metric')
 def sigmoid_binary_cross_entropy(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
@@ -90,6 +93,7 @@ def sigmoid_binary_cross_entropy(
     return -labels * log_p - (1. - labels) * log_not_p
 
 
+@set_module_as('braintools.metric')
 def hinge_loss(
     predictor_outputs: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike
@@ -106,6 +110,7 @@ def hinge_loss(
     return jnp.maximum(0, 1 - predictor_outputs * targets)
 
 
+@set_module_as('braintools.metric')
 def perceptron_loss(
     predictor_outputs: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike
@@ -126,6 +131,7 @@ def perceptron_loss(
     return jnp.maximum(0, - predictor_outputs * targets)
 
 
+@set_module_as('braintools.metric')
 def softmax_cross_entropy(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
@@ -154,6 +160,7 @@ def softmax_cross_entropy(
     return ret
 
 
+@set_module_as('braintools.metric')
 def softmax_cross_entropy_with_integer_labels(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
@@ -192,6 +199,7 @@ def softmax_cross_entropy_with_integer_labels(
 _dot_last_dim = jnp.vectorize(jnp.dot, signature='(n),(n)->()')
 
 
+@set_module_as('braintools.metric')
 def multiclass_hinge_loss(
     scores: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
@@ -214,6 +222,7 @@ def multiclass_hinge_loss(
             _dot_last_dim(scores, one_hot_labels))
 
 
+@set_module_as('braintools.metric')
 def multiclass_perceptron_loss(
     scores: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
@@ -235,6 +244,7 @@ def multiclass_perceptron_loss(
     return jnp.max(scores, axis=-1) - _dot_last_dim(scores, one_hot_labels)
 
 
+@set_module_as('braintools.metric')
 def poly_loss_cross_entropy(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
@@ -282,6 +292,7 @@ def poly_loss_cross_entropy(
     return cross_entropy + epsilon * one_minus_pt
 
 
+@set_module_as('braintools.metric')
 def kl_divergence(
     log_predictions: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike
@@ -310,6 +321,7 @@ def kl_divergence(
     return jnp.sum(loss, axis=-1)
 
 
+@set_module_as('braintools.metric')
 def kl_divergence_with_log_targets(
     log_predictions: brainstate.typing.ArrayLike,
     log_targets: brainstate.typing.ArrayLike
@@ -334,6 +346,7 @@ def kl_divergence_with_log_targets(
     return jnp.sum(loss, axis=-1)
 
 
+@set_module_as('braintools.metric')
 def convex_kl_divergence(
     log_predictions: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike
@@ -360,6 +373,7 @@ def convex_kl_divergence(
     return kl_divergence(log_predictions, targets) + jnp.sum(jnp.exp(log_predictions) - targets, axis=-1)
 
 
+@set_module_as('braintools.metric')
 def ctc_loss_with_forward_probs(
     logits: brainstate.typing.ArrayLike,
     logit_paddings: brainstate.typing.ArrayLike,
@@ -485,6 +499,7 @@ def ctc_loss_with_forward_probs(
     return per_seq_loss, logalpha_phi, logalpha_emit
 
 
+@set_module_as('braintools.metric')
 def ctc_loss(
     logits: brainstate.typing.ArrayLike,
     logit_paddings: brainstate.typing.ArrayLike,
@@ -526,6 +541,7 @@ def ctc_loss(
     return per_seq_loss
 
 
+@set_module_as('braintools.metric')
 def sigmoid_focal_loss(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,
@@ -571,6 +587,7 @@ def sigmoid_focal_loss(
     return loss
 
 
+@set_module_as('braintools.metric')
 def nll_loss(input, target):
     r"""
     The negative log likelihood loss.

@@ -48,6 +48,8 @@ import brainunit as u
 import jax
 import jax.numpy as jnp
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'ranking_softmax_loss',
 ]
@@ -104,6 +106,7 @@ def _safe_reduce(
     return output
 
 
+@set_module_as('braintools.metric')
 def ranking_softmax_loss(
     logits: brainstate.typing.ArrayLike,
     labels: brainstate.typing.ArrayLike,

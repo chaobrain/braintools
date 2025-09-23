@@ -18,6 +18,8 @@ from typing import Any, Protocol
 
 import jax.numpy as jnp
 
+from braintools._misc import set_module_as
+
 __all__ = [
     "make_fenchel_young_loss",
 ]
@@ -29,6 +31,7 @@ class MaxFun(Protocol):
         ...
 
 
+@set_module_as('braintools.metric')
 def make_fenchel_young_loss(
     max_fun: MaxFun
 ):

@@ -32,17 +32,8 @@ from ._regression import __all__ as _regression_all
 from ._smoothing import *
 from ._smoothing import __all__ as _smoothing_all
 
-__all__ = (
-    _classification_all
-    + _correlation_all
-    + _fenchel_young_all
-    + _firings_all
-    + _lfp_all
-    + _ranking_all
-    + _regression_all
-    + _smoothing_all
-    + _pariwise_all
-)
+__all__ = _classification_all + _correlation_all + _fenchel_young_all + _firings_all + _lfp_all
+__all__ = __all__ + _ranking_all + _regression_all + _smoothing_all + _pariwise_all
 del (
     _classification_all,
     _correlation_all,

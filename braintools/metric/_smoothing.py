@@ -19,9 +19,12 @@ import brainstate
 import brainunit as u
 import jax.numpy as jnp
 
+from braintools._misc import set_module_as
+
 __all__ = ['smooth_labels']
 
 
+@set_module_as('braintools.metric')
 def smooth_labels(
     labels: brainstate.typing.ArrayLike,
     alpha: float,

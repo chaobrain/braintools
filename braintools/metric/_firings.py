@@ -22,12 +22,15 @@ import brainunit as u
 import jax.numpy as jnp
 import numpy as onp
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'raster_plot',
     'firing_rate',
 ]
 
 
+@set_module_as('braintools.metric')
 def raster_plot(
     sp_matrix: brainstate.typing.ArrayLike,
     times: brainstate.typing.ArrayLike
@@ -54,6 +57,7 @@ def raster_plot(
     return index, time
 
 
+@set_module_as('braintools.metric')
 def firing_rate(
     spikes: brainstate.typing.ArrayLike,
     width: Union[float, u.Quantity],

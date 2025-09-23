@@ -22,6 +22,7 @@ import brainunit as u
 import jax.numpy as jnp
 
 from ._util import _reduce
+from braintools._misc import set_module_as
 
 __all__ = [
     'squared_error',
@@ -72,6 +73,7 @@ def safe_norm(x: brainstate.typing.ArrayLike,
     return jnp.where(norm <= min_norm, min_norm, masked_norm)
 
 
+@set_module_as('braintools.metric')
 def squared_error(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
@@ -109,6 +111,7 @@ def squared_error(
     return _reduce(errors ** 2, reduction, axis=axis)
 
 
+@set_module_as('braintools.metric')
 def absolute_error(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
@@ -200,6 +203,7 @@ class L1Loss:
         return l1_loss(input, target, reduction=self.reduction)
 
 
+@set_module_as('braintools.metric')
 def l1_loss(logits: brainstate.typing.ArrayLike,
             targets: brainstate.typing.ArrayLike,
             reduction: str = 'sum'):
@@ -255,6 +259,7 @@ def l1_loss(logits: brainstate.typing.ArrayLike,
     return _reduce(outputs=norm, reduction=reduction)
 
 
+@set_module_as('braintools.metric')
 def l2_loss(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
@@ -278,6 +283,7 @@ def l2_loss(
     return 0.5 * squared_error(predictions, targets)
 
 
+@set_module_as('braintools.metric')
 def l2_norm(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
@@ -302,6 +308,7 @@ def l2_norm(
     return jnp.linalg.norm(errors, axis=axis, ord=2)
 
 
+@set_module_as('braintools.metric')
 def huber_loss(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
@@ -335,6 +342,7 @@ def huber_loss(
     return 0.5 * quadratic ** 2 + delta * linear
 
 
+@set_module_as('braintools.metric')
 def log_cosh(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
@@ -361,6 +369,7 @@ def log_cosh(
     return jnp.logaddexp(errors, -errors) - jnp.log(2.0).astype(errors.dtype)
 
 
+@set_module_as('braintools.metric')
 def cosine_similarity(
     predictions: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike,
@@ -396,6 +405,7 @@ def cosine_similarity(
     return jnp.sum(unit_targets * unit_predictions, axis=-1)
 
 
+@set_module_as('braintools.metric')
 def cosine_distance(
     predictions: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike,
