@@ -43,52 +43,71 @@ def cross_correlation(
     dt: Union[int, float] = None,
     method: str = 'loop'
 ):
-    r"""Calculate cross correlation index between neurons.
+    r"""Calculate cross-correlation index between neurons.
 
-    The coherence [1]_ between two neurons i and j is measured by their
-    cross-correlation of spike trains at zero time lag within a time bin
-    of :math:`\Delta t = \tau`. More specifically, suppose that a long
-    time interval T is divided into small bins of :math:`\Delta t` and
-    that two spike trains are given by :math:`X(l)=` 0 or 1, :math:`Y(l)=` 0
-    or 1, :math:`l=1,2, \ldots, K(T / K=\tau)`. Thus, we define a coherence
-    measure for the pair as:
+    The coherence between two neurons i and j is measured by their
+    cross-correlation of spike trains at zero time lag within a time bin.
+    This function computes the population synchronization index based on
+    pairwise cross-correlations.
+
+    The coherence measure for a pair is defined as:
 
     .. math::
 
-        \kappa_{i j}(\tau)=\frac{\sum_{l=1}^{K} X(l) Y(l)}
+        \kappa_{ij}(\tau) = \frac{\sum_{l=1}^{K} X(l) Y(l)}
         {\sqrt{\sum_{l=1}^{K} X(l) \sum_{l=1}^{K} Y(l)}}
 
-    The population coherence measure :math:`\kappa(\tau)` is defined by the
-    average of :math:`\kappa_{i j}(\tau)` over many pairs of neurons in the
-    network.
+    where the time interval is divided into K bins of size :math:`\Delta t = \tau`,
+    and :math:`X(l)`, :math:`Y(l)` are binary spike indicators (0 or 1) for each bin.
 
-    .. note::
-       To JIT compile this function, users should make ``bin``, ``dt``, ``numpy`` static.
-       For example, ``partial(brainpy.measure.cross_correlation, bin=10, numpy=False)``.
+    The population coherence measure :math:`\kappa(\tau)` is the average of
+    :math:`\kappa_{ij}(\tau)` over all pairs of neurons.
 
     Parameters
     ----------
-    spikes : ndarray
-        The history of spike states of the neuron group.
-    bin : float, int
-        The time bin to normalize spike states.
-    dt : float, optional
-        The time precision.
-    method: str
-      The method to calculate all pairs of cross correlation.
-      Supports two kinds of methods: `loop` and `vmap`.
-      `vmap` method needs much more memory.
+    spikes : brainstate.typing.ArrayLike
+        Spike history matrix with shape ``(num_time, num_neurons)``.
+        Binary values indicating spike occurrences.
+    bin : Union[int, float]
+        Time bin size for binning spike trains.
+    dt : Union[int, float], optional
+        Time precision. If None, uses ``brainstate.environ.get_dt()``.
+    method : str, default='loop'
+        Method for computing cross-correlations:
+        
+        - ``'loop'``: Memory-efficient iterative approach
+        - ``'vmap'``: Vectorized approach (uses more memory)
 
     Returns
     -------
-    cc_index : float
-        The cross correlation value which represents the synchronization index.
+    float
+        Cross-correlation index representing the population synchronization level.
+        Values closer to 1 indicate higher synchronization.
+
+    Notes
+    -----
+    To JIT compile this function, make ``bin``, ``dt``, and ``method`` static.
+    For example: ``partial(cross_correlation, bin=10, method='loop')``.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools as bt
+    >>> # Generate random spike data
+    >>> spikes = jnp.array([[1, 0, 1], [0, 1, 0], [1, 1, 0]])
+    >>> sync_index = bt.metric.cross_correlation(spikes, bin=1.0)
+    >>> print(f"Synchronization index: {sync_index:.3f}")
+    >>> 
+    >>> # For larger datasets, use vectorized method
+    >>> large_spikes = jnp.random.binomial(1, 0.1, (1000, 50))
+    >>> sync_fast = bt.metric.cross_correlation(large_spikes, bin=10.0, method='vmap')
+    >>> print(f"Population synchronization: {sync_fast:.3f}")
 
     References
     ----------
     .. [1] Wang, Xiao-Jing, and György Buzsáki. "Gamma oscillation by synaptic
            inhibition in a hippocampal interneuronal network model." Journal of
-           neuroscience 16.20 (1996): 6402-6413.
+           Neuroscience 16.20 (1996): 6402-6413.
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
     bin_size = int(bin / dt)
@@ -135,55 +154,79 @@ def voltage_fluctuation(
     potentials,
     method='loop'
 ):
-    r"""Calculate neuronal synchronization via voltage variance.
+    r"""Calculate neuronal synchronization via voltage variance analysis.
 
-    The method comes from [1]_ [2]_ [3]_.
+    This method quantifies synchronization by comparing the variance of the
+    population-averaged membrane potential to the average variance of individual
+    neurons' membrane potentials.
 
-    First, average over the membrane potential :math:`V`
+    The synchronization measure is computed as:
+
+    .. math::
+
+        \chi^2(N) = \frac{\sigma_V^2}{\frac{1}{N} \sum_{i=1}^N \sigma_{V_i}^2}
+
+    where:
+    
+    - :math:`\sigma_V^2` is the variance of the population average potential
+    - :math:`\sigma_{V_i}^2` is the variance of individual neuron potentials
+    - :math:`N` is the number of neurons
+
+    The population average potential is:
 
     .. math::
 
         V(t) = \frac{1}{N} \sum_{i=1}^{N} V_i(t)
 
-    The variance of the time fluctuations of :math:`V(t)` is
+    And its variance is:
 
     .. math::
 
-        \sigma_V^2 = \left\langle \left[ V(t) \right]^2 \right\rangle_t -
-        \left[ \left\langle V(t) \right\rangle_t \right]^2
+        \sigma_V^2 = \left\langle V(t)^2 \right\rangle_t - \left\langle V(t) \right\rangle_t^2
 
-    where :math:`\left\langle \ldots \right\rangle_t = (1 / T_m) \int_0^{T_m} dt \, \ldots`
-    denotes time-averaging over a large time, :math:`\tau_m`. After normalization
-    of :math:`\sigma_V` to the average over the population of the single cell
-    membrane potentials
+    Parameters
+    ----------
+    potentials : brainstate.typing.ArrayLike
+        Membrane potential matrix with shape ``(num_time, num_neurons)``.
+        Contains the voltage traces for each neuron over time.
+    method : str, default='loop'
+        Computational method:
+        
+        - ``'loop'``: Memory-efficient iterative computation
+        - ``'vmap'``: Vectorized computation (higher memory usage)
 
-    .. math::
+    Returns
+    -------
+    float
+        Synchronization index. Values > 1 indicate synchronized activity,
+        values ≈ 1 indicate asynchronous activity.
 
-        \sigma_{V_i}^2 = \left\langle\left[ V_i(t) \right]^2 \right\rangle_t -
-        \left[ \left\langle V_i(t) \right\rangle_t \right]^2
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools as bt
+    >>> # Generate correlated voltage traces
+    >>> t = jnp.linspace(0, 10, 1000)
+    >>> # Synchronous case: common oscillation + noise
+    >>> common_signal = jnp.sin(2 * jnp.pi * t)
+    >>> potentials_sync = common_signal[:, None] + 0.1 * jnp.random.normal((1000, 10))
+    >>> sync_idx = bt.metric.voltage_fluctuation(potentials_sync)
+    >>> print(f"Synchronized case: {sync_idx:.3f}")
+    >>> 
+    >>> # Asynchronous case: independent noise
+    >>> potentials_async = jnp.random.normal((1000, 10))
+    >>> async_idx = bt.metric.voltage_fluctuation(potentials_async)
+    >>> print(f"Asynchronous case: {async_idx:.3f}")
 
-    one defines a synchrony measure, :math:`\chi (N)`, for the activity of a system
-    of :math:`N` neurons by:
-
-    .. math::
-
-        \chi^2 \left( N \right) = \frac{\sigma_V^2}{ \frac{1}{N} \sum_{i=1}^N
-        \sigma_{V_i}^2}
-
-    .. [1] Golomb, D. and Rinzel J. (1993) Dynamics of globally coupled
-           inhibitory neurons with heterogeneity. Phys. Rev. E 48:4810-4814.
-    .. [2] Golomb D. and Rinzel J. (1994) Clustering in globally coupled
-           inhibitory neurons. Physica D 72:259-282.
-    .. [3] David Golomb (2007) Neuronal synchrony measures. Scholarpedia, 2(1):1347.
-
-    Args:
-      potentials: The membrane potential matrix of the neuron group.
-      method: The method to calculate all pairs of cross correlation.
-         Supports two kinds of methods: `loop` and `vmap`.
-        `vmap` method will consume much more memory.
-
-    Returns:
-      sync_index: The synchronization index.
+    References
+    ----------
+    .. [1] Golomb, D. and Rinzel, J. (1993). "Dynamics of globally coupled
+           inhibitory neurons with heterogeneity." Physical Review E
+           48(6): 4810-4814.
+    .. [2] Golomb, D. and Rinzel, J. (1994). "Clustering in globally coupled
+           inhibitory neurons." Physica D 72(1-2): 259-282.
+    .. [3] Golomb, David (2007). "Neuronal synchrony measures."
+           Scholarpedia 2(1): 1347.
     """
 
     avg = jnp.mean(potentials, axis=1)
@@ -203,24 +246,67 @@ def voltage_fluctuation(
 
 @set_module_as('braintools.metric')
 def matrix_correlation(x, y):
-    """Pearson correlation of the lower triagonal of two matrices.
+    r"""Compute Pearson correlation of upper triangular elements of two matrices.
 
-      The triangular matrix is offset by k = 1 in order to ignore the diagonal line
+    This function calculates the correlation coefficient between corresponding
+    upper triangular elements of two matrices, excluding the diagonal.
+    This is useful for comparing connectivity matrices or similarity matrices.
 
     Parameters
     ----------
-    x: ndarray
-      First matrix.
-    y: ndarray
-      Second matrix
-    numpy: bool
-      Whether we use numpy array as the functional output.
-      If ``False``, this function can be JIT compiled.
+    x : brainstate.typing.ArrayLike
+        First matrix. Must be 2-dimensional.
+    y : brainstate.typing.ArrayLike
+        Second matrix. Must have the same shape as `x`.
 
     Returns
     -------
-    coef: ndarray
-      Correlation coefficient
+    float
+        Pearson correlation coefficient between the upper triangular elements
+        of the two matrices (excluding diagonal).
+
+    Raises
+    ------
+    ValueError
+        If input arrays are not 2-dimensional.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools as bt
+    >>> # Create two correlation matrices with similar structure
+    >>> x = jnp.array([[1.0, 0.8, 0.3], [0.8, 1.0, 0.5], [0.3, 0.5, 1.0]])
+    >>> y = jnp.array([[1.0, 0.7, 0.4], [0.7, 1.0, 0.6], [0.4, 0.6, 1.0]])
+    >>> corr = bt.metric.matrix_correlation(x, y)
+    >>> print(f"Matrix correlation: {corr:.3f}")
+    >>> 
+    >>> # Compare connectivity matrices from different conditions
+    >>> baseline_fc = jnp.random.rand(5, 5)
+    >>> baseline_fc = (baseline_fc + baseline_fc.T) / 2  # Make symmetric
+    >>> jnp.fill_diagonal(baseline_fc, 1.0)  # Set diagonal to 1
+    >>> 
+    >>> treatment_fc = baseline_fc + 0.1 * jnp.random.rand(5, 5)
+    >>> similarity = bt.metric.matrix_correlation(baseline_fc, treatment_fc)
+    >>> print(f"Condition similarity: {similarity:.3f}")
+
+    Notes
+    -----
+    The function uses ``jnp.triu_indices_from(x, k=1)`` to extract upper
+    triangular elements, where ``k=1`` excludes the diagonal.
+    
+    This measure is particularly useful for:
+    
+    - Comparing functional connectivity matrices across conditions
+    - Assessing similarity of network structures
+    - Validating model predictions against empirical connectivity
+    
+    For matrices that are not symmetric, only the upper triangle is used,
+    which may not capture the full relationship structure.
+    
+    See Also
+    --------
+    functional_connectivity : Compute connectivity matrix from time series
+    weighted_correlation : Weighted correlation for individual vectors
     """
     if x.ndim != 2:
         raise ValueError(f'Only support 2d array, but we got a array '
@@ -236,20 +322,52 @@ def matrix_correlation(x, y):
 
 @set_module_as('braintools.metric')
 def functional_connectivity(activities):
-    """Functional connectivity matrix of timeseries activities.
+    r"""Compute functional connectivity matrix from time series data.
+
+    Calculates the pairwise Pearson correlation coefficients between all
+    pairs of signals to create a functional connectivity matrix. This is
+    commonly used in neuroscience to assess statistical dependencies
+    between different brain regions or neurons.
 
     Parameters
     ----------
-    activities: ndarray
-      The multidimensional array with the shape of ``(num_time, num_sample)``.
-    numpy: bool
-      Whether we use numpy array as the functional output.
-      If ``False``, this function can be JIT compiled.
+    activities : brainstate.typing.ArrayLike
+        Time series data with shape ``(num_time, num_signals)`` where
+        each column represents a different signal/neuron/region.
 
     Returns
     -------
-    connectivity_matrix: ndarray
-      ``num_sample x num_sample`` functional connectivity matrix.
+    brainstate.typing.ArrayLike
+        Functional connectivity matrix with shape ``(num_signals, num_signals)``.
+        Element (i,j) represents the correlation between signals i and j.
+        Diagonal elements are 1.0. NaN values are replaced with 0.0.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools as bt
+    >>> # Generate correlated time series
+    >>> t = jnp.linspace(0, 10, 100)
+    >>> sig1 = jnp.sin(t) + 0.1 * jnp.random.normal(size=100)
+    >>> sig2 = jnp.sin(t + 0.2) + 0.1 * jnp.random.normal(size=100)
+    >>> activities = jnp.column_stack([sig1, sig2])
+    >>> fc_matrix = bt.metric.functional_connectivity(activities)
+    >>> print(f"Connectivity shape: {fc_matrix.shape}")
+    >>> print(f"Correlation: {fc_matrix[0, 1]:.3f}")
+
+    Notes
+    -----
+    The function uses ``jnp.corrcoef`` internally and handles NaN values
+    by replacing them with 0.0 using ``jnp.nan_to_num``.
+    
+    For very short time series, correlations may be unreliable due to
+    insufficient data points. Consider using longer recordings or smoothing
+    techniques for more stable estimates.
+    
+    See Also
+    --------
+    functional_connectivity_dynamics : Time-varying connectivity analysis
+    matrix_correlation : Correlation between connectivity matrices
     """
     if activities.ndim != 2:
         raise ValueError('Only support 2d array with shape of "(num_time, num_sample)". '
@@ -264,23 +382,54 @@ def functional_connectivity_dynamics(
     window_size=30,
     step_size=5
 ):
-    """Computes functional connectivity dynamics (FCD) matrix.
+    r"""Compute functional connectivity dynamics (FCD) matrix.
+
+    Functional Connectivity Dynamics (FCD) captures the temporal evolution
+    of functional connectivity by computing connectivity matrices over
+    sliding windows and then measuring correlations between these matrices.
+    This provides insights into how network connectivity patterns change over time.
 
     Parameters
     ----------
-    activities: ndarray
-      The time series with shape of ``(num_time, num_sample)``.
-    window_size: int
-      Size of each rolling window in time steps, defaults to 30.
-    step_size: int
-      Step size between each rolling window, defaults to 5.
+    activities : brainstate.typing.ArrayLike
+        Time series data with shape ``(num_time, num_signals)``.
+    window_size : int, default=30
+        Size of each sliding window in time steps. Larger windows provide
+        more stable connectivity estimates but lower temporal resolution.
+    step_size : int, default=5
+        Step size between consecutive windows. Smaller steps provide higher
+        temporal resolution but more computational cost.
 
     Returns
     -------
-    fcd_matrix: ndarray
-      FCD matrix.
+    brainstate.typing.ArrayLike
+        FCD matrix measuring correlations between connectivity patterns
+        across different time windows.
+
+    Notes
+    -----
+    This function is currently not implemented and will raise a NotImplementedError.
+    The FCD computation involves:
+    
+    1. Computing FC matrices for sliding windows
+    2. Vectorizing upper triangular elements of each FC matrix  
+    3. Computing correlations between these vectors across time windows
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools as bt
+    >>> activities = jnp.random.rand(200, 10)  # 200 time points, 10 signals
+    >>> # fcd = bt.metric.functional_connectivity_dynamics(activities)
+    >>> # Currently raises NotImplementedError
     """
-    pass
+    raise NotImplementedError(
+        "Functional connectivity dynamics computation is not yet implemented. "
+        "The FCD computation would involve: "
+        "1) Computing FC matrices for sliding windows, "
+        "2) Vectorizing upper triangular elements of each FC matrix, "
+        "3) Computing correlations between these vectors across time windows."
+    )
 
 
 @set_module_as('braintools.metric')
@@ -289,21 +438,69 @@ def weighted_correlation(
     y,
     w,
 ):
-    """Weighted Pearson correlation of two data series.
+    r"""Compute weighted Pearson correlation between two data series.
+
+    Calculates the Pearson correlation coefficient between two variables
+    with weighted observations. This is useful when some data points
+    should contribute more to the correlation calculation than others.
+
+    The weighted correlation is computed as:
+
+    .. math::
+
+        r_w = \frac{\text{Cov}_w(X,Y)}{\sqrt{\text{Cov}_w(X,X) \cdot \text{Cov}_w(Y,Y)}}
+
+    where :math:`\text{Cov}_w` is the weighted covariance.
 
     Parameters
     ----------
-    x: ndarray
-      The data series 1.
-    y: ndarray
-      The data series 2.
-    w: ndarray
-      Weight vector, must have same length as x and y.
+    x : brainstate.typing.ArrayLike
+        First data series. Must be 1-dimensional.
+    y : brainstate.typing.ArrayLike
+        Second data series. Must be 1-dimensional and same length as `x`.
+    w : brainstate.typing.ArrayLike
+        Weight vector. Must be 1-dimensional and same length as `x` and `y`.
+        Higher weights give more importance to corresponding data points.
 
     Returns
     -------
-    corr: ndarray
-      Weighted correlation coefficient.
+    float
+        Weighted Pearson correlation coefficient between -1 and 1.
+
+    Raises
+    ------
+    ValueError
+        If any input array is not 1-dimensional or if arrays have different lengths.
+    
+    Notes
+    -----
+    The weighted correlation reduces to the standard Pearson correlation when
+    all weights are equal. Weights should be non-negative; zero weights
+    effectively exclude those data points from the calculation.
+    
+    For numerical stability, avoid using weights with very large differences
+    in magnitude, as this can lead to precision issues.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> import braintools as bt
+    >>> # Perfect linear relationship
+    >>> x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    >>> y = jnp.array([2.0, 4.0, 6.0, 8.0, 10.0])
+    >>> # Weight middle points more heavily
+    >>> w = jnp.array([1.0, 1.0, 2.0, 2.0, 1.0])
+    >>> corr = bt.metric.weighted_correlation(x, y, w)
+    >>> print(f"Weighted correlation: {corr:.3f}")
+    >>> 
+    >>> # Compare with unweighted correlation
+    >>> unweighted = jnp.corrcoef(x, y)[0, 1]
+    >>> print(f"Unweighted correlation: {unweighted:.3f}")
+    >>> 
+    >>> # Example with reliability weights (higher for more reliable measurements)
+    >>> reliability = jnp.array([0.5, 0.8, 0.9, 0.7, 0.6])
+    >>> corr_reliable = bt.metric.weighted_correlation(x, y, reliability)
+    >>> print(f"Reliability-weighted: {corr_reliable:.3f}")
     """
 
     def _weighted_mean(x, w):

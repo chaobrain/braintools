@@ -40,64 +40,178 @@ def unitary_LFP(
     location: str = 'soma layer',
     seed: brainstate.typing.SeedOrKey = None
 ) -> jax.Array:
-    """
-    A kernel-based method to calculate unitary local field potentials (uLFP)
-    from a network of spiking neurons [1]_.
+    r"""Calculate unitary local field potentials (uLFP) from spike train data.
 
-    .. note::
-       This method calculates LFP only from the neuronal spikes. It does not consider
-       the subthreshold synaptic events, or the dendritic voltage-dependent ion channels.
+    Computes the contribution of spiking neurons to local field potentials using
+    a kernel-based method. This approach models the spatial distribution of neurons,
+    axonal conduction delays, and layer-specific amplitude scaling to estimate
+    the LFP signal recorded at an electrode positioned at the center of the
+    neural population.
 
-    Examples
-    --------
+    The method implements a biophysically-motivated model where each spike
+    contributes to the LFP through a Gaussian kernel with amplitude and delay
+    determined by the neuron's distance from the recording electrode:
 
-    If you have spike data of excitatory and inhibtiory neurons, you can get the LFP
-    by the following methods:
+    .. math::
 
-    >>> import brainstate as bst
-    >>> import jax
-    >>> import braintools
-    >>> n_time = 1000
-    >>> n_exc = 100
-    >>> n_inh = 25
-    >>> times = jax.numpy.arange(n_time) * 0.1
-    >>> exc_sps = bst.random.random((n_time, n_exc)) < 0.3
-    >>> inh_sps = bst.random.random((n_time, n_inh)) < 0.4
-    >>> lfp = braintools.metric.unitary_LFP(times, exc_sps, 'exc')
-    >>> lfp += braintools.metric.unitary_LFP(times, inh_sps, 'inh')
+        \text{uLFP}(t) = \sum_{i,s} A_i \exp\left(-\frac{(t - t_s - \delta_i)^2}{2\sigma^2}\right)
+
+    where :math:`A_i` is the distance-dependent amplitude, :math:`t_s` is the
+    spike time, :math:`\delta_i` is the conduction delay, and :math:`\sigma`
+    is the kernel width (different for excitatory and inhibitory neurons).
 
     Parameters
     ----------
-    times: ndarray
-      The times of the recording points.
-    spikes: ndarray
-      The spikes of excitatory neurons recorded by brainpy monitors.
-    spike_type: str
-      The neuron type of the spike trains. It can be "exc" or "inh".
-    location: str
-      The location of the spikes recorded. It can be "soma layer", "deep layer",
-      "superficial layer" and "surface".
-    xmax: float
-      Size of the array (in mm).
-    ymax: float
-      Size of the array (in mm).
-    va: int, float
-      The axon velocity (mm/sec).
-    lambda_: float
-      The space constant (mm).
-    sig_i: float
-      The std-dev of inhibition (in ms)
-    sig_e: float
-      The std-dev for excitation (in ms).
-    seed: int
-      The random seed.
+    times : brainstate.typing.ArrayLike
+        Time points of the recording with shape ``(n_time_steps,)``. These
+        represent the temporal sampling points for the LFP calculation,
+        typically in milliseconds.
+    spikes : brainstate.typing.ArrayLike
+        Binary spike matrix with shape ``(n_time_steps, n_neurons)`` where
+        non-zero values indicate spike occurrences. Each element
+        ``spikes[t, i]`` represents whether neuron ``i`` fired at time ``t``.
+    spike_type : {'exc', 'inh'}
+        Type of neurons generating the spikes:
+        
+        - ``'exc'``: Excitatory neurons (positive contribution)
+        - ``'inh'``: Inhibitory neurons (can be positive or negative depending on layer)
+        
+    xmax : float, default=0.2
+        Spatial extent of the neuron population in the x-dimension (mm).
+        Neurons are randomly distributed within a rectangle of size
+        ``xmax × ymax`` centered at the electrode position.
+    ymax : float, default=0.2
+        Spatial extent of the neuron population in the y-dimension (mm).
+    va : float, default=200.0
+        Axonal conduction velocity in mm/s. Determines the delay between
+        spike occurrence and its contribution to the LFP. Typical values
+        range from 100-500 mm/s for cortical neurons.
+    lambda_ : float, default=0.2
+        Spatial decay constant in mm. Controls how quickly the LFP amplitude
+        decreases with distance from the electrode. Smaller values result
+        in more localized LFP signals.
+    sig_i : float, default=2.1
+        Standard deviation of the inhibitory neuron kernel in ms.
+        Determines the temporal width of inhibitory contributions to the LFP.
+    sig_e : float, default=3.15
+        Standard deviation of the excitatory neuron kernel in ms.
+        Default is ``2.1 * 1.5``, making excitatory contributions broader
+        than inhibitory ones.
+    location : {'soma layer', 'deep layer', 'superficial layer', 'surface'}, default='soma layer'
+        Recording electrode location relative to the cortical layers:
+        
+        - ``'soma layer'``: At the soma level (excitatory: +0.48, inhibitory: +3.0)
+        - ``'deep layer'``: Below soma layer (excitatory: -0.16, inhibitory: -0.2)
+        - ``'superficial layer'``: Above soma layer (excitatory: +0.24, inhibitory: -1.2)
+        - ``'surface'``: At cortical surface (excitatory: -0.08, inhibitory: +0.3)
+        
+        Values in parentheses indicate the base amplitude scaling factors.
+    seed : brainstate.typing.SeedOrKey, optional
+        Random seed for reproducible neuron positioning. If None, positions
+        are generated randomly. Use for consistent results across runs.
+
+    Returns
+    -------
+    jax.Array
+        Unitary LFP signal with shape ``(n_time_steps,)`` representing the
+        contribution of the specified neuron population to the local field
+        potential. Units are typically in microvolts (μV).
+
+    Raises
+    ------
+    ValueError
+        If ``spike_type`` is not 'exc' or 'inh', if ``spikes`` is not 2D,
+        or if ``times`` and ``spikes`` have incompatible shapes.
+    NotImplementedError
+        If ``location`` is not one of the supported options.
+
+    Notes
+    -----
+    This implementation focuses on spike-triggered LFP contributions and does
+    not account for:
+    
+    - Subthreshold synaptic currents
+    - Dendritic voltage-dependent ion channels  
+    - Volume conduction effects from distant sources
+    - Frequency-dependent propagation
+    
+    For realistic LFP modeling, combine contributions from both excitatory
+    and inhibitory populations and consider using multiple electrode locations.
+
+    The neuron positions are randomly generated within the specified spatial
+    bounds, and the electrode is positioned at the center ``(xmax/2, ymax/2)``.
+    Each neuron's contribution is weighted by distance and scaled according
+    to the recording location and neuron type.
+
+    Examples
+    --------
+    Calculate LFP from excitatory and inhibitory populations:
+
+    >>> import brainstate as bst
+    >>> import jax.numpy as jnp
+    >>> import braintools as bt
+    >>> # Set up simulation parameters
+    >>> bst.random.seed(42)
+    >>> n_time, n_exc, n_inh = 1000, 100, 25
+    >>> dt = 0.1  # ms
+    >>> times = jnp.arange(n_time) * dt
+    >>> # Generate sparse random spike trains
+    >>> exc_spikes = (bst.random.random((n_time, n_exc)) < 0.02).astype(float)
+    >>> inh_spikes = (bst.random.random((n_time, n_inh)) < 0.04).astype(float)
+    >>> # Calculate LFP components
+    >>> lfp_exc = bt.metric.unitary_LFP(times, exc_spikes, 'exc', seed=42)
+    >>> lfp_inh = bt.metric.unitary_LFP(times, inh_spikes, 'inh', seed=42)
+    >>> total_lfp = lfp_exc + lfp_inh
+    >>> print(f"LFP shape: {total_lfp.shape}")
+    >>> print(f"LFP range: {total_lfp.min():.3f} to {total_lfp.max():.3f}")
+
+    Compare different recording locations:
+
+    >>> # Same spike data, different recording depths
+    >>> lfp_soma = bt.metric.unitary_LFP(times, exc_spikes, 'exc', 
+    ...                                  location='soma layer')
+    >>> lfp_deep = bt.metric.unitary_LFP(times, exc_spikes, 'exc', 
+    ...                                  location='deep layer')
+    >>> lfp_surface = bt.metric.unitary_LFP(times, exc_spikes, 'exc', 
+    ...                                      location='surface')
+
+    Analyze the effect of spatial parameters:
+
+    >>> # Larger population area
+    >>> lfp_large = bt.metric.unitary_LFP(times, exc_spikes, 'exc',
+    ...                                   xmax=0.5, ymax=0.5)
+    >>> # Faster conduction velocity
+    >>> lfp_fast = bt.metric.unitary_LFP(times, exc_spikes, 'exc', va=500.0)
+
+    Visualize the results:
+
+    >>> import matplotlib.pyplot as plt
+    >>> plt.figure(figsize=(10, 6))
+    >>> plt.plot(times[:500], total_lfp[:500], 'k-', linewidth=1)
+    >>> plt.xlabel('Time (ms)')
+    >>> plt.ylabel('LFP Amplitude (μV)')
+    >>> plt.title('Simulated Local Field Potential')
+    >>> plt.grid(True, alpha=0.3)
+    >>> plt.show()
+
+    See Also
+    --------
+    braintools.metric.firing_rate : Calculate population firing rates
+    braintools.metric.raster_plot : Extract spike timing data
+    jax.numpy.convolve : Alternative smoothing approach for LFP
 
     References
     ----------
-    .. [1] Telenczuk, Bartosz, Maria Telenczuk, and Alain Destexhe. "A kernel-based
-           method to calculate local field potentials from networks of spiking
-           neurons." Journal of Neuroscience Methods 344 (2020): 108871.
-
+    .. [1] Telenczuk, Bartosz, Maria Telenczuk, and Alain Destexhe.
+           "A kernel-based method to calculate local field potentials from
+           networks of spiking neurons." Journal of Neuroscience Methods
+           344 (2020): 108871. https://doi.org/10.1016/j.jneumeth.2020.108871
+    .. [2] Einevoll, Gaute T., et al. "Modelling and analysis of local field
+           potentials for studying the function of cortical circuits."
+           Nature Reviews Neuroscience 14.11 (2013): 770-785.
+    .. [3] Buzsáki, György, Costas A. Anastassiou, and Christof Koch.
+           "The origin of extracellular fields and currents—EEG, ECoG, LFP
+           and spikes." Nature Reviews Neuroscience 13.6 (2012): 407-420.
     """
     if spike_type not in ['exc', 'inh']:
         raise ValueError('"spike_type" should be "exc or ""inh". ')
@@ -106,7 +220,7 @@ def unitary_LFP(
                          f'But we got {spikes.shape}')
     if times.shape[0] != spikes.shape[0]:
         raise ValueError('times and spikes should be consistent at the firs axis. '
-                         f'Bug we got {times.shape[0]} != {spikes.shape}.')
+                                                  f'But we got {times.shape[0]} != {spikes.shape}.')
 
     # Distributing cells in a 2D grid
     rng = brainstate.random.RandomState(seed)
