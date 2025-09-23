@@ -45,6 +45,9 @@ def line_plot(
     legend=None,
     title=None,
     show=False,
+    colors=None,
+    alpha=1.0,
+    linewidth=1.0,
     **kwargs
 ):
     """Show the specified value in the given object (Neurons or Synapses.)
@@ -74,7 +77,31 @@ def line_plot(
         The prefix of legend for plot.
     show : bool
         Whether show the figure.
+    colors : list, optional
+        Colors for each line.
+    alpha : float
+        Alpha transparency value.
+    linewidth : float
+        Width of lines.
+    **kwargs
+        Additional keyword arguments passed to plot().
+        
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The axes object containing the plot.
+    
+    Raises
+    ------
+    TypeError
+        If plot_ids is not the correct type.
+    ValueError
+        If val_matrix is empty or incompatible dimensions.
     """
+    # Input validation
+    if val_matrix is None or len(val_matrix) == 0:
+        raise ValueError("val_matrix cannot be empty")
+
     # get plot_ids
     if plot_ids is None:
         plot_ids = [0]
@@ -94,14 +121,36 @@ def line_plot(
     val_matrix = np.asarray(val_matrix)
     ts = np.asarray(ts)
 
+    # Validate dimensions
+    if len(ts) != val_matrix.shape[0]:
+        raise ValueError(f"Time array length ({len(ts)}) must match val_matrix first dimension ({val_matrix.shape[0]})")
+
+    # Check plot_ids are valid
+    max_idx = val_matrix.shape[1] - 1
+    invalid_ids = [idx for idx in plot_ids if idx < 0 or idx > max_idx]
+    if invalid_ids:
+        raise ValueError(f"Invalid plot_ids {invalid_ids}. Must be between 0 and {max_idx}")
+
+    # Set up colors
+    if colors is not None:
+        if len(colors) < len(plot_ids):
+            # Cycle colors if not enough provided
+            colors = (colors * (len(plot_ids) // len(colors) + 1))[:len(plot_ids)]
+
     # plot
-    if legend:
-        for idx in plot_ids:
+    for i, idx in enumerate(plot_ids):
+        plot_kwargs = kwargs.copy()
+        plot_kwargs['alpha'] = alpha
+        plot_kwargs['linewidth'] = linewidth
+
+        if colors is not None:
+            plot_kwargs['color'] = colors[i]
+
+        if legend:
             label = legend if len(plot_ids) == 1 else f'{legend}-{idx}'
-            ax.plot(ts, val_matrix[:, idx], label=label, **kwargs)
-    else:
-        for idx in plot_ids:
-            ax.plot(ts, val_matrix[:, idx], **kwargs)
+            plot_kwargs['label'] = label
+
+        ax.plot(ts, val_matrix[:, idx], **plot_kwargs)
 
     # legend
     if legend:
@@ -131,6 +180,8 @@ def line_plot(
     if show:
         plt.show()
 
+    return ax
+
 
 def raster_plot(
     ts,
@@ -145,9 +196,10 @@ def raster_plot(
     ylim=None,
     title=None,
     show=False,
+    alpha=1.0,
     **kwargs
 ):
-    """Show the rater plot of the spikes.
+    """Show the raster plot of the spikes.
 
     Parameters
     ----------
@@ -157,38 +209,67 @@ def raster_plot(
         The spike matrix which records the spike information.
         It can be easily accessed by specifying the ``monitors``
         of NeuGroup by: ``neu = NeuGroup(..., monitors=['spike'])``
-    ax : Axes
-        The figure.
+    ax : Axes, optional
+        The figure axes. If None, uses plt.
+    marker : str
+        The marker style.
     markersize : int
         The size of the marker.
     color : str
         The color of the marker.
-    xlim : list, tuple
+    xlim : list, tuple, optional
         The xlim.
-    ylim : list, tuple
+    ylim : list, tuple, optional
         The ylim.
     xlabel : str
         The xlabel.
     ylabel : str
         The ylabel.
+    title : str, optional
+        The plot title.
     show : bool
         Show the figure.
+    alpha : float
+        Alpha transparency value.
+    **kwargs
+        Additional keyword arguments passed to scatter().
+        
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The axes object containing the plot.
+        
+    Raises
+    ------
+    ValueError
+        If ts is None or sp_matrix is empty.
     """
 
-    sp_matrix = np.asarray(sp_matrix)
+    # Input validation
     if ts is None:
         raise ValueError('Must provide "ts".')
+    if sp_matrix is None or len(sp_matrix) == 0:
+        raise ValueError('sp_matrix cannot be empty.')
+
+    sp_matrix = np.asarray(sp_matrix)
     ts = np.asarray(ts)
+
+    # Validate dimensions
+    if len(ts) != sp_matrix.shape[0]:
+        raise ValueError(f"Time array length ({len(ts)}) must match sp_matrix first dimension ({sp_matrix.shape[0]})")
 
     # get index and time
     elements = np.where(sp_matrix > 0.)
     index = elements[1]
     time = ts[elements[0]]
 
-    # plot rater
+    # plot raster
     if ax is None:
         ax = plt
-    ax.scatter(time, index, marker=marker, c=color, s=markersize, **kwargs)
+
+    scatter_kwargs = kwargs.copy()
+    scatter_kwargs['alpha'] = alpha
+    ax.scatter(time, index, marker=marker, c=color, s=markersize, **scatter_kwargs)
 
     # xlable
     if xlabel:
@@ -210,6 +291,8 @@ def raster_plot(
     if show:
         plt.show()
 
+    return ax
+
 
 def animate_2D(
     values,
@@ -225,7 +308,9 @@ def animate_2D(
     gif_dpi=None,
     video_fps=None,
     save_path=None,
-    show=True
+    show=True,
+    repeat=True,
+    **kwargs
 ):
     """Animate the potentials of the neuron group.
 

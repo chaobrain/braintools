@@ -1,4 +1,4 @@
-# Common toolboxes for brain simulation
+# Modeling tools for brain simulation
 
 <p align="center">
   	<img alt="Header image of braintools." src="https://raw.githubusercontent.com/chaobrain/braintools/main/docs/_static/braintools.jpg" width=50%>

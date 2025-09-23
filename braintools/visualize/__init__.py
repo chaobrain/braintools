@@ -16,13 +16,24 @@
 
 from .animation import *
 from .animation import __all__ as _animation_all
+from .colormaps import *
+from .colormaps import __all__ as _colormaps_all
 from .figures import *
 from .figures import __all__ as _figures_all
+from .interactive import *
+from .interactive import __all__ as _interactive_all
+from .neural import *
+from .neural import __all__ as _neural_all
 from .plots import *
 from .plots import __all__ as _plots_all
+from .statistical import *
+from .statistical import __all__ as _statistical_all
 from .style import *
+from .three_d import *
+from .three_d import __all__ as _three_d_all
 
+__all__ = _figures_all + _plots_all + _animation_all + _neural_all
+__all__ = __all__ + _statistical_all + _interactive_all + _three_d_all + _colormaps_all
 
-__all__ = list(_figures_all + _plots_all + _animation_all)
-
-del _figures_all
+del _figures_all, _plots_all, _animation_all, _neural_all
+del _statistical_all, _interactive_all, _three_d_all, _colormaps_all

@@ -19,7 +19,6 @@ This module is rewritten from the Flax APIs (https://github.com/google/flax).
 """
 
 import enum
-import logging
 import os
 import sys
 import threading
