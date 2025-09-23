@@ -84,9 +84,9 @@ def make_fenchel_young_loss(
 
     >>> import jax.numpy as jnp
     >>> from jax.scipy.special import logsumexp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Create the loss function
-    >>> fy_loss = bt.metric.make_fenchel_young_loss(max_fun=logsumexp)
+    >>> fy_loss = braintools.metric.make_fenchel_young_loss(max_fun=logsumexp)
     >>> # Example usage
     >>> scores = jnp.array([[2.0, 1.0, 0.5], [1.5, 2.5, 1.0]])
     >>> targets = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
@@ -97,7 +97,7 @@ def make_fenchel_young_loss(
 
     >>> def custom_max(x):
     ...     return jnp.max(x) + 0.1 * jnp.sum(x**2)  # L2 regularized max
-    >>> structured_loss = bt.metric.make_fenchel_young_loss(max_fun=custom_max)
+    >>> structured_loss = braintools.metric.make_fenchel_young_loss(max_fun=custom_max)
 
     See Also
     --------

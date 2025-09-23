@@ -92,15 +92,15 @@ def cross_correlation(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Generate random spike data
     >>> spikes = jnp.array([[1, 0, 1], [0, 1, 0], [1, 1, 0]])
-    >>> sync_index = bt.metric.cross_correlation(spikes, bin=1.0)
+    >>> sync_index = braintools.metric.cross_correlation(spikes, bin=1.0)
     >>> print(f"Synchronization index: {sync_index:.3f}")
     >>> 
     >>> # For larger datasets, use vectorized method
     >>> large_spikes = jnp.random.binomial(1, 0.1, (1000, 50))
-    >>> sync_fast = bt.metric.cross_correlation(large_spikes, bin=10.0, method='vmap')
+    >>> sync_fast = braintools.metric.cross_correlation(large_spikes, bin=10.0, method='vmap')
     >>> print(f"Population synchronization: {sync_fast:.3f}")
 
     References
@@ -204,18 +204,18 @@ def voltage_fluctuation(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Generate correlated voltage traces
     >>> t = jnp.linspace(0, 10, 1000)
     >>> # Synchronous case: common oscillation + noise
     >>> common_signal = jnp.sin(2 * jnp.pi * t)
     >>> potentials_sync = common_signal[:, None] + 0.1 * jnp.random.normal((1000, 10))
-    >>> sync_idx = bt.metric.voltage_fluctuation(potentials_sync)
+    >>> sync_idx = braintools.metric.voltage_fluctuation(potentials_sync)
     >>> print(f"Synchronized case: {sync_idx:.3f}")
     >>> 
     >>> # Asynchronous case: independent noise
     >>> potentials_async = jnp.random.normal((1000, 10))
-    >>> async_idx = bt.metric.voltage_fluctuation(potentials_async)
+    >>> async_idx = braintools.metric.voltage_fluctuation(potentials_async)
     >>> print(f"Asynchronous case: {async_idx:.3f}")
 
     References
@@ -273,11 +273,11 @@ def matrix_correlation(x, y):
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Create two correlation matrices with similar structure
     >>> x = jnp.array([[1.0, 0.8, 0.3], [0.8, 1.0, 0.5], [0.3, 0.5, 1.0]])
     >>> y = jnp.array([[1.0, 0.7, 0.4], [0.7, 1.0, 0.6], [0.4, 0.6, 1.0]])
-    >>> corr = bt.metric.matrix_correlation(x, y)
+    >>> corr = braintools.metric.matrix_correlation(x, y)
     >>> print(f"Matrix correlation: {corr:.3f}")
     >>> 
     >>> # Compare connectivity matrices from different conditions
@@ -286,7 +286,7 @@ def matrix_correlation(x, y):
     >>> jnp.fill_diagonal(baseline_fc, 1.0)  # Set diagonal to 1
     >>> 
     >>> treatment_fc = baseline_fc + 0.1 * jnp.random.rand(5, 5)
-    >>> similarity = bt.metric.matrix_correlation(baseline_fc, treatment_fc)
+    >>> similarity = braintools.metric.matrix_correlation(baseline_fc, treatment_fc)
     >>> print(f"Condition similarity: {similarity:.3f}")
 
     Notes
@@ -345,13 +345,13 @@ def functional_connectivity(activities):
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Generate correlated time series
     >>> t = jnp.linspace(0, 10, 100)
     >>> sig1 = jnp.sin(t) + 0.1 * jnp.random.normal(size=100)
     >>> sig2 = jnp.sin(t + 0.2) + 0.1 * jnp.random.normal(size=100)
     >>> activities = jnp.column_stack([sig1, sig2])
-    >>> fc_matrix = bt.metric.functional_connectivity(activities)
+    >>> fc_matrix = braintools.metric.functional_connectivity(activities)
     >>> print(f"Connectivity shape: {fc_matrix.shape}")
     >>> print(f"Correlation: {fc_matrix[0, 1]:.3f}")
 
@@ -417,10 +417,10 @@ def functional_connectivity_dynamics(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> import brainstate as bst
     >>> activities = bst.random.rand(200, 10)
-    >>> fcd = bt.metric.functional_connectivity_dynamics(activities)
+    >>> fcd = braintools.metric.functional_connectivity_dynamics(activities)
     """
 
     if activities.ndim != 2:
@@ -517,13 +517,13 @@ def weighted_correlation(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Perfect linear relationship
     >>> x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
     >>> y = jnp.array([2.0, 4.0, 6.0, 8.0, 10.0])
     >>> # Weight middle points more heavily
     >>> w = jnp.array([1.0, 1.0, 2.0, 2.0, 1.0])
-    >>> corr = bt.metric.weighted_correlation(x, y, w)
+    >>> corr = braintools.metric.weighted_correlation(x, y, w)
     >>> print(f"Weighted correlation: {corr:.3f}")
     >>>
     >>> # Compare with unweighted correlation
@@ -532,7 +532,7 @@ def weighted_correlation(
     >>>
     >>> # Example with reliability weights (higher for more reliable measurements)
     >>> reliability = jnp.array([0.5, 0.8, 0.9, 0.7, 0.6])
-    >>> corr_reliable = bt.metric.weighted_correlation(x, y, reliability)
+    >>> corr_reliable = braintools.metric.weighted_correlation(x, y, reliability)
     >>> print(f"Reliability-weighted: {corr_reliable:.3f}")
     """
 

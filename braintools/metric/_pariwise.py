@@ -72,11 +72,11 @@ def cosine_similarity(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Create sample vectors
     >>> X = jnp.array([[1, 0, 0], [0, 1, 0], [1, 1, 0]])
     >>> # Compute pairwise similarities
-    >>> sim_matrix = bt.metric.cosine_similarity(X)
+    >>> sim_matrix = braintools.metric.cosine_similarity(X)
     >>> print(sim_matrix)
     [[1.         0.         0.70710677]
      [0.         1.         0.70710677]
@@ -84,7 +84,7 @@ def cosine_similarity(
     >>> 
     >>> # Compare with different set
     >>> Y = jnp.array([[1, 1, 1], [0, 0, 1]])
-    >>> cross_sim = bt.metric.cosine_similarity(X, Y)
+    >>> cross_sim = braintools.metric.cosine_similarity(X, Y)
     >>> print(cross_sim.shape)
     (3, 2)
 

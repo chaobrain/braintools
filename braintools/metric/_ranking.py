@@ -24,10 +24,10 @@ leading dimensions are considered batch dimensions.
 
 Standalone usage:
 
->>> import braintools as bt
+>>> import braintools as braintools
 >>> scores = jnp.array([2., 1., 3.])
 >>> labels = jnp.array([1., 0., 0.])
->>> loss = bt.metric.ranking_softmax_loss(scores, labels)
+>>> loss = braintools.metric.ranking_softmax_loss(scores, labels)
 >>> print(f"{loss:.3f}")
 1.408
 
@@ -36,7 +36,7 @@ Usage with a batch of data and a mask to indicate valid items.
 >>> scores = jnp.array([[2., 1., 0.], [1., 0.5, 1.5]])
 >>> labels = jnp.array([[1., 0., 0.], [0., 0., 1.]])
 >>> where = jnp.array([[True, True, False], [True, True, True]])
->>> loss = bt.metric.ranking_softmax_loss(scores, labels, where=where)
+>>> loss = braintools.metric.ranking_softmax_loss(scores, labels, where=where)
 >>> print(f"{loss:.3f}")
 0.497
 """
@@ -227,12 +227,12 @@ def ranking_softmax_loss(
     Basic ranking loss with single query:
 
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Scores for 3 items
     >>> logits = jnp.array([2.0, 1.0, 3.0])  
     >>> # Relevance: item 3 most relevant, item 1 second, item 2 least
     >>> labels = jnp.array([1.0, 0.0, 2.0])
-    >>> loss = bt.metric.ranking_softmax_loss(logits, labels)
+    >>> loss = braintools.metric.ranking_softmax_loss(logits, labels)
     >>> print(f"Loss: {loss:.4f}")
 
     Batch processing with masking:
@@ -242,18 +242,18 @@ def ranking_softmax_loss(
     >>> labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
     >>> # Second query only has first 2 items valid
     >>> where = jnp.array([[True, True, False], [True, True, True]])
-    >>> loss = bt.metric.ranking_softmax_loss(logits, labels, where=where)
+    >>> loss = braintools.metric.ranking_softmax_loss(logits, labels, where=where)
     >>> print(f"Batch loss: {loss:.4f}")
 
     Per-item weighting:
 
     >>> weights = jnp.array([1.0, 2.0, 1.0])  # Emphasize middle item
-    >>> loss = bt.metric.ranking_softmax_loss(logits[0], labels[0], weights=weights)
+    >>> loss = braintools.metric.ranking_softmax_loss(logits[0], labels[0], weights=weights)
     >>> print(f"Weighted loss: {loss:.4f}")
 
     Unreduced losses for analysis:
 
-    >>> batch_losses = bt.metric.ranking_softmax_loss(
+    >>> batch_losses = braintools.metric.ranking_softmax_loss(
     ...     logits, labels, where=where, reduce_fn=None
     ... )
     >>> print(f"Individual losses: {batch_losses}")

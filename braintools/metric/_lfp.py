@@ -149,7 +149,7 @@ def unitary_LFP(
 
     >>> import brainstate as bst
     >>> import jax.numpy as jnp
-    >>> import braintools as bt
+    >>> import braintools as braintools
     >>> # Set up simulation parameters
     >>> bst.random.seed(42)
     >>> n_time, n_exc, n_inh = 1000, 100, 25
@@ -159,8 +159,8 @@ def unitary_LFP(
     >>> exc_spikes = (bst.random.random((n_time, n_exc)) < 0.02).astype(float)
     >>> inh_spikes = (bst.random.random((n_time, n_inh)) < 0.04).astype(float)
     >>> # Calculate LFP components
-    >>> lfp_exc = bt.metric.unitary_LFP(times, exc_spikes, 'exc', seed=42)
-    >>> lfp_inh = bt.metric.unitary_LFP(times, inh_spikes, 'inh', seed=42)
+    >>> lfp_exc = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', seed=42)
+    >>> lfp_inh = braintools.metric.unitary_LFP(times, inh_spikes, 'inh', seed=42)
     >>> total_lfp = lfp_exc + lfp_inh
     >>> print(f"LFP shape: {total_lfp.shape}")
     >>> print(f"LFP range: {total_lfp.min():.3f} to {total_lfp.max():.3f}")
@@ -168,20 +168,20 @@ def unitary_LFP(
     Compare different recording locations:
 
     >>> # Same spike data, different recording depths
-    >>> lfp_soma = bt.metric.unitary_LFP(times, exc_spikes, 'exc', 
+    >>> lfp_soma = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
     ...                                  location='soma layer')
-    >>> lfp_deep = bt.metric.unitary_LFP(times, exc_spikes, 'exc', 
+    >>> lfp_deep = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
     ...                                  location='deep layer')
-    >>> lfp_surface = bt.metric.unitary_LFP(times, exc_spikes, 'exc', 
+    >>> lfp_surface = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
     ...                                      location='surface')
 
     Analyze the effect of spatial parameters:
 
     >>> # Larger population area
-    >>> lfp_large = bt.metric.unitary_LFP(times, exc_spikes, 'exc',
+    >>> lfp_large = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
     ...                                   xmax=0.5, ymax=0.5)
     >>> # Faster conduction velocity
-    >>> lfp_fast = bt.metric.unitary_LFP(times, exc_spikes, 'exc', va=500.0)
+    >>> lfp_fast = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', va=500.0)
 
     Visualize the results:
 
