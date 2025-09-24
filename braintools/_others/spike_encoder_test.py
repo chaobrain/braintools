@@ -16,6 +16,7 @@
 import unittest
 
 import brainstate as bst
+import brainstate.random
 import jax.numpy as jnp
 import numpy as np
 
@@ -168,6 +169,7 @@ class TestPopulationEncoder(unittest.TestCase):
 
     def test_receptive_field_width(self):
         """Test different receptive field widths."""
+        brainstate.random.seed(42)
         narrow_encoder = spike_encoder.PopulationEncoder(n_neurons=10, sigma=0.1)
         wide_encoder = spike_encoder.PopulationEncoder(n_neurons=10, sigma=0.5)
 

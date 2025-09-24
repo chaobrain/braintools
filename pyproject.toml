@@ -7,6 +7,7 @@ build-backend = "setuptools.build_meta"
 exclude = [
     "docs*",
     "tests*",
+    "dev*",
     "examples*",
     "build*",
     "dist*",
@@ -22,7 +23,7 @@ universal = true
 
 [project]
 name = "braintools"
-description = "The Toolbox for Brain Modeling Ecosystem."
+description = "Modeling tools for brain simulation."
 readme = 'README.md'
 license = { text = 'Apache-2.0 license' }
 requires-python = '>=3.10'
