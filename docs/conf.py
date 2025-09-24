@@ -37,7 +37,6 @@ import shutil
 
 shutil.copy('../changelog.md', 'apis/changelog.md')
 
-
 # -- Project information -----------------------------------------------------
 
 project = 'braintools'
@@ -131,3 +130,8 @@ execution_timeout = 200
 autodoc_default_options = {
     'exclude-members': '....,default_rng',
 }
+
+# Add Plotly JS once for your whole site (optional but recommended)
+html_js_files = [
+    "https://cdn.plot.ly/plotly-latest.min.js",  # or pin a specific version
+]
