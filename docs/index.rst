@@ -1,7 +1,7 @@
 ``braintools`` documentation
 ============================
 
-`braintools <https://github.com/brainpy/braintools>`_ implements the common toolboxes for brain simulation.
+`braintools <https://github.com/chaobrain/braintools>`_ implements the common toolboxes for brain simulation.
 
 
 Overview
@@ -182,3 +182,4 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     apis/optim.rst
     apis/input.rst
     apis/tree.rst
+    apis/visualize.rst

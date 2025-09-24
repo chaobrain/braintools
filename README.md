@@ -7,17 +7,17 @@
 
 <p align="center">
 	<a href="https://pypi.org/project/braintools/"><img alt="Supported Python Version" src="https://img.shields.io/pypi/pyversions/braintools"></a>
-	<a href="https://github.com/brainpy/braintools/blob/main/LICENSE"><img alt="LICENSE" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
+	<a href="https://github.com/chaobrain/braintools/blob/main/LICENSE"><img alt="LICENSE" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
     <a href='https://braintools.readthedocs.io/?badge=latest'>
         <img src='https://readthedocs.org/projects/braintools/badge/?version=latest' alt='Documentation Status' />
     </a>  	
     <a href="https://badge.fury.io/py/braintools"><img alt="PyPI version" src="https://badge.fury.io/py/braintools.svg"></a>
-    <a href="https://github.com/brainpy/braintools/actions/workflows/CI.yml"><img alt="Continuous Integration" src="https://github.com/brainpy/braintools/actions/workflows/CI.yml/badge.svg"></a>
+    <a href="https://github.com/chaobrain/braintools/actions/workflows/CI.yml"><img alt="Continuous Integration" src="https://github.com/chaobrain/braintools/actions/workflows/CI.yml/badge.svg"></a>
     <a href="https://doi.org/10.5281/zenodo.17110064"><img src="https://zenodo.org/badge/776629792.svg" alt="DOI"></a>
 </p>
 
 
-[``braintools``](https://github.com/brainpy/braintools) is a lightweight, JAX‑friendly toolbox of practical utilities for brain modeling. It focuses on:
+[``braintools``](https://github.com/chaobrain/braintools) is a lightweight, JAX‑friendly toolbox of practical utilities for brain modeling. It focuses on:
 
 - Metric functions for model training/evaluation (classification, regression, ranking, connectivity, LFP helpers)
 - Numerical one‑step integrators for ODE/SDE/DDE (PyTree‑aware, JAX‑ready)
