@@ -20,9 +20,6 @@ import numpy as np
 
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
-import warnings
-
-warnings.filterwarnings('ignore')
 
 # Import visualization modules
 from braintools.visualize import statistical
@@ -97,4 +94,29 @@ class TestStatisticalVisualization(unittest.TestCase):
             labels=['A', 'B', 'C']
         )
         self.assertIsNotNone(ax)
+        plt.close()
+
+    def test_scatter_matrix(self):
+        """Test scatter matrix visualization."""
+        # Test full scatter matrix (standalone)
+        fig = statistical.scatter_matrix(
+            self.data[:, :3],  # Use 3 features for manageable matrix
+            labels=self.labels[:3],
+            figsize=(8, 8),
+            alpha=0.6
+        )
+        self.assertIsNotNone(fig)
+        plt.show()
+        plt.close()
+
+        # Test simplified scatter matrix (with ax parameter)
+        fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+        result_fig = statistical.scatter_matrix(
+            self.data[:, :3],
+            labels=self.labels[:3],
+            ax=ax,
+            alpha=0.6
+        )
+        self.assertIsNotNone(result_fig)
+        plt.show()
         plt.close()

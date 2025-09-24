@@ -484,6 +484,7 @@ def scatter_matrix(
     alpha: float = 0.7,
     figsize: Tuple[float, float] = (12, 12),
     color: str = 'blue',
+    ax: Optional[plt.Axes] = None,
     **kwargs
 ) -> plt.Figure:
     """
@@ -500,9 +501,12 @@ def scatter_matrix(
     alpha : float
         Alpha transparency.
     figsize : tuple
-        Figure size.
+        Figure size (only used if ax is None).
     color : str
         Plot color.
+    ax : matplotlib.axes.Axes, optional
+        Single axes to plot a simplified version (2x2 subset).
+        If None, creates full scatter matrix.
     **kwargs
         Additional arguments passed to scatter plots.
         
@@ -514,42 +518,75 @@ def scatter_matrix(
     data = as_numpy(data)
     n_features = data.shape[1]
 
-    fig, axes = plt.subplots(n_features, n_features, figsize=figsize)
+    if ax is not None:
+        # Simplified version for single axis - show 2x2 subset of most important features
+        # Select first 2 features for simplicity
+        n_subset = min(2, n_features)
+        
+        # Create 2x2 subplot within the given axis
+        # We'll create a simple scatter plot of first two features
+        if n_features >= 2:
+            ax.scatter(data[:, 0], data[:, 1], alpha=alpha, color=color, **kwargs)
+            ax.set_xlabel(labels[0] if labels else 'Feature 0')
+            ax.set_ylabel(labels[1] if labels else 'Feature 1')
+            ax.set_title('Scatter Plot (Features 0 vs 1)')
+            ax.grid(True, alpha=0.3)
+        else:
+            # Only one feature - show histogram
+            ax.hist(data[:, 0], alpha=alpha, color=color, bins=20)
+            ax.set_xlabel(labels[0] if labels else 'Feature 0')
+            ax.set_ylabel('Frequency')
+            ax.set_title('Feature Distribution')
+            ax.grid(True, alpha=0.3)
+        
+        return ax.figure
+    
+    else:
+        # Full scatter matrix
+        fig, axes = plt.subplots(n_features, n_features, figsize=figsize)
+        
+        # Handle single feature case
+        if n_features == 1:
+            axes.hist(data[:, 0], alpha=alpha, color=color, bins=20)
+            axes.set_xlabel(labels[0] if labels else 'Feature 0')
+            axes.set_ylabel('Frequency')
+            plt.tight_layout()
+            return fig
 
-    for i in range(n_features):
-        for j in range(n_features):
-            ax = axes[i, j]
+        for i in range(n_features):
+            for j in range(n_features):
+                current_ax = axes[i, j] if n_features > 1 else axes
 
-            if i == j:
-                # Diagonal: histogram or KDE
-                if diagonal == 'hist':
-                    ax.hist(data[:, i], alpha=alpha, color=color, bins=20)
-                elif diagonal == 'kde':
-                    try:
-                        from scipy.stats import gaussian_kde
-                        kde = gaussian_kde(data[:, i])
-                        x_range = np.linspace(data[:, i].min(), data[:, i].max(), 100)
-                        ax.plot(x_range, kde(x_range), color=color)
-                    except ImportError:
-                        ax.hist(data[:, i], alpha=alpha, color=color, bins=20)
-            else:
-                # Off-diagonal: scatter plot
-                ax.scatter(data[:, j], data[:, i], alpha=alpha, color=color, **kwargs)
-
-            # Labels
-            if i == n_features - 1:
-                if labels is not None:
-                    ax.set_xlabel(labels[j])
+                if i == j:
+                    # Diagonal: histogram or KDE
+                    if diagonal == 'hist':
+                        current_ax.hist(data[:, i], alpha=alpha, color=color, bins=20)
+                    elif diagonal == 'kde':
+                        try:
+                            from scipy.stats import gaussian_kde
+                            kde = gaussian_kde(data[:, i])
+                            x_range = np.linspace(data[:, i].min(), data[:, i].max(), 100)
+                            current_ax.plot(x_range, kde(x_range), color=color)
+                        except ImportError:
+                            current_ax.hist(data[:, i], alpha=alpha, color=color, bins=20)
                 else:
-                    ax.set_xlabel(f'Feature {j}')
-            if j == 0:
-                if labels is not None:
-                    ax.set_ylabel(labels[i])
-                else:
-                    ax.set_ylabel(f'Feature {i}')
+                    # Off-diagonal: scatter plot
+                    current_ax.scatter(data[:, j], data[:, i], alpha=alpha, color=color, **kwargs)
 
-    plt.tight_layout()
-    return fig
+                # Labels
+                if i == n_features - 1:
+                    if labels is not None:
+                        current_ax.set_xlabel(labels[j])
+                    else:
+                        current_ax.set_xlabel(f'Feature {j}')
+                if j == 0:
+                    if labels is not None:
+                        current_ax.set_ylabel(labels[i])
+                    else:
+                        current_ax.set_ylabel(f'Feature {i}')
+
+        plt.tight_layout()
+        return fig
 
 
 def regression_plot(
