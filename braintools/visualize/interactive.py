@@ -61,7 +61,7 @@ def interactive_spike_raster(
     width: int = 800,
     height: int = 600,
     **kwargs
-) -> go.Figure:
+):
     """
     Create interactive spike raster plot using Plotly.
     
@@ -174,7 +174,7 @@ def interactive_line_plot(
     width: int = 800,
     height: int = 600,
     **kwargs
-) -> go.Figure:
+):
     """
     Create interactive line plot using Plotly.
     
@@ -250,7 +250,7 @@ def interactive_heatmap(
     width: int = 800,
     height: int = 600,
     **kwargs
-) -> go.Figure:
+):
     """
     Create interactive heatmap using Plotly.
     
@@ -309,7 +309,7 @@ def interactive_3d_scatter(
     width: int = 800,
     height: int = 600,
     **kwargs
-) -> go.Figure:
+):
     """
     Create interactive 3D scatter plot using Plotly.
     
@@ -388,7 +388,7 @@ def interactive_network(
     width: int = 800,
     height: int = 600,
     **kwargs
-) -> go.Figure:
+):
     """
     Create interactive network visualization using Plotly.
     
@@ -499,7 +499,7 @@ def interactive_histogram(
     width: int = 800,
     height: int = 600,
     **kwargs
-) -> go.Figure:
+):
     """
     Create interactive histogram using Plotly.
     
@@ -574,7 +574,7 @@ def interactive_surface(
     width: int = 800,
     height: int = 600,
     **kwargs
-) -> go.Figure:
+):
     """
     Create interactive 3D surface plot using Plotly.
     
@@ -639,7 +639,7 @@ def interactive_correlation_matrix(
     width: int = 800,
     height: int = 600,
     **kwargs
-) -> go.Figure:
+):
     """
     Create interactive correlation matrix heatmap using Plotly.
     
@@ -708,7 +708,7 @@ def dashboard_neural_activity(
     title: str = "Neural Activity Dashboard",
     width: int = 1200,
     height: int = 800
-) -> go.Figure:
+):
     """
     Create comprehensive dashboard for neural activity visualization.
     
