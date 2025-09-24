@@ -228,3 +228,4 @@ cython_debug/
 /docs/apis/deprecated/generated/
 /.claude/
 /docs/apis/changelog.md
+/docs/checkpoints/

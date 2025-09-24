@@ -253,6 +253,8 @@ msgpack_register_serialization(
 
 
 def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(xs, brainstate.util.FlattedDict):
+        xs = xs.to_nest()
     str_keys = set(str(k) for k in xs.keys())
     if len(str_keys) != len(xs):
         raise ValueError('Dict keys do not have a unique string representation: '
@@ -264,6 +266,10 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _restore_dict(xs, states: Dict[str, Any], mismatch: str = 'error') -> Dict[str, Any]:
+    if isinstance(xs, brainstate.util.FlattedDict):
+        xs = xs.to_nest()
+    if isinstance(states, brainstate.util.FlattedDict):
+        states = states.to_nest()
     diff = set(map(str, xs.keys())).difference(states.keys())
     if diff:
         msg = ('The target dict keys and state dict keys do not match,'
@@ -833,8 +839,6 @@ def msgpack_load(
             checkpoint_contents = fp.read()
 
     state_dict = _msgpack_restore(checkpoint_contents)
-    if isinstance(target, brainstate.util.FlattedDict):
-        target = target.to_nest()
     if target is not None:
         state_dict = msgpack_from_state_dict(target, state_dict, mismatch=mismatch)
 
