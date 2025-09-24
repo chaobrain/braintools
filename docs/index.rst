@@ -156,7 +156,6 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     interactive_visualization.ipynb
     3d_visualization.ipynb
     styling_and_themes.ipynb
-    animation_and_dynamics.ipynb
 
 
 .. toctree::
