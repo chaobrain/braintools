@@ -522,7 +522,7 @@ def scatter_matrix(
         # Simplified version for single axis - show 2x2 subset of most important features
         # Select first 2 features for simplicity
         n_subset = min(2, n_features)
-        
+
         # Create 2x2 subplot within the given axis
         # We'll create a simple scatter plot of first two features
         if n_features >= 2:
@@ -538,13 +538,13 @@ def scatter_matrix(
             ax.set_ylabel('Frequency')
             ax.set_title('Feature Distribution')
             ax.grid(True, alpha=0.3)
-        
+
         return ax.figure
-    
+
     else:
         # Full scatter matrix
         fig, axes = plt.subplots(n_features, n_features, figsize=figsize)
-        
+
         # Handle single feature case
         if n_features == 1:
             axes.hist(data[:, 0], alpha=alpha, color=color, bins=20)

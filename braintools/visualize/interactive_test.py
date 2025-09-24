@@ -20,11 +20,6 @@ import matplotlib
 import numpy as np
 
 matplotlib.use('Agg')  # Use non-interactive backend for testing
-import warnings
-
-warnings.filterwarnings('ignore')
-
-# Import visualization modules
 from braintools.visualize import interactive
 
 

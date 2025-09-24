@@ -16,8 +16,7 @@
 import jax.numpy as jnp
 import numpy as np
 from absl.testing import parameterized
-
-from braintools.metric import _smoothing
+import braintools
 
 
 class SmoothLabelsTest(parameterized.TestCase):
@@ -32,24 +31,24 @@ class SmoothLabelsTest(parameterized.TestCase):
 
     def test_scalar(self):
         """Tests for a full batch."""
-        np.testing.assert_allclose(_smoothing.smooth_labels(self.ts[0], 0.), self.exp_alpha_zero[0], atol=1e-4)
-        np.testing.assert_allclose(_smoothing.smooth_labels(self.ts[0], 0.1), self.exp_alpha_zero_point_one[0],
+        np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts[0], 0.), self.exp_alpha_zero[0], atol=1e-4)
+        np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts[0], 0.1), self.exp_alpha_zero_point_one[0],
                                    atol=1e-4)
-        np.testing.assert_allclose(_smoothing.smooth_labels(self.ts[0], 1.), self.exp_alpha_one[0], atol=1e-4)
+        np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts[0], 1.), self.exp_alpha_one[0], atol=1e-4)
 
     def test_batched(self):
         """Tests for a full batch."""
-        np.testing.assert_allclose(_smoothing.smooth_labels(self.ts, 0.), self.exp_alpha_zero, atol=1e-4)
-        np.testing.assert_allclose(_smoothing.smooth_labels(self.ts, 0.1), self.exp_alpha_zero_point_one, atol=1e-4)
-        np.testing.assert_allclose(_smoothing.smooth_labels(self.ts, 1.), self.exp_alpha_one, atol=1e-4)
+        np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts, 0.), self.exp_alpha_zero, atol=1e-4)
+        np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts, 0.1), self.exp_alpha_zero_point_one, atol=1e-4)
+        np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts, 1.), self.exp_alpha_one, atol=1e-4)
 
     def test_smooth_labels_assertion_error(self):
         with self.assertRaises(AssertionError):
-            _smoothing.smooth_labels(jnp.array([[1, 0, 0], [0, 1, 0]]), 0.1)
+            braintools.metric.smooth_labels(jnp.array([[1, 0, 0], [0, 1, 0]]), 0.1)
 
     def test_alpha_very_small_positive(self):
         """Tests for a very small positive alpha close to zero."""
         very_small_alpha = 1e-10
         expected_output = (1.0 - very_small_alpha) * self.ts + very_small_alpha / self.ts.shape[-1]
         np.testing.assert_allclose(
-            _smoothing.smooth_labels(self.ts, very_small_alpha), expected_output, atol=1e-4)
+            braintools.metric.smooth_labels(self.ts, very_small_alpha), expected_output, atol=1e-4)

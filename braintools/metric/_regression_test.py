@@ -17,8 +17,7 @@
 import jax.numpy as jnp
 import numpy as np
 from absl.testing import parameterized
-
-from braintools.metric import _regression
+import braintools
 
 
 class SquaredErrorTest(parameterized.TestCase):
@@ -31,14 +30,14 @@ class SquaredErrorTest(parameterized.TestCase):
         self.exp = (self.ts - self.ys) ** 2
 
     def test_scalar(self):
-        np.testing.assert_allclose(_regression.squared_error(self.ys[0], self.ts[0]), self.exp[0])
+        np.testing.assert_allclose(braintools.metric.squared_error(self.ys[0], self.ts[0]), self.exp[0])
 
     def test_batched(self):
-        np.testing.assert_allclose(_regression.squared_error(self.ys, self.ts), self.exp)
+        np.testing.assert_allclose(braintools.metric.squared_error(self.ys, self.ts), self.exp)
 
     def test_shape_mismatch(self):
         with self.assertRaises(AssertionError):
-            _ = _regression.squared_error(self.ys, jnp.expand_dims(self.ts, axis=-1))
+            _ = braintools.metric.squared_error(self.ys, jnp.expand_dims(self.ts, axis=-1))
 
 
 class L2LossTest(parameterized.TestCase):
@@ -51,14 +50,14 @@ class L2LossTest(parameterized.TestCase):
         self.exp = 0.5 * (self.ts - self.ys) ** 2
 
     def test_scalar(self):
-        np.testing.assert_allclose((_regression.l2_loss)(self.ys[0], self.ts[0]), self.exp[0])
+        np.testing.assert_allclose((braintools.metric.l2_loss)(self.ys[0], self.ts[0]), self.exp[0])
 
     def test_batched(self):
-        np.testing.assert_allclose((_regression.l2_loss)(self.ys, self.ts), self.exp)
+        np.testing.assert_allclose((braintools.metric.l2_loss)(self.ys, self.ts), self.exp)
 
     def test_shape_mismatch(self):
         with self.assertRaises(AssertionError):
-            _ = (_regression.l2_loss)(self.ys, jnp.expand_dims(self.ts, axis=-1))
+            _ = (braintools.metric.l2_loss)(self.ys, jnp.expand_dims(self.ts, axis=-1))
 
 
 class HuberLossTest(parameterized.TestCase):
@@ -71,10 +70,10 @@ class HuberLossTest(parameterized.TestCase):
         self.exp = np.array([1.5, 0.5, 0., 0.125, 0.5, 1.5, 131.2])
 
     def test_scalar(self):
-        np.testing.assert_allclose((_regression.huber_loss)(self.ys[0], self.ts[0], delta=1.0), self.exp[0])
+        np.testing.assert_allclose((braintools.metric.huber_loss)(self.ys[0], self.ts[0], delta=1.0), self.exp[0])
 
     def test_batched(self):
-        np.testing.assert_allclose((_regression.huber_loss)(self.ys, self.ts, delta=1.0), self.exp)
+        np.testing.assert_allclose((braintools.metric.huber_loss)(self.ys, self.ts, delta=1.0), self.exp)
 
 
 class LogCoshTest(parameterized.TestCase):
@@ -90,19 +89,19 @@ class LogCoshTest(parameterized.TestCase):
             [499.30685, 1.3250027, 0.4337809, 0.12011451, 0.43378082])
 
     def test_scalar(self):
-        out = (_regression.log_cosh)(self.ys[0], self.ts[0])
+        out = (braintools.metric.log_cosh)(self.ys[0], self.ts[0])
         np.testing.assert_allclose(out, self.exp[0], atol=1e-5)
 
     def test_batched(self):
-        out = (_regression.log_cosh)(self.ys, self.ts)
+        out = (braintools.metric.log_cosh)(self.ys, self.ts)
         np.testing.assert_allclose(out, self.exp, atol=1e-5)
 
     def test_scalar_predictions_only(self):
-        out = (_regression.log_cosh)(self.ys[0])
+        out = (braintools.metric.log_cosh)(self.ys[0])
         np.testing.assert_allclose(out, self.exp_ys_only[0], atol=1e-5)
 
     def test_batched_predictions_only(self):
-        out = (_regression.log_cosh)(self.ys)
+        out = (braintools.metric.log_cosh)(self.ys)
         np.testing.assert_allclose(out, self.exp_ys_only, atol=1e-5)
 
 
@@ -117,16 +116,16 @@ class CosineDistanceTest(parameterized.TestCase):
 
     def test_scalar_distance(self):
         """Tests for a full batch."""
-        np.testing.assert_allclose((_regression.cosine_distance)(self.ys[0], self.ts[0]), self.exp[0], atol=1e-4)
+        np.testing.assert_allclose((braintools.metric.cosine_distance)(self.ys[0], self.ts[0]), self.exp[0], atol=1e-4)
 
     def test_scalar_similarity(self):
         """Tests for a full batch."""
-        np.testing.assert_allclose((_regression.cosine_similarity)(self.ys[0], self.ts[0]), 1. - self.exp[0], atol=1e-4)
+        np.testing.assert_allclose((braintools.metric.cosine_similarity)(self.ys[0], self.ts[0]), 1. - self.exp[0], atol=1e-4)
 
     def test_batched_distance(self):
         """Tests for a full batch."""
-        np.testing.assert_allclose((_regression.cosine_distance)(self.ys, self.ts), self.exp, atol=1e-4)
+        np.testing.assert_allclose((braintools.metric.cosine_distance)(self.ys, self.ts), self.exp, atol=1e-4)
 
     def test_batched_similarity(self):
         """Tests for a full batch."""
-        np.testing.assert_allclose((_regression.cosine_similarity)(self.ys, self.ts), 1. - self.exp, atol=1e-4)
+        np.testing.assert_allclose((braintools.metric.cosine_similarity)(self.ys, self.ts), 1. - self.exp, atol=1e-4)
