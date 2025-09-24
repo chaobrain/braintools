@@ -229,3 +229,4 @@ cython_debug/
 /.claude/
 /docs/apis/changelog.md
 /docs/checkpoints/
+/dev/
