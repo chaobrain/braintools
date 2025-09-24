@@ -18,11 +18,8 @@
 import io
 import os
 import re
-import sys
-import time
 
-from setuptools import find_packages
-from setuptools import setup
+from setuptools import find_packages, setup
 
 # version
 here = os.path.abspath(os.path.dirname(__file__))
@@ -38,6 +35,7 @@ with io.open(os.path.join(here, 'README.md'), 'r', encoding='utf-8') as f:
 packages = find_packages(
     exclude=[
         "docs*",
+        "dev*",
         "tests*",
         "examples*",
         "build*",
@@ -53,7 +51,7 @@ all_dependencies = ['matplotlib', 'nevergrad', 'scipy', 'msgpack']
 setup(
     name='braintools',
     version=version,
-    description='The Toolbox for Brain Modeling Ecosystem.',
+    description='Modeling tools for brain simulation.',
     long_description=README,
     long_description_content_type="text/markdown",
     author='BrainTools Developers',

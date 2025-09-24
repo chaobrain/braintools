@@ -1,9 +1,7 @@
 ``braintools`` documentation
 ============================
 
-`braintools <https://github.com/brainpy/braintools>`_ implements the common toolboxes for brain simulation.
-
-----
+`braintools <https://github.com/chaobrain/braintools>`_ implements the common toolboxes for brain simulation.
 
 
 Overview
@@ -21,7 +19,7 @@ utilities used throughout computational neuroscience workflows:
 - And more to come...
 
 The project favors a simple, well‑typed functional style that plays nicely with
-JIT/VMAP and works out‑of‑the‑box with `brainstate <https://brainstate.readthedocs.io/>`_
+jit/vmap and works out‑of‑the‑box with `brainstate <https://brainstate.readthedocs.io/>`_
 and `brainunit <https://brainunit.readthedocs.io/>`_.
 
 
@@ -46,13 +44,11 @@ Compute functional connectivity and its dynamics::
 
 Advance an ODE with RK4::
 
-  from braintools.quad import ode_rk4_step
-
   def f(y, t):
       return -y  # dy/dt = -y
 
   y, t = jnp.array(1.0), 0.0
-  y_next = ode_rk4_step(f, y, t)
+  y_next = braintools.quad.ode_rk4_step(f, y, t)
 
 
 Design Principles
@@ -107,7 +103,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 .. toctree::
     :hidden:
     :maxdepth: 2
-    :caption: Numerical Integrations
+    :caption: Numerical Integration
 
     ode_integration.ipynb
     sde_integration.ipynb
@@ -117,7 +113,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 .. toctree::
     :hidden:
     :maxdepth: 2
-    :caption: Metric Functions
+    :caption: Metric Function
 
 
     classification_losses.ipynb
@@ -125,7 +121,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     ranking_learning_to_rank.ipynb
     pairwise_embedding_similarity.ipynb
     spiking_metrics.ipynb
-    advanced_spiking_metrics.ipynb
+    spiking_sync.ipynb
     lfp_analysis.ipynb
 
 
@@ -133,7 +129,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 .. toctree::
     :hidden:
     :maxdepth: 2
-    :caption: Spike Encodings
+    :caption: Spike Encoding
 
     spike_encoding.ipynb
 
@@ -144,6 +140,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     :maxdepth: 2
     :caption: File Processing
 
+    msgpack_checkpointing.ipynb
 
 
 .. toctree::
@@ -152,6 +149,25 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     :caption: Visualization
 
 
+    neural_data_visualization.ipynb
+    advanced_neural_plots.ipynb
+    statistical_visualization.ipynb
+    model_evaluation_plots.ipynb
+    interactive_visualization.ipynb
+    3d_visualization.ipynb
+    styling_and_themes.ipynb
+    animation_and_dynamics.ipynb
+    real_world_applications.ipynb
+    custom_extensions.ipynb
+
+
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+    :caption: Optimizations
+
+    nevergrad_optimizer.ipynb
+    scipy_optimizer.ipynb
 
 
 .. toctree::
@@ -161,8 +177,10 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 
     apis/changelog.md
     apis/braintools.rst
+    apis/file.rst
     apis/quad.rst
     apis/metric.rst
     apis/optim.rst
     apis/input.rst
     apis/tree.rst
+    apis/visualize.rst

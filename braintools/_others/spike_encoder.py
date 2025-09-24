@@ -139,7 +139,7 @@ class LatencyEncoder:
             dt_val = u.get_mantissa(dt)
             tau_val = u.get_mantissa(tau) if hasattr(tau, 'mantissa') else tau
             first_spk_val = u.get_mantissa(self.first_spk_time)
-            
+
             if self.method == 'linear':
                 spike_time = (tau_val - first_spk_val - dt_val) * (1 - x) + first_spk_val
 
@@ -197,7 +197,7 @@ class RateEncoder:
     ):
         if method not in ['linear', 'exponential', 'sqrt']:
             raise ValueError('Method must be "linear", "exponential", or "sqrt"')
-        
+
         self.gain = gain
         self.method = method
         self.min_rate = min_rate
@@ -219,7 +219,7 @@ class RateEncoder:
         x = data
         if self.normalize and self.min_val is not None and self.max_val is not None:
             x = (x - self.min_val) / (self.max_val - self.min_val)
-        
+
         # Convert to rates based on method
         if self.method == 'linear':
             rates = self.min_rate + x * (self.max_rate - self.min_rate)
@@ -227,16 +227,17 @@ class RateEncoder:
             rates = self.min_rate + (u.math.exp(x) - 1) / (u.math.exp(1) - 1) * (self.max_rate - self.min_rate)
         elif self.method == 'sqrt':
             rates = self.min_rate + u.math.sqrt(x) * (self.max_rate - self.min_rate)
-        
+        else:
+            raise ValueError(f'Unsupported method: {self.method}.')
+
         # Convert rates to probabilities per time step
         dt = brainstate.environ.get_dt()
         dt_val = u.get_mantissa(dt) if hasattr(dt, 'mantissa') else dt
         probs = rates * dt_val / 1000.0  # Convert Hz to probability per ms
         probs = u.math.clip(probs, 0, 1)
-        
+
         # Generate spikes using Bernoulli process
-        key = jax.random.PRNGKey(int(brainstate.get_time() * 1000))
-        spikes = jax.random.bernoulli(key, probs, shape=(n_time,) + data.shape)
+        spikes = brainstate.random.bernoulli(probs, size=(n_time,) + data.shape)
         return spikes.astype(data.dtype)
 
 
@@ -271,7 +272,7 @@ class PoissonEncoder:
         self.normalize = normalize
         self.max_rate = max_rate
 
-    def __call__(self, data, n_time: int, *, key: jax.Array = None):
+    def __call__(self, data, n_time: int):
         """Generate Poisson spike trains.
         
         Args:
@@ -282,20 +283,17 @@ class PoissonEncoder:
         Returns:
           Poisson spike trains with shape (n_time, *data.shape).
         """
-        if key is None:
-            key = jax.random.PRNGKey(int(brainstate.get_time() * 1000))
-        
         rates = data
         if self.normalize:
             rates = data * self.max_rate
-        
+
         dt = brainstate.environ.get_dt()  # ms
         dt_val = u.get_mantissa(dt) if hasattr(dt, 'mantissa') else dt
         # Rate parameter for each time step
         lam = rates * dt_val / 1000.0  # Convert Hz to expected spikes per time step
-        
+
         # Generate Poisson spikes
-        spikes = jax.random.poisson(key, lam, shape=(n_time,) + data.shape)
+        spikes = brainstate.random.poisson(lam, size=(n_time,) + data.shape)
         # Convert to binary spikes (1 if >= 1 spike, 0 otherwise)
         return (spikes > 0).astype(data.dtype)
 
@@ -335,11 +333,11 @@ class PopulationEncoder:
         self.max_val = max_val
         self.sigma = sigma if sigma is not None else (max_val - min_val) / (n_neurons - 1)
         self.max_rate = max_rate
-        
+
         # Create neuron preferred values (centers of receptive fields)
         self.centers = u.math.linspace(min_val, max_val, n_neurons)
 
-    def __call__(self, data, n_time: int, *, key: jax.Array = None):
+    def __call__(self, data, n_time: int):
         """Generate population-encoded spikes.
         
         Args:
@@ -350,29 +348,34 @@ class PopulationEncoder:
         Returns:
           Population spike trains with shape (n_time, n_neurons, *data.shape).
         """
-        if key is None:
-            key = jax.random.PRNGKey(int(brainstate.get_time() * 1000))
-        
+        data = u.math.asarray(data)
         # Calculate distances from each neuron's preferred value
         distances = u.math.abs(data[..., None] - self.centers)
-        
+
         # Gaussian activation
         activations = u.math.exp(-0.5 * (distances / self.sigma) ** 2)
         rates = activations * self.max_rate
-        
+
         # Convert to spike probabilities
         dt = brainstate.environ.get_dt()
         dt_val = u.get_mantissa(dt) if hasattr(dt, 'mantissa') else dt
         probs = rates * dt_val / 1000.0
         probs = u.math.clip(probs, 0, 1)
-        
+
         # Generate spikes
         if data.ndim == 0:  # scalar input
             shape = (n_time, self.n_neurons)
+            spikes = brainstate.random.bernoulli(probs, size=shape)
         else:
-            shape = (n_time, self.n_neurons) + data.shape
-        
-        spikes = jax.random.bernoulli(key, probs, shape=shape)
+            # For array inputs, we need to handle the shape correctly
+            # probs has shape (*data.shape, n_neurons)
+            # We want output shape (n_time, n_neurons, *data.shape)
+            shape = (n_time,) + probs.shape
+            spikes = brainstate.random.bernoulli(probs, size=shape)
+            # Transpose to get (n_time, n_neurons, *data.shape)
+            axes = (0, data.ndim + 1) + tuple(range(1, data.ndim + 1))
+            spikes = u.math.transpose(spikes, axes)
+
         return spikes.astype(u.math.float32)
 
 
@@ -410,7 +413,7 @@ class BernoulliEncoder:
         self.min_val = min_val
         self.max_val = max_val
 
-    def __call__(self, data, n_time: int, *, key: jax.Array = None):
+    def __call__(self, data, n_time: int):
         """Generate Bernoulli-encoded spikes.
         
         Args:
@@ -421,17 +424,14 @@ class BernoulliEncoder:
         Returns:
           Bernoulli spike trains with shape (n_time, *data.shape).
         """
-        if key is None:
-            key = jax.random.PRNGKey(int(brainstate.get_time() * 1000))
-        
         x = data
         if self.normalize and self.min_val is not None and self.max_val is not None:
             x = (x - self.min_val) / (self.max_val - self.min_val)
-        
+
         probs = x * self.scale
         probs = u.math.clip(probs, 0, 1)
-        
-        spikes = jax.random.bernoulli(key, probs, shape=(n_time,) + data.shape)
+
+        spikes = brainstate.random.bernoulli(probs, size=(n_time,) + data.shape)
         return spikes.astype(data.dtype)
 
 
@@ -480,23 +480,23 @@ class DeltaEncoder:
         """
         if data.ndim == 1:
             data = data[..., None]  # Add feature dimension
-        
+
         x = data
         if self.normalize:
             x_min, x_max = u.math.min(x, axis=0, keepdims=True), u.math.max(x, axis=0, keepdims=True)
             x = (x - x_min) / (x_max - x_min + 1e-8)
-        
+
         # Calculate differences
         diffs = u.math.diff(x, axis=0, prepend=x[0:1])
-        
+
         if self.absolute:
             diffs = u.math.abs(diffs)
         elif self.positive_only:
             diffs = u.math.maximum(diffs, 0)
-        
+
         # Generate spikes where changes exceed threshold
         spikes = (u.math.abs(diffs) >= self.threshold).astype(data.dtype)
-        
+
         return spikes.squeeze() if data.shape[-1] == 1 else spikes
 
 
@@ -550,9 +550,9 @@ class StepCurrentEncoder:
         x = data
         if self.normalize and self.min_val is not None and self.max_val is not None:
             x = (x - self.min_val) / (self.max_val - self.min_val)
-        
+
         currents = x * self.current_scale + self.offset
-        
+
         # Repeat for all time steps
         return u.math.tile(currents, (n_time,) + (1,) * currents.ndim)
 
@@ -586,12 +586,12 @@ class SpikeCountEncoder:
     ):
         if distribution not in ['uniform', 'random']:
             raise ValueError('Distribution must be "uniform" or "random"')
-        
+
         self.max_spikes = max_spikes
         self.distribution = distribution
         self.normalize = normalize
 
-    def __call__(self, data, n_time: int, *, key: jax.Array = None):
+    def __call__(self, data, n_time: int):
         """Generate spike count-encoded trains.
         
         Args:
@@ -602,35 +602,33 @@ class SpikeCountEncoder:
         Returns:
           Spike trains with exact spike counts.
         """
-        if key is None:
-            key = jax.random.PRNGKey(int(brainstate.get_time() * 1000))
-        
         x = data
         if self.normalize:
             x = u.math.clip(x, 0, 1)
-        
+
         spike_counts = (x * self.max_spikes).astype(int)
         spikes = u.math.zeros((n_time,) + data.shape, dtype=data.dtype)
-        
+
         if self.distribution == 'uniform':
             # Distribute spikes uniformly
+            spike_counts_flat = spike_counts.flatten()
             for i in range(data.size):
                 idx = np.unravel_index(i, data.shape)
-                count = spike_counts.flat[i]
+                count = spike_counts_flat[i]
                 if count > 0:
                     spike_times = u.math.linspace(0, n_time - 1, count).astype(int)
                     spikes = spikes.at[(spike_times,) + idx].set(1)
-        
+
         elif self.distribution == 'random':
             # Distribute spikes randomly using a simpler approach
+            spike_counts_flat = spike_counts.flatten()
             for i in range(data.size):
                 idx = jnp.unravel_index(i, data.shape)
-                count = int(spike_counts.flat[i])
+                count = int(spike_counts_flat[i])
                 if count > 0 and count <= n_time:
-                    key, subkey = jax.random.split(key)
-                    spike_times = jax.random.choice(subkey, n_time, (count,), replace=False)
+                    spike_times = brainstate.random.choice(n_time, (count,), replace=False)
                     spikes = spikes.at[(spike_times,) + idx].set(1)
-        
+
         return spikes
 
 
@@ -663,7 +661,7 @@ class TemporalEncoder:
         self.n_patterns = n_patterns
         self.pattern_length = pattern_length
         self.jitter = jitter
-        
+
         # Pre-define temporal patterns
         self.patterns = self._create_patterns()
 
@@ -672,14 +670,14 @@ class TemporalEncoder:
         patterns = {}
         for i in range(self.n_patterns):
             # Create a unique temporal pattern
-            pattern_times = u.math.linspace(0, self.pattern_length - 1, 
-                                          max(1, int(self.pattern_length * 0.3))).astype(int)
+            pattern_times = u.math.linspace(0, self.pattern_length - 1,
+                                            max(1, int(self.pattern_length * 0.3))).astype(int)
             # Shift pattern based on index
             pattern_times = (pattern_times + i * 2) % self.pattern_length
             patterns[i] = pattern_times
         return patterns
 
-    def __call__(self, data, *, key: jax.Array = None):
+    def __call__(self, data):
         """Generate temporally-encoded spikes.
         
         Args:
@@ -689,29 +687,25 @@ class TemporalEncoder:
         Returns:
           Temporal spike patterns with shape (len(data) * pattern_length, n_patterns).
         """
-        if key is None:
-            key = jax.random.PRNGKey(int(brainstate.get_time() * 1000))
-        
         sequence_length = len(data)
         total_time = sequence_length * self.pattern_length
         spikes = u.math.zeros((total_time, self.n_patterns))
-        
+
         for t, value in enumerate(data):
             if 0 <= value < self.n_patterns:
                 pattern_times = self.patterns[int(value)]
-                
+
                 # Add temporal jitter
-                key, subkey = jax.random.split(key)
-                jitter_offset = jax.random.normal(subkey, pattern_times.shape) * self.jitter * self.pattern_length
+                jitter_offset = brainstate.random.randn(*pattern_times.shape) * self.jitter * self.pattern_length
                 jittered_times = pattern_times + jitter_offset
                 jittered_times = u.math.clip(jittered_times, 0, self.pattern_length - 1).astype(int)
-                
+
                 # Place spikes in global time
                 global_times = t * self.pattern_length + jittered_times
                 global_times = u.math.clip(global_times, 0, total_time - 1).astype(int)
-                
+
                 spikes = spikes.at[global_times, value].set(1)
-        
+
         return spikes
 
 
@@ -762,10 +756,10 @@ class RankOrderEncoder:
             x_min, x_max = u.math.min(x), u.math.max(x)
             if x_max > x_min:
                 x = (x - x_min) / (x_max - x_min)
-        
+
         if self.invert:
             x = 1 - x
-        
+
         if self.use_values:
             # Use actual values to determine spike timing
             spike_times = ((1 - x) * (n_time - 1)).astype(int)
@@ -773,11 +767,11 @@ class RankOrderEncoder:
             # Use only ranks
             ranks = u.math.argsort(u.math.argsort(-x))  # Descending rank order
             spike_times = (ranks * (n_time - 1) // len(data)).astype(int)
-        
+
         spike_times = u.math.clip(spike_times, 0, n_time - 1)
-        
+
         # Create spike trains
         spikes = u.math.zeros((n_time, len(data)), dtype=data.dtype)
         spikes = spikes.at[spike_times, u.math.arange(len(data))].set(1)
-        
+
         return spikes

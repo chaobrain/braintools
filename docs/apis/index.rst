@@ -29,6 +29,11 @@ Core Modules
    Utilities for working with JAX PyTrees including scaling, arithmetic operations,
    concatenation, splitting, and conversion functions for nested data structures.
 
+**braintools.visualize** - Data visualization and plotting utilities
+   Comprehensive visualization toolkit for neural data including spike rasters,
+   population activity plots, connectivity visualizations, statistical plots,
+   interactive visualizations, 3D rendering, and publication-ready styling.
+
 .. toctree::
    :maxdepth: 2
 
@@ -39,4 +44,5 @@ Core Modules
    optim.rst
    input.rst
    tree.rst
+   visualize.rst
 

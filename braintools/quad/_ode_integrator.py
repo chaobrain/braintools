@@ -121,7 +121,7 @@ def ode_rk2_step(
 
     .. math::
 
-        k_1 = f(y_n, t_n),\quad
+        k_1 = f(y_n, t_n),\\
         k_2 = f\big(y_n + \Delta t\,k_1,\ t_n + \Delta t\big),\\
         y_{n+1} = y_n + \tfrac{\Delta t}{2}\,(k_1 + k_2).
 
@@ -167,7 +167,7 @@ def ode_rk3_step(
 
     .. math::
 
-        k_1 = f(y_n, t_n),\quad
+        k_1 = f(y_n, t_n),\\
         k_2 = f\big(y_n + \tfrac{\Delta t}{2}k_1,\ t_n + \tfrac{\Delta t}{2}\big),\\
         k_3 = f\big(y_n - \Delta t\,k_1 + 2\Delta t\,k_2,\ t_n + \Delta t\big),\\
         y_{n+1} = y_n + \tfrac{\Delta t}{6}(k_1 + 4k_2 + k_3).

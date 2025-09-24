@@ -17,6 +17,8 @@
 # -*- coding: utf-8 -*-
 
 
+from typing import Union
+
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
@@ -25,7 +27,12 @@ __all__ = [
 ]
 
 
-def get_figure(row_num, col_num, row_len=3, col_len=6):
+def get_figure(
+    row_num: int,
+    col_num: int,
+    row_len: Union[int, float] = 3,
+    col_len: Union[int, float] = 6
+):
     """Get the constrained_layout figure.
 
     Parameters
