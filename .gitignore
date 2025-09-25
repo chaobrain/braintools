@@ -231,3 +231,4 @@ cython_debug/
 /docs/checkpoints/
 /dev/
 /docs/animations/
+/docs/.claude/
