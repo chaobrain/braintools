@@ -20,7 +20,7 @@ import brainstate.random
 import jax.numpy as jnp
 import numpy as np
 
-from . import spike_encoder
+from . import _spike_encoder
 
 bst.environ.set(dt=0.1)
 

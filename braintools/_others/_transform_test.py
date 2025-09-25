@@ -18,7 +18,7 @@ import brainunit as u
 import jax.numpy as jnp
 import numpy as np
 
-from braintools._others.transform import (
+from braintools._others._transform import (
     save_exp,
     IdentityTransform,
     SigmoidTransform,
