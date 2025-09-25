@@ -18,10 +18,27 @@
 
 """
 This module provides various methods to form current inputs.
-You can access them through ``brainpy.inputs.XXX``.
+You can access them through ``braintools.input.XXX``.
 """
 
-from .currents import *
-from .currents import __all__ as currents_all
+# Import from categorized modules
+from .basic import *
+from .basic import __all__ as basic_all
 
-__all__ = currents_all
+from .waveforms import *
+from .waveforms import __all__ as waveforms_all
+
+from .pulses import *
+from .pulses import __all__ as pulses_all
+
+from .stochastic import *
+from .stochastic import __all__ as stochastic_all
+
+# Keep importing from currents for backward compatibility (if it still exists)
+try:
+    from .currents import *
+    from .currents import __all__ as currents_all
+    __all__ = currents_all
+except ImportError:
+    # If currents.py doesn't exist, combine all the module exports
+    __all__ = basic_all + waveforms_all + pulses_all + stochastic_all
