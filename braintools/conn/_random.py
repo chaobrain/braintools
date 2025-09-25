@@ -22,7 +22,7 @@ from braintools._misc import set_module_as
 __all__ = [
     'random_conn',
     'fixed_prob',
-    'fixed_in_degree', 
+    'fixed_in_degree',
     'fixed_out_degree',
     'fixed_total_num',
 ]
