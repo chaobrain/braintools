@@ -14,9 +14,10 @@
 # ==============================================================================
 
 
-__version_info__ = (0, 0, 12)
-__version__ = "0.0.12"
+__version_info__ = (0, 0, 13)
+__version__ = "0.0.13"
 
+from . import conn
 from . import file
 from . import input
 from . import metric
@@ -27,6 +28,6 @@ from . import visualize
 from ._others import *
 from ._others import __all__ as _other_all
 
-__all__ = ['input', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad'] + _other_all
+__all__ = ['conn', 'input', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad'] + _other_all
 
 del _other_all
