@@ -19,26 +19,52 @@
 """
 This module provides various methods to form current inputs.
 You can access them through ``braintools.input.XXX``.
+
+The module now supports two APIs:
+1. **Composable API (recommended)**: Object-oriented API that allows combining inputs
+2. **Functional API**: Traditional function-based API for backward compatibility
+
+Composable API Example:
+-----------------------
+>>> from braintools.input import RampInput, SinusoidalInput
+>>> ramp = RampInput(0, 1, 500 * u.ms)
+>>> sine = SinusoidalInput(0.5, 10 * u.Hz, 500 * u.ms)
+>>> combined = ramp + sine  # Combine inputs
+>>> scaled = combined.scale(0.5)  # Transform result
+>>> array = scaled()  # Generate the array
+
+Functional API Example:
+-----------------------
+>>> from braintools.input import ramp_input, sinusoidal_input
+>>> ramp = ramp_input(0, 1, 500)
+>>> sine = sinusoidal_input(0.5, 10 * u.Hz, 500 * u.ms)
+>>> combined = ramp + sine  # Simple array addition
 """
 
-# Import from categorized modules
-from .basic import *
-from .basic import __all__ as basic_all
-
-from .waveforms import *
-from .waveforms import __all__ as waveforms_all
-
+# Import functional API for backward compatibility
+from ._basic import *
+from ._basic import __all__ as basic_all2
+# Import base classes for composable API
+from .base import *
+from .base import __all__ as base_all
+# Import composable classes
+from .basic_composable import *
+from .basic_composable import __all__ as basic_all
 from .pulses import *
-from .pulses import __all__ as pulses_all
-
+from .pulses import __all__ as pulses_all2
+from .pulses_composable import *
+from .pulses_composable import __all__ as pulses_all
 from .stochastic import *
-from .stochastic import __all__ as stochastic_all
+from .stochastic import __all__ as stochastic_all2
+from .stochastic_composable import *
+from .stochastic_composable import __all__ as stochastic_all
+from .waveforms import *
+from .waveforms import __all__ as waveforms_all2
+from .waveforms_composable import *
+from .waveforms_composable import __all__ as waveforms_all
 
-# Keep importing from currents for backward compatibility (if it still exists)
-try:
-    from .currents import *
-    from .currents import __all__ as currents_all
-    __all__ = currents_all
-except ImportError:
-    # If currents.py doesn't exist, combine all the module exports
-    __all__ = basic_all + waveforms_all + pulses_all + stochastic_all
+# Define __all__ for both APIs
+__all__ = base_all + basic_all + waveforms_all + pulses_all + stochastic_all
+__all__ = __all__ + basic_all2 + waveforms_all2 + pulses_all2 + stochastic_all2
+del (base_all, basic_all, waveforms_all, pulses_all, stochastic_all)
+del (basic_all2, waveforms_all2, pulses_all2, stochastic_all2)
