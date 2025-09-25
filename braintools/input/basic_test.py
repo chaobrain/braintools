@@ -24,6 +24,7 @@ import brainunit as u
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 
 from braintools.input import section_input, constant_input, step_input, ramp_input
 
@@ -47,8 +48,7 @@ class TestBasicInputs(TestCase):
         with brainstate.environ.context(dt=0.1):
             current1, duration = section_input(values=[0, 1., 0.],
                                                durations=[100, 300, 100],
-                                               return_length=True,
-                                               dt=0.1)
+                                               return_length=True)
             show(current1, duration, 'values=[0, 1, 0], durations=[100, 300, 100]')
             self.assertEqual(current1.shape[0], 5000)
 
@@ -61,16 +61,97 @@ class TestBasicInputs(TestCase):
 
     def test_section_input_different_dt(self):
         with brainstate.environ.context(dt=0.1):
-            I1 = section_input(values=[0, 1, 2], durations=[10, 20, 30], dt=0.1)
-            I2 = section_input(values=[0, 1, 2], durations=[10, 20, 30], dt=0.01)
+            I1 = section_input(values=[0, 1, 2], durations=[10, 20, 30])
             self.assertTrue(I1.shape[0] == 600)
+        with brainstate.environ.context(dt=0.01):
+            I2 = section_input(values=[0, 1, 2], durations=[10, 20, 30])
             self.assertTrue(I2.shape[0] == 6000)
+    
+    def test_section_input_with_units(self):
+        """Test section_input with units from docstring examples."""
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            # Simple step protocol
+            current = section_input(
+                values=[0, 10, 0] * u.pA,
+                durations=[100, 200, 100] * u.ms
+            )
+            self.assertEqual(current.shape[0], 4000)
+            
+            # Multiple channel input
+            values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
+            current = section_input(
+                values=values,
+                durations=[50, 100, 50] * u.ms
+            )
+            self.assertEqual(current.shape, (2000, 3))
+            
+            # Get both current and duration
+            current, duration = section_input(
+                values=[0, 1, 2, 1, 0] * u.pA,
+                durations=[20, 20, 40, 20, 20] * u.ms,
+                return_length=True
+            )
+            self.assertEqual(current.shape[0], 1200)
+            self.assertAlmostEqual(u.get_magnitude(duration), 120.0)
+            
+            # Complex protocol with different phases
+            protocol_values = [0, 2, 5, 10, 5, 2, 0] * u.pA
+            protocol_durations = [50, 30, 30, 100, 30, 30, 50] * u.ms
+            current = section_input(protocol_values, protocol_durations)
+            self.assertEqual(current.shape[0], 3200)
 
     def test_constant_input(self):
         with brainstate.environ.context(dt=0.1):
             current2, duration = constant_input([(0, 100), (1, 300), (0, 100)])
             show(current2, duration, '[(0, 100), (1, 300), (0, 100)]')
             self.assertEqual(current2.shape[0], 5000)
+    
+    def test_constant_input_with_units(self):
+        """Test constant_input with units from docstring examples."""
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            # Simple two-phase protocol
+            current, duration = constant_input([
+                (0 * u.pA, 100 * u.ms),
+                (10 * u.pA, 200 * u.ms)
+            ])
+            self.assertEqual(current.shape[0], 3000)
+            self.assertAlmostEqual(u.get_magnitude(duration), 300.0)
+            
+            # Mixed scalar and array values
+            with pytest.raises(u.UnitMismatchError):
+                current, duration = constant_input([
+                    (0, 50 * u.ms),
+                    (np.array([1, 2, 3]) * u.nA, 100 * u.ms),
+                    (0, 50 * u.ms)
+                ])
+                self.assertEqual(current.shape, (2000, 3))
+            
+            # Complex multi-phase stimulation
+            phases = [
+                (0 * u.pA, 20 * u.ms),      # baseline
+                (5 * u.pA, 50 * u.ms),      # weak stimulus
+                (10 * u.pA, 100 * u.ms),    # strong stimulus
+                (2 * u.pA, 30 * u.ms),      # recovery
+                (0 * u.pA, 50 * u.ms),      # rest
+            ]
+            current, total_time = constant_input(phases)
+            self.assertEqual(current.shape[0], 2500)
+            self.assertAlmostEqual(u.get_magnitude(total_time), 250.0)
+            
+            # Using arrays for spatial patterns
+            spatial_pattern = np.array([[1, 0], [0, 1]]) * u.nA
+            current, duration = constant_input([
+                (np.zeros((2, 2)) * u.nA, 100 * u.ms),
+                (spatial_pattern, 200 * u.ms),
+                (np.zeros((2, 2)) * u.nA, 100 * u.ms)
+            ])
+            self.assertEqual(current.shape, (4000, 2, 2))
+            
+            # Ramp-like approximation with many steps
+            steps = [(i * u.pA, 10 * u.ms) for i in range(11)]
+            current, duration = constant_input(steps)
+            self.assertEqual(current.shape[0], 1100)
+            self.assertAlmostEqual(u.get_magnitude(duration), 110.0)
 
     def test_step_input(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
@@ -80,7 +161,7 @@ class TestBasicInputs(TestCase):
             step_times = [0 * u.ms, 100 * u.ms, 250 * u.ms, 400 * u.ms]
 
             current = step_input(amplitudes, step_times, duration)
-            show(current, u.maybe_decimal(duration / u.ms), 'Step Input: Multiple Levels')
+            show(current, duration / u.ms, 'Step Input: Multiple Levels')
             self.assertEqual(current.shape[0], 5000)
 
     def test_step_input_unsorted(self):
@@ -93,6 +174,53 @@ class TestBasicInputs(TestCase):
             current = step_input(amplitudes, step_times, duration)
             # Should automatically sort and produce correct output
             self.assertEqual(current.shape[0], 3000)
+    
+    def test_step_input_examples(self):
+        """Test step_input with examples from docstring."""
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            # Simple three-level step function
+            current = step_input(
+                amplitudes=[0, 10, 5] * u.pA,
+                step_times=[0, 50, 150] * u.ms,
+                duration=200 * u.ms
+            )
+            self.assertEqual(current.shape[0], 2000)
+            
+            # Staircase protocol
+            amplitudes = [0, 2, 4, 6, 8, 10] * u.nA
+            times = [0, 20, 40, 60, 80, 100] * u.ms
+            current = step_input(amplitudes, times, 120 * u.ms)
+            self.assertEqual(current.shape[0], 1200)
+            
+            # Multiple pulses with return to baseline
+            current = step_input(
+                amplitudes=[0, 5, 0, 10, 0] * u.pA,
+                step_times=[0, 20, 40, 60, 80] * u.ms,
+                duration=100 * u.ms
+            )
+            self.assertEqual(current.shape[0], 1000)
+            
+            # Unsorted times are automatically sorted
+            current = step_input(
+                amplitudes=[5, 0, 10] * u.pA,
+                step_times=[50, 0, 100] * u.ms,  # Will be sorted to [0, 50, 100]
+                duration=150 * u.ms
+            )
+            self.assertEqual(current.shape[0], 1500)
+            
+            # Protocol with negative values
+            current = step_input(
+                amplitudes=[-5, 0, 5, 0, -5] * u.pA,
+                step_times=[0, 25, 50, 75, 100] * u.ms,
+                duration=125 * u.ms
+            )
+            self.assertEqual(current.shape[0], 1250)
+            
+            # F-I curve protocol
+            amplitudes = np.linspace(0, 50, 11) * u.pA
+            times = np.linspace(0, 1000, 11) * u.ms
+            current = step_input(amplitudes, times, 1100 * u.ms)
+            self.assertEqual(current.shape[0], 11000)
 
     def test_ramp_input(self):
         with brainstate.environ.context(dt=0.1):
@@ -110,3 +238,84 @@ class TestBasicInputs(TestCase):
 
             show(current5, duration)
             self.assertEqual(current5.shape[0], 5000)
+    
+    def test_ramp_input_examples(self):
+        """Test ramp_input with examples from docstring."""
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            # Simple linear ramp from 0 to 10 pA over 100 ms
+            current = ramp_input(
+                c_start=0 * u.pA,
+                c_end=10 * u.pA,
+                duration=100 * u.ms
+            )
+            self.assertEqual(current.shape[0], 1000)
+            # Check that it ramps up linearly
+            self.assertAlmostEqual(u.get_magnitude(current[0]), 0.0, places=5)
+            self.assertTrue(u.get_magnitude(current[-1]) > 9.9)  # Close to 10
+            
+            # Decreasing ramp (10 to 0 pA)
+            current = ramp_input(
+                c_start=10 * u.pA,
+                c_end=0 * u.pA,
+                duration=100 * u.ms
+            )
+            self.assertEqual(current.shape[0], 1000)
+            # Check that it ramps down
+            self.assertTrue(u.get_magnitude(current[500]) < u.get_magnitude(current[400]))
+            
+            # Ramp with delay and early stop
+            current = ramp_input(
+                c_start=0 * u.nA,
+                c_end=5 * u.nA,
+                duration=200 * u.ms,
+                t_start=50 * u.ms,   # Start ramping at 50 ms
+                t_end=150 * u.ms      # Stop ramping at 150 ms
+            )
+            self.assertEqual(current.shape[0], 2000)
+            # Check that ramp starts after t_start
+            self.assertAlmostEqual(u.get_magnitude(current[0]), 0.0, places=5)
+            self.assertAlmostEqual(u.get_magnitude(current[499]), 0.0, places=5)
+            # Check that there's a ramp between t_start and t_end
+            self.assertTrue(u.get_magnitude(current[1000]) > 0)
+            
+            # Negative to positive ramp
+            current = ramp_input(
+                c_start=-5 * u.pA,
+                c_end=5 * u.pA,
+                duration=100 * u.ms
+            )
+            self.assertEqual(current.shape[0], 1000)
+            # Check that it crosses zero
+            self.assertTrue(u.get_magnitude(current[0]) < 0)
+            self.assertTrue(u.get_magnitude(current[-1]) > 0)
+            
+            # Slow ramp for adaptation studies
+            current = ramp_input(
+                c_start=0 * u.pA,
+                c_end=20 * u.pA,
+                duration=1000 * u.ms,
+                t_start=100 * u.ms,
+                t_end=900 * u.ms
+            )
+            self.assertEqual(current.shape[0], 10000)
+            
+            # Ramp for I-V curve measurements
+            current = ramp_input(
+                c_start=-100 * u.pA,
+                c_end=100 * u.pA,
+                duration=500 * u.ms
+            )
+            self.assertEqual(current.shape[0], 5000)
+            # Check range
+            self.assertTrue(u.get_magnitude(current[0]) < -99)
+            self.assertTrue(u.get_magnitude(current[-1]) > 99)
+            
+            # Sawtooth wave component
+            current = ramp_input(
+                c_start=0 * u.pA,
+                c_end=10 * u.pA,
+                duration=10 * u.ms,
+                t_start=1 * u.ms,
+                t_end=9 * u.ms
+            )
+            self.assertEqual(current.shape[0], 100)
