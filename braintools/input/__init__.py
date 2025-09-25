@@ -47,23 +47,23 @@ Functional API Example:
 from ._basic import *
 from ._basic import __all__ as basic_all2
 # Import base classes for composable API
-from .base import *
-from .base import __all__ as base_all
+from ._composable_base import *
+from ._composable_base import __all__ as base_all
 # Import composable classes
-from .basic_composable import *
-from .basic_composable import __all__ as basic_all
+from ._composable_basic import *
+from ._composable_basic import __all__ as basic_all
 from ._pulses import *
 from ._pulses import __all__ as pulses_all2
-from .pulses_composable import *
-from .pulses_composable import __all__ as pulses_all
-from .stochastic import *
-from .stochastic import __all__ as stochastic_all2
-from .stochastic_composable import *
-from .stochastic_composable import __all__ as stochastic_all
-from .waveforms import *
-from .waveforms import __all__ as waveforms_all2
-from .waveforms_composable import *
-from .waveforms_composable import __all__ as waveforms_all
+from ._composable_pulses import *
+from ._composable_pulses import __all__ as pulses_all
+from ._stochastic import *
+from ._stochastic import __all__ as stochastic_all2
+from ._composable_stochastic import *
+from ._composable_stochastic import __all__ as stochastic_all
+from ._waveforms import *
+from ._waveforms import __all__ as waveforms_all2
+from ._composable_waveforms import *
+from ._composable_waveforms import __all__ as waveforms_all
 
 # Define __all__ for both APIs
 __all__ = base_all + basic_all + waveforms_all + pulses_all + stochastic_all

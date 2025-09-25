@@ -68,16 +68,16 @@ def sinusoidal_input(
     if t_end is None:
         t_end = duration
     times = u.math.arange(0. * u.ms, t_end - t_start, dt)
-    start_i = int(u.maybe_decimal(t_start / dt))
-    end_i = int(u.maybe_decimal(t_end / dt))
-    sin_inputs = amplitude * u.math.sin(2 * u.math.pi * u.maybe_decimal(times * frequency))
+    start_i = int(t_start / dt)
+    end_i = int(t_end / dt)
+    sin_inputs = amplitude * u.math.sin(2 * u.math.pi * times * frequency)
     if bias:
         sin_inputs += amplitude
-    currents = u.math.zeros(int(u.maybe_decimal(duration / dt)),
+    currents = u.math.zeros(int(duration / dt),
                             dtype=brainstate.environ.dftype(),
                             unit=u.get_unit(sin_inputs))
     currents = currents.at[start_i:end_i].set(sin_inputs)
-    return u.maybe_decimal(currents)
+    return currents
 
 
 def _square(t, duty=0.5):
@@ -143,14 +143,14 @@ def square_input(
     if t_end is None:
         t_end = duration
     times = u.math.arange(0. * u.ms, t_end - t_start, dt)
-    sin_inputs = amplitude * _square(2 * np.pi * u.maybe_decimal(times * frequency))
+    sin_inputs = amplitude * _square(2 * np.pi * times * frequency)
     if bias:
         sin_inputs += amplitude
-    currents = u.math.zeros(int(u.maybe_decimal(duration / dt)), dtype=brainstate.environ.dftype())
-    start_i = int(u.maybe_decimal(t_start / dt))
-    end_i = int(u.maybe_decimal(t_end / dt))
+    currents = u.math.zeros(int(duration / dt), dtype=brainstate.environ.dftype())
+    start_i = int(t_start / dt)
+    end_i = int(t_end / dt)
     currents = currents.at[start_i:end_i].set(sin_inputs)
-    return u.maybe_decimal(currents)
+    return currents
 
 
 def triangular_input(
@@ -195,20 +195,20 @@ def triangular_input(
     times = u.math.arange(0. * u.ms, t_end - t_start, dt)
     
     # Generate triangular wave using arcsin
-    period = 1.0 / u.maybe_decimal(frequency)
-    phase = 2 * u.math.pi * u.maybe_decimal(times * frequency)
+    period = 1.0 / frequency
+    phase = 2 * u.math.pi * times * frequency
     triangular = (2.0 * amplitude / u.math.pi) * u.math.arcsin(u.math.sin(phase))
     
     if bias:
         triangular += amplitude
     
-    currents = u.math.zeros(int(u.maybe_decimal(duration / dt)),
+    currents = u.math.zeros(int(duration / dt),
                             dtype=brainstate.environ.dftype(),
                             unit=u.get_unit(triangular))
-    start_i = int(u.maybe_decimal(t_start / dt))
-    end_i = int(u.maybe_decimal(t_end / dt))
+    start_i = int(t_start / dt)
+    end_i = int(t_end / dt)
     currents = currents.at[start_i:end_i].set(triangular)
-    return u.maybe_decimal(currents)
+    return currents
 
 
 def sawtooth_input(
@@ -253,19 +253,19 @@ def sawtooth_input(
     times = u.math.arange(0. * u.ms, t_end - t_start, dt)
     
     # Generate sawtooth wave
-    phase = u.maybe_decimal(times * frequency)
+    phase = times * frequency
     sawtooth = 2 * amplitude * (phase - u.math.floor(phase) - 0.5)
     
     if bias:
         sawtooth += amplitude
     
-    currents = u.math.zeros(int(u.maybe_decimal(duration / dt)),
+    currents = u.math.zeros(int(duration / dt),
                             dtype=brainstate.environ.dftype(),
                             unit=u.get_unit(sawtooth))
-    start_i = int(u.maybe_decimal(t_start / dt))
-    end_i = int(u.maybe_decimal(t_end / dt))
+    start_i = int(t_start / dt)
+    end_i = int(t_end / dt)
     currents = currents.at[start_i:end_i].set(sawtooth)
-    return u.maybe_decimal(currents)
+    return currents
 
 
 def chirp_input(
@@ -316,10 +316,10 @@ def chirp_input(
     t_end = duration if t_end is None else t_end
     times = u.math.arange(0. * u.ms, t_end - t_start, dt)
     
-    f0 = u.maybe_decimal(f_start / u.Hz)  # Convert to dimensionless Hz value
-    f1 = u.maybe_decimal(f_end / u.Hz)    # Convert to dimensionless Hz value
-    T = u.maybe_decimal((t_end - t_start) / u.ms)
-    times_ms = u.maybe_decimal(times / u.ms)
+    f0 = f_start / u.Hz  # Convert to dimensionless Hz value
+    f1 = f_end / u.Hz    # Convert to dimensionless Hz value
+    T = (t_end - t_start) / u.ms
+    times_ms = times / u.ms
     
     if method == 'linear':
         # Linear chirp: f(t) = f0 + (f1-f0)*t/T
@@ -337,13 +337,13 @@ def chirp_input(
     if bias:
         chirp += amplitude
     
-    currents = u.math.zeros(int(u.maybe_decimal(duration / dt)),
+    currents = u.math.zeros(int(duration / dt),
                             dtype=brainstate.environ.dftype(),
                             unit=u.get_unit(chirp))
-    start_i = int(u.maybe_decimal(t_start / dt))
-    end_i = int(u.maybe_decimal(t_end / dt))
+    start_i = int(t_start / dt)
+    end_i = int(t_end / dt)
     currents = currents.at[start_i:end_i].set(chirp)
-    return u.maybe_decimal(currents)
+    return currents
 
 
 def noisy_sinusoidal(
@@ -396,16 +396,16 @@ def noisy_sinusoidal(
     times = u.math.arange(0. * u.ms, t_end - t_start, dt)
     
     # Generate sinusoidal component
-    sin_component = amplitude * u.math.sin(2 * u.math.pi * u.maybe_decimal(times * frequency))
+    sin_component = amplitude * u.math.sin(2 * u.math.pi * times * frequency)
     
     # Add noise
     noise = noise_amplitude * rng.standard_normal(len(times))
     noisy_signal = sin_component + noise
     
-    currents = u.math.zeros(int(u.maybe_decimal(duration / dt)),
+    currents = u.math.zeros(int(duration / dt),
                             dtype=brainstate.environ.dftype(),
                             unit=u.get_unit(noisy_signal))
-    start_i = int(u.maybe_decimal(t_start / dt))
-    end_i = int(u.maybe_decimal(t_end / dt))
+    start_i = int(t_start / dt)
+    end_i = int(t_end / dt)
     currents = currents.at[start_i:end_i].set(noisy_signal)
-    return u.maybe_decimal(currents)
+    return currents
