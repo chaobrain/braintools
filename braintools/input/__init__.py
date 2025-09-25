@@ -26,6 +26,7 @@ The module now supports two APIs:
 
 Composable API Example:
 -----------------------
+>>> import brainunit as u
 >>> from braintools.input import RampInput, SinusoidalInput
 >>> ramp = RampInput(0, 1, 500 * u.ms)
 >>> sine = SinusoidalInput(0.5, 10 * u.Hz, 500 * u.ms)
@@ -35,8 +36,9 @@ Composable API Example:
 
 Functional API Example:
 -----------------------
+>>> import brainunit as u
 >>> from braintools.input import ramp_input, sinusoidal_input
->>> ramp = ramp_input(0, 1, 500)
+>>> ramp = ramp_input(0, 1, 500 * u.ms)
 >>> sine = sinusoidal_input(0.5, 10 * u.Hz, 500 * u.ms)
 >>> combined = ramp + sine  # Simple array addition
 """
@@ -50,8 +52,8 @@ from .base import __all__ as base_all
 # Import composable classes
 from .basic_composable import *
 from .basic_composable import __all__ as basic_all
-from .pulses import *
-from .pulses import __all__ as pulses_all2
+from ._pulses import *
+from ._pulses import __all__ as pulses_all2
 from .pulses_composable import *
 from .pulses_composable import __all__ as pulses_all
 from .stochastic import *
