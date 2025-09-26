@@ -403,6 +403,9 @@ class TestFunctionalConnectivityDynamics(unittest.TestCase):
 
 
 class TestWeightedCorrelation(unittest.TestCase):
+    def setUp(self):
+        self.rng = brainstate.random.RandomState(0)
+
     def test_weighted_correlation_basic(self):
         """Test basic weighted correlation functionality."""
         x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])

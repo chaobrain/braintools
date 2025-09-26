@@ -24,7 +24,7 @@ from matplotlib.animation import ArtistAnimation
 from matplotlib.artist import Artist
 from matplotlib.figure import Figure
 
-from ..tree import as_numpy
+from braintools.tree import as_numpy
 
 __all__ = [
     'animator',
