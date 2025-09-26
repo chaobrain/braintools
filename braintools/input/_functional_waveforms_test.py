@@ -111,7 +111,8 @@ class TestWaveformInputs(TestCase):
 
     def test_square_input(self):
         duration = 2000 * u.ms
-        current = square_input(amplitude=1. * u.pA, frequency=2.0 * u.Hz,
+        current = square_input(amplitude=1. * u.pA,
+                               frequency=2.0 * u.Hz,
                                duration=duration,
                                t_start=100 * u.ms)
         show(current, duration, 'Square Input')
