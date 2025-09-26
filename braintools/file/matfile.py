@@ -27,6 +27,8 @@ __all__ = [
 def load_matfile(
     filename: str,
     header_info: bool = True,
+    struct_as_record=False,
+    squeeze_me=True,
     **kwargs
 ) -> Dict:
     """
@@ -39,6 +41,10 @@ def load_matfile(
         The path to the .mat file to be loaded.
     header_info : bool, optional
         Whether to include the header information, by default True.
+    struct_as_record : bool, optional
+        Whether to load Matlab structs as numpy record arrays, by default False.
+    squeeze_me : bool, optional
+        Whether to squeeze unit matrix dimensions, by default True.
 
     Returns
     -------
@@ -61,7 +67,7 @@ def load_matfile(
         # regular numeric matrix, or a scalar
         return element
 
-    mat = sio.loadmat(filename, struct_as_record=False, squeeze_me=True, **kwargs)
+    mat = sio.loadmat(filename, struct_as_record=struct_as_record, squeeze_me=squeeze_me, **kwargs)
     dict_output = dict()
 
     for key, value in mat.items():

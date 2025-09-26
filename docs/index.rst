@@ -103,68 +103,14 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 .. toctree::
     :hidden:
     :maxdepth: 2
-    :caption: Numerical Integration
+    :caption: Tutorials
 
-    ode_integration.ipynb
-    sde_integration.ipynb
-
-
-
-.. toctree::
-    :hidden:
-    :maxdepth: 2
-    :caption: Metric Function
-
-
-    classification_losses.ipynb
-    regression_losses.ipynb
-    ranking_learning_to_rank.ipynb
-    pairwise_embedding_similarity.ipynb
-    spiking_metrics.ipynb
-    spiking_sync.ipynb
-    lfp_analysis.ipynb
-
-
-
-.. toctree::
-    :hidden:
-    :maxdepth: 2
-    :caption: Spike Encoding
-
-    spike_encoding.ipynb
-
-
-
-.. toctree::
-    :hidden:
-    :maxdepth: 2
-    :caption: File Processing
-
-    msgpack_checkpointing.ipynb
-
-
-.. toctree::
-    :hidden:
-    :maxdepth: 2
-    :caption: Visualization
-
-
-    neural_data_visualization.ipynb
-    advanced_neural_plots.ipynb
-    statistical_visualization.ipynb
-    model_evaluation_plots.ipynb
-    interactive_visualization.ipynb
-    3d_visualization.ipynb
-    styling_and_themes.ipynb
-
-
-.. toctree::
-    :hidden:
-    :maxdepth: 2
-    :caption: Optimizations
-
-    nevergrad_optimizer.ipynb
-    scipy_optimizer.ipynb
+    toc_visualization.md
+    toc_optimization.md
+    toc_integration.md
+    toc_metric_function.md
+    toc_spike_encoding.md
+    toc_file.md
 
 
 .. toctree::
