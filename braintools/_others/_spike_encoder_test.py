@@ -15,14 +15,12 @@
 
 import unittest
 
-import brainstate as bst
-import brainstate.random
+import brainstate
 import jax.numpy as jnp
 import numpy as np
+import braintools
 
-from . import spike_encoder
-
-bst.environ.set(dt=0.1)
+brainstate.environ.set(dt=0.1)
 
 
 class TestLatencyEncoder(unittest.TestCase):
@@ -32,7 +30,7 @@ class TestLatencyEncoder(unittest.TestCase):
     def test_linear_method(self):
         """Test latency encoder with linear method."""
 
-        encoder = spike_encoder.LatencyEncoder(method='linear', normalize=True)
+        encoder = braintools.LatencyEncoder(method='linear', normalize=True)
         data = jnp.array([0.0, 0.5, 1.0])
         spikes = encoder(data, n_time=10)
 
@@ -48,7 +46,7 @@ class TestLatencyEncoder(unittest.TestCase):
 
     def test_log_method(self):
         """Test latency encoder with log method."""
-        encoder = spike_encoder.LatencyEncoder(method='log', normalize=True)
+        encoder = braintools.LatencyEncoder(method='log', normalize=True)
         data = jnp.array([0.1, 0.5, 0.9])
         spikes = encoder(data, n_time=10)
 
@@ -58,11 +56,11 @@ class TestLatencyEncoder(unittest.TestCase):
     def test_invalid_method(self):
         """Test invalid method raises error."""
         with self.assertRaises(ValueError):
-            spike_encoder.LatencyEncoder(method='invalid')
+            braintools.LatencyEncoder(method='invalid')
 
     def test_normalization(self):
         """Test data normalization."""
-        encoder = spike_encoder.LatencyEncoder(min_val=0, max_val=10, normalize=True)
+        encoder = braintools.LatencyEncoder(min_val=0, max_val=10, normalize=True)
         data = jnp.array([0, 5, 10])
         spikes = encoder(data, n_time=5)
 
@@ -76,7 +74,7 @@ class TestRateEncoder(unittest.TestCase):
     def test_linear_rate_encoding(self):
         """Test linear rate encoding."""
         brainstate.random.seed(42)
-        encoder = spike_encoder.RateEncoder(gain=100, method='linear')
+        encoder = braintools.RateEncoder(gain=100, method='linear')
         data = jnp.array([0.0, 0.5, 1.0])
         spikes = encoder(data, n_time=1000)
 
@@ -88,7 +86,7 @@ class TestRateEncoder(unittest.TestCase):
 
     def test_exponential_rate_encoding(self):
         """Test exponential rate encoding."""
-        encoder = spike_encoder.RateEncoder(gain=100, method='exponential')
+        encoder = braintools.RateEncoder(gain=100, method='exponential')
         data = jnp.array([0.1, 0.5, 0.9])
         spikes = encoder(data, n_time=100)
 
@@ -99,11 +97,11 @@ class TestRateEncoder(unittest.TestCase):
     def test_invalid_method(self):
         """Test invalid method raises error."""
         with self.assertRaises(ValueError):
-            spike_encoder.RateEncoder(method='invalid')
+            braintools.RateEncoder(method='invalid')
 
     def test_rate_bounds(self):
         """Test rate bounds."""
-        encoder = spike_encoder.RateEncoder(min_rate=10, max_rate=100)
+        encoder = braintools.RateEncoder(min_rate=10, max_rate=100)
         data = jnp.array([0.0, 1.0])
         spikes = encoder(data, n_time=10000)  # Use more time steps for more reliable statistics
 
@@ -119,7 +117,7 @@ class TestPoissonEncoder(unittest.TestCase):
 
     def test_basic_poisson_encoding(self):
         """Test basic Poisson encoding."""
-        encoder = spike_encoder.PoissonEncoder()
+        encoder = braintools.PoissonEncoder()
         rates = jnp.array([10.0, 50.0, 100.0])  # Hz
         n_time = 1000
         spikes = encoder(rates, n_time=n_time)
@@ -130,7 +128,7 @@ class TestPoissonEncoder(unittest.TestCase):
         # Check approximate rates (with tolerance for randomness)
         spike_counts = jnp.sum(spikes, axis=0)
         # Expected spikes = rate (Hz) * time (s) = rate * (n_time * dt_ms / 1000)
-        dt_ms = bst.environ.get_dt()  # Should be 0.1 ms
+        dt_ms = brainstate.environ.get_dt()  # Should be 0.1 ms
         expected_counts = rates * n_time * dt_ms / 1000  # Convert to expected counts
         print(f"Spike counts: {spike_counts}, Expected: {expected_counts}")
         # Check that spike counts are in reasonable range (Poisson has high variance)
@@ -141,7 +139,7 @@ class TestPoissonEncoder(unittest.TestCase):
 
     def test_normalization(self):
         """Test rate normalization."""
-        encoder = spike_encoder.PoissonEncoder(normalize=True, max_rate=100)
+        encoder = braintools.PoissonEncoder(normalize=True, max_rate=100)
         data = jnp.array([0.1, 0.5, 1.0])
         spikes = encoder(data, n_time=100)
 
@@ -149,7 +147,7 @@ class TestPoissonEncoder(unittest.TestCase):
 
     def test_zero_rate(self):
         """Test zero rate produces no spikes."""
-        encoder = spike_encoder.PoissonEncoder()
+        encoder = braintools.PoissonEncoder()
         rates = jnp.array([0.0])
         spikes = encoder(rates, n_time=100)
 
@@ -162,7 +160,7 @@ class TestPopulationEncoder(unittest.TestCase):
 
     def test_population_encoding_scalar(self):
         """Test population encoding of scalar input."""
-        encoder = spike_encoder.PopulationEncoder(n_neurons=10, min_val=0, max_val=1)
+        encoder = braintools.PopulationEncoder(n_neurons=10, min_val=0, max_val=1)
         data = 0.5
         spikes = encoder(data, n_time=100)
 
@@ -175,7 +173,7 @@ class TestPopulationEncoder(unittest.TestCase):
 
     def test_population_encoding_array(self):
         """Test population encoding of array input."""
-        encoder = spike_encoder.PopulationEncoder(n_neurons=5, min_val=0, max_val=1)
+        encoder = braintools.PopulationEncoder(n_neurons=5, min_val=0, max_val=1)
         data = jnp.array([0.0, 1.0])
         spikes = encoder(data, n_time=50)
 
@@ -184,8 +182,8 @@ class TestPopulationEncoder(unittest.TestCase):
     def test_receptive_field_width(self):
         """Test different receptive field widths."""
         brainstate.random.seed(42)
-        narrow_encoder = spike_encoder.PopulationEncoder(n_neurons=10, sigma=0.1)
-        wide_encoder = spike_encoder.PopulationEncoder(n_neurons=10, sigma=0.5)
+        narrow_encoder = braintools.PopulationEncoder(n_neurons=10, sigma=0.1)
+        wide_encoder = braintools.PopulationEncoder(n_neurons=10, sigma=0.5)
 
         data = 0.5
 
@@ -204,7 +202,7 @@ class TestBernoulliEncoder(unittest.TestCase):
 
     def test_basic_bernoulli_encoding(self):
         """Test basic Bernoulli encoding."""
-        encoder = spike_encoder.BernoulliEncoder(scale=0.1)
+        encoder = braintools.BernoulliEncoder(scale=0.1)
         data = jnp.array([0.1, 0.5, 0.9])
         spikes = encoder(data, n_time=1000)
 
@@ -218,7 +216,7 @@ class TestBernoulliEncoder(unittest.TestCase):
 
     def test_probability_bounds(self):
         """Test probability clipping."""
-        encoder = spike_encoder.BernoulliEncoder(scale=2.0)
+        encoder = braintools.BernoulliEncoder(scale=2.0)
         data = jnp.array([0.6, 0.8])  # Would exceed 1.0 when scaled
         spikes = encoder(data, n_time=100)
 
@@ -228,7 +226,7 @@ class TestBernoulliEncoder(unittest.TestCase):
 
     def test_normalization(self):
         """Test input normalization."""
-        encoder = spike_encoder.BernoulliEncoder(normalize=True, min_val=0, max_val=10)
+        encoder = braintools.BernoulliEncoder(normalize=True, min_val=0, max_val=10)
         data = jnp.array([0, 5, 10])
         spikes = encoder(data, n_time=100)
 
@@ -241,7 +239,7 @@ class TestDeltaEncoder(unittest.TestCase):
 
     def test_delta_encoding(self):
         """Test delta encoding of changing signal."""
-        encoder = spike_encoder.DeltaEncoder(threshold=0.1)
+        encoder = braintools.DeltaEncoder(threshold=0.1)
         # Signal with clear changes
         time_series = jnp.array([0.0, 0.05, 0.2, 0.8, 0.7, 0.1])
         spikes = encoder(time_series)
@@ -252,7 +250,7 @@ class TestDeltaEncoder(unittest.TestCase):
 
     def test_positive_only_encoding(self):
         """Test positive-only delta encoding."""
-        encoder = spike_encoder.DeltaEncoder(threshold=0.1, positive_only=True)
+        encoder = braintools.DeltaEncoder(threshold=0.1, positive_only=True)
         time_series = jnp.array([0.0, 0.2, 0.1, 0.3])  # Mix of positive and negative changes
         spikes = encoder(time_series)
 
@@ -261,7 +259,7 @@ class TestDeltaEncoder(unittest.TestCase):
 
     def test_absolute_delta_encoding(self):
         """Test absolute delta encoding."""
-        encoder = spike_encoder.DeltaEncoder(threshold=0.1, absolute=True)
+        encoder = braintools.DeltaEncoder(threshold=0.1, absolute=True)
         time_series = jnp.array([0.5, 0.4, 0.6])  # Changes of ±0.1
         spikes = encoder(time_series)
 
@@ -269,7 +267,7 @@ class TestDeltaEncoder(unittest.TestCase):
 
     def test_multidimensional_input(self):
         """Test delta encoding with multidimensional input."""
-        encoder = spike_encoder.DeltaEncoder(threshold=0.1)
+        encoder = braintools.DeltaEncoder(threshold=0.1)
         time_series = jnp.array([[0.0, 0.5], [0.2, 0.3], [0.1, 0.8]])
         spikes = encoder(time_series)
 
@@ -282,7 +280,7 @@ class TestStepCurrentEncoder(unittest.TestCase):
 
     def test_current_scaling(self):
         """Test current scaling."""
-        encoder = spike_encoder.StepCurrentEncoder(current_scale=10.0)
+        encoder = braintools.StepCurrentEncoder(current_scale=10.0)
         data = jnp.array([0.1, 0.5, 1.0])
         currents = encoder(data, n_time=5)
 
@@ -295,7 +293,7 @@ class TestStepCurrentEncoder(unittest.TestCase):
 
     def test_current_offset(self):
         """Test current offset."""
-        encoder = spike_encoder.StepCurrentEncoder(current_scale=1.0, offset=5.0)
+        encoder = braintools.StepCurrentEncoder(current_scale=1.0, offset=5.0)
         data = jnp.array([0.0, 1.0])
         currents = encoder(data, n_time=3)
 
@@ -304,7 +302,7 @@ class TestStepCurrentEncoder(unittest.TestCase):
 
     def test_normalization(self):
         """Test input normalization."""
-        encoder = spike_encoder.StepCurrentEncoder(
+        encoder = braintools.StepCurrentEncoder(
             current_scale=10.0,
             normalize=True,
             min_val=0,
@@ -323,7 +321,7 @@ class TestSpikeCountEncoder(unittest.TestCase):
 
     def test_uniform_distribution(self):
         """Test uniform spike distribution."""
-        encoder = spike_encoder.SpikeCountEncoder(max_spikes=5, distribution='uniform')
+        encoder = braintools.SpikeCountEncoder(max_spikes=5, distribution='uniform')
         data = jnp.array([0.2, 0.6, 1.0])
         spikes = encoder(data, n_time=10)
 
@@ -335,7 +333,7 @@ class TestSpikeCountEncoder(unittest.TestCase):
 
     def test_random_distribution(self):
         """Test random spike distribution."""
-        encoder = spike_encoder.SpikeCountEncoder(max_spikes=3, distribution='random')
+        encoder = braintools.SpikeCountEncoder(max_spikes=3, distribution='random')
         data = jnp.array([0.34, 1.0])  # 0.34*3 = 1.02 -> 1
         spikes = encoder(data, n_time=10)
 
@@ -347,11 +345,11 @@ class TestSpikeCountEncoder(unittest.TestCase):
     def test_invalid_distribution(self):
         """Test invalid distribution raises error."""
         with self.assertRaises(ValueError):
-            spike_encoder.SpikeCountEncoder(distribution='invalid')
+            braintools.SpikeCountEncoder(distribution='invalid')
 
     def test_zero_spikes(self):
         """Test zero spike count."""
-        encoder = spike_encoder.SpikeCountEncoder(max_spikes=10)
+        encoder = braintools.SpikeCountEncoder(max_spikes=10)
         data = jnp.array([0.0])
         spikes = encoder(data, n_time=5)
 
@@ -364,7 +362,7 @@ class TestTemporalEncoder(unittest.TestCase):
 
     def test_pattern_creation(self):
         """Test temporal pattern creation."""
-        encoder = spike_encoder.TemporalEncoder(n_patterns=3, pattern_length=10)
+        encoder = braintools.TemporalEncoder(n_patterns=3, pattern_length=10)
         self.assertEqual(len(encoder.patterns), 3)
         for pattern in encoder.patterns.values():
             self.assertTrue(jnp.all(pattern >= 0))
@@ -372,7 +370,7 @@ class TestTemporalEncoder(unittest.TestCase):
 
     def test_sequence_encoding(self):
         """Test sequence encoding."""
-        encoder = spike_encoder.TemporalEncoder(n_patterns=3, pattern_length=5, jitter=0)
+        encoder = braintools.TemporalEncoder(n_patterns=3, pattern_length=5, jitter=0)
         sequence = jnp.array([0, 1, 2, 1])
         spikes = encoder(sequence)
 
@@ -388,7 +386,7 @@ class TestTemporalEncoder(unittest.TestCase):
 
     def test_invalid_pattern_id(self):
         """Test handling of invalid pattern IDs."""
-        encoder = spike_encoder.TemporalEncoder(n_patterns=3, pattern_length=5)
+        encoder = braintools.TemporalEncoder(n_patterns=3, pattern_length=5)
         sequence = jnp.array([0, 5, 1])  # 5 is invalid
         spikes = encoder(sequence)
 
@@ -397,8 +395,8 @@ class TestTemporalEncoder(unittest.TestCase):
 
     def test_temporal_jitter(self):
         """Test temporal jitter functionality."""
-        encoder_no_jitter = spike_encoder.TemporalEncoder(n_patterns=2, jitter=0.0)
-        encoder_with_jitter = spike_encoder.TemporalEncoder(n_patterns=2, jitter=0.2)
+        encoder_no_jitter = braintools.TemporalEncoder(n_patterns=2, jitter=0.0)
+        encoder_with_jitter = braintools.TemporalEncoder(n_patterns=2, jitter=0.2)
 
         sequence = jnp.array([0, 0, 0])
 
@@ -415,7 +413,7 @@ class TestRankOrderEncoder(unittest.TestCase):
 
     def test_rank_order_encoding(self):
         """Test rank order encoding."""
-        encoder = spike_encoder.RankOrderEncoder()
+        encoder = braintools.RankOrderEncoder()
         data = jnp.array([0.1, 0.8, 0.3, 0.9, 0.2])
         spikes = encoder(data, n_time=5)
 
@@ -432,8 +430,8 @@ class TestRankOrderEncoder(unittest.TestCase):
         """Test value-based timing vs rank-based timing."""
         data = jnp.array([0.1, 0.9])
 
-        value_encoder = spike_encoder.RankOrderEncoder(use_values=True)
-        rank_encoder = spike_encoder.RankOrderEncoder(use_values=False)
+        value_encoder = braintools.RankOrderEncoder(use_values=True)
+        rank_encoder = braintools.RankOrderEncoder(use_values=False)
 
         value_spikes = value_encoder(data, n_time=10)
         rank_spikes = rank_encoder(data, n_time=10)
@@ -445,8 +443,8 @@ class TestRankOrderEncoder(unittest.TestCase):
         """Test order inversion."""
         data = jnp.array([0.1, 0.9])
 
-        normal_encoder = spike_encoder.RankOrderEncoder(invert=False)
-        inverted_encoder = spike_encoder.RankOrderEncoder(invert=True)
+        normal_encoder = braintools.RankOrderEncoder(invert=False)
+        inverted_encoder = braintools.RankOrderEncoder(invert=True)
 
         normal_spikes = normal_encoder(data, n_time=10)
         inverted_spikes = inverted_encoder(data, n_time=10)
@@ -461,7 +459,7 @@ class TestRankOrderEncoder(unittest.TestCase):
 
     def test_normalization(self):
         """Test input normalization."""
-        encoder = spike_encoder.RankOrderEncoder(normalize=True)
+        encoder = braintools.RankOrderEncoder(normalize=True)
         data = jnp.array([10, 50, 100])  # Wide range
         spikes = encoder(data, n_time=10)
 
@@ -471,7 +469,7 @@ class TestRankOrderEncoder(unittest.TestCase):
 
     def test_identical_values(self):
         """Test handling of identical values."""
-        encoder = spike_encoder.RankOrderEncoder()
+        encoder = braintools.RankOrderEncoder()
         data = jnp.array([0.5, 0.5, 0.5])
         spikes = encoder(data, n_time=5)
 

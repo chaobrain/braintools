@@ -1,7 +1,7 @@
 import unittest
 import math
 
-import brainstate as bst
+import brainstate
 import jax.numpy as jnp
 
 from braintools.metric import (
@@ -101,10 +101,10 @@ class TestCoherenceAnalysis(unittest.TestCase):
 
     def test_uncorrelated_signals(self):
         """Test coherence between uncorrelated signals."""
-        bst.random.seed(42)
+        brainstate.random.seed(42)
         dt = 0.001
-        signal1 = bst.random.normal(size=1000)
-        signal2 = bst.random.normal(size=1000)
+        signal1 = brainstate.random.normal(size=1000)
+        signal2 = brainstate.random.normal(size=1000)
         
         freqs, coherence = coherence_analysis(signal1, signal2, dt)
         
@@ -133,9 +133,9 @@ class TestCoherenceAnalysis(unittest.TestCase):
 class TestPhaseAmplitudeCoupling(unittest.TestCase):
     def test_no_coupling(self):
         """Test PAC with uncoupled signal."""
-        bst.random.seed(42)
+        brainstate.random.seed(42)
         dt = 0.001
-        signal = bst.random.normal(size=2000)
+        signal = brainstate.random.normal(size=2000)
         
         mi, phase_bins, amplitudes = phase_amplitude_coupling(signal, dt)
         
@@ -192,9 +192,9 @@ class TestThetaGammaCoupling(unittest.TestCase):
 
     def test_random_signal(self):
         """Test with random signal should give low coupling."""
-        bst.random.seed(42)
+        brainstate.random.seed(42)
         dt = 0.001
-        signal = bst.random.normal(size=1000)
+        signal = brainstate.random.normal(size=1000)
         
         coupling = theta_gamma_coupling(signal, dt)
         
@@ -231,8 +231,8 @@ class TestCurrentSourceDensity(unittest.TestCase):
     def test_different_spacing(self):
         """Test CSD with different electrode spacings."""
         n_time, n_electrodes = 100, 5
-        bst.random.seed(42)
-        lfp_data = bst.random.normal(size=(n_time, n_electrodes))
+        brainstate.random.seed(42)
+        lfp_data = brainstate.random.normal(size=(n_time, n_electrodes))
         
         csd1 = current_source_density(lfp_data, electrode_spacing=0.1)
         csd2 = current_source_density(lfp_data, electrode_spacing=0.2)
@@ -258,9 +258,9 @@ class TestSpectralEntropy(unittest.TestCase):
 
     def test_random_signal(self):
         """Test entropy of random signal should be high."""
-        bst.random.seed(42)
+        brainstate.random.seed(42)
         dt = 0.001
-        signal = bst.random.normal(size=2000)
+        signal = brainstate.random.normal(size=2000)
         
         entropy = spectral_entropy(signal, dt)
         
@@ -308,11 +308,11 @@ class TestLFPPhaseCoherence(unittest.TestCase):
 
     def test_uncorrelated_signals(self):
         """Test phase coherence between uncorrelated signals."""
-        bst.random.seed(42)
+        brainstate.random.seed(42)
         dt = 0.001
         n_time = 1000
         n_channels = 4
-        signals = bst.random.normal(size=(n_time, n_channels))
+        signals = brainstate.random.normal(size=(n_time, n_channels))
         
         coherence_matrix = lfp_phase_coherence(signals, dt)
         

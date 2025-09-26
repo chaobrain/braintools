@@ -18,8 +18,7 @@ import jax.numpy as jnp
 from absl.testing import parameterized
 from jax.scipy.special import logsumexp
 
-from braintools.metric import _classification
-from braintools.metric import _fenchel_young
+import braintools
 
 
 def one_hot_argmax(inputs: jnp.ndarray) -> jnp.ndarray:
@@ -33,7 +32,7 @@ class FenchelYoungTest(parameterized.TestCase):
 
     def test_fenchel_young_reg(self):
         # Checks the behavior of the Fenchel-Young loss.
-        fy_loss = (_fenchel_young.make_fenchel_young_loss(logsumexp))
+        fy_loss = braintools.metric.make_fenchel_young_loss(logsumexp)
         rng = jax.random.PRNGKey(0)
         rngs = jax.random.split(rng, 2)
         theta_true = jax.random.uniform(rngs[0], (8, 5))
@@ -46,7 +45,7 @@ class FenchelYoungTest(parameterized.TestCase):
         y_one_hot = jax.vmap(one_hot_argmax)(theta_true)
         int_one_hot = jnp.where(y_one_hot == 1.)[1]
         loss_one_hot = jax.vmap(fy_loss)(theta_random, y_one_hot)
-        log_loss = jax.vmap(_classification.softmax_cross_entropy_with_integer_labels)(theta_random, int_one_hot)
+        log_loss = jax.vmap(braintools.metric.softmax_cross_entropy_with_integer_labels)(theta_random, int_one_hot)
         # Checks that the FY loss associated to logsumexp is correct.
         self.assertTrue(jnp.allclose(loss_one_hot, log_loss, rtol=1e-4))
         # Checks that vmapping or not is equivalent.

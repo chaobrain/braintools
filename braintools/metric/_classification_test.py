@@ -21,7 +21,7 @@ import jax.numpy as jnp
 import numpy as np
 from absl.testing import parameterized
 
-from braintools.metric import _classification
+import braintools
 
 
 class SoftmaxCrossEntropyTest(parameterized.TestCase):
@@ -36,15 +36,16 @@ class SoftmaxCrossEntropyTest(parameterized.TestCase):
     def test_scalar(self):
         """Tests for a full batch."""
         np.testing.assert_allclose(
-            (
-                _classification.softmax_cross_entropy)(self.ys[0], self.ts[0]),
-            self.exp[0], atol=1e-4)
+            braintools.metric.softmax_cross_entropy(self.ys[0], self.ts[0]),
+            self.exp[0], atol=1e-4
+        )
 
     def test_batched(self):
         """Tests for a full batch."""
         np.testing.assert_allclose(
-            (_classification.softmax_cross_entropy)(self.ys, self.ts),
-            self.exp, atol=1e-4)
+            braintools.metric.softmax_cross_entropy(self.ys, self.ts),
+            self.exp, atol=1e-4
+        )
 
 
 class SoftmaxCrossEntropyWithIntegerLabelsTest(parameterized.TestCase):
@@ -56,19 +57,19 @@ class SoftmaxCrossEntropyWithIntegerLabelsTest(parameterized.TestCase):
 
     def test_consistent_with_softmax_cross_entropy_scalar(self):
         """Tests for a scalar."""
-        exp = _classification.softmax_cross_entropy(
+        exp = braintools.metric.softmax_cross_entropy(
             self.ys[0], jax.nn.one_hot(self.ts[0], 3))
         np.testing.assert_allclose(
-            (_classification.softmax_cross_entropy_with_integer_labels)(self.ys[0], self.ts[0]),
+            braintools.metric.softmax_cross_entropy_with_integer_labels(self.ys[0], self.ts[0]),
             exp, rtol=1e-6
         )
 
     def test_consistent_with_softmax_cross_entropy_batched(self):
         """Tests for a full batch."""
-        exp = _classification.softmax_cross_entropy(
+        exp = braintools.metric.softmax_cross_entropy(
             self.ys, jax.nn.one_hot(self.ts, 3))
         np.testing.assert_allclose(
-            (_classification.softmax_cross_entropy_with_integer_labels)(self.ys, self.ts),
+            braintools.metric.softmax_cross_entropy_with_integer_labels(self.ys, self.ts),
             exp, rtol=1e-6
         )
 
@@ -109,7 +110,7 @@ class SigmoidCrossEntropyTest(parameterized.TestCase):
     )
     def testSigmoidCrossEntropy(self, preds, labels, expected):
         tested = jnp.mean(
-            _classification.sigmoid_binary_cross_entropy(preds, labels))
+            braintools.metric.sigmoid_binary_cross_entropy(preds, labels))
         np.testing.assert_allclose(tested, expected, rtol=1e-6, atol=1e-6)
 
 
@@ -137,7 +138,7 @@ class PolyLossTest(parameterized.TestCase):
     )
     def test_scalar(self, eps, expected):
         np.testing.assert_allclose(
-            (_classification.poly_loss_cross_entropy)(
+            (braintools.metric.poly_loss_cross_entropy)(
                 self.logits, self.labels, epsilon=eps
             ),
             expected,
@@ -155,7 +156,7 @@ class PolyLossTest(parameterized.TestCase):
     )
     def test_batched(self, eps, expected):
         np.testing.assert_allclose(
-            (_classification.poly_loss_cross_entropy)(
+            (braintools.metric.poly_loss_cross_entropy)(
                 self.batched_logits, self.batched_labels, epsilon=eps
             ),
             expected,
@@ -188,9 +189,9 @@ class PolyLossTest(parameterized.TestCase):
     )
     def test_equals_to_cross_entropy_when_eps0(self, logits, labels):
         np.testing.assert_allclose(
-            (_classification.poly_loss_cross_entropy)(
+            (braintools.metric.poly_loss_cross_entropy)(
                 logits, labels, epsilon=0.0),
-            (_classification.softmax_cross_entropy)(
+            (braintools.metric.softmax_cross_entropy)(
                 logits, labels),
             atol=1e-4,
         )
@@ -207,7 +208,7 @@ class HingeTest(parameterized.TestCase):
             return jax.nn.relu(1 - logit * (2.0 * label - 1.0))
 
         expected = reference_impl(label, score)
-        result = _classification.hinge_loss(score, signed_label)
+        result = braintools.metric.hinge_loss(score, signed_label)
         np.testing.assert_allclose(result, expected, atol=1e-4)
 
     def test_batched_binary(self):
@@ -220,7 +221,7 @@ class HingeTest(parameterized.TestCase):
 
         expected = jax.vmap(reference_impl)(labels, scores)
         # no need to vmap the optax loss. leading dimensions automatically handled.
-        result = _classification.hinge_loss(scores, signed_labels)
+        result = braintools.metric.hinge_loss(scores, signed_labels)
         np.testing.assert_allclose(result, expected, atol=1e-4)
 
     def test_multi_class(self):
@@ -232,7 +233,7 @@ class HingeTest(parameterized.TestCase):
             return jnp.max(scores + 1.0 - one_hot_label) - scores[label]
 
         expected = reference_impl(label, scores)
-        result = _classification.multiclass_hinge_loss(scores, label)
+        result = braintools.metric.multiclass_hinge_loss(scores, label)
         np.testing.assert_allclose(result, expected, atol=1e-4)
 
     def test_batched_multi_class(self):
@@ -245,7 +246,7 @@ class HingeTest(parameterized.TestCase):
 
         expected = jax.vmap(reference_impl)(label, scores)
         # no need to vmap the optax loss. leading dimensions automatically handled.
-        result = _classification.multiclass_hinge_loss(scores, label)
+        result = braintools.metric.multiclass_hinge_loss(scores, label)
         np.testing.assert_allclose(result, expected, atol=1e-4)
 
 
@@ -266,7 +267,7 @@ class ConvexKLDivergenceTest(parameterized.TestCase):
 
     def test_scalar(self):
         np.testing.assert_allclose(
-            (_classification.convex_kl_divergence)(
+            (braintools.metric.convex_kl_divergence)(
                 self.log_ps[0], self.qs[0]),
             self.exp[0],
             atol=1e-4,
@@ -274,7 +275,7 @@ class ConvexKLDivergenceTest(parameterized.TestCase):
 
     def test_batched(self):
         np.testing.assert_allclose(
-            (_classification.convex_kl_divergence)(
+            (braintools.metric.convex_kl_divergence)(
                 self.log_ps, self.qs),
             self.exp,
             atol=1e-4,
@@ -292,7 +293,7 @@ class PerceptronTest(parameterized.TestCase):
             return jax.nn.relu(- logit * (2.0 * label - 1.0))
 
         expected = reference_impl(label, score)
-        result = _classification.perceptron_loss(score, signed_label)
+        result = braintools.metric.perceptron_loss(score, signed_label)
         np.testing.assert_allclose(result, expected, atol=1e-4)
 
     def test_batched_binary(self):
@@ -305,7 +306,7 @@ class PerceptronTest(parameterized.TestCase):
 
         expected = jax.vmap(reference_impl)(labels, scores)
         # no need to vmap the optax loss. leading dimensions automatically handled.
-        result = _classification.perceptron_loss(scores, signed_labels)
+        result = braintools.metric.perceptron_loss(scores, signed_labels)
         np.testing.assert_allclose(result, expected, atol=1e-4)
 
     def test_multi_class(self):
@@ -316,7 +317,7 @@ class PerceptronTest(parameterized.TestCase):
             return jnp.max(scores) - scores[label]
 
         expected = reference_impl(label, scores)
-        result = _classification.multiclass_perceptron_loss(scores, label)
+        result = braintools.metric.multiclass_perceptron_loss(scores, label)
         np.testing.assert_allclose(result, expected, atol=1e-4)
 
     def test_batched_multi_class(self):
@@ -328,7 +329,7 @@ class PerceptronTest(parameterized.TestCase):
 
         expected = jax.vmap(reference_impl)(label, scores)
         # no need to vmap the optax loss. leading dimensions automatically handled.
-        result = _classification.multiclass_perceptron_loss(scores, label)
+        result = braintools.metric.multiclass_perceptron_loss(scores, label)
         np.testing.assert_allclose(result, expected, atol=1e-4)
 
 
@@ -346,13 +347,13 @@ class KLDivergenceTest(parameterized.TestCase):
 
     def test_scalar(self):
         np.testing.assert_allclose(
-            (_classification.kl_divergence)(self.log_ps[0], self.qs[0]),
+            (braintools.metric.kl_divergence)(self.log_ps[0], self.qs[0]),
             self.exp[0],
             atol=1e-4)
 
     def test_batched(self):
         np.testing.assert_allclose(
-            (_classification.kl_divergence)(self.log_ps, self.qs),
+            (braintools.metric.kl_divergence)(self.log_ps, self.qs),
             self.exp,
             atol=1e-4)
 
@@ -371,14 +372,14 @@ class KLDivergenceWithLogTargetsTest(parameterized.TestCase):
 
     def test_scalar(self):
         np.testing.assert_allclose(
-            (_classification.kl_divergence_with_log_targets)(
+            (braintools.metric.kl_divergence_with_log_targets)(
                 self.log_ps[0], self.qs[0]),
             self.exp[0],
             atol=1e-4)
 
     def test_batched(self):
         np.testing.assert_allclose(
-            (_classification.kl_divergence_with_log_targets)(
+            (braintools.metric.kl_divergence_with_log_targets)(
                 self.log_ps, self.qs),
             self.exp,
             atol=1e-4)
@@ -397,7 +398,7 @@ def _average_ctc_loss(
     labels,
     label_paddings
 ):
-    return jnp.average(_classification.ctc_loss(logprobs, logprob_paddings, labels, label_paddings))
+    return jnp.average(braintools.metric.ctc_loss(logprobs, logprob_paddings, labels, label_paddings))
 
 
 class CTCTest(parameterized.TestCase):
@@ -424,7 +425,7 @@ class CTCTest(parameterized.TestCase):
                 while labels[n, t] == labels[n, t - 1]:
                     labels[n, t] = np.random.uniform(1, nclasses)
 
-        results = (_classification.ctc_loss_with_forward_probs)(
+        results = (braintools.metric.ctc_loss_with_forward_probs)(
             logits, np.zeros(logits.shape[:2]),
             labels, np.zeros(labels.shape))
         (per_seq_loss, logalpha_blank, logalpha_emit) = results
@@ -474,7 +475,7 @@ class CTCTest(parameterized.TestCase):
         lengths = np.random.randint(3, 6, size=(batch_size,))
         paddings = _lengths_to_paddings(lengths, steps)
 
-        actual_loss = (_classification.ctc_loss)(
+        actual_loss = (braintools.metric.ctc_loss)(
             logits, paddings, labels, paddings)
 
         value_and_grad = (jax.value_and_grad(_average_ctc_loss))
@@ -523,7 +524,7 @@ class CTCTest(parameterized.TestCase):
         logits = np.random.randn(batch_size, logit_steps, nclasses)
         logit_paddings = _lengths_to_paddings(logit_lengths, logit_steps)
 
-        per_seq_loss = (_classification.ctc_loss)(
+        per_seq_loss = (braintools.metric.ctc_loss)(
             logits, logit_paddings, labels, label_paddings)
 
         logprobs = jax.nn.log_softmax(logits)
@@ -550,21 +551,21 @@ class SigmoidFocalLossTest(parameterized.TestCase):
     def test_focal_equals_ce(self):
         """If gamma == 0 and alpha == 0 we expect a CE loss."""
         np.testing.assert_allclose(
-            (_classification.sigmoid_focal_loss)(
+            (braintools.metric.sigmoid_focal_loss)(
                 self.ys, self.ts, gamma=0.0
             ),
-            _classification.sigmoid_binary_cross_entropy(self.ys, self.ts),
+            braintools.metric.sigmoid_binary_cross_entropy(self.ys, self.ts),
             rtol=self._rtol,
         )
 
     def test_scale(self):
         """This test should catch problems with p_t."""
         gamma = 2
-        focal_loss = (_classification.sigmoid_focal_loss)(
+        focal_loss = (braintools.metric.sigmoid_focal_loss)(
             self.ys, self.ts, gamma=gamma
         )
         p = jax.nn.sigmoid(self.ys)
-        ce_loss = _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
+        ce_loss = braintools.metric.sigmoid_binary_cross_entropy(self.ys, self.ts)
         p_t = p * self.ts + (1 - p) * (1 - self.ts)
         scale = (1 - p_t) ** gamma
         focal_scale = focal_loss / ce_loss
@@ -572,10 +573,10 @@ class SigmoidFocalLossTest(parameterized.TestCase):
 
     def test_large_logit_fl_less_than_ce(self):
         """If gamma == 2 and alpha == 0.5, the impact of large logits is reduced."""
-        focal_loss = (_classification.sigmoid_focal_loss)(
+        focal_loss = (braintools.metric.sigmoid_focal_loss)(
             self.large_ys, self.ones_ts, gamma=2, alpha=0.5
         )
-        ce_loss = _classification.sigmoid_binary_cross_entropy(
+        ce_loss = braintools.metric.sigmoid_binary_cross_entropy(
             self.large_ys, self.ones_ts
         )
         loss_ratio = ce_loss / focal_loss
@@ -584,10 +585,10 @@ class SigmoidFocalLossTest(parameterized.TestCase):
 
     def test_small_logit_fl_less_than_ce(self):
         """If gamma == 2, small logits retain their weight."""
-        focal_loss = (_classification.sigmoid_focal_loss)(
+        focal_loss = (braintools.metric.sigmoid_focal_loss)(
             self.small_ys, self.ones_ts, gamma=2
         )
-        ce_loss = _classification.sigmoid_binary_cross_entropy(
+        ce_loss = braintools.metric.sigmoid_binary_cross_entropy(
             self.small_ys, self.ones_ts
         )
         loss_ratio = ce_loss / focal_loss
@@ -597,28 +598,28 @@ class SigmoidFocalLossTest(parameterized.TestCase):
     def test_alpha_one(self):
         """Test if re-weighting with alpha=1 is ok."""
         np.testing.assert_allclose(
-            (_classification.sigmoid_focal_loss)(
+            (braintools.metric.sigmoid_focal_loss)(
                 self.ys, self.ts, gamma=0.0, alpha=1
             ),
-            _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
+            braintools.metric.sigmoid_binary_cross_entropy(self.ys, self.ts)
             * self.ts,
             rtol=self._rtol,
         )
 
     def test_ignore_positive(self):
         """If alpha == 0 positive examples do not matter."""
-        focal_loss = (_classification.sigmoid_focal_loss)(
+        focal_loss = (braintools.metric.sigmoid_focal_loss)(
             self.ys, self.ts, alpha=0
         )
-        ce_loss = _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
+        ce_loss = braintools.metric.sigmoid_binary_cross_entropy(self.ys, self.ts)
         assert all(ce_loss[self.ts == 1] > 0)
         assert all(focal_loss[self.ts == 1] == 0)
 
     def test_ignore_negative(self):
         """If alpha == 1 negative examples do not matter."""
-        focal_loss = (_classification.sigmoid_focal_loss)(
+        focal_loss = (braintools.metric.sigmoid_focal_loss)(
             self.ys, self.ts, alpha=1
         )
-        ce_loss = _classification.sigmoid_binary_cross_entropy(self.ys, self.ts)
+        ce_loss = braintools.metric.sigmoid_binary_cross_entropy(self.ys, self.ts)
         assert all(ce_loss[self.ts == 0] > 0)
         assert all(focal_loss[self.ts == 0] == 0)

@@ -19,9 +19,6 @@ import numpy as np
 
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
-import warnings
-
-warnings.filterwarnings('ignore')
 
 # Import visualization modules
 from braintools.visualize import neural, plots, colormaps
