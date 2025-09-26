@@ -60,7 +60,7 @@ class Sinusoidal(Input):
 
     Parameters
     ----------
-    amplitude : float
+    amplitude : ArrayLike
         Peak amplitude of the sinusoidal wave.
     frequency : Quantity
         Frequency of oscillation. Must be in Hz units.
@@ -163,7 +163,7 @@ class Sinusoidal(Input):
     """
 
     def __init__(self,
-                 amplitude: float,
+                 amplitude: ArrayLike,
                  frequency: u.Quantity,
                  duration: ArrayLike,
                  t_start: Optional[ArrayLike] = None,

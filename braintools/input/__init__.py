@@ -47,27 +47,24 @@ Legacy Notice:
 Legacy names ending with `Input`/`_input` remain available as deprecated aliases and emit `DeprecationWarning`.
 """
 
-# Import functional API for backward compatibility
-from ._functional_basic import *
-from ._functional_basic import __all__ as basic_all2
-# Import base classes for composable API
 from ._composable_base import *
 from ._composable_base import __all__ as base_all
-# Import composable classes
 from ._composable_basic import *
 from ._composable_basic import __all__ as basic_all
-from ._functional_pulses import *
-from ._functional_pulses import __all__ as pulses_all2
 from ._composable_pulses import *
 from ._composable_pulses import __all__ as pulses_all
-from ._functional_stochastic import *
-from ._functional_stochastic import __all__ as stochastic_all2
 from ._composable_stochastic import *
 from ._composable_stochastic import __all__ as stochastic_all
-from ._functional_waveforms import *
-from ._functional_waveforms import __all__ as waveforms_all2
 from ._composable_waveforms import *
 from ._composable_waveforms import __all__ as waveforms_all
+from ._functional_basic import *
+from ._functional_basic import __all__ as basic_all2
+from ._functional_pulses import *
+from ._functional_pulses import __all__ as pulses_all2
+from ._functional_stochastic import *
+from ._functional_stochastic import __all__ as stochastic_all2
+from ._functional_waveforms import *
+from ._functional_waveforms import __all__ as waveforms_all2
 
 # Define __all__ for both APIs
 __all__ = base_all + basic_all + waveforms_all + pulses_all + stochastic_all

@@ -23,12 +23,13 @@ composable input currents for neural simulations. The key feature is the
 ability to combine simple inputs using mathematical operators and
 transformations to build sophisticated stimulation protocols.
 """
-
+import functools
 from typing import Optional, Union, Callable
 
 import brainstate
 import brainunit as u
 import numpy as np
+
 from ._deprecation import create_deprecated_class
 
 __all__ = [
@@ -758,10 +759,8 @@ class Sequential(Input):
     
     Parameters
     ----------
-    input1 : Input
-        First input (comes first in time).
-    input2 : Input
-        Second input (comes after first).
+    *inputs : Any
+        All sequential inputs.
         
     Examples
     --------
@@ -778,27 +777,16 @@ class Sequential(Input):
     >>> two_phase = Sequential(baseline, stimulus)
     """
 
-    def __init__(self, input1: Input, input2: Input):
-        """Initialize sequential input.
-        
-        Parameters
-        ----------
-        input1 : Input
-            First input (comes first in time).
-        input2 : Input
-            Second input (comes after first).
-        """
-
+    def __init__(self, *inputs):
         # Total duration is sum of both durations
-        super().__init__(input1.duration + input2.duration)
-        self.input1 = input1
-        self.input2 = input2
+        duration = functools.reduce(u.math.add, [inp.duration for inp in inputs])
+        super().__init__(duration)
+        self.inputs = inputs
 
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the sequential input."""
-        arr1 = self.input1()
-        arr2 = self.input2()
-        return u.math.concatenate([arr1, arr2])
+        arrs = [inp() for inp in self.inputs]
+        return u.math.concatenate(arrs)
 
 
 class TimeShifted(Input):
@@ -1101,4 +1089,6 @@ SmoothedInput = create_deprecated_class(Smoothed, 'SmoothedInput', 'Smoothed')
 RepeatedInput = create_deprecated_class(Repeated, 'RepeatedInput', 'Repeated')
 TransformedInput = create_deprecated_class(Transformed, 'TransformedInput', 'Transformed')
 
-__all__.extend(['CompositeInput', 'SequentialInput', 'TimeShiftedInput', 'ClippedInput', 'SmoothedInput', 'RepeatedInput', 'TransformedInput'])
+__all__.extend(
+    ['CompositeInput', 'SequentialInput', 'TimeShiftedInput', 'ClippedInput', 'SmoothedInput', 'RepeatedInput',
+     'TransformedInput'])

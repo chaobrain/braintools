@@ -163,7 +163,7 @@ class Spike(Input):
     def __init__(self,
                  sp_times: Sequence[ArrayLike],
                  duration: ArrayLike,
-                 sp_lens: Union[float, Sequence[float]] = 1.,
+                 sp_lens: Union[float, Sequence[float]] = 1. * u.ms,
                  sp_sizes: Union[float, Sequence[float]] = 1.):
         """Initialize spike input.
         
@@ -174,7 +174,7 @@ class Spike(Input):
         duration : ArrayLike
             The total duration.
         sp_lens : Union[float, Sequence[float]], optional
-            The spike duration(s). Default is 1.
+            The spike duration(s). Default is 1 * u.ms.
         sp_sizes : Union[float, Sequence[float]], optional
             The spike amplitude(s). Default is 1.
         """
