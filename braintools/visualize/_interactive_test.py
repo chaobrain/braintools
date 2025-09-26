@@ -20,7 +20,7 @@ import matplotlib
 import numpy as np
 
 matplotlib.use('Agg')  # Use non-interactive backend for testing
-from braintools.visualize import interactive
+import braintools
 
 
 class TestInteractiveVisualization(unittest.TestCase):
@@ -35,7 +35,7 @@ class TestInteractiveVisualization(unittest.TestCase):
     def test_interactive_spike_raster(self):
         """Test interactive spike raster."""
         try:
-            fig = interactive.interactive_spike_raster(
+            fig = braintools.visualize.interactive_spike_raster(
                 self.spike_times,
                 color_by='neuron'
             )
@@ -48,7 +48,7 @@ class TestInteractiveVisualization(unittest.TestCase):
         try:
             x = np.linspace(0, 10, 100)
             y = [np.sin(x), np.cos(x)]
-            fig = interactive.interactive_line_plot(
+            fig = braintools.visualize.interactive_line_plot(
                 x, y,
                 labels=['sin', 'cos']
             )

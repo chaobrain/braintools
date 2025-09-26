@@ -20,9 +20,7 @@ import numpy as np
 
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
-
-# Import visualization modules
-from braintools.visualize import neural
+import braintools
 
 
 class TestNeuralVisualization(unittest.TestCase):
@@ -48,7 +46,7 @@ class TestNeuralVisualization(unittest.TestCase):
 
     def test_spike_raster(self):
         """Test spike raster plotting."""
-        ax = neural.spike_raster(
+        ax = braintools.visualize.spike_raster(
             self.spike_times,
             show_stats=True,
             figsize=(8, 6)
@@ -58,7 +56,7 @@ class TestNeuralVisualization(unittest.TestCase):
 
     def test_population_activity(self):
         """Test population activity plotting."""
-        ax = neural.population_activity(
+        ax = braintools.visualize.population_activity(
             self.population_data,
             time=self.time,
             method='mean'
@@ -68,7 +66,7 @@ class TestNeuralVisualization(unittest.TestCase):
 
     def test_connectivity_matrix(self):
         """Test connectivity matrix visualization."""
-        ax = neural.connectivity_matrix(
+        ax = braintools.visualize.connectivity_matrix(
             self.connectivity,
             show_values=True,
             center_zero=False
@@ -79,7 +77,7 @@ class TestNeuralVisualization(unittest.TestCase):
     def test_neural_trajectory(self):
         """Test neural trajectory plotting."""
         trajectory_data = np.random.randn(50, 3)
-        ax = neural.neural_trajectory(
+        ax = braintools.visualize.neural_trajectory(
             trajectory_data,
             time_color=True
         )
@@ -89,7 +87,7 @@ class TestNeuralVisualization(unittest.TestCase):
     def test_spike_histogram(self):
         """Test spike histogram (PSTH)."""
         all_spikes = np.concatenate(self.spike_times)
-        ax = neural.spike_histogram(
+        ax = braintools.visualize.spike_histogram(
             all_spikes,
             bins=20,
             density=True
@@ -99,7 +97,7 @@ class TestNeuralVisualization(unittest.TestCase):
 
     def test_isi_distribution(self):
         """Test inter-spike interval distribution."""
-        ax = neural.isi_distribution(
+        ax = braintools.visualize.isi_distribution(
             self.spike_times,
             log_scale=False
         )
@@ -110,7 +108,7 @@ class TestNeuralVisualization(unittest.TestCase):
         """Test firing rate map visualization."""
         # Create 2D rate map
         rate_map = np.random.rand(20, 20)
-        ax = neural.firing_rate_map(
+        ax = braintools.visualize.firing_rate_map(
             rate_map,
             cmap='hot'
         )

@@ -19,9 +19,7 @@ import numpy as np
 
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
-
-# Import visualization modules
-from braintools.visualize import plots
+import braintools
 
 
 class TestExistingPlots(unittest.TestCase):
@@ -35,7 +33,7 @@ class TestExistingPlots(unittest.TestCase):
 
     def test_line_plot(self):
         """Test enhanced line plot."""
-        ax = plots.line_plot(
+        ax = braintools.visualize.line_plot(
             self.time,
             self.values,
             plot_ids=[0, 1],
@@ -49,14 +47,14 @@ class TestExistingPlots(unittest.TestCase):
     def test_line_plot_errors(self):
         """Test line plot error handling."""
         with self.assertRaises(ValueError):
-            plots.line_plot([], self.values)
+            braintools.visualize.line_plot([], self.values)
 
         with self.assertRaises(ValueError):
-            plots.line_plot(self.time[:50], self.values)
+            braintools.visualize.line_plot(self.time[:50], self.values)
 
     def test_raster_plot(self):
         """Test enhanced raster plot."""
-        ax = plots.raster_plot(
+        ax = braintools.visualize.raster_plot(
             self.time,
             self.spike_matrix,
             alpha=0.8,
@@ -68,7 +66,7 @@ class TestExistingPlots(unittest.TestCase):
     def test_raster_plot_errors(self):
         """Test raster plot error handling."""
         with self.assertRaises(ValueError):
-            plots.raster_plot(None, self.spike_matrix)
+            braintools.visualize.raster_plot(None, self.spike_matrix)
 
         with self.assertRaises(ValueError):
-            plots.raster_plot(self.time, [])
+            braintools.visualize.raster_plot(self.time, [])
