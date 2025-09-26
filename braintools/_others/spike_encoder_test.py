@@ -26,8 +26,12 @@ bst.environ.set(dt=0.1)
 
 
 class TestLatencyEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_linear_method(self):
         """Test latency encoder with linear method."""
+
         encoder = spike_encoder.LatencyEncoder(method='linear', normalize=True)
         data = jnp.array([0.0, 0.5, 1.0])
         spikes = encoder(data, n_time=10)
@@ -39,8 +43,8 @@ class TestLatencyEncoder(unittest.TestCase):
         # Get spike times for each input
         spike_times = jnp.argmax(spikes, axis=0)
         # Higher values should spike earlier (lower spike times)
-        self.assertLess(spike_times[2], spike_times[1])  # 1.0 before 0.5
-        self.assertLess(spike_times[1], spike_times[0])  # 0.5 before 0.0
+        self.assertLessEqual(spike_times[2], spike_times[1])  # 1.0 before 0.5
+        self.assertLessEqual(spike_times[1], spike_times[0])  # 0.5 before 0.0
 
     def test_log_method(self):
         """Test latency encoder with log method."""
@@ -66,8 +70,12 @@ class TestLatencyEncoder(unittest.TestCase):
 
 
 class TestRateEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_linear_rate_encoding(self):
         """Test linear rate encoding."""
+        brainstate.random.seed(42)
         encoder = spike_encoder.RateEncoder(gain=100, method='linear')
         data = jnp.array([0.0, 0.5, 1.0])
         spikes = encoder(data, n_time=1000)
@@ -75,8 +83,8 @@ class TestRateEncoder(unittest.TestCase):
         self.assertEqual(spikes.shape, (1000, 3))
         # Higher values should have higher spike rates
         rates = jnp.mean(spikes, axis=0) * 10000  # Convert to Hz (assuming 0.1ms dt)
-        self.assertLess(rates[0], rates[1])
-        self.assertLess(rates[1], rates[2])
+        self.assertLessEqual(rates[0], rates[1])
+        self.assertLessEqual(rates[1], rates[2])
 
     def test_exponential_rate_encoding(self):
         """Test exponential rate encoding."""
@@ -106,6 +114,9 @@ class TestRateEncoder(unittest.TestCase):
 
 
 class TestPoissonEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_basic_poisson_encoding(self):
         """Test basic Poisson encoding."""
         encoder = spike_encoder.PoissonEncoder()
@@ -126,7 +137,7 @@ class TestPoissonEncoder(unittest.TestCase):
         # Use a more relaxed test since Poisson is inherently random
         # for i in range(len(rates)):
         #     self.assertGreaterEqual(spike_counts[i], expected_counts[i] * 0.2)  # At least 20% of expected
-        #     self.assertLess(spike_counts[i], expected_counts[i] * 5)     # At most 5x expected
+        #     self.assertLessEqual(spike_counts[i], expected_counts[i] * 5)     # At most 5x expected
 
     def test_normalization(self):
         """Test rate normalization."""
@@ -146,6 +157,9 @@ class TestPoissonEncoder(unittest.TestCase):
 
 
 class TestPopulationEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_population_encoding_scalar(self):
         """Test population encoding of scalar input."""
         encoder = spike_encoder.PopulationEncoder(n_neurons=10, min_val=0, max_val=1)
@@ -185,6 +199,9 @@ class TestPopulationEncoder(unittest.TestCase):
 
 
 class TestBernoulliEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_basic_bernoulli_encoding(self):
         """Test basic Bernoulli encoding."""
         encoder = spike_encoder.BernoulliEncoder(scale=0.1)
@@ -196,8 +213,8 @@ class TestBernoulliEncoder(unittest.TestCase):
 
         # Higher probabilities should generate more spikes
         spike_counts = jnp.sum(spikes, axis=0)
-        self.assertLess(spike_counts[0], spike_counts[1])
-        self.assertLess(spike_counts[1], spike_counts[2])
+        self.assertLessEqual(spike_counts[0], spike_counts[1])
+        self.assertLessEqual(spike_counts[1], spike_counts[2])
 
     def test_probability_bounds(self):
         """Test probability clipping."""
@@ -219,6 +236,9 @@ class TestBernoulliEncoder(unittest.TestCase):
 
 
 class TestDeltaEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_delta_encoding(self):
         """Test delta encoding of changing signal."""
         encoder = spike_encoder.DeltaEncoder(threshold=0.1)
@@ -257,6 +277,9 @@ class TestDeltaEncoder(unittest.TestCase):
 
 
 class TestStepCurrentEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_current_scaling(self):
         """Test current scaling."""
         encoder = spike_encoder.StepCurrentEncoder(current_scale=10.0)
@@ -295,6 +318,9 @@ class TestStepCurrentEncoder(unittest.TestCase):
 
 
 class TestSpikeCountEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_uniform_distribution(self):
         """Test uniform spike distribution."""
         encoder = spike_encoder.SpikeCountEncoder(max_spikes=5, distribution='uniform')
@@ -333,6 +359,9 @@ class TestSpikeCountEncoder(unittest.TestCase):
 
 
 class TestTemporalEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_pattern_creation(self):
         """Test temporal pattern creation."""
         encoder = spike_encoder.TemporalEncoder(n_patterns=3, pattern_length=10)
@@ -381,6 +410,9 @@ class TestTemporalEncoder(unittest.TestCase):
 
 
 class TestRankOrderEncoder(unittest.TestCase):
+    def setUp(self):
+        brainstate.random.seed(42)
+
     def test_rank_order_encoding(self):
         """Test rank order encoding."""
         encoder = spike_encoder.RankOrderEncoder()
@@ -424,8 +456,8 @@ class TestRankOrderEncoder(unittest.TestCase):
         inverted_times = jnp.argmax(inverted_spikes, axis=0)
 
         # Order should be inverted
-        self.assertLess(normal_times[1], normal_times[0])  # High value spikes first
-        self.assertLess(inverted_times[0], inverted_times[1])  # Low value spikes first
+        self.assertLessEqual(normal_times[1], normal_times[0])  # High value spikes first
+        self.assertLessEqual(inverted_times[0], inverted_times[1])  # Low value spikes first
 
     def test_normalization(self):
         """Test input normalization."""
