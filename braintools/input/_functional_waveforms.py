@@ -995,10 +995,7 @@ def noisy_sinusoidal(
     noise_amplitude_value = u.Quantity(noise_amplitude).to(c_unit).mantissa
     
     # Setup random number generator
-    if seed is None:
-        rng = brainstate.random.DEFAULT
-    else:
-        rng = brainstate.random.RandomState(seed)
+    rng = np.random if seed is None else np.random.RandomState(seed)
     
     # Calculate indices
     n_steps = int(np.ceil(duration_value / dt_value))
