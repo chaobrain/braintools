@@ -70,14 +70,25 @@ def random_conn(
 
     rng = np.random if seed is None else np.random.RandomState(seed)
 
-    if not include_self and pre_num == post_num:
-        mask = np.ones((pre_num, post_num), dtype=bool)
-        np.fill_diagonal(mask, False)
-        conn_mat = (rng.rand(pre_num, post_num) < prob) & mask
-    else:
-        conn_mat = rng.rand(pre_num, post_num) < prob
+    pre_indices_list = []
+    post_indices_list = []
 
-    pre_indices, post_indices = np.where(conn_mat)
+    for pre_idx in range(pre_num):
+        samples = rng.random_sample(post_num)
+        if not include_self and pre_num == post_num and post_num > 0:
+            samples[pre_idx] = 1.0
+        hits = np.nonzero(samples < prob)[0]
+        if hits.size:
+            pre_indices_list.append(np.full(hits.size, pre_idx, dtype=np.int64))
+            post_indices_list.append(hits.astype(np.int64))
+
+    if pre_indices_list:
+        pre_indices = np.concatenate(pre_indices_list)
+        post_indices = np.concatenate(post_indices_list)
+    else:
+        pre_indices = np.empty(0, dtype=np.int64)
+        post_indices = np.empty(0, dtype=np.int64)
+
     return pre_indices, post_indices
 
 
@@ -247,7 +258,7 @@ def fixed_total_num(
     include_self: bool = True
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Create connectivity with a fixed total number of synapses.
-    
+
     Parameters
     ----------
     pre_size : int or tuple of ints
@@ -260,7 +271,7 @@ def fixed_total_num(
         Random seed for reproducibility.
     include_self : bool
         Whether to allow self-connections.
-        
+
     Returns
     -------
     pre_indices : np.ndarray
@@ -278,25 +289,38 @@ def fixed_total_num(
     else:
         post_num = int(np.prod(np.asarray(post_size)))
 
+    if total_num < 0:
+        raise ValueError("`total_num` must be non-negative")
+
+    if pre_num == 0 or post_num == 0 or total_num == 0:
+        return (np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64))
+
     rng = np.random if seed is None else np.random.RandomState(seed)
 
-    if not include_self and pre_num == post_num:
-        # Create all possible connections excluding diagonal
-        pre_all = np.repeat(np.arange(pre_num), post_num)
-        post_all = np.tile(np.arange(post_num), pre_num)
-        mask = pre_all != post_all
-        pre_all = pre_all[mask]
-        post_all = post_all[mask]
+    square_no_self = (not include_self) and (pre_num == post_num)
+
+    if square_no_self:
+        if post_num <= 1:
+            if total_num > 0:
+                raise ValueError("No valid connections available when population size is 1 and `include_self` is False")
+            return (np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64))
+
+        n_per_row = post_num - 1
+        n_possible = pre_num * n_per_row
+        if total_num > n_possible:
+            raise ValueError(f"Requested {total_num} connections but only {n_possible} are possible")
+
+        indices = rng.choice(n_possible, size=total_num, replace=False)
+        pre_indices = indices // n_per_row
+        col_rank = indices % n_per_row
+        post_indices = col_rank + (col_rank >= pre_indices)
     else:
-        # Create all possible connections
-        pre_all = np.repeat(np.arange(pre_num), post_num)
-        post_all = np.tile(np.arange(post_num), pre_num)
+        n_possible = pre_num * post_num
+        if total_num > n_possible:
+            raise ValueError(f"Requested {total_num} connections but only {n_possible} are possible")
 
-    # Randomly select connections
-    n_possible = len(pre_all)
-    if total_num > n_possible:
-        raise ValueError(f"Requested {total_num} connections but only {n_possible} are possible")
+        indices = rng.choice(n_possible, size=total_num, replace=False)
+        pre_indices = indices // post_num
+        post_indices = indices % post_num
 
-    indices = rng.choice(n_possible, size=total_num, replace=False)
-
-    return pre_all[indices], post_all[indices]
+    return pre_indices.astype(np.int64, copy=False), post_indices.astype(np.int64, copy=False)

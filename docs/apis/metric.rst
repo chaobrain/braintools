@@ -4,8 +4,13 @@
 .. currentmodule:: braintools.metric 
 .. automodule:: braintools.metric 
 
+Comprehensive metric collection covering spiking activity, statistical
+analysis, and supervised learning objectives for neural modeling.
+
 Classification Losses
 ---------------------
+
+Objective functions for training classifiers on neural or behavioral labels.
 
 .. autosummary::
    :toctree: generated/
@@ -26,10 +31,14 @@ Classification Losses
    ctc_loss
    ctc_loss_with_forward_probs
    sigmoid_focal_loss
+   nll_loss
 
 
 Correlation
 -----------
+
+Tools for measuring synchrony, functional connectivity, and aggregated
+correlations between neural signals.
 
 .. autosummary::
    :toctree: generated/
@@ -47,6 +56,9 @@ Correlation
 Fenchel-Young Loss
 ------------------
 
+Generalized convex losses derived from Fenchel-Young duality for structured
+prediction problems.
+
 .. autosummary::
    :toctree: generated/
    :nosignatures:
@@ -57,6 +69,9 @@ Fenchel-Young Loss
 
 Spike Firing
 ------------
+
+Descriptive statistics that summarize firing rates, timing variability, and
+spiking reliability.
 
 .. autosummary::
     :toctree: generated/
@@ -77,6 +92,9 @@ Spike Firing
 Local Field Potential
 ---------------------
 
+Metrics tailored to local field potential (LFP) analysis such as spectral
+characteristics and connectivity.
+
 .. autosummary::
     :toctree: generated/
     :nosignatures:
@@ -95,6 +113,9 @@ Local Field Potential
 Ranking Losses
 --------------
 
+Losses for ordered prediction tasks including pairwise and list-wise ranking
+setups.
+
 .. autosummary::
    :toctree: generated/
    :nosignatures:
@@ -105,6 +126,8 @@ Ranking Losses
 
 Regression Losses
 -----------------
+
+Continuous-valued error metrics for fitting neural or behavioral signals.
 
 .. autosummary::
    :toctree: generated/
@@ -124,6 +147,8 @@ Regression Losses
 
 Smoothing Losses
 ----------------
+
+Regularizers that promote smooth trajectories or label distributions over time.
 
 .. autosummary::
    :toctree: generated/

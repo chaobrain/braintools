@@ -4,6 +4,9 @@
 .. currentmodule:: braintools.optim 
 .. automodule:: braintools.optim 
 
+Optimization wrappers that standardize SciPy and Nevergrad optimizers for
+brain modeling workloads.
+
 .. autosummary::
    :toctree: generated/
    :nosignatures:

@@ -4,10 +4,14 @@
 .. currentmodule:: braintools
 .. automodule:: braintools
 
-
+BrainTools aggregates reusable building blocks for spiking neural computations,
+including encoders, spike arithmetic utilities, and parameter transforms.
 
 Spike Encoders
 --------------
+
+Encoders that convert continuous-valued signals or event streams into spike
+trains suitable for spiking network simulations.
 
 .. autosummary::
     :toctree: generated/
@@ -30,6 +34,9 @@ Spike Encoders
 Spike Operations
 ----------------
 
+Vectorized boolean and arithmetic helpers for manipulating spike trains and
+combining encoder outputs.
+
 .. autosummary::
     :toctree: generated/
     :nosignatures:
@@ -47,6 +54,9 @@ Spike Operations
 
 Parameter Transformations
 -------------------------
+
+Smooth and invertible transforms used to keep optimization parameters within
+valid domains during training.
 
 .. autosummary::
     :toctree: generated/

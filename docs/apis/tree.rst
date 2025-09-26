@@ -4,6 +4,9 @@
 .. currentmodule:: braintools.tree 
 .. automodule:: braintools.tree 
 
+Operations for manipulating JAX PyTrees, including arithmetic, reshaping, and
+conversion utilities used across the toolkit.
+
 .. autosummary::
    :toctree: generated/
 
