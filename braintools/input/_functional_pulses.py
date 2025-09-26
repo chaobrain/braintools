@@ -115,9 +115,7 @@ def spike_input(
     duration_value = u.Quantity(duration).to(time_unit).mantissa
 
     # Handle various input types including Quantity arrays
-    if hasattr(sp_times, '__iter__'):
-        sp_times = list(sp_times) if not isinstance(sp_times, (list, tuple)) else sp_times
-    else:
+    if not hasattr(sp_times, '__iter__'):
         raise ValueError("sp_times must be an iterable")
 
     # Convert times to mantissa
@@ -126,21 +124,15 @@ def spike_input(
         sp_times_values.append(u.Quantity(t).to(time_unit).mantissa)
 
     # Handle spike lengths
-    if not isinstance(sp_lens, (tuple, list, np.ndarray, u.Quantity, jax.Array)):
+    if not isinstance(sp_lens, (tuple, list)) and u.math.size(sp_lens) == 1:
         sp_lens = [sp_lens] * len(sp_times)
-    # elif hasattr(sp_lens, 'unit'):  # Handle Quantity arrays
-    #     # Extract individual elements from Quantity array
-    #     sp_lens = [sp_lens[i] for i in range(len(sp_lens))]
     sp_lens_values = []
     for length in sp_lens:
         sp_lens_values.append(u.Quantity(length).to(time_unit).mantissa)
 
     # Handle spike sizes and extract units
-    if not isinstance(sp_sizes, (tuple, list)) and u.math.size(sp_sizes) != len(sp_times):
+    if not isinstance(sp_sizes, (tuple, list)) and u.math.size(sp_sizes) == 1:
         sp_sizes = [sp_sizes] * len(sp_times)
-    # elif hasattr(sp_sizes, 'unit'):  # Handle Quantity arrays
-    #     # Extract individual elements from Quantity array
-    #     sp_sizes = [sp_sizes[i] for i in range(len(sp_sizes))]
 
     c_unit = u.get_unit(sp_sizes[0])
     sp_sizes_values = []

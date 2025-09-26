@@ -25,6 +25,8 @@ import brainstate
 import brainunit as u
 import numpy as np
 
+from braintools._misc import set_module_as
+
 __all__ = [
     'section_input',
     'constant_input',
@@ -33,6 +35,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.input')
 def section_input(
     values: Sequence,
     durations: Sequence,

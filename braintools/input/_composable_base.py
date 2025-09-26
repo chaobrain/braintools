@@ -178,6 +178,8 @@ class Input:
     >>> noisy_modulated = (signal + noise) * modulator
     """
 
+    __module__ = 'braintools.input'
+
     def __init__(self, duration: Union[float, u.Quantity]):
         """Initialize the Input base class.
         
