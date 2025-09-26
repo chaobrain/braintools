@@ -24,7 +24,7 @@ import brainunit as u
 import matplotlib.pyplot as plt
 import numpy as np
 
-from braintools.input._stochastic import wiener_process, ou_process, poisson_input
+from braintools.input._functional_stochastic import wiener_process, ou_process, poisson_input
 
 block = False
 
