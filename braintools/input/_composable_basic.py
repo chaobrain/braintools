@@ -19,15 +19,19 @@
 Composable basic input current generators.
 """
 
+import functools
 from typing import Sequence, Optional, Union
+
 import brainstate
 import brainunit as u
 import numpy as np
+
 from ._composable_base import Input
+from ._functional_basic import section_input, constant_input, step_input, ramp_input
 
 __all__ = [
     'SectionInput',
-    'ConstantInput', 
+    'ConstantInput',
     'StepInput',
     'RampInput',
 ]
@@ -43,11 +47,12 @@ class SectionInput(Input):
     >>> sine = SinusoidalInput(0.5, 10 * u.Hz, 500)
     >>> combined = section + sine  # Add sinusoidal on top
     """
-    
-    def __init__(self, 
-                 values: Sequence,
-                 durations: Sequence,
-                 dt: Optional[Union[float, u.Quantity]] = None):
+
+    def __init__(
+        self,
+        values: Sequence,
+        durations: Sequence
+    ):
         """Initialize section input.
         
         Parameters
@@ -56,41 +61,22 @@ class SectionInput(Input):
             The current values for each period duration.
         durations : list, np.ndarray
             The duration for each period.
-        dt : float or Quantity, optional
-            The numerical precision.
         """
         if len(durations) != len(values):
             raise ValueError(f'"values" and "durations" must be the same length, while '
-                           f'we got {len(values)} != {len(durations)}.')
-        
+                             f'we got {len(values)} != {len(durations)}.')
+
         # Calculate total duration
-        total_duration = sum(durations)
-        super().__init__(total_duration, dt)
-        
+        total_duration = functools.reduce(u.math.add, durations)
+        super().__init__(total_duration)
+
         self.values = values
         self.durations = durations
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the section input array."""
-        # Get input shape
-        values = [u.math.array(val) for val in self.values]
-        i_shape = ()
-        for val in values:
-            shape = u.math.shape(val)
-            if len(shape) > len(i_shape):
-                i_shape = shape
-        
-        # Format the current
-        currents = []
-        for c_size, duration in zip(values, self.durations):
-            current = u.math.ones(
-                (int(np.ceil(duration / self.dt)),) + i_shape,
-                dtype=brainstate.environ.dftype()
-            )
-            current = current * c_size
-            currents.append(current)
-        
-        return u.math.concatenate(currents, axis=0)
+        # Use the functional API
+        return section_input(self.values, self.durations, return_length=False)
 
 
 class ConstantInput(Input):
@@ -103,10 +89,8 @@ class ConstantInput(Input):
     >>> smoothed = const.smooth(tau=10)  # Smooth transitions
     >>> scaled = const.scale(0.5)  # Scale to half amplitude
     """
-    
-    def __init__(self,
-                 I_and_duration: Sequence[tuple],
-                 dt: Optional[Union[float, u.Quantity]] = None):
+
+    def __init__(self, I_and_duration: Sequence[tuple]):
         """Initialize constant input.
         
         Parameters
@@ -114,32 +98,17 @@ class ConstantInput(Input):
         I_and_duration : list
             This parameter receives the current size and the current
             duration pairs, like `[(Isize1, duration1), (Isize2, duration2)]`.
-        dt : float or Quantity, optional
-            The numerical precision.
         """
         # Calculate total duration
-        total_duration = sum(item[1] for item in I_and_duration)
-        super().__init__(total_duration, dt)
-        
+        total_duration = functools.reduce(u.math.add, [item[1] for item in I_and_duration])
+        super().__init__(total_duration)
+
         self.I_and_duration = I_and_duration
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the constant input array."""
-        # Get input shape
-        I_shape = ()
-        for I in self.I_and_duration:
-            shape = u.math.shape(I[0])
-            if len(shape) > len(I_shape):
-                I_shape = shape
-        
-        # Get the current
-        currents = []
-        for c_size, duration in self.I_and_duration:
-            length = int(np.ceil(duration / self.dt))
-            current = u.math.ones((length,) + I_shape, dtype=brainstate.environ.dftype()) * c_size
-            currents.append(current)
-        
-        return u.math.concatenate(currents, axis=0)
+        # Use the functional API
+        return constant_input(self.I_and_duration)
 
 
 class StepInput(Input):
@@ -152,12 +121,11 @@ class StepInput(Input):
     >>> noise = WienerProcess(300, sigma=0.1)
     >>> noisy_steps = steps + noise
     """
-    
+
     def __init__(self,
                  amplitudes: Sequence[float],
                  step_times: Sequence[Union[float, u.Quantity]],
-                 duration: Union[float, u.Quantity],
-                 dt: Optional[Union[float, u.Quantity]] = None):
+                 duration: Union[float, u.Quantity]):
         """Initialize step input.
         
         Parameters
@@ -168,38 +136,29 @@ class StepInput(Input):
             Time points where steps occur.
         duration : float or Quantity
             Total duration of the input.
-        dt : float or Quantity, optional
-            The numerical precision.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         self.amplitudes = amplitudes
         self.step_times = step_times
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the step input array."""
-        currents = u.math.zeros(self.n_steps, dtype=brainstate.environ.dftype())
-        
-        # Convert step times to dimensionless values for sorting
-        step_times_ms = [t / u.ms if hasattr(t, 'unit') else t 
-                         for t in self.step_times]
-        
-        # Sort step times and amplitudes together
-        sorted_indices = np.argsort(step_times_ms)
-        sorted_times = [self.step_times[i] for i in sorted_indices]
-        sorted_amps = [self.amplitudes[i] for i in sorted_indices]
-        
-        # Set amplitude for each interval
-        for i, (time, amp) in enumerate(zip(sorted_times, sorted_amps)):
-            start_i = int(time / self.dt)
-            if i < len(sorted_times) - 1:
-                end_i = int(sorted_times[i + 1] / self.dt)
+        # Convert step_times to have proper units if they don't
+        dt_unit = u.get_unit(self.dt)
+        step_times_with_units = []
+        for t in self.step_times:
+            if hasattr(t, 'unit'):
+                step_times_with_units.append(t)
             else:
-                end_i = self.n_steps
-            
-            if start_i < self.n_steps:
-                currents = currents.at[start_i:min(end_i, self.n_steps)].set(amp)
+                # Assume it's in the same unit as dt if no unit is provided
+                step_times_with_units.append(t * dt_unit)
         
-        return currents
+        # Use the functional API
+        return step_input(
+            self.amplitudes,
+            step_times_with_units,
+            self.duration
+        )
 
 
 class RampInput(Input):
@@ -216,14 +175,13 @@ class RampInput(Input):
     >>> ramp2 = RampInput(0, 2, 1000, t_start=200, t_end=800)
     >>> clipped = ramp2.clip(0, 1.5)  # Limit maximum value
     """
-    
+
     def __init__(self,
                  c_start: float,
                  c_end: float,
                  duration: Union[float, u.Quantity],
                  t_start: Optional[Union[float, u.Quantity]] = None,
-                 t_end: Optional[Union[float, u.Quantity]] = None,
-                 dt: Optional[Union[float, u.Quantity]] = None):
+                 t_end: Optional[Union[float, u.Quantity]] = None):
         """Initialize ramp input.
         
         Parameters
@@ -238,29 +196,22 @@ class RampInput(Input):
             The ramped current start time-point. Default is 0.
         t_end : float or Quantity, optional
             The ramped current end time-point. Default is duration.
-        dt : float or Quantity, optional
-            The numerical precision.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         u.fail_for_unit_mismatch(c_start, c_end)
-        
+
         self.c_start = c_start
         self.c_end = c_end
         self.t_start = t_start
         self.t_end = t_end
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the ramp input array."""
-        t_start = 0. * u.get_unit(self.dt) if self.t_start is None else self.t_start
-        t_end = self.duration if self.t_end is None else self.t_end
-        
-        current = u.math.zeros(self.n_steps,
-                               dtype=brainstate.environ.dftype(),
-                               unit=u.get_unit(self.c_start))
-        
-        p1 = int(np.ceil(t_start / self.dt))
-        p2 = int(np.ceil(t_end / self.dt))
-        cc = u.math.linspace(self.c_start, self.c_end, p2 - p1)
-        current = current.at[p1: p2].set(cc)
-        
-        return current
+        # Use the functional API
+        return ramp_input(
+            self.c_start,
+            self.c_end,
+            self.duration,
+            self.t_start,
+            self.t_end
+        )

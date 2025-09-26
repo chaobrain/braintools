@@ -82,7 +82,6 @@ class SinusoidalInput(Input):
                  amplitude: float,
                  frequency: u.Quantity,
                  duration: Union[float, u.Quantity],
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None,
                  bias: bool = False):
@@ -96,8 +95,6 @@ class SinusoidalInput(Input):
             Frequency of the sinus oscillation, in Hz.
         duration : float or Quantity
             The input duration.
-        dt : float or Quantity, optional
-            The numerical precision.
         t_start : float or Quantity, optional
             The start time. Default is 0.
         t_end : float or Quantity, optional
@@ -106,7 +103,7 @@ class SinusoidalInput(Input):
             Whether the sinusoid oscillates around 0 (False), or
             has a positive DC bias, thus non-negative (True).
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         assert frequency.unit.dim == u.Hz.dim, f'The frequency must be in Hz. But got {frequency.unit}.'
         
         self.amplitude = amplitude
@@ -149,7 +146,6 @@ class SquareInput(Input):
                  amplitude: float,
                  frequency: u.Quantity,
                  duration: Union[float, u.Quantity],
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  bias: bool = False,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None):
@@ -163,8 +159,6 @@ class SquareInput(Input):
             Frequency of the square oscillation, in Hz.
         duration : float or Quantity
             The input duration.
-        dt : float or Quantity, optional
-            The numerical precision.
         bias : bool
             Whether the wave oscillates around 0 (False), or
             has a positive DC bias, thus non-negative (True).
@@ -173,7 +167,7 @@ class SquareInput(Input):
         t_end : float or Quantity, optional
             The end time.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         assert frequency.unit.dim == u.Hz.dim, f'The frequency must be in Hz. But got {frequency.unit}.'
         
         self.amplitude = amplitude
@@ -214,7 +208,6 @@ class TriangularInput(Input):
                  amplitude: float,
                  frequency: u.Quantity,
                  duration: Union[float, u.Quantity],
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None,
                  bias: bool = False):
@@ -228,8 +221,6 @@ class TriangularInput(Input):
             Frequency of the triangular oscillation, in Hz.
         duration : float or Quantity
             The input duration.
-        dt : float or Quantity, optional
-            The numerical precision.
         t_start : float or Quantity, optional
             The start time.
         t_end : float or Quantity, optional
@@ -238,7 +229,7 @@ class TriangularInput(Input):
             Whether the wave oscillates around 0 (False), or
             has a positive DC bias, thus non-negative (True).
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         assert frequency.unit.dim == u.Hz.dim, f'The frequency must be in Hz. But got {frequency.unit}.'
         
         self.amplitude = amplitude
@@ -285,7 +276,6 @@ class SawtoothInput(Input):
                  amplitude: float,
                  frequency: u.Quantity,
                  duration: Union[float, u.Quantity],
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None,
                  bias: bool = False):
@@ -299,8 +289,6 @@ class SawtoothInput(Input):
             Frequency of the sawtooth oscillation, in Hz.
         duration : float or Quantity
             The input duration.
-        dt : float or Quantity, optional
-            The numerical precision.
         t_start : float or Quantity, optional
             The start time.
         t_end : float or Quantity, optional
@@ -309,7 +297,7 @@ class SawtoothInput(Input):
             Whether the wave oscillates around 0 (False), or
             has a positive DC bias, thus non-negative (True).
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         assert frequency.unit.dim == u.Hz.dim, f'The frequency must be in Hz. But got {frequency.unit}.'
         
         self.amplitude = amplitude
@@ -356,7 +344,6 @@ class ChirpInput(Input):
                  f_start: u.Quantity,
                  f_end: u.Quantity,
                  duration: Union[float, u.Quantity],
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None,
                  method: str = 'linear',
@@ -373,8 +360,6 @@ class ChirpInput(Input):
             Ending frequency in Hz.
         duration : float or Quantity
             Total duration of the input.
-        dt : float or Quantity, optional
-            The numerical precision.
         t_start : float or Quantity, optional
             The start time.
         t_end : float or Quantity, optional
@@ -384,7 +369,7 @@ class ChirpInput(Input):
         bias : bool
             Whether to add positive DC bias.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         assert f_start.unit.dim == u.Hz.dim, f'Start frequency must be in Hz. Got {f_start.unit}.'
         assert f_end.unit.dim == u.Hz.dim, f'End frequency must be in Hz. Got {f_end.unit}.'
         
@@ -447,7 +432,6 @@ class NoisySinusoidalInput(Input):
                  frequency: u.Quantity,
                  noise_amplitude: float,
                  duration: Union[float, u.Quantity],
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None,
                  seed: Optional[int] = None):
@@ -463,8 +447,6 @@ class NoisySinusoidalInput(Input):
             Amplitude of the additive Gaussian noise.
         duration : float or Quantity
             The input duration.
-        dt : float or Quantity, optional
-            The numerical precision.
         t_start : float or Quantity, optional
             The start time.
         t_end : float or Quantity, optional
@@ -472,7 +454,7 @@ class NoisySinusoidalInput(Input):
         seed : int, optional
             Random seed for noise generation.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         assert frequency.unit.dim == u.Hz.dim, f'Frequency must be in Hz. Got {frequency.unit}.'
         
         self.amplitude = amplitude

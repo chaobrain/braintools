@@ -49,8 +49,7 @@ class SpikeInput(Input):
                  sp_times: Sequence[Union[float, u.Quantity]],
                  duration: Union[float, u.Quantity],
                  sp_lens: Union[float, Sequence[float]] = 1.,
-                 sp_sizes: Union[float, Sequence[float]] = 1.,
-                 dt: Optional[Union[float, u.Quantity]] = None):
+                 sp_sizes: Union[float, Sequence[float]] = 1.):
         """Initialize spike input.
         
         Parameters
@@ -63,10 +62,8 @@ class SpikeInput(Input):
             The spike length(s).
         sp_sizes : float or list
             The spike amplitude(s).
-        dt : float or Quantity, optional
-            The numerical precision.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         
         self.sp_times = sp_times
         self.sp_lens = sp_lens if isinstance(sp_lens, (list, tuple)) else [sp_lens] * len(sp_times)
@@ -99,8 +96,7 @@ class GaussianPulse(Input):
                  amplitude: float,
                  center: Union[float, u.Quantity],
                  sigma: Union[float, u.Quantity],
-                 duration: Union[float, u.Quantity],
-                 dt: Optional[Union[float, u.Quantity]] = None):
+                 duration: Union[float, u.Quantity]):
         """Initialize Gaussian pulse.
         
         Parameters
@@ -113,10 +109,8 @@ class GaussianPulse(Input):
             Standard deviation (width) of the pulse.
         duration : float or Quantity
             Total duration of the input.
-        dt : float or Quantity, optional
-            The numerical precision.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         
         self.amplitude = amplitude
         self.center = center
@@ -145,8 +139,7 @@ class ExponentialDecay(Input):
                  tau: Union[float, u.Quantity],
                  duration: Union[float, u.Quantity],
                  t_start: Optional[Union[float, u.Quantity]] = None,
-                 t_end: Optional[Union[float, u.Quantity]] = None,
-                 dt: Optional[Union[float, u.Quantity]] = None):
+                 t_end: Optional[Union[float, u.Quantity]] = None):
         """Initialize exponential decay.
         
         Parameters
@@ -161,10 +154,8 @@ class ExponentialDecay(Input):
             Start time of the decay.
         t_end : float or Quantity, optional
             End time of the decay.
-        dt : float or Quantity, optional
-            The numerical precision.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         
         self.amplitude = amplitude
         self.tau = tau
@@ -205,8 +196,7 @@ class DoubleExponential(Input):
                  tau_rise: Union[float, u.Quantity],
                  tau_decay: Union[float, u.Quantity],
                  duration: Union[float, u.Quantity],
-                 t_start: Optional[Union[float, u.Quantity]] = None,
-                 dt: Optional[Union[float, u.Quantity]] = None):
+                 t_start: Optional[Union[float, u.Quantity]] = None):
         """Initialize double exponential.
         
         Parameters
@@ -221,10 +211,8 @@ class DoubleExponential(Input):
             Total duration of the input.
         t_start : float or Quantity, optional
             Start time of the pulse.
-        dt : float or Quantity, optional
-            The numerical precision.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         
         self.amplitude = amplitude
         self.tau_rise = tau_rise
@@ -274,8 +262,7 @@ class BurstInput(Input):
                  inter_burst_interval: Union[float, u.Quantity],
                  amplitude: float,
                  duration: Union[float, u.Quantity],
-                 t_start: Optional[Union[float, u.Quantity]] = None,
-                 dt: Optional[Union[float, u.Quantity]] = None):
+                 t_start: Optional[Union[float, u.Quantity]] = None):
         """Initialize burst input.
         
         Parameters
@@ -292,10 +279,8 @@ class BurstInput(Input):
             Total duration of the input.
         t_start : float or Quantity, optional
             Start time of first burst.
-        dt : float or Quantity, optional
-            The numerical precision.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         
         self.n_bursts = n_bursts
         self.burst_duration = burst_duration

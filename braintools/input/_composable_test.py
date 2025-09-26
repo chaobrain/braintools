@@ -242,7 +242,7 @@ class TestComposableAPI(TestCase):
             modulated_ou = ou + sine_mean
             
             array = modulated_ou()
-            self.assertEqual(array.shape, (5000, 1))
+            self.assertEqual(array.shape, (5000,))
             
             show(modulated_ou, 'OU Process with Sinusoidal Mean')
     

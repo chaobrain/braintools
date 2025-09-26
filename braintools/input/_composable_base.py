@@ -20,6 +20,7 @@ Base classes for composable input current construction.
 """
 
 from typing import Optional, Union, Callable
+
 import brainstate
 import brainunit as u
 import numpy as np
@@ -50,21 +51,22 @@ class Input:
     >>> filtered = sine.low_pass(20 * u.Hz)
     >>> scaled = ramp.scale(2.0).clip(0, 1.5)
     """
-    
-    def __init__(self, duration: Union[float, u.Quantity], dt: Optional[Union[float, u.Quantity]] = None):
+
+    def __init__(self, duration: Union[float, u.Quantity]):
         """Initialize the Input base class.
         
         Parameters
         ----------
         duration : float or Quantity
             The total duration of the input.
-        dt : float or Quantity, optional
-            The numerical precision. If None, uses the global dt.
         """
         self.duration = duration
-        self.dt = brainstate.environ.get_dt() if dt is None else dt
         self._cached_array = None
-    
+
+    @property
+    def dt(self):
+        return brainstate.environ.get_dt()
+
     def __call__(self, recompute: bool = False) -> brainstate.typing.ArrayLike:
         """Generate and return the input current array.
         
@@ -81,88 +83,88 @@ class Input:
         if self._cached_array is None or recompute:
             self._cached_array = self._generate()
         return self._cached_array
-    
+
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the input current array. Must be implemented by subclasses."""
         raise NotImplementedError("Subclasses must implement _generate()")
-    
+
     @property
     def shape(self):
         """Get the shape of the input array."""
         return self().shape
-    
+
     @property
     def n_steps(self):
         """Get the number of time steps."""
         return int(np.ceil(self.duration / self.dt))
-    
+
     def __add__(self, other):
         """Add two inputs or add a constant."""
         if isinstance(other, Input):
             return CompositeInput(self, other, operator='+')
         else:
-            return CompositeInput(self, ConstantValue(other, self.duration, self.dt), operator='+')
-    
+            return CompositeInput(self, ConstantValue(other, self.duration), operator='+')
+
     def __radd__(self, other):
         """Right addition."""
         return self.__add__(other)
-    
+
     def __sub__(self, other):
         """Subtract two inputs or subtract a constant."""
         if isinstance(other, Input):
             return CompositeInput(self, other, operator='-')
         else:
-            return CompositeInput(self, ConstantValue(other, self.duration, self.dt), operator='-')
-    
+            return CompositeInput(self, ConstantValue(other, self.duration), operator='-')
+
     def __rsub__(self, other):
         """Right subtraction."""
         if isinstance(other, Input):
             return CompositeInput(other, self, operator='-')
         else:
-            return CompositeInput(ConstantValue(other, self.duration, self.dt), self, operator='-')
-    
+            return CompositeInput(ConstantValue(other, self.duration), self, operator='-')
+
     def __mul__(self, other):
         """Multiply two inputs or multiply by a constant."""
         if isinstance(other, Input):
             return CompositeInput(self, other, operator='*')
         else:
-            return CompositeInput(self, ConstantValue(other, self.duration, self.dt), operator='*')
-    
+            return CompositeInput(self, ConstantValue(other, self.duration), operator='*')
+
     def __rmul__(self, other):
         """Right multiplication."""
         return self.__mul__(other)
-    
+
     def __truediv__(self, other):
         """Divide two inputs or divide by a constant."""
         if isinstance(other, Input):
             return CompositeInput(self, other, operator='/')
         else:
-            return CompositeInput(self, ConstantValue(other, self.duration, self.dt), operator='/')
-    
+            return CompositeInput(self, ConstantValue(other, self.duration), operator='/')
+
     def __rtruediv__(self, other):
         """Right division."""
         if isinstance(other, Input):
             return CompositeInput(other, self, operator='/')
         else:
-            return CompositeInput(ConstantValue(other, self.duration, self.dt), self, operator='/')
-    
+            return CompositeInput(ConstantValue(other, self.duration), self, operator='/')
+
     def __and__(self, other):
         """Concatenate two inputs in time (sequential composition)."""
         if not isinstance(other, Input):
             raise TypeError("Can only concatenate with another Input object")
         return SequentialInput(self, other)
-    
+
     def __or__(self, other):
         """Overlay two inputs (take maximum at each point)."""
         if isinstance(other, Input):
             return CompositeInput(self, other, operator='max')
         else:
             raise TypeError("Can only overlay with another Input object")
-    
+
     def __neg__(self):
         """Negate the input."""
-        return CompositeInput(ConstantValue(0, self.duration, self.dt), self, operator='-')
-    
+        return CompositeInput(ConstantValue(0, self.duration), self, operator='-')
+
     def scale(self, factor: float):
         """Scale the input by a factor.
         
@@ -177,7 +179,7 @@ class Input:
             The scaled input.
         """
         return self * factor
-    
+
     def shift(self, time_shift: Union[float, u.Quantity]):
         """Shift the input in time.
         
@@ -192,7 +194,7 @@ class Input:
             The time-shifted input.
         """
         return TimeShiftedInput(self, time_shift)
-    
+
     def clip(self, min_val: Optional[float] = None, max_val: Optional[float] = None):
         """Clip the input values to a range.
         
@@ -209,7 +211,7 @@ class Input:
             The clipped input.
         """
         return ClippedInput(self, min_val, max_val)
-    
+
     def smooth(self, tau: Union[float, u.Quantity]):
         """Apply exponential smoothing to the input.
         
@@ -224,7 +226,7 @@ class Input:
             The smoothed input.
         """
         return SmoothedInput(self, tau)
-    
+
     def repeat(self, n_times: int):
         """Repeat the input pattern n times.
         
@@ -239,7 +241,7 @@ class Input:
             The repeated input.
         """
         return RepeatedInput(self, n_times)
-    
+
     def apply(self, func: Callable):
         """Apply a custom function to the input.
         
@@ -258,7 +260,7 @@ class Input:
 
 class CompositeInput(Input):
     """Composite input created by combining two inputs with an operator."""
-    
+
     def __init__(self, input1: Input, input2: Input, operator: str):
         """Initialize a composite input.
         
@@ -272,23 +274,17 @@ class CompositeInput(Input):
             The operator to apply ('+', '-', '*', '/', 'max', 'min').
         """
         # Use the maximum duration of the two inputs
-        duration = max(getattr(input1.duration, 'magnitude', input1.duration),
-                      getattr(input2.duration, 'magnitude', input2.duration))
-        if hasattr(input1.duration, 'unit'):
-            duration = duration * input1.duration.unit
-        elif hasattr(input2.duration, 'unit'):
-            duration = duration * input2.duration.unit
-            
-        super().__init__(duration, input1.dt)
+        duration = u.math.maximum(input1.duration, input2.duration)
+        super().__init__(duration)
         self.input1 = input1
         self.input2 = input2
         self.operator = operator
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the composite input."""
         arr1 = self.input1()
         arr2 = self.input2()
-        
+
         # Ensure arrays have the same length (pad with zeros if needed)
         max_len = max(len(arr1), len(arr2))
         if len(arr1) < max_len:
@@ -297,7 +293,7 @@ class CompositeInput(Input):
         if len(arr2) < max_len:
             padding = u.math.zeros(max_len - len(arr2), dtype=arr2.dtype, unit=u.get_unit(arr2))
             arr2 = u.math.concatenate([arr2, padding])
-        
+
         # Apply the operator
         if self.operator == '+':
             return arr1 + arr2
@@ -318,20 +314,19 @@ class CompositeInput(Input):
 
 class ConstantValue(Input):
     """A constant value input."""
-    
-    def __init__(self, value: float, duration: Union[float, u.Quantity], 
-                 dt: Optional[Union[float, u.Quantity]] = None):
-        super().__init__(duration, dt)
+
+    def __init__(self, value: float, duration: Union[float, u.Quantity]):
+        super().__init__(duration)
         self.value = value
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate constant array."""
         return u.math.ones(self.n_steps, dtype=brainstate.environ.dftype()) * self.value
 
 
 class SequentialInput(Input):
     """Sequential composition of two inputs."""
-    
+
     def __init__(self, input1: Input, input2: Input):
         """Initialize sequential input.
         
@@ -342,22 +337,13 @@ class SequentialInput(Input):
         input2 : Input
             Second input (comes after first).
         """
+
         # Total duration is sum of both durations
-        duration1 = getattr(input1.duration, 'magnitude', input1.duration)
-        duration2 = getattr(input2.duration, 'magnitude', input2.duration)
-        
-        if hasattr(input1.duration, 'unit'):
-            total_duration = (duration1 + duration2) * input1.duration.unit
-        elif hasattr(input2.duration, 'unit'):
-            total_duration = (duration1 + duration2) * input2.duration.unit
-        else:
-            total_duration = duration1 + duration2
-            
-        super().__init__(total_duration, input1.dt)
+        super().__init__(input1.duration + input2.duration)
         self.input1 = input1
         self.input2 = input2
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the sequential input."""
         arr1 = self.input1()
         arr2 = self.input2()
@@ -366,7 +352,7 @@ class SequentialInput(Input):
 
 class TimeShiftedInput(Input):
     """Time-shifted version of an input."""
-    
+
     def __init__(self, input_obj: Input, time_shift: Union[float, u.Quantity]):
         """Initialize time-shifted input.
         
@@ -377,15 +363,15 @@ class TimeShiftedInput(Input):
         time_shift : float or Quantity
             Amount to shift (positive = delay, negative = advance).
         """
-        super().__init__(input_obj.duration, input_obj.dt)
+        super().__init__(input_obj.duration)
         self.input_obj = input_obj
         self.time_shift = time_shift
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the shifted input."""
         arr = self.input_obj()
         shift_steps = int(self.time_shift / self.dt)
-        
+
         if shift_steps > 0:
             # Delay: pad with zeros at the beginning
             padding = u.math.zeros(shift_steps, dtype=arr.dtype, unit=u.get_unit(arr))
@@ -401,8 +387,8 @@ class TimeShiftedInput(Input):
 
 class ClippedInput(Input):
     """Clipped version of an input."""
-    
-    def __init__(self, input_obj: Input, min_val: Optional[float] = None, 
+
+    def __init__(self, input_obj: Input, min_val: Optional[float] = None,
                  max_val: Optional[float] = None):
         """Initialize clipped input.
         
@@ -415,12 +401,12 @@ class ClippedInput(Input):
         max_val : float, optional
             Maximum value.
         """
-        super().__init__(input_obj.duration, input_obj.dt)
+        super().__init__(input_obj.duration)
         self.input_obj = input_obj
         self.min_val = min_val
         self.max_val = max_val
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the clipped input."""
         arr = self.input_obj()
         if self.min_val is not None:
@@ -432,7 +418,7 @@ class ClippedInput(Input):
 
 class SmoothedInput(Input):
     """Exponentially smoothed version of an input."""
-    
+
     def __init__(self, input_obj: Input, tau: Union[float, u.Quantity]):
         """Initialize smoothed input.
         
@@ -443,27 +429,25 @@ class SmoothedInput(Input):
         tau : float or Quantity
             Smoothing time constant.
         """
-        super().__init__(input_obj.duration, input_obj.dt)
+        super().__init__(input_obj.duration)
         self.input_obj = input_obj
         self.tau = tau
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the smoothed input."""
-        arr = self.input_obj()
+        arr, arr_unit = u.split_mantissa_unit(self.input_obj())
         alpha = self.dt / self.tau
-        
-        smoothed = u.math.zeros_like(arr)
-        smoothed = smoothed.at[0].set(arr[0])
-        
+
+        smoothed = np.zeros_like(arr)
+        smoothed[0] = arr[0]
         for i in range(1, len(arr)):
-            smoothed = smoothed.at[i].set(alpha * arr[i] + (1 - alpha) * smoothed[i-1])
-        
-        return smoothed
+            smoothed[i] = alpha * arr[i] + (1 - alpha) * smoothed[i - 1]
+        return u.maybe_decimal(smoothed * arr_unit)
 
 
 class RepeatedInput(Input):
     """Repeated version of an input pattern."""
-    
+
     def __init__(self, input_obj: Input, n_times: int):
         """Initialize repeated input.
         
@@ -475,17 +459,11 @@ class RepeatedInput(Input):
             Number of times to repeat.
         """
         # Total duration is n_times * original duration
-        orig_duration = getattr(input_obj.duration, 'magnitude', input_obj.duration)
-        if hasattr(input_obj.duration, 'unit'):
-            total_duration = (orig_duration * n_times) * input_obj.duration.unit
-        else:
-            total_duration = orig_duration * n_times
-            
-        super().__init__(total_duration, input_obj.dt)
+        super().__init__(input_obj.duration * n_times)
         self.input_obj = input_obj
         self.n_times = n_times
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the repeated input."""
         arr = self.input_obj()
         return u.math.tile(arr, self.n_times)
@@ -493,7 +471,7 @@ class RepeatedInput(Input):
 
 class TransformedInput(Input):
     """Custom transformation applied to an input."""
-    
+
     def __init__(self, input_obj: Input, func: Callable):
         """Initialize transformed input.
         
@@ -504,11 +482,11 @@ class TransformedInput(Input):
         func : callable
             Function to apply to the array.
         """
-        super().__init__(input_obj.duration, input_obj.dt)
+        super().__init__(input_obj.duration)
         self.input_obj = input_obj
         self.func = func
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the transformed input."""
         arr = self.input_obj()
         return self.func(arr)

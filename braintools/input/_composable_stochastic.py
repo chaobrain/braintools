@@ -48,7 +48,6 @@ class WienerProcess(Input):
                  n: int = 1,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None,
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  sigma: float = 1.0,
                  seed: Optional[int] = None):
         """Initialize Wiener process.
@@ -63,14 +62,12 @@ class WienerProcess(Input):
             The start time.
         t_end : float or Quantity, optional
             The end time.
-        dt : float or Quantity, optional
-            The numerical precision.
         sigma : float
             Standard deviation of the noise.
         seed : int, optional
             Random seed.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         
         self.n = n
         self.t_start = t_start
@@ -85,20 +82,28 @@ class WienerProcess(Input):
         else:
             rng = brainstate.random.RandomState(self.seed)
         
-        t_start = 0. if self.t_start is None else self.t_start
+        # Get dt unit
+        dt_unit = u.get_unit(self.dt)
+        dt_value = u.get_magnitude(self.dt)
+        
+        t_start = 0. * dt_unit if self.t_start is None else self.t_start
         t_end = self.duration if self.t_end is None else self.t_end
+        
+        # Convert to same unit as dt
+        t_start_value = u.Quantity(t_start).to(dt_unit).mantissa if hasattr(t_start, 'unit') else t_start
+        t_end_value = u.Quantity(t_end).to(dt_unit).mantissa if hasattr(t_end, 'unit') else t_end
         
         currents = u.math.zeros((self.n_steps, self.n), dtype=brainstate.environ.dftype())
         
-        start_i = int(t_start / self.dt)
-        end_i = int(t_end / self.dt)
+        start_i = int(t_start_value / dt_value)
+        end_i = int(t_end_value / dt_value)
         
         # Generate Wiener increments
-        dt_sqrt = u.math.sqrt(self.dt)
+        dt_sqrt = u.math.sqrt(u.get_magnitude(self.dt))
         wiener = rng.standard_normal((end_i - start_i, self.n)) * self.sigma * dt_sqrt
         
         # Cumulative sum to get Wiener process
-        wiener_cumsum = u.math.cumsum(wiener, axis=0)
+        wiener_cumsum = np.cumsum(wiener, axis=0)
         currents = currents.at[start_i:end_i].set(wiener_cumsum)
         
         return currents
@@ -123,7 +128,6 @@ class OUProcess(Input):
                  n: int = 1,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None,
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  seed: Optional[int] = None):
         """Initialize OU process.
         
@@ -143,12 +147,10 @@ class OUProcess(Input):
             Start time.
         t_end : float or Quantity, optional
             End time.
-        dt : float or Quantity, optional
-            Numerical precision.
         seed : int, optional
             Random seed.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         
         self.mean = mean
         self.sigma = sigma
@@ -165,13 +167,21 @@ class OUProcess(Input):
         else:
             rng = brainstate.random.RandomState(self.seed)
         
-        t_start = 0. if self.t_start is None else self.t_start
+        # Get dt unit
+        dt_unit = u.get_unit(self.dt)
+        dt_value = u.get_magnitude(self.dt)
+        
+        t_start = 0. * dt_unit if self.t_start is None else self.t_start
         t_end = self.duration if self.t_end is None else self.t_end
+        
+        # Convert to same unit as dt
+        t_start_value = u.Quantity(t_start).to(dt_unit).mantissa if hasattr(t_start, 'unit') else t_start
+        t_end_value = u.Quantity(t_end).to(dt_unit).mantissa if hasattr(t_end, 'unit') else t_end
         
         currents = u.math.zeros((self.n_steps, self.n), dtype=brainstate.environ.dftype())
         
-        start_i = int(t_start / self.dt)
-        end_i = int(t_end / self.dt)
+        start_i = int(t_start_value / dt_value)
+        end_i = int(t_end_value / dt_value)
         
         # Generate OU process
         dt_over_tau = self.dt / self.tau
@@ -186,6 +196,9 @@ class OUProcess(Input):
         
         currents = currents.at[start_i:end_i].set(ou_values)
         
+        # Squeeze if n=1 for consistency with functional API
+        if self.n == 1:
+            return u.math.squeeze(currents, axis=-1)
         return currents
 
 
@@ -206,7 +219,6 @@ class PoissonInput(Input):
                  n: int = 1,
                  t_start: Optional[Union[float, u.Quantity]] = None,
                  t_end: Optional[Union[float, u.Quantity]] = None,
-                 dt: Optional[Union[float, u.Quantity]] = None,
                  seed: Optional[int] = None):
         """Initialize Poisson input.
         
@@ -222,12 +234,10 @@ class PoissonInput(Input):
             Start time.
         t_end : float or Quantity, optional
             End time.
-        dt : float or Quantity, optional
-            Numerical precision.
         seed : int, optional
             Random seed.
         """
-        super().__init__(duration, dt)
+        super().__init__(duration)
         assert rate.unit.dim == u.Hz.dim, f'Rate must be in Hz. Got {rate.unit}.'
         
         self.rate = rate
@@ -243,17 +253,28 @@ class PoissonInput(Input):
         else:
             rng = brainstate.random.RandomState(self.seed)
         
-        t_start = 0. * u.ms if self.t_start is None else self.t_start
+        # Get dt unit
+        dt_unit = u.get_unit(self.dt)
+        dt_value = u.get_magnitude(self.dt)
+        
+        t_start = 0. * dt_unit if self.t_start is None else self.t_start
         t_end = self.duration if self.t_end is None else self.t_end
+        
+        # Convert to same unit as dt
+        t_start_value = u.Quantity(t_start).to(dt_unit).mantissa if hasattr(t_start, 'unit') else t_start
+        t_end_value = u.Quantity(t_end).to(dt_unit).mantissa if hasattr(t_end, 'unit') else t_end
         
         currents = u.math.zeros((self.n_steps, self.n), dtype=brainstate.environ.dftype())
         
-        start_i = int(t_start / self.dt)
-        end_i = int(t_end / self.dt)
+        start_i = int(t_start_value / dt_value)
+        end_i = int(t_end_value / dt_value)
         
         # Generate Poisson spikes
         spike_prob = self.rate * self.dt
         spikes = rng.random((end_i - start_i, self.n)) < spike_prob
         currents = currents.at[start_i:end_i].set(spikes.astype(brainstate.environ.dftype()))
         
+        # Squeeze if n=1 for consistency with functional API
+        if self.n == 1:
+            return u.math.squeeze(currents, axis=-1)
         return currents

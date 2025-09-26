@@ -44,24 +44,24 @@ Functional API Example:
 """
 
 # Import functional API for backward compatibility
-from ._basic import *
-from ._basic import __all__ as basic_all2
+from ._functional_basic import *
+from ._functional_basic import __all__ as basic_all2
 # Import base classes for composable API
 from ._composable_base import *
 from ._composable_base import __all__ as base_all
 # Import composable classes
 from ._composable_basic import *
 from ._composable_basic import __all__ as basic_all
-from ._pulses import *
-from ._pulses import __all__ as pulses_all2
+from ._functional_pulses import *
+from ._functional_pulses import __all__ as pulses_all2
 from ._composable_pulses import *
 from ._composable_pulses import __all__ as pulses_all
-from ._stochastic import *
-from ._stochastic import __all__ as stochastic_all2
+from ._functional_stochastic import *
+from ._functional_stochastic import __all__ as stochastic_all2
 from ._composable_stochastic import *
 from ._composable_stochastic import __all__ as stochastic_all
-from ._waveforms import *
-from ._waveforms import __all__ as waveforms_all2
+from ._functional_waveforms import *
+from ._functional_waveforms import __all__ as waveforms_all2
 from ._composable_waveforms import *
 from ._composable_waveforms import __all__ as waveforms_all
 
