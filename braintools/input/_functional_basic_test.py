@@ -45,8 +45,8 @@ class TestBasicInputs(TestCase):
     def test_section(self):
         with brainstate.environ.context(dt=0.1):
             current1, duration = section(values=[0, 1., 0.],
-                                               durations=[100, 300, 100],
-                                               return_length=True)
+                                         durations=[100, 300, 100],
+                                         return_length=True)
             show(current1, duration, 'values=[0, 1, 0], durations=[100, 300, 100]')
             self.assertEqual(current1.shape[0], 5000)
 
@@ -54,7 +54,7 @@ class TestBasicInputs(TestCase):
         with brainstate.environ.context(dt=0.1):
             brainstate.random.seed(123)
             current = section(values=[0, jnp.ones(10), brainstate.random.random((3, 10))],
-                                    durations=[100, 300, 100])
+                              durations=[100, 300, 100])
             self.assertTrue(current.shape == (5000, 3, 10))
 
     def test_section_different_dt(self):

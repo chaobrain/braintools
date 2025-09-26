@@ -733,6 +733,7 @@ class Composite(Input):
         >>> multiplied = ramp * sine
         >>> maximum = ramp | sine  # Uses 'max' operator
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, input1: Input, input2: Input, operator: str):
         """Initialize a composite input.
@@ -807,6 +808,7 @@ class ConstantValue(Input):
         >>> # Direct construction
         >>> baseline = ConstantValue(0.1, 500 * u.ms)
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, value: float, duration: Union[float, u.Quantity]):
         super().__init__(duration)
@@ -845,6 +847,7 @@ class Sequential(Input):
         >>> # Direct construction
         >>> two_phase = Sequential(baseline, stimulus)
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, *inputs):
         # Total duration is sum of both durations
@@ -889,6 +892,7 @@ class TimeShifted(Input):
         >>> # Usually created via shift() method
         >>> delayed = pulse.shift(100 * u.ms)
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, input_obj: Input, time_shift: Union[float, u.Quantity]):
         """Initialize time-shifted input.
@@ -956,6 +960,7 @@ class Clipped(Input):
         >>> # Usually created via clip() method
         >>> saturated = ramp.clip(0, 1)
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, input_obj: Input, min_val: Optional[float] = None,
                  max_val: Optional[float] = None):
@@ -1025,6 +1030,7 @@ class Smoothed(Input):
         >>> # Usually created via smooth() method
         >>> smooth = steps.smooth(10 * u.ms)
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, input_obj: Input, tau: Union[float, u.Quantity]):
         """Initialize smoothed input.
@@ -1087,6 +1093,7 @@ class Repeated(Input):
         >>> # Usually created via repeat() method
         >>> train = burst.repeat(10)
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, input_obj: Input, n_times: int):
         """Initialize repeated input.
@@ -1144,6 +1151,7 @@ class Transformed(Input):
         >>> # Usually created via apply() method
         >>> transformed = sine.apply(lambda x: jnp.abs(x))
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, input_obj: Input, func: Callable):
         """Initialize transformed input.

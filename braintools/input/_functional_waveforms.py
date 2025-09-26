@@ -24,6 +24,8 @@ from typing import Optional
 import brainstate
 import brainunit as u
 import numpy as np
+
+from braintools._misc import set_module_as
 from ._deprecation import create_deprecated_function
 
 __all__ = [
@@ -36,6 +38,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.input')
 def sinusoidal(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
@@ -162,32 +165,32 @@ def sinusoidal(
     # Get dt and time unit
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     # Convert to mantissa values
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Check frequency unit
     freq_unit = u.get_unit(frequency)
     assert freq_unit.dim == u.Hz.dim, f'Frequency must be in Hz. Got {freq_unit}.'
     freq_value = u.Quantity(frequency).to(u.Hz).mantissa
-    
+
     # Extract amplitude and unit
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
-    
+
     # Calculate indices
     n_steps = int(np.ceil(duration_value / dt_value))
     start_i = int(t_start_value / dt_value)
     end_i = int(t_end_value / dt_value)
-    
+
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
-    
+
     # Generate sinusoidal wave
     # Convert frequency from Hz to match time unit
     if time_unit == u.ms:
@@ -197,35 +200,37 @@ def sinusoidal(
     else:
         # General conversion
         freq_factor = freq_value * u.Quantity(1 * time_unit).to(u.second).mantissa
-    
+
     sin_values = amplitude_value * np.sin(2 * np.pi * freq_factor * times)
-    
+
     if bias:
         sin_values += amplitude_value
-    
+
     # Create full array with zeros outside window
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
     currents[start_i:end_i] = sin_values
-    
+
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def _square_wave(t, duty=0.5):
     """Helper function to generate square wave."""
     t = np.asarray(t)
     y = np.zeros(t.shape, dtype=brainstate.environ.dftype())
-    
+
     # Calculate phase in [0, 2*pi]
     tmod = np.mod(t, 2 * np.pi)
-    
+
     # Set to 1 for first part of period, -1 for second part
     mask_positive = tmod < (duty * 2 * np.pi)
     y[mask_positive] = 1
     y[~mask_positive] = -1
-    
+
     return y
 
 
+@set_module_as('braintools.input')
 def square(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
@@ -359,36 +364,36 @@ def square(
     # Validate duty cycle
     if not 0 <= duty_cycle <= 1:
         raise ValueError(f"duty_cycle must be between 0 and 1, got {duty_cycle}")
-    
+
     # Get dt and time unit
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     # Convert to mantissa values
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Check frequency unit
     freq_unit = u.get_unit(frequency)
     assert freq_unit.dim == u.Hz.dim, f'Frequency must be in Hz. Got {freq_unit}.'
     freq_value = u.Quantity(frequency).to(u.Hz).mantissa
-    
+
     # Extract amplitude and unit
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
-    
+
     # Calculate indices
     n_steps = int(np.ceil(duration_value / dt_value))
     start_i = int(t_start_value / dt_value)
     end_i = int(t_end_value / dt_value)
-    
+
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
-    
+
     # Convert frequency to match time unit
     if time_unit == u.ms:
         freq_factor = freq_value / 1000.0  # Hz to kHz for ms
@@ -396,21 +401,22 @@ def square(
         freq_factor = freq_value
     else:
         freq_factor = freq_value * u.Quantity(1 * time_unit).to(u.second).mantissa
-    
+
     # Generate square wave
     phase = 2 * np.pi * freq_factor * times
     square_values = amplitude_value * _square_wave(phase, duty=duty_cycle)
-    
+
     if bias:
         square_values += amplitude_value
-    
+
     # Create full array with zeros outside window
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
     currents[start_i:end_i] = square_values
-    
+
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def triangular(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
@@ -535,32 +541,32 @@ def triangular(
     # Get dt and time unit
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     # Convert to mantissa values
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Check frequency unit
     freq_unit = u.get_unit(frequency)
     assert freq_unit.dim == u.Hz.dim, f'Frequency must be in Hz. Got {freq_unit}.'
     freq_value = u.Quantity(frequency).to(u.Hz).mantissa
-    
+
     # Extract amplitude and unit
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
-    
+
     # Calculate indices
     n_steps = int(np.ceil(duration_value / dt_value))
     start_i = int(t_start_value / dt_value)
     end_i = int(t_end_value / dt_value)
-    
+
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
-    
+
     # Convert frequency to match time unit
     if time_unit == u.ms:
         freq_factor = freq_value / 1000.0
@@ -568,21 +574,22 @@ def triangular(
         freq_factor = freq_value
     else:
         freq_factor = freq_value * u.Quantity(1 * time_unit).to(u.second).mantissa
-    
+
     # Generate triangular wave using arcsin(sin(x))
     phase = 2 * np.pi * freq_factor * times
     triangular_values = (2.0 * amplitude_value / np.pi) * np.arcsin(np.sin(phase))
-    
+
     if bias:
         triangular_values += amplitude_value
-    
+
     # Create full array with zeros outside window
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
     currents[start_i:end_i] = triangular_values
-    
+
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def sawtooth(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
@@ -706,32 +713,32 @@ def sawtooth(
     # Get dt and time unit
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     # Convert to mantissa values
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Check frequency unit
     freq_unit = u.get_unit(frequency)
     assert freq_unit.dim == u.Hz.dim, f'Frequency must be in Hz. Got {freq_unit}.'
     freq_value = u.Quantity(frequency).to(u.Hz).mantissa
-    
+
     # Extract amplitude and unit
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
-    
+
     # Calculate indices
     n_steps = int(np.ceil(duration_value / dt_value))
     start_i = int(t_start_value / dt_value)
     end_i = int(t_end_value / dt_value)
-    
+
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
-    
+
     # Convert frequency to match time unit
     if time_unit == u.ms:
         freq_factor = freq_value / 1000.0
@@ -739,21 +746,22 @@ def sawtooth(
         freq_factor = freq_value
     else:
         freq_factor = freq_value * u.Quantity(1 * time_unit).to(u.second).mantissa
-    
+
     # Generate sawtooth wave
     phase = freq_factor * times
     sawtooth_values = 2 * amplitude_value * (phase - np.floor(phase) - 0.5)
-    
+
     if bias:
         sawtooth_values += amplitude_value
-    
+
     # Create full array with zeros outside window
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
     currents[start_i:end_i] = sawtooth_values
-    
+
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def chirp(
     amplitude: brainstate.typing.ArrayLike,
     f_start: brainstate.typing.ArrayLike,
@@ -896,41 +904,41 @@ def chirp(
     # Check method
     if method not in ['linear', 'logarithmic']:
         raise ValueError(f"method must be 'linear' or 'logarithmic', got {method}")
-    
+
     # Get dt and time unit
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     # Convert to mantissa values
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Check frequency units
     f_start_unit = u.get_unit(f_start)
     f_end_unit = u.get_unit(f_end)
     assert f_start_unit.dim == u.Hz.dim, f'Start frequency must be in Hz. Got {f_start_unit}.'
     assert f_end_unit.dim == u.Hz.dim, f'End frequency must be in Hz. Got {f_end_unit}.'
-    
+
     f_start_value = u.Quantity(f_start).to(u.Hz).mantissa
     f_end_value = u.Quantity(f_end).to(u.Hz).mantissa
-    
+
     # Extract amplitude and unit
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
-    
+
     # Calculate indices
     n_steps = int(np.ceil(duration_value / dt_value))
     start_i = int(t_start_value / dt_value)
     end_i = int(t_end_value / dt_value)
-    
+
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
     sweep_duration = t_end_value - t_start_value
-    
+
     # Convert frequencies to match time unit
     if time_unit == u.ms:
         f0 = f_start_value / 1000.0  # Hz to kHz
@@ -942,30 +950,31 @@ def chirp(
         time_factor = u.Quantity(1 * time_unit).to(u.second).mantissa
         f0 = f_start_value * time_factor
         f1 = f_end_value * time_factor
-    
+
     # Generate chirp based on method
     if method == 'linear':
         # Linear chirp: f(t) = f0 + (f1-f0)*t/T
-        phase = 2 * np.pi * (f0 * times + 0.5 * (f1 - f0) * times**2 / sweep_duration)
+        phase = 2 * np.pi * (f0 * times + 0.5 * (f1 - f0) * times ** 2 / sweep_duration)
     else:  # logarithmic
         # Logarithmic chirp
         if f0 <= 0 or f1 <= 0:
             raise ValueError("Logarithmic chirp requires positive frequencies")
         k = (f1 / f0) ** (1 / sweep_duration)
-        phase = 2 * np.pi * f0 * (k**times - 1) / np.log(k)
-    
+        phase = 2 * np.pi * f0 * (k ** times - 1) / np.log(k)
+
     chirp_values = amplitude_value * np.sin(phase)
-    
+
     if bias:
         chirp_values += amplitude_value
-    
+
     # Create full array with zeros outside window
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
     currents[start_i:end_i] = chirp_values
-    
+
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def noisy_sinusoidal(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
@@ -1102,36 +1111,36 @@ def noisy_sinusoidal(
     # Get dt and time unit
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     # Convert to mantissa values
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Check frequency unit
     freq_unit = u.get_unit(frequency)
     assert freq_unit.dim == u.Hz.dim, f'Frequency must be in Hz. Got {freq_unit}.'
     freq_value = u.Quantity(frequency).to(u.Hz).mantissa
-    
+
     # Extract amplitude and unit
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
     noise_amplitude_value = u.Quantity(noise_amplitude).to(c_unit).mantissa
-    
+
     # Setup random number generator
     rng = np.random if seed is None else np.random.RandomState(seed)
-    
+
     # Calculate indices
     n_steps = int(np.ceil(duration_value / dt_value))
     start_i = int(t_start_value / dt_value)
     end_i = int(t_end_value / dt_value)
-    
+
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
-    
+
     # Convert frequency to match time unit
     if time_unit == u.ms:
         freq_factor = freq_value / 1000.0
@@ -1139,19 +1148,20 @@ def noisy_sinusoidal(
         freq_factor = freq_value
     else:
         freq_factor = freq_value * u.Quantity(1 * time_unit).to(u.second).mantissa
-    
+
     # Generate sinusoidal component
     sin_component = amplitude_value * np.sin(2 * np.pi * freq_factor * times)
-    
+
     # Add noise
     noise = noise_amplitude_value * rng.standard_normal(len(times))
     noisy_signal = sin_component + noise
-    
+
     # Create full array with zeros outside window
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
     currents[start_i:end_i] = noisy_signal
-    
+
     return u.maybe_decimal(currents * c_unit)
+
 
 sinusoidal_input = create_deprecated_function(sinusoidal, 'sinusoidal_input', 'sinusoidal')
 square_input = create_deprecated_function(square, 'square_input', 'square')

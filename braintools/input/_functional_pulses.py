@@ -23,8 +23,9 @@ from typing import Optional, Union, Sequence
 
 import brainstate
 import brainunit as u
-import jax
 import numpy as np
+
+from braintools._misc import set_module_as
 from ._deprecation import create_deprecated_function
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.input')
 def spike(
     sp_times: Sequence,
     sp_lens: Union[float, Sequence],
@@ -167,6 +169,7 @@ def spike(
     return u.maybe_decimal(current * c_unit)
 
 
+@set_module_as('braintools.input')
 def gaussian_pulse(
     amplitude: brainstate.typing.ArrayLike,
     center: brainstate.typing.ArrayLike,
@@ -280,6 +283,7 @@ def gaussian_pulse(
     return u.maybe_decimal(gaussian * c_unit)
 
 
+@set_module_as('braintools.input')
 def exponential_decay(
     amplitude: brainstate.typing.ArrayLike,
     tau: brainstate.typing.ArrayLike,
@@ -405,6 +409,7 @@ def exponential_decay(
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def double_exponential(
     amplitude: brainstate.typing.ArrayLike,
     tau_rise: brainstate.typing.ArrayLike,
@@ -553,6 +558,7 @@ def double_exponential(
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def burst(
     burst_amp: brainstate.typing.ArrayLike,
     burst_freq: brainstate.typing.ArrayLike,

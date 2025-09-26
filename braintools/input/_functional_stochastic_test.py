@@ -28,6 +28,7 @@ from braintools.input import wiener_process, ou_process, poisson
 
 block = False
 
+
 def show(current, duration, title=''):
     if plt is not None:
         dt_value = u.get_magnitude(brainstate.environ.get_dt())
@@ -208,9 +209,9 @@ class TestStochasticInputs(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 500 * u.ms
             current = poisson(rate=20 * u.Hz,
-                                    duration=duration,
-                                    amplitude=1 * u.pA,
-                                    n=3)
+                              duration=duration,
+                              amplitude=1 * u.pA,
+                              n=3)
             show(current, duration, 'Poisson Input (20 Hz)')
             self.assertEqual(current.shape, (5000, 3))
 
@@ -218,9 +219,9 @@ class TestStochasticInputs(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 300 * u.ms
             current = poisson(rate=100 * u.Hz,
-                                    duration=duration,
-                                    amplitude=0.5 * u.nA,
-                                    n=2)
+                              duration=duration,
+                              amplitude=0.5 * u.nA,
+                              n=2)
             show(current, duration, 'Poisson Input (High Rate: 100 Hz)')
             self.assertEqual(current.shape, (3000, 2))
 
@@ -228,11 +229,11 @@ class TestStochasticInputs(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 600 * u.ms
             current = poisson(rate=30 * u.Hz,
-                                    duration=duration,
-                                    amplitude=2 * u.pA,
-                                    n=1,
-                                    t_start=100 * u.ms,
-                                    t_end=500 * u.ms)
+                              duration=duration,
+                              amplitude=2 * u.pA,
+                              n=1,
+                              t_start=100 * u.ms,
+                              t_end=500 * u.ms)
             show(current, duration, 'Poisson Input with Time Window')
             self.assertEqual(current.shape[0], 6000)
 
@@ -247,15 +248,15 @@ class TestStochasticInputs(TestCase):
             duration = 200 * u.ms
             # Test reproducibility
             current1 = poisson(rate=50 * u.Hz,
-                                     duration=duration,
-                                     amplitude=1 * u.nA,
-                                     n=4,
-                                     seed=456)
+                               duration=duration,
+                               amplitude=1 * u.nA,
+                               n=4,
+                               seed=456)
             current2 = poisson(rate=50 * u.Hz,
-                                     duration=duration,
-                                     amplitude=1 * u.nA,
-                                     n=4,
-                                     seed=456)
+                               duration=duration,
+                               amplitude=1 * u.nA,
+                               n=4,
+                               seed=456)
             assert u.math.allclose(current1, current2)
 
     def test_poisson_from_docstring(self):

@@ -27,8 +27,8 @@ from typing import Optional
 import brainstate
 import brainunit as u
 
-from ._composable_base import Input
 from . import _functional_stochastic as functional
+from ._composable_base import Input
 from ._deprecation import create_deprecated_class
 
 ArrayLike = brainstate.typing.ArrayLike
@@ -163,6 +163,7 @@ class WienerProcess(Input):
     Poisson : Poisson spike train generator
     wiener_process : Functional API for Wiener process
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  duration: ArrayLike,
@@ -369,6 +370,7 @@ class OUProcess(Input):
     Poisson : Poisson spike train generator
     ou_process : Functional API for OU process
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  mean: float,
@@ -574,6 +576,7 @@ class Poisson(Input):
     OUProcess : Ornstein-Uhlenbeck process
     poisson : Functional API for Poisson input
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  rate: u.Quantity,

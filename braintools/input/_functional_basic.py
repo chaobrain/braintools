@@ -175,6 +175,7 @@ def section(
         return currents
 
 
+@set_module_as('braintools.input')
 def constant(I_and_duration):
     """Format constant input currents with specified durations.
 
@@ -304,6 +305,7 @@ def constant(I_and_duration):
     return currents, I_duration
 
 
+@set_module_as('braintools.input')
 def step(
     amplitudes,
     step_times,
@@ -443,6 +445,7 @@ def step(
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def ramp(
     c_start: brainstate.typing.ArrayLike,
     c_end: brainstate.typing.ArrayLike,
