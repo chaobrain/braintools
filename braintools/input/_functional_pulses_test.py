@@ -24,8 +24,7 @@ import brainunit as u
 import matplotlib.pyplot as plt
 import numpy as np
 
-from braintools.input._functional_pulses import (spike_input, gaussian_pulse, exponential_decay,
-                                                 double_exponential, burst_input)
+from braintools.input import (spike_input, gaussian_pulse, exponential_decay, double_exponential, burst_input)
 
 block = False
 

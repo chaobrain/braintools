@@ -33,8 +33,6 @@ from braintools.input._composable_pulses import GaussianPulse
 
 block = False
 
-brainstate.environ.set(dt=0.1 * u.ms)
-
 
 def show(current, duration, title=''):
     if plt is not None:
@@ -356,69 +354,74 @@ class TestSawtoothInput(TestCase):
 
     def test_fast_reset(self):
         """Test fast reset sawtooth from docstring example."""
-        reset_test = SawtoothInput(
-            amplitude=20.0,
-            frequency=20 * u.Hz,
-            duration=250 * u.ms
-        )
-        signal = reset_test()
-        self.assertEqual(signal.shape[0], 2500)
-        show(signal, 250 * u.ms, 'Fast Reset Sawtooth')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            reset_test = SawtoothInput(
+                amplitude=20.0,
+                frequency=20 * u.Hz,
+                duration=250 * u.ms
+            )
+            signal = reset_test()
+            self.assertEqual(signal.shape[0], 2500)
+            show(signal, 250 * u.ms, 'Fast Reset Sawtooth')
 
     def test_repeated_ramp(self):
         """Test repeated ramp protocol from docstring example."""
-        ramp_protocol = SawtoothInput(
-            amplitude=100.0,
-            frequency=1 * u.Hz,
-            duration=10000 * u.ms
-        )
-        signal = ramp_protocol()
-        self.assertEqual(signal.shape[0], 100000)
-        # Show only first 2 seconds for clarity
-        show(signal[:20000], 2000 * u.ms, 'Repeated Ramp Protocol (first 2s)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            ramp_protocol = SawtoothInput(
+                amplitude=100.0,
+                frequency=1 * u.Hz,
+                duration=10000 * u.ms
+            )
+            signal = ramp_protocol()
+            self.assertEqual(signal.shape[0], 100000)
+            # Show only first 2 seconds for clarity
+            show(signal[:20000], 2000 * u.ms, 'Repeated Ramp Protocol (first 2s)')
 
     def test_positive_bias_sawtooth(self):
         """Test sawtooth with positive bias from docstring example."""
-        positive_saw = SawtoothInput(
-            amplitude=5.0,
-            frequency=4 * u.Hz,
-            duration=500 * u.ms,
-            bias=True  # Ramps from 0 to 10
-        )
-        signal = positive_saw()
-        self.assertEqual(signal.shape[0], 5000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            positive_saw = SawtoothInput(
+                amplitude=5.0,
+                frequency=4 * u.Hz,
+                duration=500 * u.ms,
+                bias=True  # Ramps from 0 to 10
+            )
+            signal = positive_saw()
+            self.assertEqual(signal.shape[0], 5000)
 
-        # Check non-negative values
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag >= -0.01))
-        show(signal, 500 * u.ms, 'Positive Bias Sawtooth')
+            # Check non-negative values
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag >= -0.01))
+            show(signal, 500 * u.ms, 'Positive Bias Sawtooth')
 
     def test_modulated_sawtooth(self):
         """Test modulated sawtooth from docstring example."""
-        saw = SawtoothInput(2.0, 5 * u.Hz, 1000 * u.ms)
-        modulation = SinusoidalInput(0.5, 1 * u.Hz, 1000 * u.ms, bias=True)
-        modulated = saw * modulation
-        signal = modulated()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Modulated Sawtooth')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            saw = SawtoothInput(2.0, 5 * u.Hz, 1000 * u.ms)
+            modulation = SinusoidalInput(0.5, 1 * u.Hz, 1000 * u.ms, bias=True)
+            modulated = saw * modulation
+            signal = modulated()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Modulated Sawtooth')
 
     def test_windowed_sawtooth(self):
         """Test windowed sawtooth from docstring example."""
-        windowed_saw = SawtoothInput(
-            amplitude=8.0,
-            frequency=3 * u.Hz,
-            duration=2000 * u.ms,
-            t_start=400 * u.ms,
-            t_end=1600 * u.ms
-        )
-        signal = windowed_saw()
-        self.assertEqual(signal.shape[0], 20000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            windowed_saw = SawtoothInput(
+                amplitude=8.0,
+                frequency=3 * u.Hz,
+                duration=2000 * u.ms,
+                t_start=400 * u.ms,
+                t_end=1600 * u.ms
+            )
+            signal = windowed_saw()
+            self.assertEqual(signal.shape[0], 20000)
 
-        # Check windowing
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag[:4000] == 0))
-        self.assertTrue(np.all(signal_mag[16000:] == 0))
-        show(signal, 2000 * u.ms, 'Windowed Sawtooth')
+            # Check windowing
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag[:4000] == 0))
+            self.assertTrue(np.all(signal_mag[16000:] == 0))
+            show(signal, 2000 * u.ms, 'Windowed Sawtooth')
 
 
 class TestChirpInput(TestCase):
@@ -426,117 +429,126 @@ class TestChirpInput(TestCase):
 
     def test_linear_chirp(self):
         """Test linear frequency sweep from docstring example."""
-        chirp = ChirpInput(
-            amplitude=1.0,
-            f_start=1 * u.Hz,
-            f_end=50 * u.Hz,
-            duration=2000 * u.ms,
-            method='linear'
-        )
-        signal = chirp()
-        self.assertEqual(signal.shape[0], 20000)
-        show(signal, 2000 * u.ms, 'Linear Chirp (1-50 Hz)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            chirp = ChirpInput(
+                amplitude=1.0,
+                f_start=1 * u.Hz,
+                f_end=50 * u.Hz,
+                duration=2000 * u.ms,
+                method='linear'
+            )
+            signal = chirp()
+            self.assertEqual(signal.shape[0], 20000)
+            show(signal, 2000 * u.ms, 'Linear Chirp (1-50 Hz)')
 
     def test_logarithmic_chirp(self):
         """Test logarithmic sweep from docstring example."""
-        log_chirp = ChirpInput(
-            amplitude=2.0,
-            f_start=0.1 * u.Hz,
-            f_end=100 * u.Hz,
-            duration=5000 * u.ms,
-            method='logarithmic'
-        )
-        signal = log_chirp()
-        self.assertEqual(signal.shape[0], 50000)
-        show(signal[:20000], 2000 * u.ms, 'Logarithmic Chirp (first 2s)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            log_chirp = ChirpInput(
+                amplitude=2.0,
+                f_start=0.1 * u.Hz,
+                f_end=100 * u.Hz,
+                duration=5000 * u.ms,
+                method='logarithmic'
+            )
+            signal = log_chirp()
+            self.assertEqual(signal.shape[0], 50000)
+            show(signal[:20000], 2000 * u.ms, 'Logarithmic Chirp (first 2s)')
 
     def test_repeated_chirp(self):
         """Test repeated chirp from docstring example."""
-        chirp = ChirpInput(1.0, 1 * u.Hz, 10 * u.Hz, 500 * u.ms)
-        repeated = chirp.repeat(3)  # Repeat 3 times
-        signal = repeated()
-        self.assertEqual(signal.shape[0], 15000)  # 3 * 500ms
-        show(signal, 1500 * u.ms, 'Repeated Chirp (3x)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            chirp = ChirpInput(1.0, 1 * u.Hz, 10 * u.Hz, 500 * u.ms)
+            repeated = chirp.repeat(3)  # Repeat 3 times
+            signal = repeated()
+            self.assertEqual(signal.shape[0], 15000)  # 3 * 500ms
+            show(signal, 1500 * u.ms, 'Repeated Chirp (3x)')
 
     def test_reverse_chirp(self):
         """Test reverse chirp from docstring example."""
-        reverse_chirp = ChirpInput(
-            amplitude=3.0,
-            f_start=100 * u.Hz,
-            f_end=1 * u.Hz,
-            duration=2000 * u.ms
-        )
-        signal = reverse_chirp()
-        self.assertEqual(signal.shape[0], 20000)
-        show(signal, 2000 * u.ms, 'Reverse Chirp (100-1 Hz)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            reverse_chirp = ChirpInput(
+                amplitude=3.0,
+                f_start=100 * u.Hz,
+                f_end=1 * u.Hz,
+                duration=2000 * u.ms
+            )
+            signal = reverse_chirp()
+            self.assertEqual(signal.shape[0], 20000)
+            show(signal, 2000 * u.ms, 'Reverse Chirp (100-1 Hz)')
 
     def test_resonance_test_chirp(self):
         """Test theta-gamma resonance test from docstring example."""
-        resonance_test = ChirpInput(
-            amplitude=1.0,
-            f_start=4 * u.Hz,   # Theta start
-            f_end=80 * u.Hz,    # Gamma end
-            duration=10000 * u.ms,
-            method='logarithmic'
-        )
-        signal = resonance_test()
-        self.assertEqual(signal.shape[0], 100000)
-        # Show only first 2 seconds for clarity
-        show(signal[:20000], 2000 * u.ms, 'Theta-Gamma Resonance Test (first 2s)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            resonance_test = ChirpInput(
+                amplitude=1.0,
+                f_start=4 * u.Hz,   # Theta start
+                f_end=80 * u.Hz,    # Gamma end
+                duration=10000 * u.ms,
+                method='logarithmic'
+            )
+            signal = resonance_test()
+            self.assertEqual(signal.shape[0], 100000)
+            # Show only first 2 seconds for clarity
+            show(signal[:20000], 2000 * u.ms, 'Theta-Gamma Resonance Test (first 2s)')
 
     def test_windowed_chirp(self):
         """Test windowed chirp from docstring example."""
-        windowed_chirp = ChirpInput(
-            amplitude=2.0,
-            f_start=2 * u.Hz,
-            f_end=40 * u.Hz,
-            duration=3000 * u.ms,
-            t_start=500 * u.ms,
-            t_end=2500 * u.ms
-        )
-        signal = windowed_chirp()
-        self.assertEqual(signal.shape[0], 30000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            windowed_chirp = ChirpInput(
+                amplitude=2.0,
+                f_start=2 * u.Hz,
+                f_end=40 * u.Hz,
+                duration=3000 * u.ms,
+                t_start=500 * u.ms,
+                t_end=2500 * u.ms
+            )
+            signal = windowed_chirp()
+            self.assertEqual(signal.shape[0], 30000)
 
-        # Check windowing
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag[:5000] == 0))
-        self.assertTrue(np.all(signal_mag[25000:] == 0))
-        show(signal, 3000 * u.ms, 'Windowed Chirp')
+            # Check windowing
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag[:5000] == 0))
+            self.assertTrue(np.all(signal_mag[25000:] == 0))
+            show(signal, 3000 * u.ms, 'Windowed Chirp')
 
     def test_chirp_with_envelope(self):
         """Test chirp with amplitude envelope from docstring example."""
-        chirp = ChirpInput(1.0, 5 * u.Hz, 50 * u.Hz, 1000 * u.ms)
-        envelope = RampInput(0.1, 1.0, 1000 * u.ms)
-        ramped_chirp = chirp * envelope
-        signal = ramped_chirp()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Chirp with Ramp Envelope')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            chirp = ChirpInput(1.0, 5 * u.Hz, 50 * u.Hz, 1000 * u.ms)
+            envelope = RampInput(0.1, 1.0, 1000 * u.ms)
+            ramped_chirp = chirp * envelope
+            signal = ramped_chirp()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Chirp with Ramp Envelope')
 
     def test_broadband_chirp(self):
         """Test broadband chirp from docstring example."""
-        low_chirp = ChirpInput(1.0, 0.5 * u.Hz, 5 * u.Hz, 2000 * u.ms)
-        high_chirp = ChirpInput(0.5, 20 * u.Hz, 100 * u.Hz, 2000 * u.ms)
-        broadband = low_chirp + high_chirp
-        signal = broadband()
-        self.assertEqual(signal.shape[0], 20000)
-        show(signal, 2000 * u.ms, 'Broadband Chirp')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            low_chirp = ChirpInput(1.0, 0.5 * u.Hz, 5 * u.Hz, 2000 * u.ms)
+            high_chirp = ChirpInput(0.5, 20 * u.Hz, 100 * u.Hz, 2000 * u.ms)
+            broadband = low_chirp + high_chirp
+            signal = broadband()
+            self.assertEqual(signal.shape[0], 20000)
+            show(signal, 2000 * u.ms, 'Broadband Chirp')
 
     def test_positive_bias_chirp(self):
         """Test chirp with positive bias from docstring example."""
-        positive_chirp = ChirpInput(
-            amplitude=5.0,
-            f_start=10 * u.Hz,
-            f_end=30 * u.Hz,
-            duration=1000 * u.ms,
-            bias=True  # Always positive
-        )
-        signal = positive_chirp()
-        self.assertEqual(signal.shape[0], 10000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            positive_chirp = ChirpInput(
+                amplitude=5.0,
+                f_start=10 * u.Hz,
+                f_end=30 * u.Hz,
+                duration=1000 * u.ms,
+                bias=True  # Always positive
+            )
+            signal = positive_chirp()
+            self.assertEqual(signal.shape[0], 10000)
 
-        # Check non-negative values
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag >= -0.01))
-        show(signal, 1000 * u.ms, 'Positive Bias Chirp')
+            # Check non-negative values
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag >= -0.01))
+            show(signal, 1000 * u.ms, 'Positive Bias Chirp')
 
 
 class TestNoisySinusoidalInput(TestCase):
@@ -544,122 +556,131 @@ class TestNoisySinusoidalInput(TestCase):
 
     def test_small_noise(self):
         """Test sinusoid with small noise from docstring example."""
-        noisy = NoisySinusoidalInput(
-            amplitude=10.0,
-            frequency=10 * u.Hz,
-            noise_amplitude=1.0,  # 10% noise
-            duration=1000 * u.ms
-        )
-        signal = noisy()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Sinusoid with Small Noise')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            noisy = NoisySinusoidalInput(
+                amplitude=10.0,
+                frequency=10 * u.Hz,
+                noise_amplitude=1.0,  # 10% noise
+                duration=1000 * u.ms
+            )
+            signal = noisy()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Sinusoid with Small Noise')
 
     def test_stochastic_resonance(self):
         """Test high noise for stochastic resonance from docstring example."""
-        stochastic = NoisySinusoidalInput(
-            amplitude=5.0,
-            frequency=5 * u.Hz,
-            noise_amplitude=10.0,  # Noise > signal
-            duration=2000 * u.ms
-        )
-        signal = stochastic()
-        self.assertEqual(signal.shape[0], 20000)
-        show(signal, 2000 * u.ms, 'Stochastic Resonance (High Noise)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            stochastic = NoisySinusoidalInput(
+                amplitude=5.0,
+                frequency=5 * u.Hz,
+                noise_amplitude=10.0,  # Noise > signal
+                duration=2000 * u.ms
+            )
+            signal = stochastic()
+            self.assertEqual(signal.shape[0], 20000)
+            show(signal, 2000 * u.ms, 'Stochastic Resonance (High Noise)')
 
     def test_filtered_noisy(self):
         """Test filtering noisy signal from docstring example."""
-        noisy = NoisySinusoidalInput(1.0, 20 * u.Hz, 0.5, 500 * u.ms)
-        filtered = noisy.smooth(tau=10 * u.ms)  # Low-pass filter
-        signal = filtered()
-        self.assertEqual(signal.shape[0], 5000)
-        show(signal, 500 * u.ms, 'Filtered Noisy Sinusoid')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            noisy = NoisySinusoidalInput(1.0, 20 * u.Hz, 0.5, 500 * u.ms)
+            filtered = noisy.smooth(tau=10 * u.ms)  # Low-pass filter
+            signal = filtered()
+            self.assertEqual(signal.shape[0], 5000)
+            show(signal, 500 * u.ms, 'Filtered Noisy Sinusoid')
 
     def test_theta_with_noise(self):
         """Test theta rhythm with synaptic noise from docstring example."""
-        theta_noisy = NoisySinusoidalInput(
-            amplitude=2.0,
-            frequency=8 * u.Hz,  # Theta frequency
-            noise_amplitude=0.5,
-            duration=5000 * u.ms
-        )
-        signal = theta_noisy()
-        self.assertEqual(signal.shape[0], 50000)
-        show(signal[:20000], 2000 * u.ms, 'Theta with Synaptic Noise (first 2s)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            theta_noisy = NoisySinusoidalInput(
+                amplitude=2.0,
+                frequency=8 * u.Hz,  # Theta frequency
+                noise_amplitude=0.5,
+                duration=5000 * u.ms
+            )
+            signal = theta_noisy()
+            self.assertEqual(signal.shape[0], 50000)
+            show(signal[:20000], 2000 * u.ms, 'Theta with Synaptic Noise (first 2s)')
 
     def test_cross_frequency_noisy(self):
         """Test combining multiple noisy oscillations from docstring example."""
-        theta = NoisySinusoidalInput(1.0, 8 * u.Hz, 0.2, 1000 * u.ms, seed=42)
-        gamma = NoisySinusoidalInput(0.5, 40 * u.Hz, 0.1, 1000 * u.ms, seed=43)
-        cross_frequency = theta + gamma
-        signal = cross_frequency()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Cross-Frequency Coupling (Noisy)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            theta = NoisySinusoidalInput(1.0, 8 * u.Hz, 0.2, 1000 * u.ms, seed=42)
+            gamma = NoisySinusoidalInput(0.5, 40 * u.Hz, 0.1, 1000 * u.ms, seed=43)
+            cross_frequency = theta + gamma
+            signal = cross_frequency()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Cross-Frequency Coupling (Noisy)')
 
     def test_windowed_noisy(self):
         """Test windowed noisy stimulation from docstring example."""
-        windowed_noisy = NoisySinusoidalInput(
-            amplitude=8.0,
-            frequency=20 * u.Hz,
-            noise_amplitude=2.0,
-            duration=1000 * u.ms,
-            t_start=200 * u.ms,
-            t_end=800 * u.ms
-        )
-        signal = windowed_noisy()
-        self.assertEqual(signal.shape[0], 10000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            windowed_noisy = NoisySinusoidalInput(
+                amplitude=8.0,
+                frequency=20 * u.Hz,
+                noise_amplitude=2.0,
+                duration=1000 * u.ms,
+                t_start=200 * u.ms,
+                t_end=800 * u.ms
+            )
+            signal = windowed_noisy()
+            self.assertEqual(signal.shape[0], 10000)
 
-        # Check windowing
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag[:2000] == 0))
-        self.assertTrue(np.all(signal_mag[8000:] == 0))
-        show(signal, 1000 * u.ms, 'Windowed Noisy Sinusoid')
+            # Check windowing
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag[:2000] == 0))
+            self.assertTrue(np.all(signal_mag[8000:] == 0))
+            show(signal, 1000 * u.ms, 'Windowed Noisy Sinusoid')
 
     def test_reproducible_noisy(self):
         """Test reproducible noisy signal from docstring example."""
-        reproducible1 = NoisySinusoidalInput(
-            amplitude=15.0,
-            frequency=40 * u.Hz,
-            noise_amplitude=3.0,
-            duration=500 * u.ms,
-            seed=42  # Fixed random seed
-        )
-        signal1 = reproducible1()
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            reproducible1 = NoisySinusoidalInput(
+                amplitude=15.0,
+                frequency=40 * u.Hz,
+                noise_amplitude=3.0,
+                duration=500 * u.ms,
+                seed=42  # Fixed random seed
+            )
+            signal1 = reproducible1()
 
-        reproducible2 = NoisySinusoidalInput(
-            amplitude=15.0,
-            frequency=40 * u.Hz,
-            noise_amplitude=3.0,
-            duration=500 * u.ms,
-            seed=42  # Same seed
-        )
-        signal2 = reproducible2()
+            reproducible2 = NoisySinusoidalInput(
+                amplitude=15.0,
+                frequency=40 * u.Hz,
+                noise_amplitude=3.0,
+                duration=500 * u.ms,
+                seed=42  # Same seed
+            )
+            signal2 = reproducible2()
 
-        # Should be identical
-        assert u.math.allclose(signal1, signal2)
-        self.assertEqual(signal1.shape[0], 5000)
-        show(signal1, 500 * u.ms, 'Reproducible Noisy Sinusoid')
+            # Should be identical
+            assert u.math.allclose(signal1, signal2)
+            self.assertEqual(signal1.shape[0], 5000)
+            show(signal1, 500 * u.ms, 'Reproducible Noisy Sinusoid')
 
     def test_weak_signal_detection(self):
         """Test weak signal in strong noise from docstring example."""
-        weak_signal = NoisySinusoidalInput(
-            amplitude=1.0,
-            frequency=10 * u.Hz,
-            noise_amplitude=5.0,  # 5x noise
-            duration=10000 * u.ms
-        )
-        signal = weak_signal()
-        self.assertEqual(signal.shape[0], 100000)
-        # Show only first 1 second for clarity
-        show(signal[:10000], 1000 * u.ms, 'Weak Signal in Strong Noise (first 1s)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            weak_signal = NoisySinusoidalInput(
+                amplitude=1.0,
+                frequency=10 * u.Hz,
+                noise_amplitude=5.0,  # 5x noise
+                duration=10000 * u.ms
+            )
+            signal = weak_signal()
+            self.assertEqual(signal.shape[0], 100000)
+            # Show only first 1 second for clarity
+            show(signal[:10000], 1000 * u.ms, 'Weak Signal in Strong Noise (first 1s)')
 
     def test_modulated_noisy(self):
         """Test modulating noisy sinusoid from docstring example."""
-        noisy = NoisySinusoidalInput(2.0, 30 * u.Hz, 0.5, 1000 * u.ms)
-        envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
-        burst = noisy * envelope
-        signal = burst()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Noisy Sinusoid Burst')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            noisy = NoisySinusoidalInput(2.0, 30 * u.Hz, 0.5, 1000 * u.ms)
+            envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
+            burst = noisy * envelope
+            signal = burst()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Noisy Sinusoid Burst')
 
 
 class TestCombinedWaveforms(TestCase):
@@ -667,45 +688,49 @@ class TestCombinedWaveforms(TestCase):
 
     def test_mixed_frequencies(self):
         """Test combining different frequency components."""
-        low_freq = SinusoidalInput(2.0, 2 * u.Hz, 1000 * u.ms)
-        mid_freq = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
-        high_freq = SinusoidalInput(0.5, 50 * u.Hz, 1000 * u.ms)
-        mixed = low_freq + mid_freq + high_freq
-        signal = mixed()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Mixed Frequency Components')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            low_freq = SinusoidalInput(2.0, 2 * u.Hz, 1000 * u.ms)
+            mid_freq = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
+            high_freq = SinusoidalInput(0.5, 50 * u.Hz, 1000 * u.ms)
+            mixed = low_freq + mid_freq + high_freq
+            signal = mixed()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Mixed Frequency Components')
 
     def test_square_plus_sine(self):
         """Test combining square and sine waves."""
-        square = SquareInput(1.0, 5 * u.Hz, 800 * u.ms)
-        sine = SinusoidalInput(0.5, 15 * u.Hz, 800 * u.ms)
-        combined = square + sine
-        signal = combined()
-        self.assertEqual(signal.shape[0], 8000)
-        show(signal, 800 * u.ms, 'Square + Sine Wave')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            square = SquareInput(1.0, 5 * u.Hz, 800 * u.ms)
+            sine = SinusoidalInput(0.5, 15 * u.Hz, 800 * u.ms)
+            combined = square + sine
+            signal = combined()
+            self.assertEqual(signal.shape[0], 8000)
+            show(signal, 800 * u.ms, 'Square + Sine Wave')
 
     def test_triangular_times_chirp(self):
         """Test multiplying triangular and chirp."""
-        tri = TriangularInput(1.0, 2 * u.Hz, 1000 * u.ms)
-        chirp = ChirpInput(1.0, 5 * u.Hz, 20 * u.Hz, 1000 * u.ms)
-        modulated = tri * chirp
-        signal = modulated()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Triangular-Modulated Chirp')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            tri = TriangularInput(1.0, 2 * u.Hz, 1000 * u.ms)
+            chirp = ChirpInput(1.0, 5 * u.Hz, 20 * u.Hz, 1000 * u.ms)
+            modulated = tri * chirp
+            signal = modulated()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Triangular-Modulated Chirp')
 
     def test_complex_protocol(self):
         """Test complex stimulation protocol."""
-        # Base oscillation
-        base = SinusoidalInput(1.0, 10 * u.Hz, 2000 * u.ms)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            # Base oscillation
+            base = SinusoidalInput(1.0, 10 * u.Hz, 2000 * u.ms)
 
-        # Add ramp
-        ramp = RampInput(0, 2.0, 2000 * u.ms)
+            # Add ramp
+            ramp = RampInput(0, 2.0, 2000 * u.ms)
 
-        # Add noise
-        noise = NoisySinusoidalInput(0.5, 40 * u.Hz, 0.2, 2000 * u.ms)
+            # Add noise
+            noise = NoisySinusoidalInput(0.5, 40 * u.Hz, 0.2, 2000 * u.ms)
 
-        # Combine all
-        protocol = base + ramp + noise
-        signal = protocol()
-        self.assertEqual(signal.shape[0], 20000)
-        show(signal, 2000 * u.ms, 'Complex Stimulation Protocol')
+            # Combine all
+            protocol = base + ramp + noise
+            signal = protocol()
+            self.assertEqual(signal.shape[0], 20000)
+            show(signal, 2000 * u.ms, 'Complex Stimulation Protocol')

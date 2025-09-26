@@ -31,8 +31,6 @@ from braintools.input import (
     WienerProcess, SinusoidalInput
 )
 
-brainstate.environ.set(dt=0.1 * u.ms)
-
 
 class TestSpikeInput(TestCase):
     """Test SpikeInput class and its docstring examples."""
