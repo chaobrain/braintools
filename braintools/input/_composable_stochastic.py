@@ -17,13 +17,20 @@
 
 """
 Composable stochastic input generators.
+
+This module provides composable stochastic input generators that can be combined
+with other input components using arithmetic operations.
 """
 
-from typing import Optional, Union
+from typing import Optional
+
 import brainstate
 import brainunit as u
-import numpy as np
+
 from ._composable_base import Input
+from . import _functional_stochastic as functional
+
+ArrayLike = brainstate.typing.ArrayLike
 
 __all__ = [
     'WienerProcess',
@@ -33,125 +40,313 @@ __all__ = [
 
 
 class WienerProcess(Input):
-    """Generate Wiener process (Brownian motion) input.
-    
+    r"""Generate Wiener process (Brownian motion) input.
+
+    A Wiener process (also known as Brownian motion) is a continuous-time
+    stochastic process with independent Gaussian increments. It's widely used
+    to model synaptic noise and random fluctuations in neural systems.
+
+    The process follows:
+
+    .. math::
+        dW(t) \sim \mathcal{N}(0, \sigma^2 dt)
+
+    where increments are independent and normally distributed.
+
+    Parameters
+    ----------
+    duration : float or Quantity
+        Total duration of the input signal. Supports time units.
+    n : int, optional
+        Number of independent Wiener processes to generate.
+        Default is 1.
+    t_start : float or Quantity, optional
+        Start time of the process. Before this, output is 0.
+        Default is 0.
+    t_end : float or Quantity, optional
+        End time of the process. After this, output is 0.
+        Default is duration.
+    sigma : float, optional
+        Standard deviation of the noise. Default is 1.0.
+    seed : int, optional
+        Random seed for reproducibility.
+        Default is None (uses global random state).
+
+    Attributes
+    ----------
+    n : int
+        Number of independent processes
+    t_start : float or Quantity
+        Start time of the process
+    t_end : float or Quantity
+        End time of the process
+    sigma : float
+        Standard deviation of the noise
+    seed : int or None
+        Random seed for reproducibility
+
     Examples
     --------
-    >>> # Create noisy background with drift
-    >>> noise = WienerProcess(500, sigma=0.1, n=2)
-    >>> drift = RampInput(0, 0.5, 500)
+    >>> import brainunit as u
+    >>> import brainstate
+    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    Create simple Wiener process:
+
+    >>> noise = WienerProcess(duration=100 * u.ms, sigma=0.5)
+    >>> signal = noise()
+
+    Create multiple independent processes:
+
+    >>> multi_noise = WienerProcess(
+    ...     duration=200 * u.ms,
+    ...     n=5,  # 5 independent processes
+    ...     sigma=1.0
+    ... )
+
+    Create windowed noise (active only between t_start and t_end):
+
+    >>> windowed = WienerProcess(
+    ...     duration=500 * u.ms,
+    ...     sigma=2.0,
+    ...     t_start=100 * u.ms,
+    ...     t_end=400 * u.ms
+    ... )
+
+    Combine with other inputs using arithmetic operations:
+
+    >>> from braintools.input import RampInput, StepInput
+    >>> # Noisy background with linear drift
+    >>> drift = RampInput(0, 0.5, 500 * u.ms)
+    >>> noise = WienerProcess(500 * u.ms, sigma=0.1)
     >>> drifting_noise = noise + drift
+
+    >>> # Modulated noise
+    >>> envelope = StepInput([0, 1.0], [0 * u.ms, 100 * u.ms], 500 * u.ms)
+    >>> modulated = noise * envelope
+
+    Create reproducible noise with seed:
+
+    >>> fixed_noise = WienerProcess(
+    ...     duration=100 * u.ms,
+    ...     sigma=0.3,
+    ...     seed=42  # Fixed seed for reproducibility
+    ... )
+
+    Notes
+    -----
+    - The variance of increments scales with dt: Var(dW) = σ²dt
+    - The process has zero mean: E[W(t)] = 0
+    - Increments are independent and normally distributed
+    - The process is non-differentiable but continuous
+    - Useful for modeling synaptic background noise
+    - Can be combined with other Input classes using +, -, *, /
+
+    See Also
+    --------
+    OUProcess : Ornstein-Uhlenbeck process with mean reversion
+    PoissonInput : Poisson spike train generator
+    wiener_process : Functional API for Wiener process
     """
-    
+
     def __init__(self,
-                 duration: Union[float, u.Quantity],
+                 duration: ArrayLike,
                  n: int = 1,
-                 t_start: Optional[Union[float, u.Quantity]] = None,
-                 t_end: Optional[Union[float, u.Quantity]] = None,
+                 t_start: Optional[ArrayLike] = None,
+                 t_end: Optional[ArrayLike] = None,
                  sigma: float = 1.0,
                  seed: Optional[int] = None):
-        """Initialize Wiener process.
-        
-        Parameters
-        ----------
-        duration : float or Quantity
-            The total duration.
-        n : int
-            Number of independent processes.
-        t_start : float or Quantity, optional
-            The start time.
-        t_end : float or Quantity, optional
-            The end time.
-        sigma : float
-            Standard deviation of the noise.
-        seed : int, optional
-            Random seed.
-        """
         super().__init__(duration)
-        
         self.n = n
         self.t_start = t_start
         self.t_end = t_end
         self.sigma = sigma
         self.seed = seed
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
-        """Generate the Wiener process array."""
-        if self.seed is None:
-            rng = brainstate.random.DEFAULT
-        else:
-            rng = brainstate.random.RandomState(self.seed)
-        
-        # Get dt unit
-        dt_unit = u.get_unit(self.dt)
-        dt_value = u.get_magnitude(self.dt)
-        
-        t_start = 0. * dt_unit if self.t_start is None else self.t_start
-        t_end = self.duration if self.t_end is None else self.t_end
-        
-        # Convert to same unit as dt
-        t_start_value = u.Quantity(t_start).to(dt_unit).mantissa if hasattr(t_start, 'unit') else t_start
-        t_end_value = u.Quantity(t_end).to(dt_unit).mantissa if hasattr(t_end, 'unit') else t_end
-        
-        currents = u.math.zeros((self.n_steps, self.n), dtype=brainstate.environ.dftype())
-        
-        start_i = int(t_start_value / dt_value)
-        end_i = int(t_end_value / dt_value)
-        
-        # Generate Wiener increments
-        dt_sqrt = u.math.sqrt(u.get_magnitude(self.dt))
-        wiener = rng.standard_normal((end_i - start_i, self.n)) * self.sigma * dt_sqrt
-        
-        # Cumulative sum to get Wiener process
-        wiener_cumsum = np.cumsum(wiener, axis=0)
-        currents = currents.at[start_i:end_i].set(wiener_cumsum)
-        
-        return currents
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
+        """Generate the Wiener process using the functional API.
+
+        Returns
+        -------
+        ArrayLike
+            Generated Wiener process array with shape (n_steps,) if n=1,
+            or (n_steps, n) if n>1.
+        """
+        # Use the functional API to generate the Wiener process
+        return functional.wiener_process(
+            duration=self.duration,
+            sigma=self.sigma,
+            n=self.n,
+            t_start=self.t_start,
+            t_end=self.t_end,
+            seed=self.seed
+        )
 
 
 class OUProcess(Input):
-    """Generate Ornstein-Uhlenbeck process input.
-    
+    r"""Generate Ornstein-Uhlenbeck process input.
+
+    The Ornstein-Uhlenbeck (OU) process is a stochastic process that models
+    a particle undergoing Brownian motion with friction. It exhibits
+    mean-reverting behavior, making it useful for modeling fluctuations
+    around a steady state in neural systems.
+
+    The process follows the stochastic differential equation:
+
+    .. math::
+        dX_t = \frac{\mu - X_t}{\tau} dt + \sigma dW_t
+
+    where:
+    - μ is the mean (drift target)
+    - τ is the time constant
+    - σ is the noise amplitude
+    - W_t is a Wiener process
+
+    Parameters
+    ----------
+    mean : float
+        Mean value (drift target) of the OU process.
+    sigma : float
+        Standard deviation of the noise.
+    tau : float or Quantity
+        Time constant of the process. Larger values = slower fluctuations.
+        Supports time units.
+    duration : float or Quantity
+        Total duration of the input signal. Supports time units.
+    n : int, optional
+        Number of independent OU processes to generate.
+        Default is 1.
+    t_start : float or Quantity, optional
+        Start time of the process. Before this, output is 0.
+        Default is 0.
+    t_end : float or Quantity, optional
+        End time of the process. After this, output is 0.
+        Default is duration.
+    seed : int, optional
+        Random seed for reproducibility.
+        Default is None (uses global random state).
+
+    Attributes
+    ----------
+    mean : float
+        Mean value (drift target)
+    sigma : float
+        Noise amplitude
+    tau : float or Quantity
+        Time constant
+    n : int
+        Number of independent processes
+    t_start : float or Quantity
+        Start time of the process
+    t_end : float or Quantity
+        End time of the process
+    seed : int or None
+        Random seed
+
     Examples
     --------
-    >>> # Create OU process with time-varying mean
-    >>> ou = OUProcess(mean=0.5, sigma=0.1, tau=20, duration=500, n=2)
-    >>> sine_mean = SinusoidalInput(0.3, 2 * u.Hz, 500)
+    >>> import brainunit as u
+    >>> import brainstate
+    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    Simple OU process:
+
+    >>> ou = OUProcess(
+    ...     mean=0.5,
+    ...     sigma=0.2,
+    ...     tau=10 * u.ms,
+    ...     duration=500 * u.ms
+    ... )
+    >>> signal = ou()
+
+    Fast fluctuations around zero:
+
+    >>> fast_ou = OUProcess(
+    ...     mean=0.0,
+    ...     sigma=0.5,
+    ...     tau=2 * u.ms,  # Fast time constant
+    ...     duration=200 * u.ms
+    ... )
+
+    Slow fluctuations with drift:
+
+    >>> slow_ou = OUProcess(
+    ...     mean=1.0,
+    ...     sigma=0.3,
+    ...     tau=50 * u.ms,  # Slow time constant
+    ...     duration=1000 * u.ms
+    ... )
+
+    Multiple independent processes:
+
+    >>> multi_ou = OUProcess(
+    ...     mean=0.0,
+    ...     sigma=0.2,
+    ...     tau=5 * u.ms,
+    ...     duration=300 * u.ms,
+    ...     n=10  # 10 independent processes
+    ... )
+
+    Windowed OU process:
+
+    >>> windowed_ou = OUProcess(
+    ...     mean=0.5,
+    ...     sigma=0.1,
+    ...     tau=20 * u.ms,
+    ...     duration=500 * u.ms,
+    ...     t_start=100 * u.ms,
+    ...     t_end=400 * u.ms
+    ... )
+
+    Combine with other inputs:
+
+    >>> from braintools.input import SinusoidalInput, StepInput
+    >>> # OU process with time-varying mean
+    >>> ou = OUProcess(mean=0.5, sigma=0.1, tau=20 * u.ms, duration=500 * u.ms)
+    >>> sine_mean = SinusoidalInput(0.3, 2 * u.Hz, 500 * u.ms)
     >>> modulated_ou = ou + sine_mean
+
+    >>> # Gated OU process
+    >>> gate = StepInput([0, 1.0], [0 * u.ms, 50 * u.ms], 500 * u.ms)
+    >>> gated_ou = ou * gate
+
+    Create reproducible OU process:
+
+    >>> fixed_ou = OUProcess(
+    ...     mean=0.0,
+    ...     sigma=0.15,
+    ...     tau=15 * u.ms,
+    ...     duration=200 * u.ms,
+    ...     seed=123  # Fixed seed
+    ... )
+
+    Notes
+    -----
+    - The process has mean-reverting behavior controlled by tau
+    - Steady-state variance: σ²/(2/τ)
+    - Autocorrelation decays exponentially with time constant tau
+    - For tau → ∞, approaches a Wiener process
+    - For tau → 0, approaches white noise
+    - Useful for modeling synaptic background activity
+    - Can be combined with other Input classes using +, -, *, /
+
+    See Also
+    --------
+    WienerProcess : Wiener process without mean reversion
+    PoissonInput : Poisson spike train generator
+    ou_process : Functional API for OU process
     """
-    
+
     def __init__(self,
                  mean: float,
                  sigma: float,
-                 tau: Union[float, u.Quantity],
-                 duration: Union[float, u.Quantity],
+                 tau: ArrayLike,
+                 duration: ArrayLike,
                  n: int = 1,
-                 t_start: Optional[Union[float, u.Quantity]] = None,
-                 t_end: Optional[Union[float, u.Quantity]] = None,
+                 t_start: Optional[ArrayLike] = None,
+                 t_end: Optional[ArrayLike] = None,
                  seed: Optional[int] = None):
-        """Initialize OU process.
-        
-        Parameters
-        ----------
-        mean : float
-            Mean value (drift target).
-        sigma : float
-            Noise amplitude.
-        tau : float or Quantity
-            Time constant.
-        duration : float or Quantity
-            Total duration.
-        n : int
-            Number of independent processes.
-        t_start : float or Quantity, optional
-            Start time.
-        t_end : float or Quantity, optional
-            End time.
-        seed : int, optional
-            Random seed.
-        """
         super().__init__(duration)
-        
         self.mean = mean
         self.sigma = sigma
         self.tau = tau
@@ -159,122 +354,207 @@ class OUProcess(Input):
         self.t_start = t_start
         self.t_end = t_end
         self.seed = seed
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
-        """Generate the OU process array."""
-        if self.seed is None:
-            rng = brainstate.random.DEFAULT
-        else:
-            rng = brainstate.random.RandomState(self.seed)
-        
-        # Get dt unit
-        dt_unit = u.get_unit(self.dt)
-        dt_value = u.get_magnitude(self.dt)
-        
-        t_start = 0. * dt_unit if self.t_start is None else self.t_start
-        t_end = self.duration if self.t_end is None else self.t_end
-        
-        # Convert to same unit as dt
-        t_start_value = u.Quantity(t_start).to(dt_unit).mantissa if hasattr(t_start, 'unit') else t_start
-        t_end_value = u.Quantity(t_end).to(dt_unit).mantissa if hasattr(t_end, 'unit') else t_end
-        
-        currents = u.math.zeros((self.n_steps, self.n), dtype=brainstate.environ.dftype())
-        
-        start_i = int(t_start_value / dt_value)
-        end_i = int(t_end_value / dt_value)
-        
-        # Generate OU process
-        dt_over_tau = self.dt / self.tau
-        noise_amp = self.sigma * u.math.sqrt(2 * dt_over_tau)
-        
-        ou_values = u.math.ones((end_i - start_i, self.n)) * self.mean
-        
-        for i in range(1, end_i - start_i):
-            drift = dt_over_tau * (self.mean - ou_values[i-1])
-            noise = noise_amp * rng.standard_normal(self.n)
-            ou_values = ou_values.at[i].set(ou_values[i-1] + drift + noise)
-        
-        currents = currents.at[start_i:end_i].set(ou_values)
-        
-        # Squeeze if n=1 for consistency with functional API
-        if self.n == 1:
-            return u.math.squeeze(currents, axis=-1)
-        return currents
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
+        """Generate the OU process using the functional API.
+
+        Returns
+        -------
+        ArrayLike
+            Generated OU process array with shape (n_steps,) if n=1,
+            or (n_steps, n) if n>1.
+        """
+        # Use the functional API to generate the OU process
+        return functional.ou_process(
+            mean=self.mean,
+            sigma=self.sigma,
+            tau=self.tau,
+            duration=self.duration,
+            n=self.n,
+            t_start=self.t_start,
+            t_end=self.t_end,
+            seed=self.seed
+        )
 
 
 class PoissonInput(Input):
-    """Generate Poisson spike train input.
-    
+    r"""Generate Poisson spike train input.
+
+    Creates spike trains where spikes occur randomly according to a Poisson
+    process with a specified rate. This is useful for modeling random
+    synaptic inputs or background activity in neural systems.
+
+    The probability of a spike in each time bin is:
+
+    .. math::
+        P(\text{spike}) = \lambda \cdot dt
+
+    where λ is the rate and dt is the time step.
+
+    Parameters
+    ----------
+    rate : Quantity
+        Mean firing rate. Must be in Hz units.
+    duration : float or Quantity
+        Total duration of the input signal. Supports time units.
+    n : int, optional
+        Number of independent Poisson processes to generate.
+        Default is 1.
+    t_start : float or Quantity, optional
+        Start time of spiking. Before this, output is 0.
+        Default is 0.
+    t_end : float or Quantity, optional
+        End time of spiking. After this, output is 0.
+        Default is duration.
+    amplitude : float, optional
+        Amplitude of each spike. Default is 1.0.
+    seed : int, optional
+        Random seed for reproducibility.
+        Default is None (uses global random state).
+
+    Attributes
+    ----------
+    rate : Quantity
+        Firing rate in Hz
+    n : int
+        Number of independent spike trains
+    t_start : float or Quantity
+        Start time of spiking
+    t_end : float or Quantity
+        End time of spiking
+    amplitude : float
+        Spike amplitude
+    seed : int or None
+        Random seed
+
     Examples
     --------
-    >>> # Create Poisson input with rate modulation
-    >>> poisson = PoissonInput(50 * u.Hz, 1000 * u.ms, n=3)
+    >>> import brainunit as u
+    >>> import brainstate
+    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    Simple Poisson spike train:
+
+    >>> spikes = PoissonInput(
+    ...     rate=10 * u.Hz,
+    ...     duration=1000 * u.ms
+    ... )
+    >>> signal = spikes()
+
+    High-frequency background activity:
+
+    >>> background = PoissonInput(
+    ...     rate=100 * u.Hz,
+    ...     duration=500 * u.ms,
+    ...     amplitude=0.5  # Smaller amplitude
+    ... )
+
+    Multiple independent spike trains:
+
+    >>> multi_spikes = PoissonInput(
+    ...     rate=20 * u.Hz,
+    ...     duration=2000 * u.ms,
+    ...     n=50,  # 50 independent spike trains
+    ...     amplitude=2.0
+    ... )
+
+    Windowed spiking activity:
+
+    >>> burst = PoissonInput(
+    ...     rate=50 * u.Hz,
+    ...     duration=1000 * u.ms,
+    ...     t_start=200 * u.ms,
+    ...     t_end=800 * u.ms,
+    ...     amplitude=1.0
+    ... )
+
+    Low rate spontaneous activity:
+
+    >>> spontaneous = PoissonInput(
+    ...     rate=1 * u.Hz,
+    ...     duration=10000 * u.ms,
+    ...     amplitude=5.0
+    ... )
+
+    Combine with envelopes for rate modulation:
+
+    >>> from braintools.input import GaussianPulse, SinusoidalInput
+    >>> # Poisson spikes with Gaussian envelope
+    >>> poisson = PoissonInput(50 * u.Hz, 1000 * u.ms)
     >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
     >>> modulated = poisson * envelope
+
+    >>> # Rhythmic modulation of spike rate
+    >>> rhythm = SinusoidalInput(0.5, 5 * u.Hz, 1000 * u.ms)
+    >>> rhythmic_spikes = poisson * (1 + rhythm)
+
+    Create reproducible spike pattern:
+
+    >>> fixed_spikes = PoissonInput(
+    ...     rate=30 * u.Hz,
+    ...     duration=500 * u.ms,
+    ...     seed=456  # Fixed seed for reproducibility
+    ... )
+
+    Inhomogeneous Poisson process (time-varying rate):
+
+    >>> from braintools.input import RampInput
+    >>> # Base Poisson process
+    >>> base_poisson = PoissonInput(10 * u.Hz, 1000 * u.ms)
+    >>> # Increasing rate envelope
+    >>> ramp = RampInput(0.1, 1.0, 1000 * u.ms)
+    >>> increasing_rate = base_poisson * ramp
+
+    Notes
+    -----
+    - Spike probability per timestep = rate * dt
+    - Mean number of spikes = rate * duration
+    - Inter-spike intervals follow exponential distribution
+    - For small dt, probability of multiple spikes per bin is negligible
+    - Can be combined with continuous inputs for rate modulation
+    - Useful for modeling synaptic background noise
+    - Can be combined with other Input classes using +, -, *, /
+
+    See Also
+    --------
+    WienerProcess : Continuous noise process
+    OUProcess : Ornstein-Uhlenbeck process
+    poisson_input : Functional API for Poisson input
     """
-    
+
     def __init__(self,
                  rate: u.Quantity,
-                 duration: Union[float, u.Quantity],
+                 duration: ArrayLike,
                  n: int = 1,
-                 t_start: Optional[Union[float, u.Quantity]] = None,
-                 t_end: Optional[Union[float, u.Quantity]] = None,
+                 t_start: Optional[ArrayLike] = None,
+                 t_end: Optional[ArrayLike] = None,
+                 amplitude: float = 1.0,
                  seed: Optional[int] = None):
-        """Initialize Poisson input.
-        
-        Parameters
-        ----------
-        rate : Quantity
-            Firing rate in Hz.
-        duration : float or Quantity
-            Total duration.
-        n : int
-            Number of independent spike trains.
-        t_start : float or Quantity, optional
-            Start time.
-        t_end : float or Quantity, optional
-            End time.
-        seed : int, optional
-            Random seed.
-        """
         super().__init__(duration)
         assert rate.unit.dim == u.Hz.dim, f'Rate must be in Hz. Got {rate.unit}.'
-        
         self.rate = rate
         self.n = n
         self.t_start = t_start
         self.t_end = t_end
+        self.amplitude = amplitude
         self.seed = seed
-    
-    def _generate(self)-> brainstate.typing.ArrayLike:
-        """Generate the Poisson input array."""
-        if self.seed is None:
-            rng = brainstate.random.DEFAULT
-        else:
-            rng = brainstate.random.RandomState(self.seed)
-        
-        # Get dt unit
-        dt_unit = u.get_unit(self.dt)
-        dt_value = u.get_magnitude(self.dt)
-        
-        t_start = 0. * dt_unit if self.t_start is None else self.t_start
-        t_end = self.duration if self.t_end is None else self.t_end
-        
-        # Convert to same unit as dt
-        t_start_value = u.Quantity(t_start).to(dt_unit).mantissa if hasattr(t_start, 'unit') else t_start
-        t_end_value = u.Quantity(t_end).to(dt_unit).mantissa if hasattr(t_end, 'unit') else t_end
-        
-        currents = u.math.zeros((self.n_steps, self.n), dtype=brainstate.environ.dftype())
-        
-        start_i = int(t_start_value / dt_value)
-        end_i = int(t_end_value / dt_value)
-        
-        # Generate Poisson spikes
-        spike_prob = self.rate * self.dt
-        spikes = rng.random((end_i - start_i, self.n)) < spike_prob
-        currents = currents.at[start_i:end_i].set(spikes.astype(brainstate.environ.dftype()))
-        
-        # Squeeze if n=1 for consistency with functional API
-        if self.n == 1:
-            return u.math.squeeze(currents, axis=-1)
-        return currents
+
+    def _generate(self) -> brainstate.typing.ArrayLike:
+        """Generate the Poisson input using the functional API.
+
+        Returns
+        -------
+        ArrayLike
+            Generated Poisson spike train with shape (n_steps,) if n=1,
+            or (n_steps, n) if n>1.
+        """
+        # Use the functional API to generate the Poisson input
+        return functional.poisson_input(
+            rate=self.rate,
+            duration=self.duration,
+            amplitude=self.amplitude,
+            n=self.n,
+            t_start=self.t_start,
+            t_end=self.t_end,
+            seed=self.seed
+        )
