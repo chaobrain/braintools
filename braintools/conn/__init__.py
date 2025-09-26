@@ -160,100 +160,26 @@ Operations and Transformations:
 - **Transformations**: .add_noise(), .add_plasticity(), .apply_transform()
 """
 
-# Import composable base classes
-from ._composable_base import (
-    Connectivity,
-    ConnectionResult,
-    CompositeConnectivity,
-    ConstrainedConnectivity,
-    TransformedConnectivity,
-    ScaledConnectivity,
-    FilteredConnectivity,
-    LayeredConnectivity
-)
-
-# Import composable connectivity patterns
-from ._composable_patterns import (
-    Random,
-    DistanceDependent,
-    SmallWorld,
-    Regular,
-    AllToAll,
-    OneToOne,
-    Gaussian,
-    Exponential,
-    PowerLaw,
-    ScaleFree,
-    Modular,
-    Hierarchical,
-    Ring,
-    Grid,
-    Custom
-)
-
-# Import legacy functional API for backward compatibility
-from ._random import *
-from ._random import __all__ as _random_all
+from ._complex import *
+from ._complex import __all__ as _complex_all
 from ._distance import *
 from ._distance import __all__ as _distance_all
+from ._hierarchical import *
+from ._hierarchical import __all__ as _hierarchical_all
+from ._io import *
+from ._io import __all__ as _io_all
+from ._kernel import *
+from ._kernel import __all__ as _kernel_all
+from ._random import *
+from ._random import __all__ as _random_all
 from ._regular import *
 from ._regular import __all__ as _regular_all
 from ._statistical import *
 from ._statistical import __all__ as _statistical_all
-from ._complex import *
-from ._complex import __all__ as _complex_all
-from ._hierarchical import *
-from ._hierarchical import __all__ as _hierarchical_all
-from ._kernel import *
-from ._kernel import __all__ as _kernel_all
-from ._io import *
-from ._io import __all__ as _io_all
 
-# Define composable exports
-_composable_base_all = [
-    'Connectivity',
-    'ConnectionResult',
-    'CompositeConnectivity',
-    'ConstrainedConnectivity',
-    'TransformedConnectivity',
-    'ScaledConnectivity',
-    'FilteredConnectivity',
-    'LayeredConnectivity'
-]
-
-_composable_patterns_all = [
-    'Random',
-    'DistanceDependent',
-    'SmallWorld',
-    'Regular',
-    'AllToAll',
-    'OneToOne',
-    'Gaussian',
-    'Exponential',
-    'PowerLaw',
-    'ScaleFree',
-    'Modular',
-    'Hierarchical',
-    'Ring',
-    'Grid',
-    'Custom'
-]
-
-# Combine all exports (composable + legacy)
-__all__ = (
-    _composable_base_all +
-    _composable_patterns_all +
-    _random_all +
-    _distance_all +
-    _regular_all +
-    _statistical_all +
-    _complex_all +
-    _hierarchical_all +
-    _kernel_all +
-    _io_all
-)
+__all__ = _random_all + _distance_all + _regular_all + _statistical_all + _complex_all
+__all__ = __all__ + _hierarchical_all + _kernel_all + _io_all
 
 # Clean up namespace
-del (_composable_base_all, _composable_patterns_all,
-     _random_all, _distance_all, _regular_all, _statistical_all,
+del (_random_all, _distance_all, _regular_all, _statistical_all,
      _complex_all, _hierarchical_all, _kernel_all, _io_all)
