@@ -28,7 +28,6 @@ from braintools.input import (
     WienerProcess, SinusoidalInput
 )
 
-brainstate.environ.set(dt=0.1 * u.ms)
 
 
 class TestSectionInput(TestCase):

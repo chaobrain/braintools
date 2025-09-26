@@ -59,72 +59,78 @@ class TestSinusoidalInput(TestCase):
 
     def test_simple_sinusoidal(self):
         """Test simple sinusoidal input from docstring example."""
-        sine = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
-        signal = sine()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Simple Sinusoidal')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            sine = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
+            signal = sine()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Simple Sinusoidal')
 
     def test_amplitude_modulation(self):
         """Test amplitude-modulated signal from docstring example."""
-        carrier = SinusoidalInput(1.0, 100 * u.Hz, 500 * u.ms)
-        envelope = RampInput(0, 1, 500 * u.ms)
-        am_signal = carrier * envelope
-        signal = am_signal()
-        self.assertEqual(signal.shape[0], 5000)
-        show(signal, 500 * u.ms, 'Amplitude Modulated Sinusoidal')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            carrier = SinusoidalInput(1.0, 100 * u.Hz, 500 * u.ms)
+            envelope = RampInput(0, 1, 500 * u.ms)
+            am_signal = carrier * envelope
+            signal = am_signal()
+            self.assertEqual(signal.shape[0], 5000)
+            show(signal, 500 * u.ms, 'Amplitude Modulated Sinusoidal')
 
     def test_frequency_beats(self):
         """Test frequency beats from docstring example."""
-        sine1 = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
-        sine2 = SinusoidalInput(1.0, 11 * u.Hz, 1000 * u.ms)
-        beats = sine1 + sine2  # 1 Hz beat frequency
-        signal = beats()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Frequency Beats')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            sine1 = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
+            sine2 = SinusoidalInput(1.0, 11 * u.Hz, 1000 * u.ms)
+            beats = sine1 + sine2  # 1 Hz beat frequency
+            signal = beats()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Frequency Beats')
 
     def test_harmonics(self):
         """Test complex waveform with harmonics from docstring example."""
-        fundamental = SinusoidalInput(1.0, 5 * u.Hz, 2000 * u.ms)
-        third = SinusoidalInput(0.3, 15 * u.Hz, 2000 * u.ms)
-        fifth = SinusoidalInput(0.2, 25 * u.Hz, 2000 * u.ms)
-        complex_wave = fundamental + third + fifth
-        signal = complex_wave()
-        self.assertEqual(signal.shape[0], 20000)
-        show(signal, 2000 * u.ms, 'Complex Waveform with Harmonics')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            fundamental = SinusoidalInput(1.0, 5 * u.Hz, 2000 * u.ms)
+            third = SinusoidalInput(0.3, 15 * u.Hz, 2000 * u.ms)
+            fifth = SinusoidalInput(0.2, 25 * u.Hz, 2000 * u.ms)
+            complex_wave = fundamental + third + fifth
+            signal = complex_wave()
+            self.assertEqual(signal.shape[0], 20000)
+            show(signal, 2000 * u.ms, 'Complex Waveform with Harmonics')
 
     def test_windowed_sinusoid(self):
         """Test windowed sinusoid from docstring example."""
-        resonance = SinusoidalInput(
-            amplitude=2.0,
-            frequency=8 * u.Hz,  # Theta frequency
-            duration=5000 * u.ms,
-            t_start=1000 * u.ms,
-            t_end=4000 * u.ms
-        )
-        signal = resonance()
-        self.assertEqual(signal.shape[0], 50000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            resonance = SinusoidalInput(
+                amplitude=2.0,
+                frequency=8 * u.Hz,  # Theta frequency
+                duration=5000 * u.ms,
+                t_start=1000 * u.ms,
+                t_end=4000 * u.ms
+            )
+            signal = resonance()
+            self.assertEqual(signal.shape[0], 50000)
 
-        # Check windowing
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag[:10000] == 0))
-        self.assertTrue(np.all(signal_mag[40000:] == 0))
-        show(signal, 5000 * u.ms, 'Windowed Sinusoid')
+            # Check windowing
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag[:10000] == 0))
+            self.assertTrue(np.all(signal_mag[40000:] == 0))
+            show(signal, 5000 * u.ms, 'Windowed Sinusoid')
 
     def test_positive_bias(self):
         """Test sinusoid with positive bias from docstring example."""
-        positive_sine = SinusoidalInput(
-            amplitude=5.0,
-            frequency=5 * u.Hz,
-            duration=2000 * u.ms,
-            bias=True  # Oscillates between 0 and 10
-        )
-        signal = positive_sine()
-        self.assertEqual(signal.shape[0], 20000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            positive_sine = SinusoidalInput(
+                amplitude=5.0,
+                frequency=5 * u.Hz,
+                duration=2000 * u.ms,
+                bias=True  # Oscillates between 0 and 10
+            )
+            signal = positive_sine()
+            self.assertEqual(signal.shape[0], 20000)
 
-        # Check that all values are non-negative
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag >= -0.01))  # Small tolerance for numerical errors
-        show(signal, 2000 * u.ms, 'Positive Bias Sinusoid')
+            # Check that all values are non-negative
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag >= -0.01))  # Small tolerance for numerical errors
+            show(signal, 2000 * u.ms, 'Positive Bias Sinusoid')
 
 
 class TestSquareInput(TestCase):
@@ -132,88 +138,96 @@ class TestSquareInput(TestCase):
 
     def test_symmetric_square(self):
         """Test symmetric square wave from docstring example."""
-        square = SquareInput(1.0, 5 * u.Hz, 1000 * u.ms)
-        signal = square()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Symmetric Square Wave')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            square = SquareInput(1.0, 5 * u.Hz, 1000 * u.ms)
+            signal = square()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Symmetric Square Wave')
 
     def test_pulse_train(self):
         """Test pulse train with duty cycle from docstring example."""
-        pulses = SquareInput(
-            amplitude=5.0,
-            frequency=10 * u.Hz,
-            duration=500 * u.ms,
-            duty_cycle=0.2  # 20% high, 80% low
-        )
-        signal = pulses()
-        self.assertEqual(signal.shape[0], 5000)
-        show(signal, 500 * u.ms, 'Pulse Train (20% Duty Cycle)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            pulses = SquareInput(
+                amplitude=5.0,
+                frequency=10 * u.Hz,
+                duration=500 * u.ms,
+                duty_cycle=0.2  # 20% high, 80% low
+            )
+            signal = pulses()
+            self.assertEqual(signal.shape[0], 5000)
+            show(signal, 500 * u.ms, 'Pulse Train (20% Duty Cycle)')
 
     def test_smoothed_square(self):
         """Test smoothed square wave from docstring example."""
-        square = SquareInput(2.0, 5 * u.Hz, 800 * u.ms)
-        smoothed = square.smooth(tau=5 * u.ms)  # Low-pass filter
-        signal = smoothed()
-        self.assertEqual(signal.shape[0], 8000)
-        show(signal, 800 * u.ms, 'Smoothed Square Wave')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            square = SquareInput(2.0, 5 * u.Hz, 800 * u.ms)
+            smoothed = square.smooth(tau=5 * u.ms)  # Low-pass filter
+            signal = smoothed()
+            self.assertEqual(signal.shape[0], 8000)
+            show(signal, 800 * u.ms, 'Smoothed Square Wave')
 
     def test_clock_signal(self):
         """Test clock signal from docstring example."""
-        clock = SquareInput(
-            amplitude=1.0,
-            frequency=40 * u.Hz,
-            duration=250 * u.ms,
-            duty_cycle=0.5
-        )
-        signal = clock()
-        self.assertEqual(signal.shape[0], 2500)
-        show(signal, 250 * u.ms, 'Clock Signal')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            clock = SquareInput(
+                amplitude=1.0,
+                frequency=40 * u.Hz,
+                duration=250 * u.ms,
+                duty_cycle=0.5
+            )
+            signal = clock()
+            self.assertEqual(signal.shape[0], 2500)
+            show(signal, 250 * u.ms, 'Clock Signal')
 
     def test_square_with_offset(self):
         """Test square wave with DC offset from docstring example."""
-        square = SquareInput(3.0, 2 * u.Hz, 2000 * u.ms)
-        offset = ConstantInput([(2.0, 2000 * u.ms)])
-        shifted_square = square + offset
-        signal = shifted_square()
-        self.assertEqual(signal.shape[0], 20000)
-        show(signal, 2000 * u.ms, 'Square Wave with DC Offset')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            square = SquareInput(3.0, 2 * u.Hz, 2000 * u.ms)
+            offset = ConstantInput([(2.0, 2000 * u.ms)])
+            shifted_square = square + offset
+            signal = shifted_square()
+            self.assertEqual(signal.shape[0], 20000)
+            show(signal, 2000 * u.ms, 'Square Wave with DC Offset')
 
     def test_gated_square(self):
         """Test gated square wave from docstring example."""
-        square = SquareInput(1.0, 50 * u.Hz, 1000 * u.ms)
-        gate = StepInput([0, 1, 0], [0 * u.ms, 200 * u.ms, 800 * u.ms], 1000 * u.ms)
-        gated = square * gate
-        signal = gated()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Gated Square Wave')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            square = SquareInput(1.0, 50 * u.Hz, 1000 * u.ms)
+            gate = StepInput([0, 1, 0], [0 * u.ms, 200 * u.ms, 800 * u.ms], 1000 * u.ms)
+            gated = square * gate
+            signal = gated()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Gated Square Wave')
 
     def test_positive_bias_square(self):
         """Test square wave with positive bias from docstring example."""
-        positive_square = SquareInput(
-            amplitude=4.0,
-            frequency=10 * u.Hz,
-            duration=500 * u.ms,
-            bias=True  # Alternates between 0 and 8
-        )
-        signal = positive_square()
-        self.assertEqual(signal.shape[0], 5000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            positive_square = SquareInput(
+                amplitude=4.0,
+                frequency=10 * u.Hz,
+                duration=500 * u.ms,
+                bias=True  # Alternates between 0 and 8
+            )
+            signal = positive_square()
+            self.assertEqual(signal.shape[0], 5000)
 
-        # Check values are non-negative
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag >= -0.01))
-        show(signal, 500 * u.ms, 'Positive Bias Square Wave')
+            # Check values are non-negative
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag >= -0.01))
+            show(signal, 500 * u.ms, 'Positive Bias Square Wave')
 
     def test_pwm_signal(self):
         """Test PWM-like signal from docstring example."""
-        pwm = SquareInput(
-            amplitude=5.0,
-            frequency=100 * u.Hz,
-            duration=100 * u.ms,
-            duty_cycle=0.1  # 10% duty cycle
-        )
-        signal = pwm()
-        self.assertEqual(signal.shape[0], 1000)
-        show(signal, 100 * u.ms, 'PWM Signal (10% Duty Cycle)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            pwm = SquareInput(
+                amplitude=5.0,
+                frequency=100 * u.Hz,
+                duration=100 * u.ms,
+                duty_cycle=0.1  # 10% duty cycle
+            )
+            signal = pwm()
+            self.assertEqual(signal.shape[0], 1000)
+            show(signal, 100 * u.ms, 'PWM Signal (10% Duty Cycle)')
 
 
 class TestTriangularInput(TestCase):
@@ -221,83 +235,90 @@ class TestTriangularInput(TestCase):
 
     def test_simple_triangular(self):
         """Test simple triangular wave from docstring example."""
-        tri = TriangularInput(2.0, 3 * u.Hz, 1000 * u.ms)
-        signal = tri()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Simple Triangular Wave')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            tri = TriangularInput(2.0, 3 * u.Hz, 1000 * u.ms)
+            signal = tri()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Simple Triangular Wave')
 
     def test_slow_ramp_iv_curve(self):
         """Test slow ramp for I-V curve from docstring example."""
-        ramp = TriangularInput(
-            amplitude=100.0,
-            frequency=0.5 * u.Hz,  # 2 second period
-            duration=4000 * u.ms
-        )
-        signal = ramp()
-        self.assertEqual(signal.shape[0], 40000)
-        show(signal, 4000 * u.ms, 'Slow Ramp for I-V Curve')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            ramp = TriangularInput(
+                amplitude=100.0,
+                frequency=0.5 * u.Hz,  # 2 second period
+                duration=4000 * u.ms
+            )
+            signal = ramp()
+            self.assertEqual(signal.shape[0], 40000)
+            show(signal, 4000 * u.ms, 'Slow Ramp for I-V Curve')
 
     def test_clipped_triangular(self):
         """Test clipped triangular wave from docstring example."""
-        tri = TriangularInput(5.0, 4 * u.Hz, 600 * u.ms)
-        clipped = tri.clip(-3.0, 3.0)  # Trapezoidal shape
-        signal = clipped()
-        self.assertEqual(signal.shape[0], 6000)
-        show(signal, 600 * u.ms, 'Clipped Triangular (Trapezoidal)')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            tri = TriangularInput(5.0, 4 * u.Hz, 600 * u.ms)
+            clipped = tri.clip(-3.0, 3.0)  # Trapezoidal shape
+            signal = clipped()
+            self.assertEqual(signal.shape[0], 6000)
+            show(signal, 600 * u.ms, 'Clipped Triangular (Trapezoidal)')
 
     def test_triangular_with_envelope(self):
         """Test triangular wave with envelope from docstring example."""
-        tri = TriangularInput(2.0, 10 * u.Hz, 1000 * u.ms)
-        envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
-        modulated = tri * envelope
-        signal = modulated()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Triangular with Gaussian Envelope')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            tri = TriangularInput(2.0, 10 * u.Hz, 1000 * u.ms)
+            envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
+            modulated = tri * envelope
+            signal = modulated()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Triangular with Gaussian Envelope')
 
     def test_adaptation_test(self):
         """Test triangular for adaptation testing from docstring example."""
-        adaptation_test = TriangularInput(
-            amplitude=20.0,
-            frequency=1 * u.Hz,
-            duration=5000 * u.ms
-        )
-        signal = adaptation_test()
-        self.assertEqual(signal.shape[0], 50000)
-        show(signal, 5000 * u.ms, 'Adaptation Test Triangular')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            adaptation_test = TriangularInput(
+                amplitude=20.0,
+                frequency=1 * u.Hz,
+                duration=5000 * u.ms
+            )
+            signal = adaptation_test()
+            self.assertEqual(signal.shape[0], 50000)
+            show(signal, 5000 * u.ms, 'Adaptation Test Triangular')
 
     def test_positive_bias_triangular(self):
         """Test triangular with positive bias from docstring example."""
-        positive_tri = TriangularInput(
-            amplitude=3.0,
-            frequency=5 * u.Hz,
-            duration=800 * u.ms,
-            bias=True  # Ramps between 0 and 6
-        )
-        signal = positive_tri()
-        self.assertEqual(signal.shape[0], 8000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            positive_tri = TriangularInput(
+                amplitude=3.0,
+                frequency=5 * u.Hz,
+                duration=800 * u.ms,
+                bias=True  # Ramps between 0 and 6
+            )
+            signal = positive_tri()
+            self.assertEqual(signal.shape[0], 8000)
 
-        # Check non-negative values
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag >= -0.01))
-        show(signal, 800 * u.ms, 'Positive Bias Triangular')
+            # Check non-negative values
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag >= -0.01))
+            show(signal, 800 * u.ms, 'Positive Bias Triangular')
 
     def test_windowed_triangular(self):
         """Test windowed triangular from docstring example."""
-        windowed_tri = TriangularInput(
-            amplitude=4.0,
-            frequency=2 * u.Hz,
-            duration=3000 * u.ms,
-            t_start=500 * u.ms,
-            t_end=2500 * u.ms
-        )
-        signal = windowed_tri()
-        self.assertEqual(signal.shape[0], 30000)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            windowed_tri = TriangularInput(
+                amplitude=4.0,
+                frequency=2 * u.Hz,
+                duration=3000 * u.ms,
+                t_start=500 * u.ms,
+                t_end=2500 * u.ms
+            )
+            signal = windowed_tri()
+            self.assertEqual(signal.shape[0], 30000)
 
-        # Check windowing
-        signal_mag = u.get_magnitude(signal)
-        self.assertTrue(np.all(signal_mag[:5000] == 0))
-        self.assertTrue(np.all(signal_mag[25000:] == 0))
-        show(signal, 3000 * u.ms, 'Windowed Triangular')
+            # Check windowing
+            signal_mag = u.get_magnitude(signal)
+            self.assertTrue(np.all(signal_mag[:5000] == 0))
+            self.assertTrue(np.all(signal_mag[25000:] == 0))
+            show(signal, 3000 * u.ms, 'Windowed Triangular')
 
 
 class TestSawtoothInput(TestCase):
@@ -305,30 +326,33 @@ class TestSawtoothInput(TestCase):
 
     def test_simple_sawtooth(self):
         """Test simple sawtooth wave from docstring example."""
-        saw = SawtoothInput(1.0, 2 * u.Hz, 2000 * u.ms)
-        signal = saw()
-        self.assertEqual(signal.shape[0], 20000)
-        show(signal, 2000 * u.ms, 'Simple Sawtooth Wave')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            saw = SawtoothInput(1.0, 2 * u.Hz, 2000 * u.ms)
+            signal = saw()
+            self.assertEqual(signal.shape[0], 20000)
+            show(signal, 2000 * u.ms, 'Simple Sawtooth Wave')
 
     def test_threshold_detection(self):
         """Test slow ramp for threshold detection from docstring example."""
-        threshold_test = SawtoothInput(
-            amplitude=50.0,
-            frequency=0.5 * u.Hz,  # 2 second ramp
-            duration=4000 * u.ms
-        )
-        signal = threshold_test()
-        self.assertEqual(signal.shape[0], 40000)
-        show(signal, 4000 * u.ms, 'Threshold Detection Sawtooth')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            threshold_test = SawtoothInput(
+                amplitude=50.0,
+                frequency=0.5 * u.Hz,  # 2 second ramp
+                duration=4000 * u.ms
+            )
+            signal = threshold_test()
+            self.assertEqual(signal.shape[0], 40000)
+            show(signal, 4000 * u.ms, 'Threshold Detection Sawtooth')
 
     def test_sawtooth_with_offset(self):
         """Test sawtooth with DC offset from docstring example."""
-        saw = SawtoothInput(3.0, 3 * u.Hz, 1000 * u.ms)
-        offset = ConstantInput([(2.0, 1000 * u.ms)])
-        shifted_saw = saw + offset
-        signal = shifted_saw()
-        self.assertEqual(signal.shape[0], 10000)
-        show(signal, 1000 * u.ms, 'Sawtooth with DC Offset')
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            saw = SawtoothInput(3.0, 3 * u.Hz, 1000 * u.ms)
+            offset = ConstantInput([(2.0, 1000 * u.ms)])
+            shifted_saw = saw + offset
+            signal = shifted_saw()
+            self.assertEqual(signal.shape[0], 10000)
+            show(signal, 1000 * u.ms, 'Sawtooth with DC Offset')
 
     def test_fast_reset(self):
         """Test fast reset sawtooth from docstring example."""
