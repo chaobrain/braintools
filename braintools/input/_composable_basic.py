@@ -27,11 +27,10 @@ from typing import Sequence, Optional, Union
 
 import brainstate
 import brainunit as u
-import numpy as np
 
 from ._composable_base import Input
-from ._functional_basic import section, constant, step, ramp
 from ._deprecation import create_deprecated_class
+from ._functional_basic import section, constant, step, ramp
 
 __all__ = [
     'Section',
@@ -127,6 +126,7 @@ class Section(Input):
     >>> recovery = Section([0], [200])
     >>> full_protocol = baseline & stim & recovery
     """
+    __module__ = 'braintools.input'
 
     def __init__(
         self,
@@ -254,6 +254,7 @@ class Constant(Input):
     >>> # Repeat pattern
     >>> repeated = const.repeat(3)
     """
+    __module__ = 'braintools.input'
 
     def __init__(self, I_and_duration: Sequence[tuple]):
         """Initialize constant input.
@@ -376,6 +377,7 @@ class Step(Input):
     >>> test = Step([0, 1, 0], [0, 20, 80], 100 * u.ms)
     >>> protocol = baseline & test & baseline
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  amplitudes: Sequence[float],
@@ -407,7 +409,7 @@ class Step(Input):
             else:
                 # Assume it's in the same unit as dt if no unit is provided
                 step_times_with_units.append(t * dt_unit)
-        
+
         # Use the functional API
         return step(
             self.amplitudes,
@@ -538,6 +540,7 @@ class Ramp(Input):
     >>> down_ramp = Ramp(1, 0, 100 * u.ms)
     >>> protocol = up_ramp & plateau & down_ramp
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  c_start: float,

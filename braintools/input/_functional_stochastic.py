@@ -19,12 +19,14 @@
 Stochastic and random process input generators.
 """
 
-from typing import Optional, Union
+from typing import Optional
 
-import numpy as np
-from ._deprecation import create_deprecated_function
 import brainstate
 import brainunit as u
+import numpy as np
+
+from braintools._misc import set_module_as
+from ._deprecation import create_deprecated_function
 
 __all__ = [
     'wiener_process',
@@ -33,6 +35,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.input')
 def wiener_process(
     duration: brainstate.typing.ArrayLike,
     sigma: brainstate.typing.ArrayLike = 1.0,
@@ -115,18 +118,18 @@ def wiener_process(
     """
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Extract sigma
     sigma_value, c_unit = u.split_mantissa_unit(sigma)
-    
+
     # Setup random number generator
     rng = np.random if seed is None else np.random.RandomState(seed)
 
@@ -134,20 +137,21 @@ def wiener_process(
     i_start = int(t_start_value / dt_value)
     i_end = int(t_end_value / dt_value)
     n_steps = int(np.ceil(duration_value / dt_value))
-    
+
     # Generate noise
     dt_sqrt = np.sqrt(dt_value)
     shape = (i_end - i_start,) if n == 1 else (i_end - i_start, n)
     noise_values = rng.standard_normal(shape) * sigma_value * dt_sqrt
-    
+
     # Create full array with zeros outside the window
     full_shape = (n_steps,) if n == 1 else (n_steps, n)
     currents = np.zeros(full_shape, dtype=brainstate.environ.dftype())
     currents[i_start:i_end] = noise_values
-    
+
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def ou_process(
     mean: brainstate.typing.ArrayLike,
     sigma: brainstate.typing.ArrayLike,
@@ -257,56 +261,57 @@ def ou_process(
     """
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Extract parameters
     mean_value, c_unit = u.split_mantissa_unit(mean)
     sigma_value = u.Quantity(sigma).to(c_unit).mantissa
     tau_value = u.Quantity(tau).to(time_unit).mantissa
-    
+
     # Setup random number generator
     rng = np.random if seed is None else np.random.RandomState(seed)
-    
+
     # Calculate indices
     i_start = int(t_start_value / dt_value)
     i_end = int(t_end_value / dt_value)
     n_steps = int(np.ceil(duration_value / dt_value))
-    
+
     # Generate OU process
     dt_sqrt = np.sqrt(dt_value)
     dt_over_tau = dt_value / tau_value
-    
+
     # Initialize process at mean
     x = np.full(n, mean_value, dtype=brainstate.environ.dftype())
     process_values = []
-    
+
     for _ in range(i_end - i_start):
         # OU dynamics: dx = (mean - x) * dt/tau + sigma * sqrt(dt) * dW
         noise = rng.standard_normal(n if n > 1 else ())
         x = x + (mean_value - x) * dt_over_tau + sigma_value * dt_sqrt * noise
         process_values.append(x.copy() if n > 1 else x)
-    
+
     # Stack the process values
     if n > 1:
         noise_values = np.stack(process_values, axis=0)
     else:
         noise_values = np.squeeze(np.array(process_values))
-    
+
     # Create full array with zeros outside the window
     full_shape = (n_steps,) if n == 1 else (n_steps, n)
     currents = np.zeros(full_shape, dtype=brainstate.environ.dftype())
     currents[i_start:i_end] = noise_values
-    
+
     return u.maybe_decimal(currents * c_unit)
 
 
+@set_module_as('braintools.input')
 def poisson(
     rate: brainstate.typing.ArrayLike,
     duration: brainstate.typing.ArrayLike,
@@ -409,31 +414,31 @@ def poisson(
     """
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    
+
     # Handle time parameters
     t_start = 0. * time_unit if t_start is None else t_start
     t_end = duration if t_end is None else t_end
-    
+
     duration_value = u.Quantity(duration).to(time_unit).mantissa
     t_start_value = u.Quantity(t_start).to(time_unit).mantissa
     t_end_value = u.Quantity(t_end).to(time_unit).mantissa
-    
+
     # Handle rate (must be in Hz)
     rate_unit = u.get_unit(rate)
     assert rate_unit.dim == u.Hz.dim, f'Rate must be in Hz. Got {rate_unit}.'
     rate_value = u.Quantity(rate).to(u.Hz).mantissa
-    
+
     # Extract amplitude
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
-    
+
     # Setup random number generator
     rng = np.random if seed is None else np.random.RandomState(seed)
-    
+
     # Calculate indices
     i_start = int(t_start_value / dt_value)
     i_end = int(t_end_value / dt_value)
     n_steps = int(np.ceil(duration_value / dt_value))
-    
+
     # Convert rate to probability per timestep
     # Need to account for time unit conversion
     if time_unit == u.ms:
@@ -443,17 +448,17 @@ def poisson(
     else:
         # General conversion
         spike_prob = rate_value * dt_value * u.Quantity(1 * time_unit).to(u.second).mantissa
-    
+
     # Generate Poisson spikes in the active window
     shape = (i_end - i_start,) if n == 1 else (i_end - i_start, n)
     spikes = rng.random(shape) < spike_prob
     spike_values = spikes.astype(brainstate.environ.dftype()) * amplitude_value
-    
+
     # Create full array with zeros outside the window
     full_shape = (n_steps,) if n == 1 else (n_steps, n)
     currents = np.zeros(full_shape, dtype=brainstate.environ.dftype())
     currents[i_start:i_end] = spike_values
-    
+
     return u.maybe_decimal(currents * c_unit)
 
 

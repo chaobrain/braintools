@@ -24,12 +24,12 @@ import brainunit as u
 import matplotlib.pyplot as plt
 import numpy as np
 
+from braintools.input._composable_basic import Ramp, Constant, Step
+from braintools.input._composable_pulses import GaussianPulse
 from braintools.input._composable_waveforms import (
     Sinusoidal, Square, Triangular,
     Sawtooth, Chirp, NoisySinusoidal
 )
-from braintools.input._composable_basic import Ramp, Constant, Step
-from braintools.input._composable_pulses import GaussianPulse
 
 block = False
 
@@ -482,8 +482,8 @@ class TestChirp(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             resonance_test = Chirp(
                 amplitude=1.0,
-                f_start=4 * u.Hz,   # Theta start
-                f_end=80 * u.Hz,    # Gamma end
+                f_start=4 * u.Hz,  # Theta start
+                f_end=80 * u.Hz,  # Gamma end
                 duration=10000 * u.ms,
                 method='logarithmic'
             )

@@ -28,6 +28,7 @@ import brainstate
 import brainunit as u
 
 from ._composable_base import Input
+from ._deprecation import create_deprecated_class
 from ._functional_pulses import (
     spike,
     gaussian_pulse,
@@ -35,7 +36,6 @@ from ._functional_pulses import (
     double_exponential,
     burst
 )
-from ._deprecation import create_deprecated_class
 
 ArrayLike = brainstate.typing.ArrayLike
 
@@ -159,6 +159,7 @@ class Spike(Input):
     >>> # Repeat the pattern
     >>> repeated_pairs = paired.repeat(5)
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  sp_times: Sequence[ArrayLike],
@@ -297,6 +298,7 @@ class GaussianPulse(Input):
     >>> excitatory = GaussianPulse(0.5, 150 * u.ms, 25 * u.ms, 300 * u.ms)
     >>> inhibitory = -excitatory
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  amplitude: float,
@@ -435,6 +437,7 @@ class ExponentialDecay(Input):
     ...     decays.append(ExponentialDecay(amp, 20 * u.ms, 200 * u.ms, t_start=t * u.ms))
     >>> depressing_response = sum(decays[1:], decays[0])
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  amplitude: float,
@@ -588,6 +591,7 @@ class DoubleExponential(Input):
     ...     duration=100 * u.ms
     ... )
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  amplitude: float,
@@ -743,6 +747,7 @@ class Burst(Input):
     >>> envelope = ExponentialDecay(1.0, 150 * u.ms, 600 * u.ms)
     >>> decaying_bursts = bursts * envelope
     """
+    __module__ = 'braintools.input'
 
     def __init__(self,
                  n_bursts: int,

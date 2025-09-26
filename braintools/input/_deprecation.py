@@ -15,11 +15,14 @@
 
 """Deprecation utilities for the input module."""
 
-import warnings
 import functools
-from typing import Callable, Type, Any
+import warnings
+from typing import Callable, Type
+
+from braintools._misc import set_module_as
 
 
+@set_module_as('braintools.input')
 def deprecated_alias(old_name: str, new_name: str, version: str = "1.0.0"):
     """Create a deprecation warning decorator for functions or classes.
 
@@ -32,6 +35,7 @@ def deprecated_alias(old_name: str, new_name: str, version: str = "1.0.0"):
     version : str
         Version when the deprecation will be removed
     """
+
     def decorator(func_or_class):
         if isinstance(func_or_class, type):
             # For classes
@@ -60,10 +64,13 @@ def deprecated_alias(old_name: str, new_name: str, version: str = "1.0.0"):
                     stacklevel=2
                 )
                 return func_or_class(*args, **kwargs)
+
             return wrapper
+
     return decorator
 
 
+@set_module_as('braintools.input')
 def create_deprecated_class(new_class: Type, old_name: str, new_name: str, version: str = "1.0.0") -> Type:
     """Create a deprecated alias for a class.
 
@@ -83,6 +90,7 @@ def create_deprecated_class(new_class: Type, old_name: str, new_name: str, versi
     Type
         A new class that inherits from the original with a deprecation warning
     """
+
     class DeprecatedClass(new_class):
         def __init__(self, *args, **kwargs):
             warnings.warn(
@@ -98,6 +106,7 @@ def create_deprecated_class(new_class: Type, old_name: str, new_name: str, versi
     return DeprecatedClass
 
 
+@set_module_as('braintools.input')
 def create_deprecated_function(new_func: Callable, old_name: str, new_name: str, version: str = "1.0.0") -> Callable:
     """Create a deprecated alias for a function.
 
@@ -117,6 +126,7 @@ def create_deprecated_function(new_func: Callable, old_name: str, new_name: str,
     Callable
         A wrapper function that calls the original with a deprecation warning
     """
+
     @functools.wraps(new_func)
     def wrapper(*args, **kwargs):
         warnings.warn(

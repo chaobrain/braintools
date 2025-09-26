@@ -112,8 +112,8 @@ class TestInputBaseClass(TestCase):
 
             # Smoothing
             smooth_steps = Step([0, 1, 0.5, 1, 0],
-                                     [0, 100, 200, 300, 400],
-                                     500 * u.ms).smooth(10 * u.ms)
+                                [0, 100, 200, 300, 400],
+                                500 * u.ms).smooth(10 * u.ms)
             self.assertIsInstance(smooth_steps, Smoothed)
 
             # Repeating
@@ -258,8 +258,8 @@ class TestInputBaseClass(TestCase):
 
             # Smooth
             steps = Step([0, 1, 0.5, 1, 0],
-                              [0, 50, 100, 150, 200],
-                              250 * u.ms)
+                         [0, 50, 100, 150, 200],
+                         250 * u.ms)
             smooth = steps.smooth(10 * u.ms)
             self.assertIsInstance(smooth, Smoothed)
             very_smooth = steps.smooth(50 * u.ms)
@@ -442,8 +442,8 @@ class TestSmoothed(TestCase):
         """Test different smoothing levels."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             steps = Step([0, 1, 0.5, 1, 0],
-                              [0, 50, 100, 150, 200],
-                              250 * u.ms)
+                         [0, 50, 100, 150, 200],
+                         250 * u.ms)
 
             # Light smoothing (fast response)
             light = Smoothed(steps, 5 * u.ms)
@@ -512,7 +512,7 @@ class TestTransformed(TestCase):
 
             # Sigmoid nonlinearity
             sigmoid = Transformed(sine,
-                                       lambda x: 1 / (1 + jnp.exp(-10 * x)))
+                                  lambda x: 1 / (1 + jnp.exp(-10 * x)))
             arr = sigmoid()
             self.assertTrue(np.all(u.get_magnitude(arr) >= 0))
             self.assertTrue(np.all(u.get_magnitude(arr) <= 1))

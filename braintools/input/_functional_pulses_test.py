@@ -29,7 +29,6 @@ from braintools.input import (spike, gaussian_pulse, exponential_decay, double_e
 block = False
 
 
-
 def show(current, duration, title=''):
     if plt is not None:
         dt_value = u.get_magnitude(brainstate.environ.get_dt())
@@ -45,7 +44,7 @@ def show(current, duration, title=''):
 
 class TestPulseInputs(TestCase):
     def test_spike(self):
-        with brainstate.environ.context(dt=0.1*u.ms):
+        with brainstate.environ.context(dt=0.1 * u.ms):
             # Test with time values (backward compatibility)
             current = spike(
                 sp_times=[10, 20, 30, 200, 300] * u.ms,
@@ -67,7 +66,7 @@ class TestPulseInputs(TestCase):
             )
             show(current, 350 * u.ms, 'Spike Input with Variable Parameters')
             self.assertEqual(current.shape[0], 3500)
-    
+
     def test_spike_from_docstring(self):
         """Test examples from spike docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
@@ -105,12 +104,12 @@ class TestPulseInputs(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 500 * u.ms
             current = gaussian_pulse(amplitude=1.0 * u.nA,
-                                    center=250 * u.ms,
-                                    sigma=30 * u.ms,
-                                    duration=duration)
+                                     center=250 * u.ms,
+                                     sigma=30 * u.ms,
+                                     duration=duration)
             show(current, duration, 'Gaussian Pulse')
             self.assertEqual(current.shape[0], 5000)
-    
+
     def test_gaussian_pulse_from_docstring(self):
         """Test examples from gaussian_pulse docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
@@ -151,19 +150,19 @@ class TestPulseInputs(TestCase):
                 duration=200 * u.ms
             )
             self.assertEqual(current.shape[0], 2000)
-        
+
     def test_gaussian_pulse_multiple(self):
         # Test multiple gaussian pulses
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1000 * u.ms
             current = gaussian_pulse(amplitude=0.8 * u.nA,
-                                    center=200 * u.ms,
-                                    sigma=20 * u.ms,
-                                    duration=duration)
-            current += gaussian_pulse(amplitude=1.2 * u.nA,
-                                     center=600 * u.ms,
-                                     sigma=40 * u.ms,
+                                     center=200 * u.ms,
+                                     sigma=20 * u.ms,
                                      duration=duration)
+            current += gaussian_pulse(amplitude=1.2 * u.nA,
+                                      center=600 * u.ms,
+                                      sigma=40 * u.ms,
+                                      duration=duration)
             show(current, duration, 'Multiple Gaussian Pulses')
             self.assertEqual(current.shape[0], 10000)
 
@@ -171,13 +170,13 @@ class TestPulseInputs(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 500 * u.ms
             current = exponential_decay(amplitude=2.0 * u.nA,
-                                       tau=50 * u.ms,
-                                       t_start=50 * u.ms,
-                                       t_end=450 * u.ms,
-                                       duration=duration)
+                                        tau=50 * u.ms,
+                                        t_start=50 * u.ms,
+                                        t_end=450 * u.ms,
+                                        duration=duration)
             show(current, duration, 'Exponential Decay')
             self.assertEqual(current.shape[0], 5000)
-    
+
     def test_exponential_decay_from_docstring(self):
         """Test examples from exponential_decay docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
@@ -214,20 +213,20 @@ class TestPulseInputs(TestCase):
                 tau=10 * u.ms,
                 duration=100 * u.ms,
                 t_start=20 * u.ms,  # Start decay at 20ms
-                t_end=80 * u.ms      # End at 80ms
+                t_end=80 * u.ms  # End at 80ms
             )
             self.assertEqual(current.shape[0], 1000)
             # Check that decay starts after t_start
             self.assertAlmostEqual(u.get_magnitude(current[0]), 0.0, places=5)
             self.assertAlmostEqual(u.get_magnitude(current[199]), 0.0, places=5)
             self.assertTrue(u.get_magnitude(current[200]) > 0)  # At t_start
-        
+
     def test_exponential_decay_full_duration(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 300 * u.ms
             current = exponential_decay(amplitude=1.5 * u.nA,
-                                       tau=30 * u.ms,
-                                       duration=duration)
+                                        tau=30 * u.ms,
+                                        duration=duration)
             show(current, duration, 'Exponential Decay (Full Duration)')
             self.assertEqual(current.shape[0], 3000)
 
@@ -235,13 +234,13 @@ class TestPulseInputs(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 600 * u.ms
             current = double_exponential(amplitude=1.0 * u.nA,
-                                        tau_rise=10 * u.ms,
-                                        tau_decay=50 * u.ms,
-                                        t_start=50 * u.ms,
-                                        duration=duration)
+                                         tau_rise=10 * u.ms,
+                                         tau_decay=50 * u.ms,
+                                         t_start=50 * u.ms,
+                                         duration=duration)
             show(current, duration, 'Double Exponential')
             self.assertEqual(current.shape[0], 6000)
-    
+
     def test_double_exponential_from_docstring(self):
         """Test examples from double_exponential docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
@@ -287,15 +286,15 @@ class TestPulseInputs(TestCase):
             self.assertEqual(current.shape[0], 1000)
             # Check delay
             self.assertAlmostEqual(u.get_magnitude(current[199]), 0.0, places=5)
-        
+
     def test_double_exponential_different_taus(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 800 * u.ms
             current = double_exponential(amplitude=0.8 * u.nA,
-                                        tau_rise=5 * u.ms,
-                                        tau_decay=100 * u.ms,
-                                        t_start=100 * u.ms,
-                                        duration=duration)
+                                         tau_rise=5 * u.ms,
+                                         tau_decay=100 * u.ms,
+                                         t_start=100 * u.ms,
+                                         duration=duration)
             show(current, duration, 'Double Exponential (Fast Rise, Slow Decay)')
             self.assertEqual(current.shape[0], 8000)
 
@@ -312,7 +311,7 @@ class TestPulseInputs(TestCase):
             )
             show(current, duration, 'Burst Input (5 bursts)')
             self.assertEqual(current.shape[0], 10000)
-    
+
     def test_burst_from_docstring(self):
         """Test examples from burst docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
@@ -360,7 +359,7 @@ class TestPulseInputs(TestCase):
                 duration=3000 * u.ms
             )
             self.assertEqual(current.shape[0], 30000)
-        
+
     def test_burst_with_frequency(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Test burst input with different frequencies
@@ -383,12 +382,12 @@ class TestPulseInputs(TestCase):
 
             # Create a complex stimulus with multiple pulse types
             current = gaussian_pulse(amplitude=0.5 * u.nA, center=200 * u.ms,
-                                    sigma=30 * u.ms, duration=duration)
+                                     sigma=30 * u.ms, duration=duration)
             current += exponential_decay(amplitude=0.3 * u.nA, tau=50 * u.ms,
-                                        t_start=400 * u.ms, duration=duration)
+                                         t_start=400 * u.ms, duration=duration)
             current += double_exponential(amplitude=0.4 * u.nA, tau_rise=10 * u.ms,
-                                         tau_decay=40 * u.ms, t_start=700 * u.ms,
-                                         duration=duration)
+                                          tau_decay=40 * u.ms, t_start=700 * u.ms,
+                                          duration=duration)
 
             show(current, duration, 'Combined Pulse Types')
             self.assertEqual(current.shape[0], 10000)
