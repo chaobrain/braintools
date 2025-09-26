@@ -75,37 +75,52 @@ def wiener_process(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple Wiener process
-    >>> noise = wiener_process(
-    ...     duration=100 * u.ms,
-    ...     sigma=0.5 * u.pA
-    ... )
+
+    .. code-block:: python
+
+        >>> noise = wiener_process(
+        ...     duration=100 * u.ms,
+        ...     sigma=0.5 * u.pA
+        ... )
     
     # Multiple independent processes
-    >>> noises = wiener_process(
-    ...     duration=200 * u.ms,
-    ...     sigma=1.0 * u.nA,
-    ...     n=10  # 10 independent processes
-    ... )
+
+    .. code-block:: python
+
+        >>> noises = wiener_process(
+        ...     duration=200 * u.ms,
+        ...     sigma=1.0 * u.nA,
+        ...     n=10  # 10 independent processes
+        ... )
     
     # Windowed noise
-    >>> noise = wiener_process(
-    ...     duration=500 * u.ms,
-    ...     sigma=2.0 * u.pA,
-    ...     t_start=100 * u.ms,
-    ...     t_end=400 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> noise = wiener_process(
+        ...     duration=500 * u.ms,
+        ...     sigma=2.0 * u.pA,
+        ...     t_start=100 * u.ms,
+        ...     t_end=400 * u.ms
+        ... )
     
     # Reproducible noise
-    >>> noise = wiener_process(
-    ...     duration=100 * u.ms,
-    ...     sigma=0.3 * u.nA,
-    ...     seed=42  # Fixed seed for reproducibility
-    ... )
+
+    .. code-block:: python
+
+        >>> noise = wiener_process(
+        ...     duration=100 * u.ms,
+        ...     sigma=0.3 * u.nA,
+        ...     seed=42  # Fixed seed for reproducibility
+        ... )
     
     Notes
     -----
@@ -201,52 +216,70 @@ def ou_process(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple OU process
-    >>> current = ou_process(
-    ...     mean=0.5 * u.nA,
-    ...     sigma=0.2 * u.nA,
-    ...     tau=10 * u.ms,
-    ...     duration=500 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = ou_process(
+        ...     mean=0.5 * u.nA,
+        ...     sigma=0.2 * u.nA,
+        ...     tau=10 * u.ms,
+        ...     duration=500 * u.ms
+        ... )
     
     # Fast fluctuations around zero
-    >>> current = ou_process(
-    ...     mean=0 * u.pA,
-    ...     sigma=5 * u.pA,
-    ...     tau=2 * u.ms,  # Fast time constant
-    ...     duration=200 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = ou_process(
+        ...     mean=0 * u.pA,
+        ...     sigma=5 * u.pA,
+        ...     tau=2 * u.ms,  # Fast time constant
+        ...     duration=200 * u.ms
+        ... )
     
     # Slow fluctuations with drift
-    >>> current = ou_process(
-    ...     mean=1.0 * u.nA,
-    ...     sigma=0.3 * u.nA,
-    ...     tau=50 * u.ms,  # Slow time constant
-    ...     duration=1000 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = ou_process(
+        ...     mean=1.0 * u.nA,
+        ...     sigma=0.3 * u.nA,
+        ...     tau=50 * u.ms,  # Slow time constant
+        ...     duration=1000 * u.ms
+        ... )
     
     # Multiple independent processes
-    >>> currents = ou_process(
-    ...     mean=0 * u.pA,
-    ...     sigma=2 * u.pA,
-    ...     tau=5 * u.ms,
-    ...     duration=300 * u.ms,
-    ...     n=10  # 10 independent processes
-    ... )
+
+    .. code-block:: python
+
+        >>> currents = ou_process(
+        ...     mean=0 * u.pA,
+        ...     sigma=2 * u.pA,
+        ...     tau=5 * u.ms,
+        ...     duration=300 * u.ms,
+        ...     n=10  # 10 independent processes
+        ... )
     
     # Windowed OU process
-    >>> current = ou_process(
-    ...     mean=0.5 * u.nA,
-    ...     sigma=0.1 * u.nA,
-    ...     tau=20 * u.ms,
-    ...     duration=500 * u.ms,
-    ...     t_start=100 * u.ms,
-    ...     t_end=400 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = ou_process(
+        ...     mean=0.5 * u.nA,
+        ...     sigma=0.1 * u.nA,
+        ...     tau=20 * u.ms,
+        ...     duration=500 * u.ms,
+        ...     t_start=100 * u.ms,
+        ...     t_end=400 * u.ms
+        ... )
     
     Notes
     -----
@@ -357,48 +390,66 @@ def poisson(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple Poisson spike train
-    >>> spikes = poisson(
-    ...     rate=10 * u.Hz,
-    ...     duration=1000 * u.ms,
-    ...     amplitude=1 * u.pA
-    ... )
+
+    .. code-block:: python
+
+        >>> spikes = poisson(
+        ...     rate=10 * u.Hz,
+        ...     duration=1000 * u.ms,
+        ...     amplitude=1 * u.pA
+        ... )
     
     # High-frequency background activity
-    >>> spikes = poisson(
-    ...     rate=100 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     amplitude=0.5 * u.nA
-    ... )
+
+    .. code-block:: python
+
+        >>> spikes = poisson(
+        ...     rate=100 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     amplitude=0.5 * u.nA
+        ... )
     
     # Multiple independent spike trains
-    >>> spikes = poisson(
-    ...     rate=20 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     amplitude=2 * u.pA,
-    ...     n=50  # 50 independent spike trains
-    ... )
+
+    .. code-block:: python
+
+        >>> spikes = poisson(
+        ...     rate=20 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     amplitude=2 * u.pA,
+        ...     n=50  # 50 independent spike trains
+        ... )
     
     # Windowed spiking activity
-    >>> spikes = poisson(
-    ...     rate=50 * u.Hz,
-    ...     duration=1000 * u.ms,
-    ...     amplitude=1 * u.nA,
-    ...     t_start=200 * u.ms,
-    ...     t_end=800 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> spikes = poisson(
+        ...     rate=50 * u.Hz,
+        ...     duration=1000 * u.ms,
+        ...     amplitude=1 * u.nA,
+        ...     t_start=200 * u.ms,
+        ...     t_end=800 * u.ms
+        ... )
     
     # Low rate spontaneous activity
-    >>> spikes = poisson(
-    ...     rate=1 * u.Hz,
-    ...     duration=10000 * u.ms,
-    ...     amplitude=5 * u.pA,
-    ...     seed=123  # Reproducible spike pattern
-    ... )
+
+    .. code-block:: python
+
+        >>> spikes = poisson(
+        ...     rate=1 * u.Hz,
+        ...     duration=10000 * u.ms,
+        ...     amplitude=5 * u.pA,
+        ...     seed=123  # Reproducible spike pattern
+        ... )
     
     Notes
     -----

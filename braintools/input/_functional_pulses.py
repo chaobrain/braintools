@@ -75,35 +75,47 @@ def spike(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple spike train with uniform properties
-    >>> current = spike(
-    ...     sp_times=[10, 20, 30, 200, 300] * u.ms,
-    ...     sp_lens=1 * u.ms,  # All spikes 1ms long
-    ...     sp_sizes=0.5 * u.nA,  # All spikes 0.5nA amplitude
-    ...     duration=400 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = spike(
+        ...     sp_times=[10, 20, 30, 200, 300] * u.ms,
+        ...     sp_lens=1 * u.ms,  # All spikes 1ms long
+        ...     sp_sizes=0.5 * u.nA,  # All spikes 0.5nA amplitude
+        ...     duration=400 * u.ms
+        ... )
     
     # Variable spike properties
-    >>> current = spike(
-    ...     sp_times=[10, 50, 100] * u.ms,
-    ...     sp_lens=[1, 2, 0.5] * u.ms,  # Different durations
-    ...     sp_sizes=[0.5, 1.0, 0.3] * u.nA,  # Different amplitudes
-    ...     duration=150 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = spike(
+        ...     sp_times=[10, 50, 100] * u.ms,
+        ...     sp_lens=[1, 2, 0.5] * u.ms,  # Different durations
+        ...     sp_sizes=[0.5, 1.0, 0.3] * u.nA,  # Different amplitudes
+        ...     duration=150 * u.ms
+        ... )
     
     # High-frequency burst
-    >>> import numpy as np
-    >>> times = np.arange(0, 50, 2) * u.ms  # Every 2ms
-    >>> current = spike(
-    ...     sp_times=times,
-    ...     sp_lens=0.5 * u.ms,
-    ...     sp_sizes=1.0 * u.pA,
-    ...     duration=100 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> times = np.arange(0, 50, 2) * u.ms  # Every 2ms
+        >>> current = spike(
+        ...     sp_times=times,
+        ...     sp_lens=0.5 * u.ms,
+        ...     sp_sizes=1.0 * u.pA,
+        ...     duration=100 * u.ms
+        ... )
     
     Notes
     -----
@@ -188,42 +200,57 @@ def gaussian_pulse(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Single Gaussian pulse
-    >>> current = gaussian_pulse(
-    ...     amplitude=10 * u.pA,
-    ...     center=50 * u.ms,
-    ...     sigma=10 * u.ms,
-    ...     duration=100 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = gaussian_pulse(
+        ...     amplitude=10 * u.pA,
+        ...     center=50 * u.ms,
+        ...     sigma=10 * u.ms,
+        ...     duration=100 * u.ms
+        ... )
     
     # Multiple identical pulses
-    >>> currents = gaussian_pulse(
-    ...     amplitude=5 * u.nA,
-    ...     center=25 * u.ms,
-    ...     sigma=5 * u.ms,
-    ...     duration=50 * u.ms,
-    ...     n=10  # Generate 10 identical pulses
-    ... )
+
+    .. code-block:: python
+
+        >>> currents = gaussian_pulse(
+        ...     amplitude=5 * u.nA,
+        ...     center=25 * u.ms,
+        ...     sigma=5 * u.ms,
+        ...     duration=50 * u.ms,
+        ...     n=10  # Generate 10 identical pulses
+        ... )
     
     # Narrow pulse (approximating delta function)
-    >>> current = gaussian_pulse(
-    ...     amplitude=100 * u.pA,
-    ...     center=10 * u.ms,
-    ...     sigma=0.5 * u.ms,
-    ...     duration=20 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = gaussian_pulse(
+        ...     amplitude=100 * u.pA,
+        ...     center=10 * u.ms,
+        ...     sigma=0.5 * u.ms,
+        ...     duration=20 * u.ms
+        ... )
     
     # Wide pulse (slow activation)
-    >>> current = gaussian_pulse(
-    ...     amplitude=2 * u.nA,
-    ...     center=100 * u.ms,
-    ...     sigma=30 * u.ms,
-    ...     duration=200 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = gaussian_pulse(
+        ...     amplitude=2 * u.nA,
+        ...     center=100 * u.ms,
+        ...     sigma=30 * u.ms,
+        ...     duration=200 * u.ms
+        ... )
     
     Notes
     -----
@@ -287,39 +314,54 @@ def exponential_decay(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple exponential decay
-    >>> current = exponential_decay(
-    ...     amplitude=10 * u.pA,
-    ...     tau=20 * u.ms,
-    ...     duration=100 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = exponential_decay(
+        ...     amplitude=10 * u.pA,
+        ...     tau=20 * u.ms,
+        ...     duration=100 * u.ms
+        ... )
     
     # Fast decay (mimicking AMPA receptor)
-    >>> current = exponential_decay(
-    ...     amplitude=1 * u.nA,
-    ...     tau=2 * u.ms,
-    ...     duration=20 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = exponential_decay(
+        ...     amplitude=1 * u.nA,
+        ...     tau=2 * u.ms,
+        ...     duration=20 * u.ms
+        ... )
     
     # Slow decay (mimicking NMDA receptor)
-    >>> current = exponential_decay(
-    ...     amplitude=0.5 * u.nA,
-    ...     tau=100 * u.ms,
-    ...     duration=500 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = exponential_decay(
+        ...     amplitude=0.5 * u.nA,
+        ...     tau=100 * u.ms,
+        ...     duration=500 * u.ms
+        ... )
     
     # Delayed decay
-    >>> current = exponential_decay(
-    ...     amplitude=5 * u.pA,
-    ...     tau=10 * u.ms,
-    ...     duration=100 * u.ms,
-    ...     t_start=20 * u.ms,  # Start decay at 20ms
-    ...     t_end=80 * u.ms      # End at 80ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = exponential_decay(
+        ...     amplitude=5 * u.pA,
+        ...     tau=10 * u.ms,
+        ...     duration=100 * u.ms,
+        ...     t_start=20 * u.ms,  # Start decay at 20ms
+        ...     t_end=80 * u.ms      # End at 80ms
+        ... )
     
     Notes
     -----
@@ -402,42 +444,57 @@ def double_exponential(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # AMPA-like synaptic current
-    >>> current = double_exponential(
-    ...     amplitude=1 * u.nA,
-    ...     tau_rise=0.5 * u.ms,
-    ...     tau_decay=5 * u.ms,
-    ...     duration=30 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = double_exponential(
+        ...     amplitude=1 * u.nA,
+        ...     tau_rise=0.5 * u.ms,
+        ...     tau_decay=5 * u.ms,
+        ...     duration=30 * u.ms
+        ... )
     
     # NMDA-like synaptic current
-    >>> current = double_exponential(
-    ...     amplitude=0.5 * u.nA,
-    ...     tau_rise=2 * u.ms,
-    ...     tau_decay=100 * u.ms,
-    ...     duration=500 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = double_exponential(
+        ...     amplitude=0.5 * u.nA,
+        ...     tau_rise=2 * u.ms,
+        ...     tau_decay=100 * u.ms,
+        ...     duration=500 * u.ms
+        ... )
     
     # GABA-A like inhibitory current
-    >>> current = double_exponential(
-    ...     amplitude=-0.8 * u.nA,  # Negative for inhibition
-    ...     tau_rise=0.5 * u.ms,
-    ...     tau_decay=10 * u.ms,
-    ...     duration=50 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = double_exponential(
+        ...     amplitude=-0.8 * u.nA,  # Negative for inhibition
+        ...     tau_rise=0.5 * u.ms,
+        ...     tau_decay=10 * u.ms,
+        ...     duration=50 * u.ms
+        ... )
     
     # Delayed synaptic input
-    >>> current = double_exponential(
-    ...     amplitude=2 * u.pA,
-    ...     tau_rise=1 * u.ms,
-    ...     tau_decay=15 * u.ms,
-    ...     duration=100 * u.ms,
-    ...     t_start=20 * u.ms  # Delay of 20ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = double_exponential(
+        ...     amplitude=2 * u.pA,
+        ...     tau_rise=1 * u.ms,
+        ...     tau_decay=15 * u.ms,
+        ...     duration=100 * u.ms,
+        ...     t_start=20 * u.ms  # Delay of 20ms
+        ... )
     
     Notes
     -----
@@ -537,49 +594,64 @@ def burst(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Theta burst stimulation
-    >>> current = burst(
-    ...     burst_amp=10 * u.pA,
-    ...     burst_freq=100 * u.Hz,  # 100Hz within burst
-    ...     burst_duration=50 * u.ms,  # 50ms bursts
-    ...     inter_burst_interval=150 * u.ms,  # 150ms between bursts
-    ...     n_bursts=5,
-    ...     duration=1000 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = burst(
+        ...     burst_amp=10 * u.pA,
+        ...     burst_freq=100 * u.Hz,  # 100Hz within burst
+        ...     burst_duration=50 * u.ms,  # 50ms bursts
+        ...     inter_burst_interval=150 * u.ms,  # 150ms between bursts
+        ...     n_bursts=5,
+        ...     duration=1000 * u.ms
+        ... )
     
     # Gamma burst pattern
-    >>> current = burst(
-    ...     burst_amp=5 * u.nA,
-    ...     burst_freq=40 * u.Hz,  # Gamma frequency
-    ...     burst_duration=100 * u.ms,
-    ...     inter_burst_interval=100 * u.ms,
-    ...     n_bursts=10,
-    ...     duration=2000 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = burst(
+        ...     burst_amp=5 * u.nA,
+        ...     burst_freq=40 * u.Hz,  # Gamma frequency
+        ...     burst_duration=100 * u.ms,
+        ...     inter_burst_interval=100 * u.ms,
+        ...     n_bursts=10,
+        ...     duration=2000 * u.ms
+        ... )
     
     # High-frequency stimulation protocol
-    >>> current = burst(
-    ...     burst_amp=20 * u.pA,
-    ...     burst_freq=200 * u.Hz,
-    ...     burst_duration=20 * u.ms,
-    ...     inter_burst_interval=80 * u.ms,
-    ...     n_bursts=20,
-    ...     duration=2000 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = burst(
+        ...     burst_amp=20 * u.pA,
+        ...     burst_freq=200 * u.Hz,
+        ...     burst_duration=20 * u.ms,
+        ...     inter_burst_interval=80 * u.ms,
+        ...     n_bursts=20,
+        ...     duration=2000 * u.ms
+        ... )
     
     # Slow oscillatory bursts
-    >>> current = burst(
-    ...     burst_amp=1 * u.nA,
-    ...     burst_freq=5 * u.Hz,  # Slow oscillation
-    ...     burst_duration=500 * u.ms,
-    ...     inter_burst_interval=500 * u.ms,
-    ...     n_bursts=3,
-    ...     duration=3000 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = burst(
+        ...     burst_amp=1 * u.nA,
+        ...     burst_freq=5 * u.Hz,  # Slow oscillation
+        ...     burst_duration=500 * u.ms,
+        ...     inter_burst_interval=500 * u.ms,
+        ...     n_bursts=3,
+        ...     duration=3000 * u.ms
+        ... )
     
     Notes
     -----

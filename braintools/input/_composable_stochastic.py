@@ -88,51 +88,65 @@ class WienerProcess(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Create simple Wiener process:
 
-    >>> noise = WienerProcess(duration=100 * u.ms, sigma=0.5)
-    >>> signal = noise()
+    .. code-block:: python
+
+        >>> noise = WienerProcess(duration=100 * u.ms, sigma=0.5)
+        >>> signal = noise()
 
     Create multiple independent processes:
 
-    >>> multi_noise = WienerProcess(
-    ...     duration=200 * u.ms,
-    ...     n=5,  # 5 independent processes
-    ...     sigma=1.0
-    ... )
+    .. code-block:: python
+
+        >>> multi_noise = WienerProcess(
+        ...     duration=200 * u.ms,
+        ...     n=5,  # 5 independent processes
+        ...     sigma=1.0
+        ... )
 
     Create windowed noise (active only between t_start and t_end):
 
-    >>> windowed = WienerProcess(
-    ...     duration=500 * u.ms,
-    ...     sigma=2.0,
-    ...     t_start=100 * u.ms,
-    ...     t_end=400 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> windowed = WienerProcess(
+        ...     duration=500 * u.ms,
+        ...     sigma=2.0,
+        ...     t_start=100 * u.ms,
+        ...     t_end=400 * u.ms
+        ... )
 
     Combine with other inputs using arithmetic operations:
 
-    >>> from braintools.input import Ramp, Step
-    >>> # Noisy background with linear drift
-    >>> drift = Ramp(0, 0.5, 500 * u.ms)
-    >>> noise = WienerProcess(500 * u.ms, sigma=0.1)
-    >>> drifting_noise = noise + drift
+    .. code-block:: python
 
-    >>> # Modulated noise
-    >>> envelope = Step([0, 1.0], [0 * u.ms, 100 * u.ms], 500 * u.ms)
-    >>> modulated = noise * envelope
+        >>> from braintools.input import Ramp, Step
+        >>> # Noisy background with linear drift
+        >>> drift = Ramp(0, 0.5, 500 * u.ms)
+        >>> noise = WienerProcess(500 * u.ms, sigma=0.1)
+        >>> drifting_noise = noise + drift
+
+
+        >>> # Modulated noise
+        >>> envelope = Step([0, 1.0], [0 * u.ms, 100 * u.ms], 500 * u.ms)
+        >>> modulated = noise * envelope
 
     Create reproducible noise with seed:
 
-    >>> fixed_noise = WienerProcess(
-    ...     duration=100 * u.ms,
-    ...     sigma=0.3,
-    ...     seed=42  # Fixed seed for reproducibility
-    ... )
+    .. code-block:: python
+
+        >>> fixed_noise = WienerProcess(
+        ...     duration=100 * u.ms,
+        ...     sigma=0.3,
+        ...     seed=42  # Fixed seed for reproducibility
+        ... )
 
     Notes
     -----
@@ -246,80 +260,98 @@ class OUProcess(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Simple OU process:
 
-    >>> ou = OUProcess(
-    ...     mean=0.5,
-    ...     sigma=0.2,
-    ...     tau=10 * u.ms,
-    ...     duration=500 * u.ms
-    ... )
-    >>> signal = ou()
+    .. code-block:: python
+
+        >>> ou = OUProcess(
+        ...     mean=0.5,
+        ...     sigma=0.2,
+        ...     tau=10 * u.ms,
+        ...     duration=500 * u.ms
+        ... )
+        >>> signal = ou()
 
     Fast fluctuations around zero:
 
-    >>> fast_ou = OUProcess(
-    ...     mean=0.0,
-    ...     sigma=0.5,
-    ...     tau=2 * u.ms,  # Fast time constant
-    ...     duration=200 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> fast_ou = OUProcess(
+        ...     mean=0.0,
+        ...     sigma=0.5,
+        ...     tau=2 * u.ms,  # Fast time constant
+        ...     duration=200 * u.ms
+        ... )
 
     Slow fluctuations with drift:
 
-    >>> slow_ou = OUProcess(
-    ...     mean=1.0,
-    ...     sigma=0.3,
-    ...     tau=50 * u.ms,  # Slow time constant
-    ...     duration=1000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> slow_ou = OUProcess(
+        ...     mean=1.0,
+        ...     sigma=0.3,
+        ...     tau=50 * u.ms,  # Slow time constant
+        ...     duration=1000 * u.ms
+        ... )
 
     Multiple independent processes:
 
-    >>> multi_ou = OUProcess(
-    ...     mean=0.0,
-    ...     sigma=0.2,
-    ...     tau=5 * u.ms,
-    ...     duration=300 * u.ms,
-    ...     n=10  # 10 independent processes
-    ... )
+    .. code-block:: python
+
+        >>> multi_ou = OUProcess(
+        ...     mean=0.0,
+        ...     sigma=0.2,
+        ...     tau=5 * u.ms,
+        ...     duration=300 * u.ms,
+        ...     n=10  # 10 independent processes
+        ... )
 
     Windowed OU process:
 
-    >>> windowed_ou = OUProcess(
-    ...     mean=0.5,
-    ...     sigma=0.1,
-    ...     tau=20 * u.ms,
-    ...     duration=500 * u.ms,
-    ...     t_start=100 * u.ms,
-    ...     t_end=400 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> windowed_ou = OUProcess(
+        ...     mean=0.5,
+        ...     sigma=0.1,
+        ...     tau=20 * u.ms,
+        ...     duration=500 * u.ms,
+        ...     t_start=100 * u.ms,
+        ...     t_end=400 * u.ms
+        ... )
 
     Combine with other inputs:
 
-    >>> from braintools.input import Sinusoidal, Step
-    >>> # OU process with time-varying mean
-    >>> ou = OUProcess(mean=0.5, sigma=0.1, tau=20 * u.ms, duration=500 * u.ms)
-    >>> sine_mean = Sinusoidal(0.3, 2 * u.Hz, 500 * u.ms)
-    >>> modulated_ou = ou + sine_mean
+    .. code-block:: python
 
-    >>> # Gated OU process
-    >>> gate = Step([0, 1.0], [0 * u.ms, 50 * u.ms], 500 * u.ms)
-    >>> gated_ou = ou * gate
+        >>> from braintools.input import Sinusoidal, Step
+        >>> # OU process with time-varying mean
+        >>> ou = OUProcess(mean=0.5, sigma=0.1, tau=20 * u.ms, duration=500 * u.ms)
+        >>> sine_mean = Sinusoidal(0.3, 2 * u.Hz, 500 * u.ms)
+        >>> modulated_ou = ou + sine_mean
+
+
+        >>> # Gated OU process
+        >>> gate = Step([0, 1.0], [0 * u.ms, 50 * u.ms], 500 * u.ms)
+        >>> gated_ou = ou * gate
 
     Create reproducible OU process:
 
-    >>> fixed_ou = OUProcess(
-    ...     mean=0.0,
-    ...     sigma=0.15,
-    ...     tau=15 * u.ms,
-    ...     duration=200 * u.ms,
-    ...     seed=123  # Fixed seed
-    ... )
+    .. code-block:: python
+
+        >>> fixed_ou = OUProcess(
+        ...     mean=0.0,
+        ...     sigma=0.15,
+        ...     tau=15 * u.ms,
+        ...     duration=200 * u.ms,
+        ...     seed=123  # Fixed seed
+        ... )
 
     Notes
     -----
@@ -430,81 +462,101 @@ class Poisson(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Simple Poisson spike train:
 
-    >>> spikes = Poisson(
-    ...     rate=10 * u.Hz,
-    ...     duration=1000 * u.ms
-    ... )
-    >>> signal = spikes()
+    .. code-block:: python
+
+        >>> spikes = Poisson(
+        ...     rate=10 * u.Hz,
+        ...     duration=1000 * u.ms
+        ... )
+        >>> signal = spikes()
 
     High-frequency background activity:
 
-    >>> background = Poisson(
-    ...     rate=100 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     amplitude=0.5  # Smaller amplitude
-    ... )
+    .. code-block:: python
+
+        >>> background = Poisson(
+        ...     rate=100 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     amplitude=0.5  # Smaller amplitude
+        ... )
 
     Multiple independent spike trains:
 
-    >>> multi_spikes = Poisson(
-    ...     rate=20 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     n=50,  # 50 independent spike trains
-    ...     amplitude=2.0
-    ... )
+    .. code-block:: python
+
+        >>> multi_spikes = Poisson(
+        ...     rate=20 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     n=50,  # 50 independent spike trains
+        ...     amplitude=2.0
+        ... )
 
     Windowed spiking activity:
 
-    >>> burst = Poisson(
-    ...     rate=50 * u.Hz,
-    ...     duration=1000 * u.ms,
-    ...     t_start=200 * u.ms,
-    ...     t_end=800 * u.ms,
-    ...     amplitude=1.0
-    ... )
+    .. code-block:: python
+
+        >>> burst = Poisson(
+        ...     rate=50 * u.Hz,
+        ...     duration=1000 * u.ms,
+        ...     t_start=200 * u.ms,
+        ...     t_end=800 * u.ms,
+        ...     amplitude=1.0
+        ... )
 
     Low rate spontaneous activity:
 
-    >>> spontaneous = Poisson(
-    ...     rate=1 * u.Hz,
-    ...     duration=10000 * u.ms,
-    ...     amplitude=5.0
-    ... )
+    .. code-block:: python
+
+        >>> spontaneous = Poisson(
+        ...     rate=1 * u.Hz,
+        ...     duration=10000 * u.ms,
+        ...     amplitude=5.0
+        ... )
 
     Combine with envelopes for rate modulation:
 
-    >>> from braintools.input import GaussianPulse, Sinusoidal
-    >>> # Poisson spikes with Gaussian envelope
-    >>> poisson = Poisson(50 * u.Hz, 1000 * u.ms)
-    >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
-    >>> modulated = poisson * envelope
+    .. code-block:: python
 
-    >>> # Rhythmic modulation of spike rate
-    >>> rhythm = Sinusoidal(0.5, 5 * u.Hz, 1000 * u.ms)
-    >>> rhythmic_spikes = poisson * (1 + rhythm)
+        >>> from braintools.input import GaussianPulse, Sinusoidal
+        >>> # Poisson spikes with Gaussian envelope
+        >>> poisson = Poisson(50 * u.Hz, 1000 * u.ms)
+        >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
+        >>> modulated = poisson * envelope
+
+
+        >>> # Rhythmic modulation of spike rate
+        >>> rhythm = Sinusoidal(0.5, 5 * u.Hz, 1000 * u.ms)
+        >>> rhythmic_spikes = poisson * (1 + rhythm)
 
     Create reproducible spike pattern:
 
-    >>> fixed_spikes = Poisson(
-    ...     rate=30 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     seed=456  # Fixed seed for reproducibility
-    ... )
+    .. code-block:: python
+
+        >>> fixed_spikes = Poisson(
+        ...     rate=30 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     seed=456  # Fixed seed for reproducibility
+        ... )
 
     Inhomogeneous Poisson process (time-varying rate):
 
-    >>> from braintools.input import Ramp
-    >>> # Base Poisson process
-    >>> base_poisson = Poisson(10 * u.Hz, 1000 * u.ms)
-    >>> # Increasing rate envelope
-    >>> ramp = Ramp(0.1, 1.0, 1000 * u.ms)
-    >>> increasing_rate = base_poisson * ramp
+    .. code-block:: python
+
+        >>> from braintools.input import Ramp
+        >>> # Base Poisson process
+        >>> base_poisson = Poisson(10 * u.Hz, 1000 * u.ms)
+        >>> # Increasing rate envelope
+        >>> ramp = Ramp(0.1, 1.0, 1000 * u.ms)
+        >>> increasing_rate = base_poisson * ramp
 
     Notes
     -----

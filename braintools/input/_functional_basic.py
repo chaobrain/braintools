@@ -19,6 +19,9 @@
 Basic input current generators.
 """
 
+from __future__ import annotations
+
+import functools
 from typing import Sequence, Optional
 
 import brainstate
@@ -77,36 +80,51 @@ def section(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple step protocol
-    >>> current = section(
-    ...     values=[0, 10, 0] * u.pA,
-    ...     durations=[100, 200, 100] * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = section(
+        ...     values=[0, 10, 0] * u.pA,
+        ...     durations=[100, 200, 100] * u.ms
+        ... )
     
     # Multiple channel input
-    >>> import numpy as np
-    >>> values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
-    >>> current = section(
-    ...     values=values,
-    ...     durations=[50, 100, 50] * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
+        >>> current = section(
+        ...     values=values,
+        ...     durations=[50, 100, 50] * u.ms
+        ... )
     
     # Get both current and duration
-    >>> current, duration = section(
-    ...     values=[0, 1, 2, 1, 0] * u.pA,
-    ...     durations=[20, 20, 40, 20, 20] * u.ms,
-    ...     return_length=True
-    ... )
-    >>> print(f"Total duration: {duration}")
+
+    .. code-block:: python
+
+        >>> current, duration = section(
+        ...     values=[0, 1, 2, 1, 0] * u.pA,
+        ...     durations=[20, 20, 40, 20, 20] * u.ms,
+        ...     return_length=True
+        ... )
+        >>> print(f"Total duration: {duration}")
     
     # Complex protocol with different phases
-    >>> protocol_values = [0, 2, 5, 10, 5, 2, 0] * u.pA
-    >>> protocol_durations = [50, 30, 30, 100, 30, 30, 50] * u.ms  
-    >>> current = section(protocol_values, protocol_durations)
+
+    .. code-block:: python
+
+        >>> protocol_values = [0, 2, 5, 10, 5, 2, 0] * u.pA
+        >>> protocol_durations = [50, 30, 30, 100, 30, 30, 50] * u.ms
+        >>> current = section(protocol_values, protocol_durations)
     
     Notes
     -----
@@ -180,46 +198,64 @@ def constant(I_and_duration):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> import numpy as np
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> import numpy as np
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple two-phase protocol
-    >>> current, duration = constant([
-    ...     (0 * u.pA, 100 * u.ms),
-    ...     (10 * u.pA, 200 * u.ms)
-    ... ])
+
+    .. code-block:: python
+
+        >>> current, duration = constant([
+        ...     (0 * u.pA, 100 * u.ms),
+        ...     (10 * u.pA, 200 * u.ms)
+        ... ])
     
     # Mixed scalar and array values
-    >>> current, duration = constant([
-    ...     (0, 50 * u.ms),
-    ...     (np.array([1, 2, 3]) * u.nA, 100 * u.ms),
-    ...     (0, 50 * u.ms)
-    ... ])
+
+    .. code-block:: python
+
+        >>> current, duration = constant([
+        ...     (0, 50 * u.ms),
+        ...     (np.array([1, 2, 3]) * u.nA, 100 * u.ms),
+        ...     (0, 50 * u.ms)
+        ... ])
     
     # Complex multi-phase stimulation
-    >>> phases = [
-    ...     (0 * u.pA, 20 * u.ms),      # baseline
-    ...     (5 * u.pA, 50 * u.ms),      # weak stimulus
-    ...     (10 * u.pA, 100 * u.ms),    # strong stimulus
-    ...     (2 * u.pA, 30 * u.ms),      # recovery
-    ...     (0 * u.pA, 50 * u.ms),      # rest
-    ... ]
-    >>> current, total_time = constant(phases)
-    >>> print(f"Total stimulation time: {total_time}")
+
+    .. code-block:: python
+
+        >>> phases = [
+        ...     (0 * u.pA, 20 * u.ms),      # baseline
+        ...     (5 * u.pA, 50 * u.ms),      # weak stimulus
+        ...     (10 * u.pA, 100 * u.ms),    # strong stimulus
+        ...     (2 * u.pA, 30 * u.ms),      # recovery
+        ...     (0 * u.pA, 50 * u.ms),      # rest
+        ... ]
+        >>> current, total_time = constant(phases)
+        >>> print(f"Total stimulation time: {total_time}")
     
     # Using arrays for spatial patterns
-    >>> spatial_pattern = np.array([[1, 0], [0, 1]]) * u.nA
-    >>> current, duration = constant([
-    ...     (np.zeros((2, 2)) * u.nA, 100 * u.ms),
-    ...     (spatial_pattern, 200 * u.ms),
-    ...     (np.zeros((2, 2)) * u.nA, 100 * u.ms)
-    ... ])
+
+    .. code-block:: python
+
+        >>> spatial_pattern = np.array([[1, 0], [0, 1]]) * u.nA
+        >>> current, duration = constant([
+        ...     (np.zeros((2, 2)) * u.nA, 100 * u.ms),
+        ...     (spatial_pattern, 200 * u.ms),
+        ...     (np.zeros((2, 2)) * u.nA, 100 * u.ms)
+        ... ])
     
     # Ramp-like approximation with many steps
-    >>> steps = [(i * u.pA, 10 * u.ms) for i in range(11)]
-    >>> current, duration = constant(steps)
+
+    .. code-block:: python
+
+        >>> steps = [(i * u.pA, 10 * u.ms) for i in range(11)]
+        >>> current, duration = constant(steps)
     
     Notes
     -----
@@ -271,7 +307,7 @@ def constant(I_and_duration):
 def step(
     amplitudes,
     step_times,
-    duration: brainstate.typing.ArrayLike,
+    duration: brainstate.typing.ArrayLike = None,
 ):
     """Generate step function input with multiple levels.
 
@@ -297,48 +333,69 @@ def step(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple three-level step function
-    >>> current = step(
-    ...     amplitudes=[0, 10, 5] * u.pA,
-    ...     step_times=[0, 50, 150] * u.ms,
-    ...     duration=200 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = step(
+        ...     amplitudes=[0, 10, 5] * u.pA,
+        ...     step_times=[0, 50, 150] * u.ms,
+        ...     duration=200 * u.ms
+        ... )
     
     # Staircase protocol
-    >>> amplitudes = [0, 2, 4, 6, 8, 10] * u.nA
-    >>> times = [0, 20, 40, 60, 80, 100] * u.ms
-    >>> current = step(amplitudes, times, 120 * u.ms)
+
+    .. code-block:: python
+
+        >>> amplitudes = [0, 2, 4, 6, 8, 10] * u.nA
+        >>> times = [0, 20, 40, 60, 80, 100] * u.ms
+        >>> current = step(amplitudes, times, 120 * u.ms)
     
     # Multiple pulses with return to baseline
-    >>> current = step(
-    ...     amplitudes=[0, 5, 0, 10, 0] * u.pA,
-    ...     step_times=[0, 20, 40, 60, 80] * u.ms,
-    ...     duration=100 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = step(
+        ...     amplitudes=[0, 5, 0, 10, 0] * u.pA,
+        ...     step_times=[0, 20, 40, 60, 80] * u.ms,
+        ...     duration=100 * u.ms
+        ... )
     
     # Unsorted times are automatically sorted
-    >>> current = step(
-    ...     amplitudes=[5, 0, 10] * u.pA,
-    ...     step_times=[50, 0, 100] * u.ms,  # Will be sorted to [0, 50, 100]
-    ...     duration=150 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = step(
+        ...     amplitudes=[5, 0, 10] * u.pA,
+        ...     step_times=[50, 0, 100] * u.ms,  # Will be sorted to [0, 50, 100]
+        ...     duration=150 * u.ms
+        ... )
     
     # Protocol with negative values
-    >>> current = step(
-    ...     amplitudes=[-5, 0, 5, 0, -5] * u.pA,
-    ...     step_times=[0, 25, 50, 75, 100] * u.ms,
-    ...     duration=125 * u.ms
-    ... )
+
+    .. code-block:: python
+
+        >>> current = step(
+        ...     amplitudes=[-5, 0, 5, 0, -5] * u.pA,
+        ...     step_times=[0, 25, 50, 75, 100] * u.ms,
+        ...     duration=125 * u.ms
+        ... )
     
     # F-I curve protocol
-    >>> import numpy as np
-    >>> amplitudes = np.linspace(0, 50, 11) * u.pA
-    >>> times = np.linspace(0, 1000, 11) * u.ms
-    >>> current = step(amplitudes, times, 1100 * u.ms)
+
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> amplitudes = np.linspace(0, 50, 11) * u.pA
+        >>> times = np.linspace(0, 1000, 11) * u.ms
+        >>> current = step(amplitudes, times, 1100 * u.ms)
     
     Notes
     -----
@@ -349,7 +406,8 @@ def step(
     """
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
-    duration_value = u.Quantity(duration).to(time_unit).mantissa if hasattr(duration, 'unit') else duration
+    duration = duration if duration is not None else functools.reduce(lambda a, b: a + b, step_times)
+    duration_value = u.Quantity(duration).to(time_unit).mantissa
 
     # Extract mantissa and units from amplitudes
     amp_mantissas = []
@@ -425,71 +483,97 @@ def ramp(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
-    
-    # Simple linear ramp from 0 to 10 pA over 100 ms
-    >>> current = ramp(
-    ...     c_start=0 * u.pA,
-    ...     c_end=10 * u.pA,
-    ...     duration=100 * u.ms
-    ... )
-    
-    # Decreasing ramp (10 to 0 pA)
-    >>> current = ramp(
-    ...     c_start=10 * u.pA,
-    ...     c_end=0 * u.pA,
-    ...     duration=100 * u.ms
-    ... )
-    
-    # Ramp with delay and early stop
-    >>> current = ramp(
-    ...     c_start=0 * u.nA,
-    ...     c_end=5 * u.nA,
-    ...     duration=200 * u.ms,
-    ...     t_start=50 * u.ms,   # Start ramping at 50 ms
-    ...     t_end=150 * u.ms      # Stop ramping at 150 ms
-    ... )
-    
-    # Negative to positive ramp
-    >>> current = ramp(
-    ...     c_start=-5 * u.pA,
-    ...     c_end=5 * u.pA,
-    ...     duration=100 * u.ms
-    ... )
-    
-    # Slow ramp for adaptation studies
-    >>> current = ramp(
-    ...     c_start=0 * u.pA,
-    ...     c_end=20 * u.pA,
-    ...     duration=1000 * u.ms,
-    ...     t_start=100 * u.ms,
-    ...     t_end=900 * u.ms
-    ... )
-    
-    # Ramp for I-V curve measurements
-    >>> current = ramp(
-    ...     c_start=-100 * u.pA,
-    ...     c_end=100 * u.pA,
-    ...     duration=500 * u.ms
-    ... )
-    
-    # Sawtooth wave component
-    >>> current = ramp(
-    ...     c_start=0 * u.pA,
-    ...     c_end=10 * u.pA,
-    ...     duration=10 * u.ms,
-    ...     t_start=1 * u.ms,
-    ...     t_end=9 * u.ms
-    ... )
-    
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    Simple linear ramp from 0 to 10 pA over 100 ms
+
+    .. code-block:: python
+
+        >>> current = ramp(
+        ...     c_start=0 * u.pA,
+        ...     c_end=10 * u.pA,
+        ...     duration=100 * u.ms
+        ... )
+
+    Decreasing ramp (10 to 0 pA)
+
+    .. code-block:: python
+
+        >>> current = ramp(
+        ...     c_start=10 * u.pA,
+        ...     c_end=0 * u.pA,
+        ...     duration=100 * u.ms
+        ... )
+
+    Ramp with delay and early stop
+
+    .. code-block:: python
+
+        >>> current = ramp(
+        ...     c_start=0 * u.nA,
+        ...     c_end=5 * u.nA,
+        ...     duration=200 * u.ms,
+        ...     t_start=50 * u.ms,   # Start ramping at 50 ms
+        ...     t_end=150 * u.ms      # Stop ramping at 150 ms
+        ... )
+
+    Negative to positive ramp
+
+    .. code-block:: python
+
+        >>> current = ramp(
+        ...     c_start=-5 * u.pA,
+        ...     c_end=5 * u.pA,
+        ...     duration=100 * u.ms
+        ... )
+
+    Slow ramp for adaptation studies
+
+    .. code-block:: python
+
+        >>> current = ramp(
+        ...     c_start=0 * u.pA,
+        ...     c_end=20 * u.pA,
+        ...     duration=1000 * u.ms,
+        ...     t_start=100 * u.ms,
+        ...     t_end=900 * u.ms
+        ... )
+
+    Ramp for I-V curve measurements
+
+    .. code-block:: python
+
+        >>> current = ramp(
+        ...     c_start=-100 * u.pA,
+        ...     c_end=100 * u.pA,
+        ...     duration=500 * u.ms
+        ... )
+
+    Sawtooth wave component
+
+    .. code-block:: python
+
+        >>> current = ramp(
+        ...     c_start=0 * u.pA,
+        ...     c_end=10 * u.pA,
+        ...     duration=10 * u.ms,
+        ...     t_start=1 * u.ms,
+        ...     t_end=9 * u.ms
+        ... )
+
+
     Notes
     -----
     - The ramp is perfectly linear between t_start and t_end
     - Before t_start, the current is 0 (not c_start)
     - After t_end, the current remains at the value it reached
     - Unit consistency is enforced between c_start and c_end
+
     """
     dt = brainstate.environ.get_dt()
     dt, time_unit = u.split_mantissa_unit(dt)

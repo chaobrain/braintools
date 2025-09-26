@@ -95,69 +95,83 @@ class Spike(Input):
     --------
     Simple spike train with uniform properties:
     
-    >>> spikes = Spike(
-    ...     sp_times=[10, 20, 30, 200, 300] * u.ms,
-    ...     duration=400 * u.ms,
-    ...     sp_lens=1 * u.ms,  # All spikes 1ms long
-    ...     sp_sizes=0.5 * u.nA  # All spikes 0.5nA amplitude
-    ... )
-    >>> array = spikes()
+    .. code-block:: python
+
+        >>> spikes = Spike(
+        ...     sp_times=[10, 20, 30, 200, 300] * u.ms,
+        ...     duration=400 * u.ms,
+        ...     sp_lens=1 * u.ms,  # All spikes 1ms long
+        ...     sp_sizes=0.5 * u.nA  # All spikes 0.5nA amplitude
+        ... )
+        >>> array = spikes()
     
     Variable spike properties:
     
-    >>> spikes = Spike(
-    ...     sp_times=[10, 50, 100] * u.ms,
-    ...     duration=150 * u.ms,
-    ...     sp_lens=[1, 2, 0.5] * u.ms,  # Different durations
-    ...     sp_sizes=[0.5, 1.0, 0.3] * u.nA  # Different amplitudes
-    ... )
+    .. code-block:: python
+
+        >>> spikes = Spike(
+        ...     sp_times=[10, 50, 100] * u.ms,
+        ...     duration=150 * u.ms,
+        ...     sp_lens=[1, 2, 0.5] * u.ms,  # Different durations
+        ...     sp_sizes=[0.5, 1.0, 0.3] * u.nA  # Different amplitudes
+        ... )
     
     Add to background activity:
     
-    >>> from braintools.input import Constant
-    >>> spikes = Spike([10, 50, 100, 150] * u.ms, 200 * u.ms, sp_sizes=1.0)
-    >>> background = Constant([(0.1, 200 * u.ms)])
-    >>> combined = spikes + background
+    .. code-block:: python
+
+        >>> from braintools.input import Constant
+        >>> spikes = Spike([10, 50, 100, 150] * u.ms, 200 * u.ms, sp_sizes=1.0)
+        >>> background = Constant([(0.1, 200 * u.ms)])
+        >>> combined = spikes + background
     
     High-frequency burst simulation:
     
-    >>> import numpy as np
-    >>> times = np.arange(0, 50, 2) * u.ms  # Every 2ms
-    >>> spikes = Spike(
-    ...     sp_times=times,
-    ...     duration=100 * u.ms,
-    ...     sp_lens=0.5 * u.ms,
-    ...     sp_sizes=2.0 * u.pA
-    ... )
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> times = np.arange(0, 50, 2) * u.ms  # Every 2ms
+        >>> spikes = Spike(
+        ...     sp_times=times,
+        ...     duration=100 * u.ms,
+        ...     sp_lens=0.5 * u.ms,
+        ...     sp_sizes=2.0 * u.pA
+        ... )
     
     Combine with noise for realistic inputs:
     
-    >>> from braintools.input import WienerProcess
-    >>> spikes = Spike([20, 40, 60] * u.ms, 100 * u.ms)
-    >>> noise = WienerProcess(100 * u.ms, sigma=0.05)
-    >>> noisy_spikes = spikes + noise
+    .. code-block:: python
+
+        >>> from braintools.input import WienerProcess
+        >>> spikes = Spike([20, 40, 60] * u.ms, 100 * u.ms)
+        >>> noise = WienerProcess(100 * u.ms, sigma=0.05)
+        >>> noisy_spikes = spikes + noise
     
     Pattern of increasing amplitudes:
     
-    >>> amplitudes = np.linspace(0.5, 2.0, 10)
-    >>> times = np.linspace(10, 190, 10) * u.ms
-    >>> increasing_spikes = Spike(
-    ...     sp_times=times,
-    ...     duration=200 * u.ms,
-    ...     sp_sizes=amplitudes * u.nA
-    ... )
+    .. code-block:: python
+
+        >>> amplitudes = np.linspace(0.5, 2.0, 10)
+        >>> times = np.linspace(10, 190, 10) * u.ms
+        >>> increasing_spikes = Spike(
+        ...     sp_times=times,
+        ...     duration=200 * u.ms,
+        ...     sp_sizes=amplitudes * u.nA
+        ... )
     
     Paired-pulse facilitation protocol:
     
-    >>> # Two spikes with short interval
-    >>> paired = Spike(
-    ...     sp_times=[50, 70] * u.ms,  # 20ms interval
-    ...     duration=150 * u.ms,
-    ...     sp_lens=2 * u.ms,
-    ...     sp_sizes=[1.0, 1.5] * u.nA  # Second spike larger
-    ... )
-    >>> # Repeat the pattern
-    >>> repeated_pairs = paired.repeat(5)
+    .. code-block:: python
+
+        >>> # Two spikes with short interval
+        >>> paired = Spike(
+        ...     sp_times=[50, 70] * u.ms,  # 20ms interval
+        ...     duration=150 * u.ms,
+        ...     sp_lens=2 * u.ms,
+        ...     sp_sizes=[1.0, 1.5] * u.nA  # Second spike larger
+        ... )
+        >>> # Repeat the pattern
+        >>> repeated_pairs = paired.repeat(5)
     """
 
     def __init__(self,
@@ -246,56 +260,70 @@ class GaussianPulse(Input):
     --------
     Single Gaussian pulse:
     
-    >>> pulse = GaussianPulse(
-    ...     amplitude=1.0 * u.nA,
-    ...     center=100 * u.ms,
-    ...     sigma=20 * u.ms,
-    ...     duration=200 * u.ms
-    ... )
-    >>> array = pulse()
+    .. code-block:: python
+
+        >>> pulse = GaussianPulse(
+        ...     amplitude=1.0 * u.nA,
+        ...     center=100 * u.ms,
+        ...     sigma=20 * u.ms,
+        ...     duration=200 * u.ms
+        ... )
+        >>> array = pulse()
     
     Multiple overlapping pulses:
     
-    >>> pulse1 = GaussianPulse(1.0, 100 * u.ms, 20 * u.ms, 500 * u.ms)
-    >>> pulse2 = GaussianPulse(0.8, 300 * u.ms, 30 * u.ms, 500 * u.ms)
-    >>> double_pulse = pulse1 + pulse2
+    .. code-block:: python
+
+        >>> pulse1 = GaussianPulse(1.0, 100 * u.ms, 20 * u.ms, 500 * u.ms)
+        >>> pulse2 = GaussianPulse(0.8, 300 * u.ms, 30 * u.ms, 500 * u.ms)
+        >>> double_pulse = pulse1 + pulse2
     
     Train of Gaussian pulses:
     
-    >>> # Create evenly spaced pulses
-    >>> centers = [50, 150, 250, 350] * u.ms
-    >>> pulses = []
-    >>> for center in centers:
-    ...     pulses.append(GaussianPulse(0.5, center, 10 * u.ms, 400 * u.ms))
-    >>> pulse_train = sum(pulses[1:], pulses[0])  # Sum all pulses
+    .. code-block:: python
+
+        >>> # Create evenly spaced pulses
+        >>> centers = [50, 150, 250, 350] * u.ms
+        >>> pulses = []
+        >>> for center in centers:
+        ...     pulses.append(GaussianPulse(0.5, center, 10 * u.ms, 400 * u.ms))
+        >>> pulse_train = sum(pulses[1:], pulses[0])  # Sum all pulses
     
     Amplitude modulation with Gaussian envelope:
     
-    >>> from braintools.input import Sinusoidal
-    >>> envelope = GaussianPulse(1.0, 250 * u.ms, 50 * u.ms, 500 * u.ms)
-    >>> carrier = Sinusoidal(1.0, 50 * u.Hz, 500 * u.ms)
-    >>> modulated = envelope * carrier
+    .. code-block:: python
+
+        >>> from braintools.input import Sinusoidal
+        >>> envelope = GaussianPulse(1.0, 250 * u.ms, 50 * u.ms, 500 * u.ms)
+        >>> carrier = Sinusoidal(1.0, 50 * u.Hz, 500 * u.ms)
+        >>> modulated = envelope * carrier
     
     Noisy Gaussian pulse:
     
-    >>> from braintools.input import WienerProcess
-    >>> pulse = GaussianPulse(2.0, 100 * u.ms, 15 * u.ms, 200 * u.ms)
-    >>> noise = WienerProcess(200 * u.ms, sigma=0.1)
-    >>> noisy_pulse = pulse + noise
+    .. code-block:: python
+
+        >>> from braintools.input import WienerProcess
+        >>> pulse = GaussianPulse(2.0, 100 * u.ms, 15 * u.ms, 200 * u.ms)
+        >>> noise = WienerProcess(200 * u.ms, sigma=0.1)
+        >>> noisy_pulse = pulse + noise
     
     Wide and narrow pulses comparison:
     
-    >>> narrow = GaussianPulse(1.0, 100 * u.ms, 5 * u.ms, 200 * u.ms)
-    >>> wide = GaussianPulse(1.0, 100 * u.ms, 30 * u.ms, 200 * u.ms)
-    >>> # Combine with different weights
-    >>> mixed = 0.7 * narrow + 0.3 * wide
+    .. code-block:: python
+
+        >>> narrow = GaussianPulse(1.0, 100 * u.ms, 5 * u.ms, 200 * u.ms)
+        >>> wide = GaussianPulse(1.0, 100 * u.ms, 30 * u.ms, 200 * u.ms)
+        >>> # Combine with different weights
+        >>> mixed = 0.7 * narrow + 0.3 * wide
     
     Inverted (inhibitory) pulse:
     
-    >>> inhibitory = GaussianPulse(-0.5, 150 * u.ms, 25 * u.ms, 300 * u.ms)
-    >>> # Or use negation operator
-    >>> excitatory = GaussianPulse(0.5, 150 * u.ms, 25 * u.ms, 300 * u.ms)
-    >>> inhibitory = -excitatory
+    .. code-block:: python
+
+        >>> inhibitory = GaussianPulse(-0.5, 150 * u.ms, 25 * u.ms, 300 * u.ms)
+        >>> # Or use negation operator
+        >>> excitatory = GaussianPulse(0.5, 150 * u.ms, 25 * u.ms, 300 * u.ms)
+        >>> inhibitory = -excitatory
     """
 
     def __init__(self,
@@ -383,57 +411,71 @@ class ExponentialDecay(Input):
     --------
     Simple exponential decay:
     
-    >>> decay = ExponentialDecay(
-    ...     amplitude=2.0 * u.nA,
-    ...     tau=30 * u.ms,
-    ...     duration=200 * u.ms
-    ... )
-    >>> array = decay()
+    .. code-block:: python
+
+        >>> decay = ExponentialDecay(
+        ...     amplitude=2.0 * u.nA,
+        ...     tau=30 * u.ms,
+        ...     duration=200 * u.ms
+        ... )
+        >>> array = decay()
     
     Delayed decay (starts at t=50ms):
     
-    >>> decay = ExponentialDecay(
-    ...     amplitude=1.5,
-    ...     tau=20 * u.ms,
-    ...     duration=150 * u.ms,
-    ...     t_start=50 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> decay = ExponentialDecay(
+        ...     amplitude=1.5,
+        ...     tau=20 * u.ms,
+        ...     duration=150 * u.ms,
+        ...     t_start=50 * u.ms
+        ... )
     
     Gated decay with step function:
     
-    >>> from braintools.input import Step
-    >>> decay = ExponentialDecay(2.0, 30 * u.ms, 500 * u.ms, t_start=100 * u.ms)
-    >>> step = Step([0, 1], [0, 100], 500 * u.ms)
-    >>> gated_decay = decay * step  # Gate the decay
+    .. code-block:: python
+
+        >>> from braintools.input import Step
+        >>> decay = ExponentialDecay(2.0, 30 * u.ms, 500 * u.ms, t_start=100 * u.ms)
+        >>> step = Step([0, 1], [0, 100], 500 * u.ms)
+        >>> gated_decay = decay * step  # Gate the decay
     
     Multiple decay phases:
     
-    >>> fast_decay = ExponentialDecay(1.0, 10 * u.ms, 200 * u.ms)
-    >>> slow_decay = ExponentialDecay(0.5, 50 * u.ms, 200 * u.ms)
-    >>> combined = fast_decay + slow_decay  # Bi-exponential
+    .. code-block:: python
+
+        >>> fast_decay = ExponentialDecay(1.0, 10 * u.ms, 200 * u.ms)
+        >>> slow_decay = ExponentialDecay(0.5, 50 * u.ms, 200 * u.ms)
+        >>> combined = fast_decay + slow_decay  # Bi-exponential
     
     Adaptation current simulation:
     
-    >>> # Triggered by step input
-    >>> from braintools.input import Step
-    >>> trigger = Step([0, 1, 0], [0, 50, 150], 300 * u.ms)
-    >>> adaptation = ExponentialDecay(0.3, 40 * u.ms, 300 * u.ms, t_start=50 * u.ms)
-    >>> net_current = trigger - adaptation  # Adaptation reduces input
+    .. code-block:: python
+
+        >>> # Triggered by step input
+        >>> from braintools.input import Step
+        >>> trigger = Step([0, 1, 0], [0, 50, 150], 300 * u.ms)
+        >>> adaptation = ExponentialDecay(0.3, 40 * u.ms, 300 * u.ms, t_start=50 * u.ms)
+        >>> net_current = trigger - adaptation  # Adaptation reduces input
     
     Repeated decay pattern:
     
-    >>> single_decay = ExponentialDecay(1.0, 15 * u.ms, 50 * u.ms)
-    >>> decay_train = single_decay.repeat(10)  # 500ms total
+    .. code-block:: python
+
+        >>> single_decay = ExponentialDecay(1.0, 15 * u.ms, 50 * u.ms)
+        >>> decay_train = single_decay.repeat(10)  # 500ms total
     
     Synaptic depression model:
     
-    >>> # Each spike triggers smaller response
-    >>> amplitudes = [1.0, 0.8, 0.6, 0.4]  # Decreasing amplitudes
-    >>> times = [0, 50, 100, 150]  # Spike times
-    >>> decays = []
-    >>> for amp, t in zip(amplitudes, times):
-    ...     decays.append(ExponentialDecay(amp, 20 * u.ms, 200 * u.ms, t_start=t * u.ms))
-    >>> depressing_response = sum(decays[1:], decays[0])
+    .. code-block:: python
+
+        >>> # Each spike triggers smaller response
+        >>> amplitudes = [1.0, 0.8, 0.6, 0.4]  # Decreasing amplitudes
+        >>> times = [0, 50, 100, 150]  # Spike times
+        >>> decays = []
+        >>> for amp, t in zip(amplitudes, times):
+        ...     decays.append(ExponentialDecay(amp, 20 * u.ms, 200 * u.ms, t_start=t * u.ms))
+        >>> depressing_response = sum(decays[1:], decays[0])
     """
 
     def __init__(self,
@@ -531,62 +573,76 @@ class DoubleExponential(Input):
     --------
     AMPA-like synaptic current:
     
-    >>> ampa = DoubleExponential(
-    ...     amplitude=1.0 * u.nA,
-    ...     tau_rise=0.5 * u.ms,
-    ...     tau_decay=5 * u.ms,
-    ...     duration=50 * u.ms
-    ... )
-    >>> array = ampa()
+    .. code-block:: python
+
+        >>> ampa = DoubleExponential(
+        ...     amplitude=1.0 * u.nA,
+        ...     tau_rise=0.5 * u.ms,
+        ...     tau_decay=5 * u.ms,
+        ...     duration=50 * u.ms
+        ... )
+        >>> array = ampa()
     
     NMDA-like synaptic current (slower dynamics):
     
-    >>> nmda = DoubleExponential(
-    ...     amplitude=0.5 * u.nA,
-    ...     tau_rise=2 * u.ms,
-    ...     tau_decay=50 * u.ms,
-    ...     duration=200 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> nmda = DoubleExponential(
+        ...     amplitude=0.5 * u.nA,
+        ...     tau_rise=2 * u.ms,
+        ...     tau_decay=50 * u.ms,
+        ...     duration=200 * u.ms
+        ... )
     
     Synaptic current with noise:
     
-    >>> from braintools.input import WienerProcess
-    >>> alpha = DoubleExponential(1.0, 5 * u.ms, 20 * u.ms, 200 * u.ms)
-    >>> noise = WienerProcess(200 * u.ms, sigma=0.05)
-    >>> synaptic = alpha + noise
+    .. code-block:: python
+
+        >>> from braintools.input import WienerProcess
+        >>> alpha = DoubleExponential(1.0, 5 * u.ms, 20 * u.ms, 200 * u.ms)
+        >>> noise = WienerProcess(200 * u.ms, sigma=0.05)
+        >>> synaptic = alpha + noise
     
     Train of synaptic inputs:
     
-    >>> # Multiple EPSPs at different times
-    >>> times = [10, 30, 55, 80] * u.ms
-    >>> epsps = []
-    >>> for t in times:
-    ...     epsps.append(DoubleExponential(
-    ...         1.0, 1 * u.ms, 10 * u.ms, 150 * u.ms, t_start=t
-    ...     ))
-    >>> epsp_train = sum(epsps[1:], epsps[0])
+    .. code-block:: python
+
+        >>> # Multiple EPSPs at different times
+        >>> times = [10, 30, 55, 80] * u.ms
+        >>> epsps = []
+        >>> for t in times:
+        ...     epsps.append(DoubleExponential(
+        ...         1.0, 1 * u.ms, 10 * u.ms, 150 * u.ms, t_start=t
+        ...     ))
+        >>> epsp_train = sum(epsps[1:], epsps[0])
     
     Paired-pulse facilitation:
     
-    >>> # Second pulse larger than first
-    >>> pulse1 = DoubleExponential(1.0, 2 * u.ms, 15 * u.ms, 100 * u.ms, t_start=20 * u.ms)
-    >>> pulse2 = DoubleExponential(1.5, 2 * u.ms, 15 * u.ms, 100 * u.ms, t_start=40 * u.ms)
-    >>> ppf = pulse1 + pulse2
+    .. code-block:: python
+
+        >>> # Second pulse larger than first
+        >>> pulse1 = DoubleExponential(1.0, 2 * u.ms, 15 * u.ms, 100 * u.ms, t_start=20 * u.ms)
+        >>> pulse2 = DoubleExponential(1.5, 2 * u.ms, 15 * u.ms, 100 * u.ms, t_start=40 * u.ms)
+        >>> ppf = pulse1 + pulse2
     
     Combined fast and slow components:
     
-    >>> fast = DoubleExponential(0.7, 0.5 * u.ms, 5 * u.ms, 100 * u.ms)
-    >>> slow = DoubleExponential(0.3, 5 * u.ms, 50 * u.ms, 100 * u.ms)
-    >>> mixed = fast + slow
+    .. code-block:: python
+
+        >>> fast = DoubleExponential(0.7, 0.5 * u.ms, 5 * u.ms, 100 * u.ms)
+        >>> slow = DoubleExponential(0.3, 5 * u.ms, 50 * u.ms, 100 * u.ms)
+        >>> mixed = fast + slow
     
     Inhibitory synaptic current:
     
-    >>> ipsc = DoubleExponential(
-    ...     amplitude=-0.8 * u.nA,  # Negative for inhibition
-    ...     tau_rise=1 * u.ms,
-    ...     tau_decay=20 * u.ms,
-    ...     duration=100 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> ipsc = DoubleExponential(
+        ...     amplitude=-0.8 * u.nA,  # Negative for inhibition
+        ...     tau_rise=1 * u.ms,
+        ...     tau_decay=20 * u.ms,
+        ...     duration=100 * u.ms
+        ... )
     """
 
     def __init__(self,
@@ -687,61 +743,75 @@ class Burst(Input):
     --------
     Oscillatory bursts at 50Hz:
     
-    >>> bursts = Burst(
-    ...     n_bursts=5,
-    ...     burst_amp=1.0 * u.nA,
-    ...     burst_freq=50 * u.Hz,  # 50Hz oscillation
-    ...     burst_duration=30 * u.ms,
-    ...     inter_burst_interval=100 * u.ms,
-    ...     duration=500 * u.ms
-    ... )
-    >>> array = bursts()
+    .. code-block:: python
+
+        >>> bursts = Burst(
+        ...     n_bursts=5,
+        ...     burst_amp=1.0 * u.nA,
+        ...     burst_freq=50 * u.Hz,  # 50Hz oscillation
+        ...     burst_duration=30 * u.ms,
+        ...     inter_burst_interval=100 * u.ms,
+        ...     duration=500 * u.ms
+        ... )
+        >>> array = bursts()
     Oscillatory bursts (theta-burst stimulation):
     
-    >>> theta_bursts = Burst(
-    ...     n_bursts=10,
-    ...     burst_amp=2.0,
-    ...     burst_freq=100 * u.Hz,  # 100Hz oscillation within bursts
-    ...     burst_duration=40 * u.ms,
-    ...     inter_burst_interval=200 * u.ms,  # 5Hz burst rate
-    ...     duration=2000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> theta_bursts = Burst(
+        ...     n_bursts=10,
+        ...     burst_amp=2.0,
+        ...     burst_freq=100 * u.Hz,  # 100Hz oscillation within bursts
+        ...     burst_duration=40 * u.ms,
+        ...     inter_burst_interval=200 * u.ms,  # 5Hz burst rate
+        ...     duration=2000 * u.ms
+        ... )
     Bursts with ramped amplitude:
     
-    >>> from braintools.input import Ramp
-    >>> burst = Burst(5, 1.0, 50 * u.Hz, 30 * u.ms, 100 * u.ms, 500 * u.ms)
-    >>> ramp = Ramp(0.5, 1.5, 500 * u.ms)
-    >>> modulated_burst = burst * ramp
+    .. code-block:: python
+
+        >>> from braintools.input import Ramp
+        >>> burst = Burst(5, 1.0, 50 * u.Hz, 30 * u.ms, 100 * u.ms, 500 * u.ms)
+        >>> ramp = Ramp(0.5, 1.5, 500 * u.ms)
+        >>> modulated_burst = burst * ramp
     Burst pattern with noise:
     
-    >>> from braintools.input import WienerProcess
-    >>> bursts = Burst(4, 1.5, 30 * u.Hz, 50 * u.ms, 150 * u.ms, 600 * u.ms)
-    >>> noise = WienerProcess(600 * u.ms, sigma=0.1)
-    >>> noisy_bursts = bursts + noise
+    .. code-block:: python
+
+        >>> from braintools.input import WienerProcess
+        >>> bursts = Burst(4, 1.5, 30 * u.Hz, 50 * u.ms, 150 * u.ms, 600 * u.ms)
+        >>> noise = WienerProcess(600 * u.ms, sigma=0.1)
+        >>> noisy_bursts = bursts + noise
     Gamma bursts in theta rhythm:
     
-    >>> # 40Hz gamma bursts at 5Hz theta rhythm
-    >>> gamma_in_theta = Burst(
-    ...     n_bursts=15,
-    ...     burst_amp=1.0 * u.nA,
-    ...     burst_freq=40 * u.Hz,  # Gamma frequency
-    ...     burst_duration=100 * u.ms,
-    ...     inter_burst_interval=200 * u.ms,  # Theta rhythm (5Hz)
-    ...     duration=3000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> # 40Hz gamma bursts at 5Hz theta rhythm
+        >>> gamma_in_theta = Burst(
+        ...     n_bursts=15,
+        ...     burst_amp=1.0 * u.nA,
+        ...     burst_freq=40 * u.Hz,  # Gamma frequency
+        ...     burst_duration=100 * u.ms,
+        ...     inter_burst_interval=200 * u.ms,  # Theta rhythm (5Hz)
+        ...     duration=3000 * u.ms
+        ... )
     Paired bursts protocol:
     
-    >>> # Two bursts with short interval, then long gap
-    >>> burst1 = Burst(1, 1.0, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms)
-    >>> burst2 = Burst(1, 1.2, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms).shift(30 * u.ms)
-    >>> paired = burst1 + burst2
-    >>> protocol = paired.repeat(5)  # Repeat paired bursts
+    .. code-block:: python
+
+        >>> # Two bursts with short interval, then long gap
+        >>> burst1 = Burst(1, 1.0, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms)
+        >>> burst2 = Burst(1, 1.2, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms).shift(30 * u.ms)
+        >>> paired = burst1 + burst2
+        >>> protocol = paired.repeat(5)  # Repeat paired bursts
     Burst with exponential decay envelope:
     
-    >>> from braintools.input import ExponentialDecay
-    >>> bursts = Burst(8, 1.0, 50 * u.Hz, 25 * u.ms, 75 * u.ms, 600 * u.ms)
-    >>> envelope = ExponentialDecay(1.0, 150 * u.ms, 600 * u.ms)
-    >>> decaying_bursts = bursts * envelope
+    .. code-block:: python
+
+        >>> from braintools.input import ExponentialDecay
+        >>> bursts = Burst(8, 1.0, 50 * u.Hz, 25 * u.ms, 75 * u.ms, 600 * u.ms)
+        >>> envelope = ExponentialDecay(1.0, 150 * u.ms, 600 * u.ms)
+        >>> decaying_bursts = bursts * envelope
     """
 
     def __init__(self,

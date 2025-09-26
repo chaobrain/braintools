@@ -91,60 +91,77 @@ class Sinusoidal(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Create simple sinusoidal input:
 
-    >>> sine = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
-    >>> signal = sine()
+    .. code-block:: python
+
+        >>> sine = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
+        >>> signal = sine()
 
     Create amplitude-modulated signal:
 
-    >>> from braintools.input import Ramp
-    >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 500 * u.ms)
-    >>> envelope = Ramp(0, 1, 500 * u.ms)
-    >>> am_signal = carrier * envelope
+    .. code-block:: python
+
+        >>> from braintools.input import Ramp
+        >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 500 * u.ms)
+        >>> envelope = Ramp(0, 1, 500 * u.ms)
+        >>> am_signal = carrier * envelope
 
     Create frequency beats by combining sinusoids:
 
-    >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
-    >>> sine2 = Sinusoidal(1.0, 11 * u.Hz, 1000 * u.ms)
-    >>> beats = sine1 + sine2  # 1 Hz beat frequency
+    .. code-block:: python
+
+        >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
+        >>> sine2 = Sinusoidal(1.0, 11 * u.Hz, 1000 * u.ms)
+        >>> beats = sine1 + sine2  # 1 Hz beat frequency
 
     Create complex waveform with harmonics:
 
-    >>> fundamental = Sinusoidal(1.0, 5 * u.Hz, 2000 * u.ms)
-    >>> third = Sinusoidal(0.3, 15 * u.Hz, 2000 * u.ms)
-    >>> fifth = Sinusoidal(0.2, 25 * u.Hz, 2000 * u.ms)
-    >>> complex_wave = fundamental + third + fifth
+    .. code-block:: python
+
+        >>> fundamental = Sinusoidal(1.0, 5 * u.Hz, 2000 * u.ms)
+        >>> third = Sinusoidal(0.3, 15 * u.Hz, 2000 * u.ms)
+        >>> fifth = Sinusoidal(0.2, 25 * u.Hz, 2000 * u.ms)
+        >>> complex_wave = fundamental + third + fifth
 
     Test resonance with windowed sinusoid:
 
-    >>> resonance = Sinusoidal(
-    ...     amplitude=2.0,
-    ...     frequency=8 * u.Hz,  # Theta frequency
-    ...     duration=5000 * u.ms,
-    ...     t_start=1000 * u.ms,
-    ...     t_end=4000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> resonance = Sinusoidal(
+        ...     amplitude=2.0,
+        ...     frequency=8 * u.Hz,  # Theta frequency
+        ...     duration=5000 * u.ms,
+        ...     t_start=1000 * u.ms,
+        ...     t_end=4000 * u.ms
+        ... )
 
     Create phase-shifted sinusoids:
 
-    >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
-    >>> # Shift by 250ms (90 degrees for 10Hz)
-    >>> sine2 = sine1.shift(25 * u.ms)
-    >>> quadrature = sine1 + sine2
+    .. code-block:: python
+
+        >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
+        >>> # Shift by 250ms (90 degrees for 10Hz)
+        >>> sine2 = sine1.shift(25 * u.ms)
+        >>> quadrature = sine1 + sine2
 
     Sinusoid with positive bias (rectified):
 
-    >>> positive_sine = Sinusoidal(
-    ...     amplitude=5.0,
-    ...     frequency=5 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     bias=True  # Oscillates between 0 and 10
-    ... )
+    .. code-block:: python
+
+        >>> positive_sine = Sinusoidal(
+        ...     amplitude=5.0,
+        ...     frequency=5 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     bias=True  # Oscillates between 0 and 10
+        ... )
 
     Notes
     -----
@@ -237,69 +254,88 @@ class Square(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Create symmetric square wave:
 
-    >>> square = Square(1.0, 5 * u.Hz, 1000 * u.ms)
-    >>> signal = square()
+    .. code-block:: python
+
+        >>> square = Square(1.0, 5 * u.Hz, 1000 * u.ms)
+        >>> signal = square()
 
     Create pulse train with 20% duty cycle:
 
-    >>> pulses = Square(
-    ...     amplitude=5.0,
-    ...     frequency=10 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     duty_cycle=0.2  # 20% high, 80% low
-    ... )
+    .. code-block:: python
+
+        >>> pulses = Square(
+        ...     amplitude=5.0,
+        ...     frequency=10 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     duty_cycle=0.2  # 20% high, 80% low
+        ... )
 
     Smooth square wave transitions:
 
-    >>> square = Square(2.0, 5 * u.Hz, 800 * u.ms)
-    >>> smoothed = square.smooth(tau=5 * u.ms)  # Low-pass filter
+    .. code-block:: python
+
+        >>> square = Square(2.0, 5 * u.Hz, 800 * u.ms)
+        >>> smoothed = square.smooth(tau=5 * u.ms)  # Low-pass filter
 
     Create clock signal for synchronization:
 
-    >>> clock = Square(
-    ...     amplitude=1.0,
-    ...     frequency=40 * u.Hz,
-    ...     duration=250 * u.ms,
-    ...     duty_cycle=0.5
-    ... )
+    .. code-block:: python
+
+        >>> clock = Square(
+        ...     amplitude=1.0,
+        ...     frequency=40 * u.Hz,
+        ...     duration=250 * u.ms,
+        ...     duty_cycle=0.5
+        ... )
 
     Combine with DC offset:
 
-    >>> from braintools.input import Constant
-    >>> square = Square(3.0, 2 * u.Hz, 2000 * u.ms)
-    >>> offset = Constant([(2.0, 2000 * u.ms)])
-    >>> shifted_square = square + offset
+    .. code-block:: python
+
+        >>> from braintools.input import Constant
+        >>> square = Square(3.0, 2 * u.Hz, 2000 * u.ms)
+        >>> offset = Constant([(2.0, 2000 * u.ms)])
+        >>> shifted_square = square + offset
 
     Create gated stimulation:
 
-    >>> from braintools.input import Step
-    >>> square = Square(1.0, 50 * u.Hz, 1000 * u.ms)
-    >>> gate = Step([0, 1, 0], [0 * u.ms, 200 * u.ms, 800 * u.ms], 1000 * u.ms)
-    >>> gated = square * gate
+    .. code-block:: python
+
+        >>> from braintools.input import Step
+        >>> square = Square(1.0, 50 * u.Hz, 1000 * u.ms)
+        >>> gate = Step([0, 1, 0], [0 * u.ms, 200 * u.ms, 800 * u.ms], 1000 * u.ms)
+        >>> gated = square * gate
 
     Square wave with positive bias:
 
-    >>> positive_square = Square(
-    ...     amplitude=4.0,
-    ...     frequency=10 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     bias=True  # Alternates between 0 and 8
-    ... )
+    .. code-block:: python
+
+        >>> positive_square = Square(
+        ...     amplitude=4.0,
+        ...     frequency=10 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     bias=True  # Alternates between 0 and 8
+        ... )
 
     Create PWM-like signal:
 
-    >>> pwm = Square(
-    ...     amplitude=5.0,
-    ...     frequency=100 * u.Hz,
-    ...     duration=100 * u.ms,
-    ...     duty_cycle=0.1  # 10% duty cycle
-    ... )
+    .. code-block:: python
+
+        >>> pwm = Square(
+        ...     amplitude=5.0,
+        ...     frequency=100 * u.Hz,
+        ...     duration=100 * u.ms,
+        ...     duty_cycle=0.1  # 10% duty cycle
+        ... )
 
     Notes
     -----
@@ -389,69 +425,88 @@ class Triangular(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Simple triangular wave:
 
-    >>> tri = Triangular(2.0, 3 * u.Hz, 1000 * u.ms)
-    >>> signal = tri()
+    .. code-block:: python
+
+        >>> tri = Triangular(2.0, 3 * u.Hz, 1000 * u.ms)
+        >>> signal = tri()
 
     Slow ramp for I-V curve measurements:
 
-    >>> ramp = Triangular(
-    ...     amplitude=100.0,
-    ...     frequency=0.5 * u.Hz,  # 2 second period
-    ...     duration=4000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> ramp = Triangular(
+        ...     amplitude=100.0,
+        ...     frequency=0.5 * u.Hz,  # 2 second period
+        ...     duration=4000 * u.ms
+        ... )
 
     Clipped triangular wave:
 
-    >>> tri = Triangular(5.0, 4 * u.Hz, 600 * u.ms)
-    >>> clipped = tri.clip(-3.0, 3.0)  # Trapezoidal shape
+    .. code-block:: python
+
+        >>> tri = Triangular(5.0, 4 * u.Hz, 600 * u.ms)
+        >>> clipped = tri.clip(-3.0, 3.0)  # Trapezoidal shape
 
     Triangular wave with envelope:
 
-    >>> from braintools.input import GaussianPulse
-    >>> tri = Triangular(2.0, 10 * u.Hz, 1000 * u.ms)
-    >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
-    >>> modulated = tri * envelope
+    .. code-block:: python
+
+        >>> from braintools.input import GaussianPulse
+        >>> tri = Triangular(2.0, 10 * u.Hz, 1000 * u.ms)
+        >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
+        >>> modulated = tri * envelope
 
     Testing adaptation with slow ramps:
 
-    >>> adaptation_test = Triangular(
-    ...     amplitude=20.0,
-    ...     frequency=1 * u.Hz,
-    ...     duration=5000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> adaptation_test = Triangular(
+        ...     amplitude=20.0,
+        ...     frequency=1 * u.Hz,
+        ...     duration=5000 * u.ms
+        ... )
 
     Triangular wave with positive bias:
 
-    >>> positive_tri = Triangular(
-    ...     amplitude=3.0,
-    ...     frequency=5 * u.Hz,
-    ...     duration=800 * u.ms,
-    ...     bias=True  # Ramps between 0 and 6
-    ... )
+    .. code-block:: python
+
+        >>> positive_tri = Triangular(
+        ...     amplitude=3.0,
+        ...     frequency=5 * u.Hz,
+        ...     duration=800 * u.ms,
+        ...     bias=True  # Ramps between 0 and 6
+        ... )
 
     Create sawtooth approximation:
 
-    >>> # Combine triangular with step for asymmetric ramp
-    >>> tri = Triangular(1.0, 2 * u.Hz, 1000 * u.ms)
-    >>> from braintools.input import Step
-    >>> step = Step([0, 0.5], [0 * u.ms, 250 * u.ms], 1000 * u.ms)
-    >>> asymmetric = tri + step
+    .. code-block:: python
+
+        >>> # Combine triangular with step for asymmetric ramp
+        >>> tri = Triangular(1.0, 2 * u.Hz, 1000 * u.ms)
+        >>> from braintools.input import Step
+        >>> step = Step([0, 0.5], [0 * u.ms, 250 * u.ms], 1000 * u.ms)
+        >>> asymmetric = tri + step
 
     Windowed triangular stimulation:
 
-    >>> windowed_tri = Triangular(
-    ...     amplitude=4.0,
-    ...     frequency=2 * u.Hz,
-    ...     duration=3000 * u.ms,
-    ...     t_start=500 * u.ms,
-    ...     t_end=2500 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> windowed_tri = Triangular(
+        ...     amplitude=4.0,
+        ...     frequency=2 * u.Hz,
+        ...     duration=3000 * u.ms,
+        ...     t_start=500 * u.ms,
+        ...     t_end=2500 * u.ms
+        ... )
 
     Notes
     -----
@@ -537,77 +592,98 @@ class Sawtooth(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Simple sawtooth wave:
 
-    >>> saw = Sawtooth(1.0, 2 * u.Hz, 2000 * u.ms)
-    >>> signal = saw()
+    .. code-block:: python
+
+        >>> saw = Sawtooth(1.0, 2 * u.Hz, 2000 * u.ms)
+        >>> signal = saw()
 
     Slow ramp for threshold detection:
 
-    >>> threshold_test = Sawtooth(
-    ...     amplitude=50.0,
-    ...     frequency=0.5 * u.Hz,  # 2 second ramp
-    ...     duration=4000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> threshold_test = Sawtooth(
+        ...     amplitude=50.0,
+        ...     frequency=0.5 * u.Hz,  # 2 second ramp
+        ...     duration=4000 * u.ms
+        ... )
 
     Combine with DC offset:
 
-    >>> from braintools.input import Constant
-    >>> saw = Sawtooth(3.0, 3 * u.Hz, 1000 * u.ms)
-    >>> offset = Constant([(2.0, 1000 * u.ms)])
-    >>> shifted_saw = saw + offset
+    .. code-block:: python
+
+        >>> from braintools.input import Constant
+        >>> saw = Sawtooth(3.0, 3 * u.Hz, 1000 * u.ms)
+        >>> offset = Constant([(2.0, 1000 * u.ms)])
+        >>> shifted_saw = saw + offset
 
     Fast reset testing:
 
-    >>> reset_test = Sawtooth(
-    ...     amplitude=20.0,
-    ...     frequency=20 * u.Hz,
-    ...     duration=250 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> reset_test = Sawtooth(
+        ...     amplitude=20.0,
+        ...     frequency=20 * u.Hz,
+        ...     duration=250 * u.ms
+        ... )
 
     Repeated ramp protocol:
 
-    >>> ramp_protocol = Sawtooth(
-    ...     amplitude=100.0,
-    ...     frequency=1 * u.Hz,
-    ...     duration=10000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> ramp_protocol = Sawtooth(
+        ...     amplitude=100.0,
+        ...     frequency=1 * u.Hz,
+        ...     duration=10000 * u.ms
+        ... )
 
     Sawtooth with positive bias:
 
-    >>> positive_saw = Sawtooth(
-    ...     amplitude=5.0,
-    ...     frequency=4 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     bias=True  # Ramps from 0 to 10
-    ... )
+    .. code-block:: python
+
+        >>> positive_saw = Sawtooth(
+        ...     amplitude=5.0,
+        ...     frequency=4 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     bias=True  # Ramps from 0 to 10
+        ... )
 
     Modulated sawtooth:
 
-    >>> from braintools.input import Sinusoidal
-    >>> saw = Sawtooth(2.0, 5 * u.Hz, 1000 * u.ms)
-    >>> modulation = Sinusoidal(0.5, 1 * u.Hz, 1000 * u.ms, bias=True)
-    >>> modulated = saw * modulation
+    .. code-block:: python
+
+        >>> from braintools.input import Sinusoidal
+        >>> saw = Sawtooth(2.0, 5 * u.Hz, 1000 * u.ms)
+        >>> modulation = Sinusoidal(0.5, 1 * u.Hz, 1000 * u.ms, bias=True)
+        >>> modulated = saw * modulation
 
     Windowed sawtooth stimulation:
 
-    >>> windowed_saw = Sawtooth(
-    ...     amplitude=8.0,
-    ...     frequency=3 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     t_start=400 * u.ms,
-    ...     t_end=1600 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> windowed_saw = Sawtooth(
+        ...     amplitude=8.0,
+        ...     frequency=3 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     t_start=400 * u.ms,
+        ...     t_end=1600 * u.ms
+        ... )
 
     Create staircase by clipping sawtooth:
 
-    >>> saw = Sawtooth(10.0, 1 * u.Hz, 3000 * u.ms)
-    >>> # Clip to create discrete levels
-    >>> staircase = saw.apply(lambda x: u.math.round(x / 2) * 2)
+    .. code-block:: python
+
+        >>> saw = Sawtooth(10.0, 1 * u.Hz, 3000 * u.ms)
+        >>> # Clip to create discrete levels
+        >>> staircase = saw.apply(lambda x: u.math.round(x / 2) * 2)
 
     Notes
     -----
@@ -711,88 +787,109 @@ class Chirp(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Linear frequency sweep:
 
-    >>> chirp = Chirp(
-    ...     amplitude=1.0,
-    ...     f_start=1 * u.Hz,
-    ...     f_end=50 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     method='linear'
-    ... )
-    >>> signal = chirp()
+    .. code-block:: python
+
+        >>> chirp = Chirp(
+        ...     amplitude=1.0,
+        ...     f_start=1 * u.Hz,
+        ...     f_end=50 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     method='linear'
+        ... )
+        >>> signal = chirp()
 
     Logarithmic sweep for spectral analysis:
 
-    >>> log_chirp = Chirp(
-    ...     amplitude=2.0,
-    ...     f_start=0.1 * u.Hz,
-    ...     f_end=100 * u.Hz,
-    ...     duration=5000 * u.ms,
-    ...     method='logarithmic'
-    ... )
+    .. code-block:: python
+
+        >>> log_chirp = Chirp(
+        ...     amplitude=2.0,
+        ...     f_start=0.1 * u.Hz,
+        ...     f_end=100 * u.Hz,
+        ...     duration=5000 * u.ms,
+        ...     method='logarithmic'
+        ... )
 
     Repeat chirp multiple times:
 
-    >>> chirp = Chirp(1.0, 1 * u.Hz, 10 * u.Hz, 500 * u.ms)
-    >>> repeated = chirp.repeat(3)  # Repeat 3 times
+    .. code-block:: python
+
+        >>> chirp = Chirp(1.0, 1 * u.Hz, 10 * u.Hz, 500 * u.ms)
+        >>> repeated = chirp.repeat(3)  # Repeat 3 times
 
     Reverse chirp (high to low frequency):
 
-    >>> reverse_chirp = Chirp(
-    ...     amplitude=3.0,
-    ...     f_start=100 * u.Hz,
-    ...     f_end=1 * u.Hz,
-    ...     duration=2000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> reverse_chirp = Chirp(
+        ...     amplitude=3.0,
+        ...     f_start=100 * u.Hz,
+        ...     f_end=1 * u.Hz,
+        ...     duration=2000 * u.ms
+        ... )
 
     Test resonance in theta-gamma range:
 
-    >>> resonance_test = Chirp(
-    ...     amplitude=1.0,
-    ...     f_start=4 * u.Hz,   # Theta start
-    ...     f_end=80 * u.Hz,    # Gamma end
-    ...     duration=10000 * u.ms,
-    ...     method='logarithmic'
-    ... )
+    .. code-block:: python
+
+        >>> resonance_test = Chirp(
+        ...     amplitude=1.0,
+        ...     f_start=4 * u.Hz,   # Theta start
+        ...     f_end=80 * u.Hz,    # Gamma end
+        ...     duration=10000 * u.ms,
+        ...     method='logarithmic'
+        ... )
 
     Windowed chirp for specific testing:
 
-    >>> windowed_chirp = Chirp(
-    ...     amplitude=2.0,
-    ...     f_start=2 * u.Hz,
-    ...     f_end=40 * u.Hz,
-    ...     duration=3000 * u.ms,
-    ...     t_start=500 * u.ms,
-    ...     t_end=2500 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> windowed_chirp = Chirp(
+        ...     amplitude=2.0,
+        ...     f_start=2 * u.Hz,
+        ...     f_end=40 * u.Hz,
+        ...     duration=3000 * u.ms,
+        ...     t_start=500 * u.ms,
+        ...     t_end=2500 * u.ms
+        ... )
 
     Chirp with amplitude envelope:
 
-    >>> from braintools.input import Ramp
-    >>> chirp = Chirp(1.0, 5 * u.Hz, 50 * u.Hz, 1000 * u.ms)
-    >>> envelope = Ramp(0.1, 1.0, 1000 * u.ms)
-    >>> ramped_chirp = chirp * envelope
+    .. code-block:: python
+
+        >>> from braintools.input import Ramp
+        >>> chirp = Chirp(1.0, 5 * u.Hz, 50 * u.Hz, 1000 * u.ms)
+        >>> envelope = Ramp(0.1, 1.0, 1000 * u.ms)
+        >>> ramped_chirp = chirp * envelope
 
     Multiple chirps with different ranges:
 
-    >>> low_chirp = Chirp(1.0, 0.5 * u.Hz, 5 * u.Hz, 2000 * u.ms)
-    >>> high_chirp = Chirp(0.5, 20 * u.Hz, 100 * u.Hz, 2000 * u.ms)
-    >>> broadband = low_chirp + high_chirp
+    .. code-block:: python
+
+        >>> low_chirp = Chirp(1.0, 0.5 * u.Hz, 5 * u.Hz, 2000 * u.ms)
+        >>> high_chirp = Chirp(0.5, 20 * u.Hz, 100 * u.Hz, 2000 * u.ms)
+        >>> broadband = low_chirp + high_chirp
 
     Chirp with positive bias:
 
-    >>> positive_chirp = Chirp(
-    ...     amplitude=5.0,
-    ...     f_start=10 * u.Hz,
-    ...     f_end=30 * u.Hz,
-    ...     duration=1000 * u.ms,
-    ...     bias=True  # Always positive
-    ... )
+    .. code-block:: python
+
+        >>> positive_chirp = Chirp(
+        ...     amplitude=5.0,
+        ...     f_start=10 * u.Hz,
+        ...     f_end=30 * u.Hz,
+        ...     duration=1000 * u.ms,
+        ...     bias=True  # Always positive
+        ... )
 
     Notes
     -----
@@ -894,86 +991,107 @@ class NoisySinusoidal(Input):
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Sinusoid with small noise:
 
-    >>> noisy = NoisySinusoidal(
-    ...     amplitude=10.0,
-    ...     frequency=10 * u.Hz,
-    ...     noise_amplitude=1.0,  # 10% noise
-    ...     duration=1000 * u.ms
-    ... )
-    >>> signal = noisy()
+    .. code-block:: python
+
+        >>> noisy = NoisySinusoidal(
+        ...     amplitude=10.0,
+        ...     frequency=10 * u.Hz,
+        ...     noise_amplitude=1.0,  # 10% noise
+        ...     duration=1000 * u.ms
+        ... )
+        >>> signal = noisy()
 
     High noise for stochastic resonance:
 
-    >>> stochastic = NoisySinusoidal(
-    ...     amplitude=5.0,
-    ...     frequency=5 * u.Hz,
-    ...     noise_amplitude=10.0,  # Noise > signal
-    ...     duration=2000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> stochastic = NoisySinusoidal(
+        ...     amplitude=5.0,
+        ...     frequency=5 * u.Hz,
+        ...     noise_amplitude=10.0,  # Noise > signal
+        ...     duration=2000 * u.ms
+        ... )
 
     Filter noisy signal:
 
-    >>> noisy = NoisySinusoidal(1.0, 20 * u.Hz, 0.5, 500 * u.ms)
-    >>> filtered = noisy.smooth(tau=10 * u.ms)  # Low-pass filter
+    .. code-block:: python
+
+        >>> noisy = NoisySinusoidal(1.0, 20 * u.Hz, 0.5, 500 * u.ms)
+        >>> filtered = noisy.smooth(tau=10 * u.ms)  # Low-pass filter
 
     Theta rhythm with synaptic noise:
 
-    >>> theta_noisy = NoisySinusoidal(
-    ...     amplitude=2.0,
-    ...     frequency=8 * u.Hz,  # Theta frequency
-    ...     noise_amplitude=0.5,
-    ...     duration=5000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> theta_noisy = NoisySinusoidal(
+        ...     amplitude=2.0,
+        ...     frequency=8 * u.Hz,  # Theta frequency
+        ...     noise_amplitude=0.5,
+        ...     duration=5000 * u.ms
+        ... )
 
     Combine multiple noisy oscillations:
 
-    >>> theta = NoisySinusoidal(1.0, 8 * u.Hz, 0.2, 1000 * u.ms, seed=42)
-    >>> gamma = NoisySinusoidal(0.5, 40 * u.Hz, 0.1, 1000 * u.ms, seed=43)
-    >>> cross_frequency = theta + gamma
+    .. code-block:: python
+
+        >>> theta = NoisySinusoidal(1.0, 8 * u.Hz, 0.2, 1000 * u.ms, seed=42)
+        >>> gamma = NoisySinusoidal(0.5, 40 * u.Hz, 0.1, 1000 * u.ms, seed=43)
+        >>> cross_frequency = theta + gamma
 
     Windowed noisy stimulation:
 
-    >>> windowed_noisy = NoisySinusoidal(
-    ...     amplitude=8.0,
-    ...     frequency=20 * u.Hz,
-    ...     noise_amplitude=2.0,
-    ...     duration=1000 * u.ms,
-    ...     t_start=200 * u.ms,
-    ...     t_end=800 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> windowed_noisy = NoisySinusoidal(
+        ...     amplitude=8.0,
+        ...     frequency=20 * u.Hz,
+        ...     noise_amplitude=2.0,
+        ...     duration=1000 * u.ms,
+        ...     t_start=200 * u.ms,
+        ...     t_end=800 * u.ms
+        ... )
 
     Reproducible noisy signal:
 
-    >>> reproducible = NoisySinusoidal(
-    ...     amplitude=15.0,
-    ...     frequency=40 * u.Hz,
-    ...     noise_amplitude=3.0,
-    ...     duration=500 * u.ms,
-    ...     seed=42  # Fixed random seed
-    ... )
+    .. code-block:: python
+
+        >>> reproducible = NoisySinusoidal(
+        ...     amplitude=15.0,
+        ...     frequency=40 * u.Hz,
+        ...     noise_amplitude=3.0,
+        ...     duration=500 * u.ms,
+        ...     seed=42  # Fixed random seed
+        ... )
 
     Test signal detection in noise:
 
-    >>> # Weak signal in strong noise
-    >>> weak_signal = NoisySinusoidal(
-    ...     amplitude=1.0,
-    ...     frequency=10 * u.Hz,
-    ...     noise_amplitude=5.0,  # 5x noise
-    ...     duration=10000 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> # Weak signal in strong noise
+        >>> weak_signal = NoisySinusoidal(
+        ...     amplitude=1.0,
+        ...     frequency=10 * u.Hz,
+        ...     noise_amplitude=5.0,  # 5x noise
+        ...     duration=10000 * u.ms
+        ... )
 
     Modulate noisy sinusoid:
 
-    >>> from braintools.input import GaussianPulse
-    >>> noisy = NoisySinusoidal(2.0, 30 * u.Hz, 0.5, 1000 * u.ms)
-    >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
-    >>> burst = noisy * envelope
+    .. code-block:: python
+
+        >>> from braintools.input import GaussianPulse
+        >>> noisy = NoisySinusoidal(2.0, 30 * u.Hz, 0.5, 1000 * u.ms)
+        >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
+        >>> burst = noisy * envelope
 
     Notes
     -----

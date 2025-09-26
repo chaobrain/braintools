@@ -73,6 +73,7 @@ source_suffix = ['.rst', '.ipynb', '.md']
 
 # source_suffix = '.rst'
 autosummary_generate = True
+napoleon_numpy_docstring = True   # 你用的是 NumPy 风格
 
 # The master toctree document.
 master_doc = 'index'
