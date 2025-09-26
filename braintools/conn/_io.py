@@ -39,6 +39,7 @@ __all__ = [
     'from_zarr',
     'from_csv',
     'from_dict',
+
     # Writers
     'to_sonata',
     'to_nwb',
