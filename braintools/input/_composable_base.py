@@ -133,15 +133,15 @@ class Input:
     
 
         >>> # Sequential stimulation protocol
-        >>> baseline = Step([0], [0], 200 * u.ms)
-        >>> stim = Step([1], [0], 500 * u.ms)
-        >>> recovery = Step([0], [0], 300 * u.ms)
+        >>> baseline = Step([0], [0 * u.ms], 200 * u.ms)
+        >>> stim = Step([1], [0 * u.ms], 500 * u.ms)
+        >>> recovery = Step([0], [0 * u.ms], 300 * u.ms)
         >>> protocol = baseline & stim & recovery
     
 
         >>> # Overlay (maximum) for redundant stimulation
-        >>> stim1 = Step([0, 1, 0], [0, 100, 400], 500 * u.ms)
-        >>> stim2 = Step([0, 0.8, 0], [0, 200, 450], 500 * u.ms)
+        >>> stim1 = Step([0, 1, 0], [0, 100, 400] * u.ms, 500 * u.ms)
+        >>> stim2 = Step([0, 0.8, 0], [0, 200, 450] * u.ms, 500 * u.ms)
         >>> combined_stim = stim1 | stim2
     
     Transformations:
@@ -159,12 +159,12 @@ class Input:
 
         >>> # Smoothing for filtering
         >>> smooth_steps = Step([0, 1, 0.5, 1, 0],
-        ...                          [0, 100, 200, 300, 400],
-        ...                          500 * u.ms).smooth(10 * u.ms)
+        ...                     [0, 100, 200, 300, 400] * u.ms,
+        ...                     500 * u.ms).smooth(10 * u.ms)
     
 
         >>> # Repeating patterns
-        >>> burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
+        >>> burst = Step([0, 1, 0], [0, 10, 20] * u.ms, 50 * u.ms)
         >>> repeated_bursts = burst.repeat(10)
     
 
@@ -178,10 +178,10 @@ class Input:
     .. code-block:: python
 
         >>> # Complex experimental protocol
-        >>> pre_baseline = Step([0], [0], 1000 * u.ms)
+        >>> pre_baseline = Step([0], [0 * u.ms], 1000 * u.ms)
         >>> conditioning = Sinusoidal(0.5, 5 * u.Hz, 2000 * u.ms)
-        >>> test_pulse = Step([2], [0], 100 * u.ms)
-        >>> post_baseline = Step([0], [0], 1000 * u.ms)
+        >>> test_pulse = Step([2], [0 * u.ms], 100 * u.ms)
+        >>> post_baseline = Step([0], [0 * u.ms], 1000 * u.ms)
         >>>
         >>> protocol = (pre_baseline &
         ...            (conditioning + 0.5).clip(0, 1) &

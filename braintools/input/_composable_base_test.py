@@ -74,17 +74,17 @@ class TestInputBaseClass(TestCase):
             self.assertEqual(am_signal().shape[0], 10000)
 
             # Sequential stimulation protocol
-            baseline = Step([0], [0], 200 * u.ms)
-            stim = Step([1], [0], 500 * u.ms)
-            recovery = Step([0], [0], 300 * u.ms)
+            baseline = Step([0], [0 * u.ms], 200 * u.ms)
+            stim = Step([1], [0 * u.ms], 500 * u.ms)
+            recovery = Step([0], [0 * u.ms], 300 * u.ms)
             protocol = baseline & stim & recovery
             self.assertIsInstance(protocol, Sequential)
             # Total duration should be 1000ms = 10000 steps
             self.assertEqual(protocol().shape[0], 10000)
 
             # Overlay (maximum) for redundant stimulation
-            stim1 = Step([0, 1, 0], [0, 100, 400], 500 * u.ms)
-            stim2 = Step([0, 0.8, 0], [0, 200, 450], 500 * u.ms)
+            stim1 = Step([0, 1, 0], [0, 100, 400] * u.ms, 500 * u.ms)
+            stim2 = Step([0, 0.8, 0], [0, 200, 450] * u.ms, 500 * u.ms)
             combined_stim = stim1 | stim2
             self.assertIsInstance(combined_stim, Composite)
             self.assertEqual(combined_stim().shape[0], 5000)
@@ -112,12 +112,12 @@ class TestInputBaseClass(TestCase):
 
             # Smoothing
             smooth_steps = Step([0, 1, 0.5, 1, 0],
-                                     [0, 100, 200, 300, 400],
-                                     500 * u.ms).smooth(10 * u.ms)
+                                [0, 100, 200, 300, 400] * u.ms,
+                                500 * u.ms).smooth(10 * u.ms)
             self.assertIsInstance(smooth_steps, Smoothed)
 
             # Repeating
-            burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
+            burst = Step([0, 1, 0], [0, 10, 20] * u.ms, 50 * u.ms)
             repeated_bursts = burst.repeat(10)
             self.assertIsInstance(repeated_bursts, Repeated)
             self.assertEqual(repeated_bursts().shape[0], 5000)  # 50ms * 10 = 500ms
@@ -135,10 +135,10 @@ class TestInputBaseClass(TestCase):
         """Test advanced protocol examples from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Complex experimental protocol
-            pre_baseline = Step([0], [0], 1000 * u.ms)
+            pre_baseline = Step([0], [0 * u.ms], 1000 * u.ms)
             conditioning = Sinusoidal(0.5, 5 * u.Hz, 2000 * u.ms)
-            test_pulse = Step([2], [0], 100 * u.ms)
-            post_baseline = Step([0], [0], 1000 * u.ms)
+            test_pulse = Step([2], [0 * u.ms], 100 * u.ms)
+            post_baseline = Step([0], [0 * u.ms], 1000 * u.ms)
 
             protocol = (pre_baseline &
                         (conditioning + 0.5).clip(0, 1) &
@@ -189,7 +189,7 @@ class TestInputBaseClass(TestCase):
 
             # Subtraction
             ramp = Ramp(0, 2, 100 * u.ms)
-            baseline = Step([0.5], [0], 100 * u.ms)
+            baseline = Step([0.5], [0 * u.ms], 100 * u.ms)
             corrected = ramp - baseline
             self.assertIsInstance(corrected, Composite)
             centered = ramp - 1.0
@@ -212,16 +212,16 @@ class TestInputBaseClass(TestCase):
             self.assertIsInstance(halved, Composite)
 
             # Sequential composition (&)
-            baseline = Step([0], [0], 100 * u.ms)
-            stimulus = Step([1], [0], 200 * u.ms)
-            recovery = Step([0], [0], 100 * u.ms)
+            baseline = Step([0], [0 * u.ms], 100 * u.ms)
+            stimulus = Step([1], [0 * u.ms], 200 * u.ms)
+            recovery = Step([0], [0 * u.ms], 100 * u.ms)
             protocol = baseline & stimulus & recovery
             self.assertIsInstance(protocol, Sequential)
             self.assertEqual(protocol().shape[0], 4000)  # 400ms total
 
             # Overlay (|)
-            stim1 = Step([0, 1, 0], [0, 100, 300], 400 * u.ms)
-            stim2 = Step([0, 0.8, 0], [0, 150, 350], 400 * u.ms)
+            stim1 = Step([0, 1, 0], [0, 100, 300] * u.ms, 400 * u.ms)
+            stim2 = Step([0, 0.8, 0], [0, 150, 350] * u.ms, 400 * u.ms)
             combined_overlay = stim1 | stim2
             self.assertIsInstance(combined_overlay, Composite)
 
@@ -258,15 +258,15 @@ class TestInputBaseClass(TestCase):
 
             # Smooth
             steps = Step([0, 1, 0.5, 1, 0],
-                              [0, 50, 100, 150, 200],
-                              250 * u.ms)
+                         [0, 50, 100, 150, 200] * u.ms,
+                         250 * u.ms)
             smooth = steps.smooth(10 * u.ms)
             self.assertIsInstance(smooth, Smoothed)
             very_smooth = steps.smooth(50 * u.ms)
             self.assertIsInstance(very_smooth, Smoothed)
 
             # Repeat
-            burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
+            burst = Step([0, 1, 0], [0, 10, 20] * u.ms, 50 * u.ms)
             burst_train = burst.repeat(10)
             self.assertIsInstance(burst_train, Repeated)
 
@@ -320,8 +320,8 @@ class TestComposite(TestCase):
     def test_padding_behavior(self):
         """Test that shorter inputs are padded with zeros."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            short_input = Step([1], [0], 100 * u.ms)
-            long_input = Step([0.5], [0], 200 * u.ms)
+            short_input = Step([1], [0 * u.ms], 100 * u.ms)
+            long_input = Step([0.5], [0 * u.ms], 200 * u.ms)
 
             combined = short_input + long_input
             # Should have duration of longer input
@@ -330,8 +330,8 @@ class TestComposite(TestCase):
     def test_division_by_zero(self):
         """Test that division by zero returns numerator."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            numerator = Step([1], [0], 100 * u.ms)
-            denominator = Step([0], [0], 100 * u.ms)
+            numerator = Step([1], [0 * u.ms], 100 * u.ms)
+            denominator = Step([0], [0 * u.ms], 100 * u.ms)
 
             result = numerator / denominator
             arr = result()
@@ -368,9 +368,9 @@ class TestSequential(TestCase):
     def test_three_phase_protocol(self):
         """Test three-phase protocol example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            baseline = Step([0], [0], 500 * u.ms)
+            baseline = Step([0], [0 * u.ms], 500 * u.ms)
             stimulus = Ramp(0, 1, 1000 * u.ms)
-            recovery = Step([0], [0], 500 * u.ms)
+            recovery = Step([0], [0 * u.ms], 500 * u.ms)
 
             # Chain using & operator
             protocol = baseline & stimulus & recovery
@@ -442,8 +442,8 @@ class TestSmoothed(TestCase):
         """Test different smoothing levels."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             steps = Step([0, 1, 0.5, 1, 0],
-                              [0, 50, 100, 150, 200],
-                              250 * u.ms)
+                         [0, 50, 100, 150, 200] * u.ms,
+                         250 * u.ms)
 
             # Light smoothing (fast response)
             light = Smoothed(steps, 5 * u.ms)
@@ -472,7 +472,7 @@ class TestRepeated(TestCase):
         """Test burst train example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Single burst
-            burst = Step([0, 1, 0], [0, 10, 30], 50 * u.ms)
+            burst = Step([0, 1, 0], [0, 10, 30] * u.ms, 50 * u.ms)
 
             # Burst train (10 bursts, 500ms total)
             train = Repeated(burst, 10)
@@ -512,7 +512,7 @@ class TestTransformed(TestCase):
 
             # Sigmoid nonlinearity
             sigmoid = Transformed(sine,
-                                       lambda x: 1 / (1 + jnp.exp(-10 * x)))
+                                  lambda x: 1 / (1 + jnp.exp(-10 * x)))
             arr = sigmoid()
             self.assertTrue(np.all(u.get_magnitude(arr) >= 0))
             self.assertTrue(np.all(u.get_magnitude(arr) <= 1))
@@ -549,7 +549,7 @@ class TestPropertiesAndAttributes(TestCase):
             self.assertEqual(ramp.shape, (1000,))
 
             # For multi-channel inputs (if supported)
-            steps = Step([0, 1, 0], [0, 50, 100], 150 * u.ms)
+            steps = Step([0, 1, 0], [0, 50, 100] * u.ms, 150 * u.ms)
             self.assertEqual(steps.shape, (1500,))
 
 
@@ -583,6 +583,6 @@ class TestEdgeCases(TestCase):
         """Test handling of zero or very small durations."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # This might create 0 or 1 step depending on implementation
-            short = Step([1], [0], 0.01 * u.ms)
+            short = Step([1], [0 * u.ms], 0.01 * u.ms)
             arr = short()
             self.assertGreaterEqual(arr.shape[0], 0)

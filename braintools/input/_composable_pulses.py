@@ -437,7 +437,7 @@ class ExponentialDecay(Input):
 
         >>> from braintools.input import Step
         >>> decay = ExponentialDecay(2.0, 30 * u.ms, 500 * u.ms, t_start=100 * u.ms)
-        >>> step = Step([0, 1], [0, 100], 500 * u.ms)
+        >>> step = Step([0, 1], [0, 100] * u.ms, 500 * u.ms)
         >>> gated_decay = decay * step  # Gate the decay
     
     Multiple decay phases:
@@ -454,7 +454,7 @@ class ExponentialDecay(Input):
 
         >>> # Triggered by step input
         >>> from braintools.input import Step
-        >>> trigger = Step([0, 1, 0], [0, 50, 150], 300 * u.ms)
+        >>> trigger = Step([0, 1, 0], [0, 50, 150] * u.ms, 300 * u.ms)
         >>> adaptation = ExponentialDecay(0.3, 40 * u.ms, 300 * u.ms, t_start=50 * u.ms)
         >>> net_current = trigger - adaptation  # Adaptation reduces input
     

@@ -290,7 +290,7 @@ class TestStep(TestCase):
     def test_combine_with_noise(self):
         """Test combining with noise from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            steps = Step([0, 1, 0.5], [0, 100, 200], 300 * u.ms)
+            steps = Step([0, 1, 0.5], [0, 100, 200] * u.ms, 300 * u.ms)
             noise = WienerProcess(300 * u.ms, sigma=0.1, seed=123)
             noisy_steps = steps + noise
 
@@ -306,7 +306,7 @@ class TestStep(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             sharp_steps = Step(
                 [0, 1, 0.5, 1, 0],
-                [0, 50, 100, 150, 200],
+                [0, 50, 100, 150, 200] * u.ms,
                 250 * u.ms
             )
             smooth_steps = sharp_steps.smooth(tau=10 * u.ms)
@@ -326,7 +326,7 @@ class TestStep(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             steps = Step(
                 [0, 1, 0.5, 1, 0],
-                [0, 50, 100, 150, 200],
+                [0, 50, 100, 150, 200] * u.ms,
                 250 * u.ms
             )
             clipped = steps.clip(0, 0.8)
@@ -355,8 +355,8 @@ class TestStep(TestCase):
     def test_sequential_composition(self):
         """Test sequential composition from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            baseline = Step([0], [0], 100 * u.ms)
-            test = Step([0, 1, 0], [0, 20, 80], 100 * u.ms)
+            baseline = Step([0], [0 * u.ms], 100 * u.ms)
+            test = Step([0, 1, 0], [0, 20, 80] * u.ms, 100 * u.ms)
             protocol = baseline & test & baseline
 
             array = protocol()
@@ -526,7 +526,7 @@ class TestIntegration(TestCase):
             # Create a complex protocol
             baseline = Constant([(0, 100 * u.ms)])
             ramp_up = Ramp(0, 1, 100 * u.ms)
-            steps = Step([1, 0.5, 1, 0], [0, 50, 100, 150], 200 * u.ms)
+            steps = Step([1, 0.5, 1, 0], [0, 50, 100, 150] * u.ms, 200 * u.ms)
             sections = Section([0.5, 0], [50, 50] * u.ms)
 
             protocol = baseline & ramp_up & steps & sections
@@ -540,7 +540,7 @@ class TestIntegration(TestCase):
             inputs = [
                 Section([0, 1, 0], [50, 100, 50] * u.ms),
                 Constant([(0.5, 200 * u.ms)]),
-                Step([0, 1, 0.5], [0, 50, 150], 200 * u.ms),
+                Step([0, 1, 0.5], [0, 50, 150] * u.ms, 200 * u.ms),
                 Ramp(0, 1, 200 * u.ms)
             ]
 

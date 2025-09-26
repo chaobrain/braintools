@@ -374,7 +374,7 @@ class Step(Input):
     .. code-block:: python
 
         >>> from braintools.input import WienerProcess
-        >>> steps = Step([0, 1, 0.5], [0, 100, 200], 300 * u.ms)
+        >>> steps = Step([0, 1, 0.5], [0, 100, 200] * u.ms, 300 * u.ms)
         >>> noise = WienerProcess(300 * u.ms, sigma=0.1)
         >>> noisy_steps = steps + noise
     
@@ -385,7 +385,7 @@ class Step(Input):
         >>> # Smoothed steps for gradual transitions
         >>> sharp_steps = Step(
         ...     [0, 1, 0.5, 1, 0],
-        ...     [0, 50, 100, 150, 200],
+        ...     [0, 50, 100, 150, 200] * u.ms,
         ...     250 * u.ms
         ... )
         >>> smooth_steps = sharp_steps.smooth(tau=10 * u.ms)
@@ -408,8 +408,8 @@ class Step(Input):
     
     .. code-block:: python
 
-        >>> baseline = Step([0], [0], 100 * u.ms)
-        >>> test = Step([0, 1, 0], [0, 20, 80], 100 * u.ms)
+        >>> baseline = Step([0], [0 * u.ms], 100 * u.ms)
+        >>> test = Step([0, 1, 0], [0, 20, 80] * u.ms, 100 * u.ms)
         >>> protocol = baseline & test & baseline
     """
 
