@@ -17,6 +17,9 @@
 
 """
 Composable basic input current generators.
+
+This module provides composable versions of basic input current generators
+that can be combined using operators and transformations.
 """
 
 import functools
@@ -38,14 +41,90 @@ __all__ = [
 
 
 class SectionInput(Input):
-    """Format an input current with different sections.
+    """Generate input current with different sections.
+    
+    A section input consists of different constant values maintained for
+    specified durations. This is useful for creating protocols with distinct
+    phases, such as baseline, stimulation, and recovery periods.
+    
+    Parameters
+    ----------
+    values : Sequence
+        The current values for each period. Can be scalars or arrays for
+        multi-channel inputs. Units are preserved if provided.
+    durations : Sequence
+        The duration for each period. Should have the same length as values.
+        Can be specified with or without units.
+    
+    Attributes
+    ----------
+    values : Sequence
+        The stored current values for each section.
+    durations : Sequence
+        The stored durations for each section.
+    duration : Quantity or float
+        Total duration calculated as sum of all section durations.
+    
+    Raises
+    ------
+    ValueError
+        If values and durations have different lengths.
+    
+    See Also
+    --------
+    ConstantInput : Similar but with (value, duration) pairs.
+    StepInput : Creates steps at specific time points.
+    
+    Notes
+    -----
+    The SectionInput class uses the functional API internally to generate
+    the actual current arrays. It provides a composable interface that
+    allows combining with other inputs using operators.
     
     Examples
     --------
-    >>> # Create a section input and combine with others
-    >>> section = SectionInput(values=[0, 1, 0], durations=[100, 300, 100])
-    >>> sine = SinusoidalInput(0.5, 10 * u.Hz, 500)
-    >>> combined = section + sine  # Add sinusoidal on top
+    Simple three-phase protocol:
+    
+    >>> section = SectionInput(
+    ...     values=[0, 1, 0] * u.pA,
+    ...     durations=[100, 300, 100] * u.ms
+    ... )
+    >>> array = section()  # Generate the array
+    
+    Multi-channel input:
+    
+    >>> values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
+    >>> section = SectionInput(
+    ...     values=values,
+    ...     durations=[50, 100, 50] * u.ms
+    ... )
+    
+    Combine with other inputs:
+    
+    >>> # Add noise to section input
+    >>> from braintools.input import WienerProcess
+    >>> noisy_section = section + WienerProcess(500 * u.ms, sigma=0.1)
+    
+    >>> # Modulate with sinusoid
+    >>> from braintools.input import SinusoidalInput
+    >>> sine = SinusoidalInput(0.2, 10 * u.Hz, 500 * u.ms)
+    >>> modulated = section * (1 + sine)
+    
+    Complex protocol with smooth transitions:
+    
+    >>> # Create step protocol and smooth it
+    >>> protocol = SectionInput(
+    ...     values=[0, 0.5, 1.0, 1.5, 1.0, 0.5, 0],
+    ...     durations=[50, 30, 100, 150, 100, 30, 50]
+    ... )
+    >>> smooth_protocol = protocol.smooth(tau=10 * u.ms)
+    
+    Sequential composition:
+    
+    >>> baseline = SectionInput([0], [200])
+    >>> stim = SectionInput([0.5, 1.0, 0.5], [50, 100, 50])
+    >>> recovery = SectionInput([0], [200])
+    >>> full_protocol = baseline & stim & recovery
     """
 
     def __init__(
@@ -57,9 +136,9 @@ class SectionInput(Input):
         
         Parameters
         ----------
-        values : list, np.ndarray
-            The current values for each period duration.
-        durations : list, np.ndarray
+        values : Sequence
+            The current values for each period.
+        durations : Sequence
             The duration for each period.
         """
         if len(durations) != len(values):
@@ -80,14 +159,99 @@ class SectionInput(Input):
 
 
 class ConstantInput(Input):
-    """Format constant input in durations.
+    """Generate constant input with specified durations.
+    
+    Creates a piecewise constant input where each piece has a specific
+    value and duration. This is similar to SectionInput but uses
+    (value, duration) pairs for convenience.
+    
+    Parameters
+    ----------
+    I_and_duration : Sequence[tuple]
+        List of (value, duration) pairs. Each tuple specifies the current
+        value and how long it should be maintained. Values can include units.
+    
+    Attributes
+    ----------
+    I_and_duration : Sequence[tuple]
+        The stored (value, duration) pairs.
+    duration : Quantity or float
+        Total duration calculated as sum of all durations.
+    
+    See Also
+    --------
+    SectionInput : Similar but with separate values and durations lists.
+    StepInput : Creates steps at specific time points.
+    
+    Notes
+    -----
+    ConstantInput internally uses the functional constant_input API.
+    The composable interface allows for easy combination with other
+    inputs and transformations.
     
     Examples
     --------
-    >>> # Create constant input and transform it
-    >>> const = ConstantInput([(0, 100), (1, 300), (0, 100)])
-    >>> smoothed = const.smooth(tau=10)  # Smooth transitions
-    >>> scaled = const.scale(0.5)  # Scale to half amplitude
+    Simple two-phase protocol:
+    
+    >>> const = ConstantInput([
+    ...     (0 * u.pA, 100 * u.ms),
+    ...     (10 * u.pA, 200 * u.ms)
+    ... ])
+    >>> array = const()
+    
+    Multi-step current injection:
+    
+    >>> # Incrementally increasing steps
+    >>> steps = ConstantInput([
+    ...     (0 * u.nA, 50 * u.ms),
+    ...     (0.5 * u.nA, 50 * u.ms),
+    ...     (1.0 * u.nA, 50 * u.ms),
+    ...     (1.5 * u.nA, 50 * u.ms),
+    ...     (0 * u.nA, 50 * u.ms),
+    ... ])
+    
+    Smooth transitions between levels:
+    
+    >>> # Create sharp steps and smooth them
+    >>> const = ConstantInput([
+    ...     (0, 100),
+    ...     (1, 100),
+    ...     (0.5, 100),
+    ...     (0, 100)
+    ... ])
+    >>> smoothed = const.smooth(tau=20 * u.ms)
+    
+    Combine with oscillations:
+    
+    >>> from braintools.input import SinusoidalInput
+    >>> baseline = ConstantInput([(0.5, 500)])
+    >>> oscillation = SinusoidalInput(0.2, 5 * u.Hz, 500)
+    >>> combined = baseline + oscillation
+    
+    Create complex protocols:
+    
+    >>> # Paired-pulse protocol
+    >>> protocol = ConstantInput([
+    ...     (0 * u.pA, 100 * u.ms),    # baseline
+    ...     (5 * u.pA, 20 * u.ms),     # first pulse
+    ...     (0 * u.pA, 50 * u.ms),     # inter-pulse interval
+    ...     (5 * u.pA, 20 * u.ms),     # second pulse
+    ...     (0 * u.pA, 100 * u.ms),    # recovery
+    ... ])
+    >>> # Add noise for more realistic stimulation
+    >>> from braintools.input import WienerProcess
+    >>> noisy_protocol = protocol + WienerProcess(290 * u.ms, sigma=0.1)
+    
+    Use transformations:
+    
+    >>> # Scale amplitude
+    >>> scaled = const.scale(0.5)
+    >>> 
+    >>> # Clip to physiological range
+    >>> clipped = const.clip(-80, 40)
+    >>> 
+    >>> # Repeat pattern
+    >>> repeated = const.repeat(3)
     """
 
     def __init__(self, I_and_duration: Sequence[tuple]):
@@ -95,9 +259,8 @@ class ConstantInput(Input):
         
         Parameters
         ----------
-        I_and_duration : list
-            This parameter receives the current size and the current
-            duration pairs, like `[(Isize1, duration1), (Isize2, duration2)]`.
+        I_and_duration : Sequence[tuple]
+            List of (value, duration) pairs.
         """
         # Calculate total duration
         total_duration = functools.reduce(u.math.add, [item[1] for item in I_and_duration])
@@ -107,19 +270,110 @@ class ConstantInput(Input):
 
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the constant input array."""
-        # Use the functional API
-        return constant_input(self.I_and_duration)
+        # Use the functional API - it returns (current, duration) tuple
+        current, _ = constant_input(self.I_and_duration)
+        return current
 
 
 class StepInput(Input):
     """Generate step function input with multiple levels.
     
+    Creates a step function where the input jumps to specified amplitude
+    values at given time points. This is useful for protocols requiring
+    instantaneous changes in stimulation level.
+    
+    Parameters
+    ----------
+    amplitudes : Sequence[float]
+        Amplitude values for each step. The length should match step_times.
+        Can include units for dimensional consistency.
+    step_times : Sequence[Union[float, u.Quantity]]
+        Time points where steps occur. Will be automatically sorted if not
+        in ascending order.
+    duration : Union[float, u.Quantity]
+        Total duration of the input signal.
+    
+    Attributes
+    ----------
+    amplitudes : Sequence[float]
+        The stored amplitude values.
+    step_times : Sequence
+        The stored step time points.
+    duration : Quantity or float
+        The total duration of the input.
+    
+    See Also
+    --------
+    SectionInput : For specifying durations instead of time points.
+    ConstantInput : For piecewise constant inputs with durations.
+    RampInput : For linearly changing inputs.
+    
+    Notes
+    -----
+    If step_times are not sorted, they will be automatically sorted along
+    with their corresponding amplitudes. The functional step_input API is
+    used internally for array generation.
+    
     Examples
     --------
-    >>> # Create step input and combine with noise
-    >>> steps = StepInput([0, 1, 0.5], [0, 100, 200], 300)
-    >>> noise = WienerProcess(300, sigma=0.1)
+    Simple three-level step function:
+    
+    >>> steps = StepInput(
+    ...     amplitudes=[0, 10, 5] * u.pA,
+    ...     step_times=[0, 50, 150] * u.ms,
+    ...     duration=200 * u.ms
+    ... )
+    >>> array = steps()
+    
+    Staircase protocol for I-V curve:
+    
+    >>> # Incrementally increasing current steps
+    >>> amplitudes = np.arange(0, 101, 10) * u.pA
+    >>> times = np.arange(0, 1100, 100) * u.ms
+    >>> staircase = StepInput(amplitudes, times, 1200 * u.ms)
+    
+    Multiple pulses with return to baseline:
+    
+    >>> pulses = StepInput(
+    ...     amplitudes=[0, 5, 0, 10, 0, 15, 0] * u.pA,
+    ...     step_times=[0, 20, 40, 60, 80, 100, 120] * u.ms,
+    ...     duration=150 * u.ms
+    ... )
+    
+    Combine with noise for realistic stimulation:
+    
+    >>> from braintools.input import WienerProcess
+    >>> steps = StepInput([0, 1, 0.5], [0, 100, 200], 300 * u.ms)
+    >>> noise = WienerProcess(300 * u.ms, sigma=0.1)
     >>> noisy_steps = steps + noise
+    
+    Create complex protocols with transformations:
+    
+    >>> # Smoothed steps for gradual transitions
+    >>> sharp_steps = StepInput(
+    ...     [0, 1, 0.5, 1, 0],
+    ...     [0, 50, 100, 150, 200],
+    ...     250 * u.ms
+    ... )
+    >>> smooth_steps = sharp_steps.smooth(tau=10 * u.ms)
+    >>> 
+    >>> # Clipped to physiological range
+    >>> clipped = sharp_steps.clip(0, 0.8)
+    
+    Unsorted times are automatically handled:
+    
+    >>> # Times will be sorted to [0, 50, 100]
+    >>> steps = StepInput(
+    ...     amplitudes=[5, 0, 10] * u.pA,
+    ...     step_times=[50, 0, 100] * u.ms,
+    ...     duration=150 * u.ms
+    ... )
+    
+    Sequential composition:
+    
+    >>> baseline = StepInput([0], [0], 100 * u.ms)
+    >>> test = StepInput([0, 1, 0], [0, 20, 80], 100 * u.ms)
+    >>> protocol = baseline & test & baseline
     """
 
     def __init__(self,
@@ -130,11 +384,11 @@ class StepInput(Input):
         
         Parameters
         ----------
-        amplitudes : list or array
+        amplitudes : Sequence[float]
             Amplitude values for each step.
-        step_times : list or array
+        step_times : Sequence
             Time points where steps occur.
-        duration : float or Quantity
+        duration : Union[float, u.Quantity]
             Total duration of the input.
         """
         super().__init__(duration)
@@ -162,18 +416,126 @@ class StepInput(Input):
 
 
 class RampInput(Input):
-    """Get the gradually changed input current.
+    """Generate linearly changing (ramp) input current.
+    
+    Creates a linear ramp from a starting value to an ending value over
+    a specified duration. Optionally, the ramp can be confined to a
+    specific time window within the total duration.
+    
+    Parameters
+    ----------
+    c_start : float
+        The starting current value. Can include units.
+    c_end : float
+        The ending current value. Must have same units as c_start.
+    duration : Union[float, u.Quantity]
+        The total duration of the input signal.
+    t_start : Union[float, u.Quantity], optional
+        Time point when the ramp starts. Before this, the output is c_start.
+        Default is 0.
+    t_end : Union[float, u.Quantity], optional
+        Time point when the ramp ends. After this, the output is c_end.
+        Default is duration.
+    
+    Attributes
+    ----------
+    c_start : float
+        The starting current value.
+    c_end : float  
+        The ending current value.
+    duration : Quantity or float
+        The total duration.
+    t_start : Quantity or float or None
+        The ramp start time.
+    t_end : Quantity or float or None
+        The ramp end time.
+    
+    Raises
+    ------
+    UnitMismatchError
+        If c_start and c_end have incompatible units.
+    
+    See Also
+    --------
+    StepInput : For instantaneous changes.
+    SectionInput : For piecewise constant inputs.
+    
+    Notes
+    -----
+    The ramp is linear between t_start and t_end. Before t_start, the
+    output is c_start. After t_end, the output is c_end. This uses the
+    functional ramp_input API internally.
     
     Examples
     --------
-    >>> # Create ramp and combine with oscillation
-    >>> ramp = RampInput(0, 1, 500)
-    >>> sine = SinusoidalInput(0.2, 5 * u.Hz, 500)
-    >>> modulated = ramp * sine  # Amplitude modulation
+    Simple linear ramp:
+    
+    >>> ramp = RampInput(
+    ...     c_start=0 * u.pA,
+    ...     c_end=10 * u.pA,
+    ...     duration=100 * u.ms
+    ... )
+    >>> array = ramp()
+    
+    Decreasing ramp (from high to low):
+    
+    >>> down_ramp = RampInput(
+    ...     c_start=10 * u.pA,
+    ...     c_end=0 * u.pA,
+    ...     duration=100 * u.ms
+    ... )
+    
+    Ramp with delay and early stop:
+    
+    >>> # Ramp starts at 50ms and ends at 150ms
+    >>> delayed_ramp = RampInput(
+    ...     c_start=0 * u.nA,
+    ...     c_end=5 * u.nA,
+    ...     duration=200 * u.ms,
+    ...     t_start=50 * u.ms,
+    ...     t_end=150 * u.ms
+    ... )
+    
+    Combine with oscillations for amplitude modulation:
+    
+    >>> from braintools.input import SinusoidalInput
+    >>> envelope = RampInput(0, 1, 500 * u.ms)
+    >>> carrier = SinusoidalInput(1.0, 20 * u.Hz, 500 * u.ms)
+    >>> am_signal = envelope * carrier
+    
+    Create sawtooth wave by repeating:
+    
+    >>> single_tooth = RampInput(0, 1, 50 * u.ms)
+    >>> sawtooth = single_tooth.repeat(10)  # 500ms total
+    
+    Complex protocols with transformations:
+    
+    >>> # Ramp with saturation
+    >>> ramp = RampInput(-2, 2, 400 * u.ms)
+    >>> saturated = ramp.clip(-1, 1)
     >>> 
-    >>> # Create complex ramp with time window
-    >>> ramp2 = RampInput(0, 2, 1000, t_start=200, t_end=800)
-    >>> clipped = ramp2.clip(0, 1.5)  # Limit maximum value
+    >>> # Smoothed ramp (reduces sharp corners)
+    >>> smooth_ramp = ramp.smooth(tau=5 * u.ms)
+    
+    I-V curve measurement protocol:
+    
+    >>> # Slow voltage ramp for I-V curves
+    >>> iv_ramp = RampInput(
+    ...     c_start=-100 * u.pA,
+    ...     c_end=100 * u.pA,
+    ...     duration=1000 * u.ms
+    ... )
+    >>> # Add small oscillation to avoid hysteresis
+    >>> from braintools.input import SinusoidalInput
+    >>> wobble = SinusoidalInput(5 * u.pA, 100 * u.Hz, 1000 * u.ms)
+    >>> iv_protocol = iv_ramp + wobble
+    
+    Sequential ramps for plasticity protocols:
+    
+    >>> up_ramp = RampInput(0, 1, 100 * u.ms)
+    >>> plateau = ConstantInput([(1, 50)])
+    >>> down_ramp = RampInput(1, 0, 100 * u.ms)
+    >>> protocol = up_ramp & plateau & down_ramp
     """
 
     def __init__(self,
@@ -187,15 +549,15 @@ class RampInput(Input):
         Parameters
         ----------
         c_start : float
-            The minimum (or maximum) current size.
+            The starting current value.
         c_end : float
-            The maximum (or minimum) current size.
-        duration : float or Quantity
+            The ending current value.
+        duration : Union[float, u.Quantity]
             The total duration.
-        t_start : float or Quantity, optional
-            The ramped current start time-point. Default is 0.
-        t_end : float or Quantity, optional
-            The ramped current end time-point. Default is duration.
+        t_start : Union[float, u.Quantity], optional
+            The ramp start time. Default is 0.
+        t_end : Union[float, u.Quantity], optional
+            The ramp end time. Default is duration.
         """
         super().__init__(duration)
         u.fail_for_unit_mismatch(c_start, c_end)
