@@ -82,7 +82,7 @@ def wiener_process(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple Wiener process
+    Simple Wiener process
 
     .. code-block:: python
 
@@ -91,7 +91,7 @@ def wiener_process(
         ...     sigma=0.5 * u.pA
         ... )
     
-    # Multiple independent processes
+    Multiple independent processes
 
     .. code-block:: python
 
@@ -101,7 +101,7 @@ def wiener_process(
         ...     n=10  # 10 independent processes
         ... )
     
-    # Windowed noise
+    Windowed noise
 
     .. code-block:: python
 
@@ -112,7 +112,7 @@ def wiener_process(
         ...     t_end=400 * u.ms
         ... )
     
-    # Reproducible noise
+    Reproducible noise
 
     .. code-block:: python
 
@@ -223,7 +223,7 @@ def ou_process(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple OU process
+    Simple OU process
 
     .. code-block:: python
 
@@ -234,7 +234,7 @@ def ou_process(
         ...     duration=500 * u.ms
         ... )
     
-    # Fast fluctuations around zero
+    Fast fluctuations around zero
 
     .. code-block:: python
 
@@ -245,7 +245,7 @@ def ou_process(
         ...     duration=200 * u.ms
         ... )
     
-    # Slow fluctuations with drift
+    Slow fluctuations with drift
 
     .. code-block:: python
 
@@ -256,7 +256,7 @@ def ou_process(
         ...     duration=1000 * u.ms
         ... )
     
-    # Multiple independent processes
+    Multiple independent processes
 
     .. code-block:: python
 
@@ -268,7 +268,7 @@ def ou_process(
         ...     n=10  # 10 independent processes
         ... )
     
-    # Windowed OU process
+    Windowed OU process
 
     .. code-block:: python
 
@@ -397,7 +397,7 @@ def poisson(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple Poisson spike train
+    Simple Poisson spike train
 
     .. code-block:: python
 
@@ -407,7 +407,7 @@ def poisson(
         ...     amplitude=1 * u.pA
         ... )
     
-    # High-frequency background activity
+    High-frequency background activity
 
     .. code-block:: python
 
@@ -417,7 +417,7 @@ def poisson(
         ...     amplitude=0.5 * u.nA
         ... )
     
-    # Multiple independent spike trains
+    Multiple independent spike trains
 
     .. code-block:: python
 
@@ -428,7 +428,7 @@ def poisson(
         ...     n=50  # 50 independent spike trains
         ... )
     
-    # Windowed spiking activity
+    Windowed spiking activity
 
     .. code-block:: python
 
@@ -440,7 +440,7 @@ def poisson(
         ...     t_end=800 * u.ms
         ... )
     
-    # Low rate spontaneous activity
+    Low rate spontaneous activity
 
     .. code-block:: python
 

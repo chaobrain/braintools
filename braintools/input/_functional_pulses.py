@@ -82,7 +82,7 @@ def spike(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple spike train with uniform properties
+    Simple spike train with uniform properties
 
     .. code-block:: python
 
@@ -93,7 +93,7 @@ def spike(
         ...     duration=400 * u.ms
         ... )
     
-    # Variable spike properties
+    Variable spike properties
 
     .. code-block:: python
 
@@ -104,7 +104,7 @@ def spike(
         ...     duration=150 * u.ms
         ... )
     
-    # High-frequency burst
+    High-frequency burst
 
     .. code-block:: python
 
@@ -207,7 +207,7 @@ def gaussian_pulse(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Single Gaussian pulse
+    Single Gaussian pulse
 
     .. code-block:: python
 
@@ -218,7 +218,7 @@ def gaussian_pulse(
         ...     duration=100 * u.ms
         ... )
     
-    # Multiple identical pulses
+    Multiple identical pulses
 
     .. code-block:: python
 
@@ -230,7 +230,7 @@ def gaussian_pulse(
         ...     n=10  # Generate 10 identical pulses
         ... )
     
-    # Narrow pulse (approximating delta function)
+    Narrow pulse (approximating delta function)
 
     .. code-block:: python
 
@@ -241,7 +241,7 @@ def gaussian_pulse(
         ...     duration=20 * u.ms
         ... )
     
-    # Wide pulse (slow activation)
+    Wide pulse (slow activation)
 
     .. code-block:: python
 
@@ -321,7 +321,7 @@ def exponential_decay(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple exponential decay
+    Simple exponential decay
 
     .. code-block:: python
 
@@ -331,7 +331,7 @@ def exponential_decay(
         ...     duration=100 * u.ms
         ... )
     
-    # Fast decay (mimicking AMPA receptor)
+    Fast decay (mimicking AMPA receptor)
 
     .. code-block:: python
 
@@ -341,7 +341,7 @@ def exponential_decay(
         ...     duration=20 * u.ms
         ... )
     
-    # Slow decay (mimicking NMDA receptor)
+    Slow decay (mimicking NMDA receptor)
 
     .. code-block:: python
 
@@ -351,7 +351,7 @@ def exponential_decay(
         ...     duration=500 * u.ms
         ... )
     
-    # Delayed decay
+    Delayed decay
 
     .. code-block:: python
 
@@ -451,7 +451,7 @@ def double_exponential(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # AMPA-like synaptic current
+    AMPA-like synaptic current
 
     .. code-block:: python
 
@@ -462,7 +462,7 @@ def double_exponential(
         ...     duration=30 * u.ms
         ... )
     
-    # NMDA-like synaptic current
+    NMDA-like synaptic current
 
     .. code-block:: python
 
@@ -473,7 +473,7 @@ def double_exponential(
         ...     duration=500 * u.ms
         ... )
     
-    # GABA-A like inhibitory current
+    GABA-A like inhibitory current
 
     .. code-block:: python
 
@@ -484,7 +484,7 @@ def double_exponential(
         ...     duration=50 * u.ms
         ... )
     
-    # Delayed synaptic input
+    Delayed synaptic input
 
     .. code-block:: python
 
@@ -601,7 +601,7 @@ def burst(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Theta burst stimulation
+    Theta burst stimulation
 
     .. code-block:: python
 
@@ -614,7 +614,7 @@ def burst(
         ...     duration=1000 * u.ms
         ... )
     
-    # Gamma burst pattern
+    Gamma burst pattern
 
     .. code-block:: python
 
@@ -627,7 +627,7 @@ def burst(
         ...     duration=2000 * u.ms
         ... )
     
-    # High-frequency stimulation protocol
+    High-frequency stimulation protocol
 
     .. code-block:: python
 
@@ -640,7 +640,7 @@ def burst(
         ...     duration=2000 * u.ms
         ... )
     
-    # Slow oscillatory bursts
+    Slow oscillatory bursts
 
     .. code-block:: python
 

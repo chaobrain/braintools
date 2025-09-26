@@ -87,7 +87,7 @@ def sinusoidal(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple 10 Hz sinusoid
+    Simple 10 Hz sinusoid
 
     .. code-block:: python
 
@@ -97,7 +97,7 @@ def sinusoidal(
         ...     duration=1000 * u.ms
         ... )
     
-    # High-frequency stimulation
+    High-frequency stimulation
 
     .. code-block:: python
 
@@ -107,7 +107,7 @@ def sinusoidal(
         ...     duration=500 * u.ms
         ... )
     
-    # Sinusoid with positive bias (always >= 0)
+    Sinusoid with positive bias (always >= 0)
 
     .. code-block:: python
 
@@ -118,7 +118,7 @@ def sinusoidal(
         ...     bias=True  # Oscillates between 0 and 20 pA
         ... )
     
-    # Windowed sinusoid
+    Windowed sinusoid
 
     .. code-block:: python
 
@@ -130,7 +130,7 @@ def sinusoidal(
         ...     t_end=800 * u.ms
         ... )
     
-    # Testing resonance at theta frequency
+    Testing resonance at theta frequency
 
     .. code-block:: python
 
@@ -140,7 +140,7 @@ def sinusoidal(
         ...     duration=5000 * u.ms
         ... )
     
-    # Subthreshold membrane oscillations
+    Subthreshold membrane oscillations
 
     .. code-block:: python
 
@@ -283,7 +283,7 @@ def square(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Symmetric square wave at 2 Hz
+    Symmetric square wave at 2 Hz
 
     .. code-block:: python
 
@@ -293,7 +293,7 @@ def square(
         ...     duration=2000 * u.ms
         ... )
     
-    # High-frequency pulse train
+    High-frequency pulse train
 
     .. code-block:: python
 
@@ -304,7 +304,7 @@ def square(
         ...     duty_cycle=0.2  # 20% on, 80% off
         ... )
     
-    # Square wave with positive bias
+    Square wave with positive bias
 
     .. code-block:: python
 
@@ -315,7 +315,7 @@ def square(
         ...     bias=True  # Alternates between 0 and 16 pA
         ... )
     
-    # Windowed stimulation
+    Windowed stimulation
 
     .. code-block:: python
 
@@ -327,7 +327,7 @@ def square(
         ...     t_end=1500 * u.ms
         ... )
     
-    # Asymmetric pulse train (10% duty cycle)
+    Asymmetric pulse train (10% duty cycle)
 
     .. code-block:: python
 
@@ -338,7 +338,7 @@ def square(
         ...     duty_cycle=0.1  # Short pulses
         ... )
     
-    # Clock signal for synchronization
+    Clock signal for synchronization
 
     .. code-block:: python
 
@@ -462,7 +462,7 @@ def triangular(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple triangular wave at 5 Hz
+    Simple triangular wave at 5 Hz
 
     .. code-block:: python
 
@@ -472,7 +472,7 @@ def triangular(
         ...     duration=1000 * u.ms
         ... )
     
-    # Slow triangular ramp for I-V curves
+    Slow triangular ramp for I-V curves
 
     .. code-block:: python
 
@@ -482,7 +482,7 @@ def triangular(
         ...     duration=4000 * u.ms
         ... )
     
-    # Triangular wave with positive bias
+    Triangular wave with positive bias
 
     .. code-block:: python
 
@@ -493,7 +493,7 @@ def triangular(
         ...     bias=True  # Oscillates between 0 and 10 nA
         ... )
     
-    # Windowed triangular stimulation
+    Windowed triangular stimulation
 
     .. code-block:: python
 
@@ -505,7 +505,7 @@ def triangular(
         ...     t_end=2500 * u.ms
         ... )
     
-    # High-frequency triangular wave
+    High-frequency triangular wave
 
     .. code-block:: python
 
@@ -515,7 +515,7 @@ def triangular(
         ...     duration=200 * u.ms
         ... )
     
-    # Testing adaptation with slow ramps
+    Testing adaptation with slow ramps
 
     .. code-block:: python
 
@@ -633,7 +633,7 @@ def sawtooth(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple sawtooth at 2 Hz
+    Simple sawtooth at 2 Hz
 
     .. code-block:: python
 
@@ -643,7 +643,7 @@ def sawtooth(
         ...     duration=2000 * u.ms
         ... )
     
-    # Slow ramp for threshold detection
+    Slow ramp for threshold detection
 
     .. code-block:: python
 
@@ -653,7 +653,7 @@ def sawtooth(
         ...     duration=4000 * u.ms
         ... )
     
-    # Sawtooth with positive bias
+    Sawtooth with positive bias
 
     .. code-block:: python
 
@@ -664,7 +664,7 @@ def sawtooth(
         ...     bias=True  # Ramps from 0 to 10 nA
         ... )
     
-    # Windowed sawtooth stimulation
+    Windowed sawtooth stimulation
 
     .. code-block:: python
 
@@ -676,7 +676,7 @@ def sawtooth(
         ...     t_end=1600 * u.ms
         ... )
     
-    # Fast sawtooth for reset testing
+    Fast sawtooth for reset testing
 
     .. code-block:: python
 
@@ -686,7 +686,7 @@ def sawtooth(
         ...     duration=250 * u.ms
         ... )
     
-    # Repeated ramp protocol
+    Repeated ramp protocol
 
     .. code-block:: python
 
@@ -814,7 +814,7 @@ def chirp(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Linear frequency sweep from 1 to 50 Hz
+    Linear frequency sweep from 1 to 50 Hz
 
     .. code-block:: python
 
@@ -826,7 +826,7 @@ def chirp(
         ...     method='linear'
         ... )
     
-    # Logarithmic sweep for spectral analysis
+    Logarithmic sweep for spectral analysis
 
     .. code-block:: python
 
@@ -838,7 +838,7 @@ def chirp(
         ...     method='logarithmic'
         ... )
     
-    # Chirp with positive bias
+    Chirp with positive bias
 
     .. code-block:: python
 
@@ -850,7 +850,7 @@ def chirp(
         ...     bias=True  # Always positive
         ... )
     
-    # Windowed chirp for specific testing
+    Windowed chirp for specific testing
 
     .. code-block:: python
 
@@ -863,7 +863,7 @@ def chirp(
         ...     t_end=2500 * u.ms
         ... )
     
-    # Reverse chirp (high to low frequency)
+    Reverse chirp (high to low frequency)
 
     .. code-block:: python
 
@@ -874,7 +874,7 @@ def chirp(
         ...     duration=2000 * u.ms
         ... )
     
-    # Testing resonance in theta-gamma range
+    Testing resonance in theta-gamma range
 
     .. code-block:: python
 
@@ -1022,7 +1022,7 @@ def noisy_sinusoidal(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Sinusoid with small noise
+    Sinusoid with small noise
 
     .. code-block:: python
 
@@ -1033,7 +1033,7 @@ def noisy_sinusoidal(
         ...     duration=1000 * u.ms
         ... )
     
-    # High noise for stochastic resonance
+    High noise for stochastic resonance
 
     .. code-block:: python
 
@@ -1044,7 +1044,7 @@ def noisy_sinusoidal(
         ...     duration=2000 * u.ms
         ... )
     
-    # Theta rhythm with synaptic noise
+    Theta rhythm with synaptic noise
 
     .. code-block:: python
 
@@ -1055,7 +1055,7 @@ def noisy_sinusoidal(
         ...     duration=5000 * u.ms
         ... )
     
-    # Windowed noisy stimulation
+    Windowed noisy stimulation
 
     .. code-block:: python
 
@@ -1068,7 +1068,7 @@ def noisy_sinusoidal(
         ...     t_end=800 * u.ms
         ... )
     
-    # Reproducible noisy signal
+    Reproducible noisy signal
 
     .. code-block:: python
 
@@ -1080,7 +1080,7 @@ def noisy_sinusoidal(
         ...     seed=42  # Fixed random seed
         ... )
     
-    # Subthreshold oscillation with realistic noise
+    Subthreshold oscillation with realistic noise
 
     .. code-block:: python
 

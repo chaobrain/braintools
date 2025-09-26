@@ -87,7 +87,7 @@ def section(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple step protocol
+    Simple step protocol
 
     .. code-block:: python
 
@@ -96,7 +96,7 @@ def section(
         ...     durations=[100, 200, 100] * u.ms
         ... )
     
-    # Multiple channel input
+    Multiple channel input
 
     .. code-block:: python
 
@@ -107,7 +107,7 @@ def section(
         ...     durations=[50, 100, 50] * u.ms
         ... )
     
-    # Get both current and duration
+    Get both current and duration
 
     .. code-block:: python
 
@@ -118,7 +118,7 @@ def section(
         ... )
         >>> print(f"Total duration: {duration}")
     
-    # Complex protocol with different phases
+    Complex protocol with different phases
 
     .. code-block:: python
 
@@ -206,7 +206,7 @@ def constant(I_and_duration):
         >>> import numpy as np
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple two-phase protocol
+    Simple two-phase protocol
 
     .. code-block:: python
 
@@ -215,7 +215,7 @@ def constant(I_and_duration):
         ...     (10 * u.pA, 200 * u.ms)
         ... ])
     
-    # Mixed scalar and array values
+    Mixed scalar and array values
 
     .. code-block:: python
 
@@ -225,7 +225,7 @@ def constant(I_and_duration):
         ...     (0, 50 * u.ms)
         ... ])
     
-    # Complex multi-phase stimulation
+    Complex multi-phase stimulation
 
     .. code-block:: python
 
@@ -239,7 +239,7 @@ def constant(I_and_duration):
         >>> current, total_time = constant(phases)
         >>> print(f"Total stimulation time: {total_time}")
     
-    # Using arrays for spatial patterns
+    Using arrays for spatial patterns
 
     .. code-block:: python
 
@@ -250,7 +250,7 @@ def constant(I_and_duration):
         ...     (np.zeros((2, 2)) * u.nA, 100 * u.ms)
         ... ])
     
-    # Ramp-like approximation with many steps
+    Ramp-like approximation with many steps
 
     .. code-block:: python
 
@@ -340,7 +340,7 @@ def step(
         >>> import brainstate
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple three-level step function
+    Simple three-level step function
 
     .. code-block:: python
 
@@ -350,7 +350,7 @@ def step(
         ...     duration=200 * u.ms
         ... )
     
-    # Staircase protocol
+    Staircase protocol
 
     .. code-block:: python
 
@@ -358,7 +358,7 @@ def step(
         >>> times = [0, 20, 40, 60, 80, 100] * u.ms
         >>> current = step(amplitudes, times, 120 * u.ms)
     
-    # Multiple pulses with return to baseline
+    Multiple pulses with return to baseline
 
     .. code-block:: python
 
@@ -368,7 +368,7 @@ def step(
         ...     duration=100 * u.ms
         ... )
     
-    # Unsorted times are automatically sorted
+    Unsorted times are automatically sorted
 
     .. code-block:: python
 
@@ -378,7 +378,7 @@ def step(
         ...     duration=150 * u.ms
         ... )
     
-    # Protocol with negative values
+    Protocol with negative values
 
     .. code-block:: python
 
@@ -388,7 +388,7 @@ def step(
         ...     duration=125 * u.ms
         ... )
     
-    # F-I curve protocol
+    F-I curve protocol
 
     .. code-block:: python
 
