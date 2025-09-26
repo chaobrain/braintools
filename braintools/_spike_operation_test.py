@@ -18,7 +18,7 @@ import unittest
 import jax.numpy as jnp
 import numpy as np
 
-import braintools as bt
+import braintools
 
 
 class TestSpikeBitwiseOps(unittest.TestCase):
@@ -29,49 +29,49 @@ class TestSpikeBitwiseOps(unittest.TestCase):
 
     def test_bitwise_or(self):
         expected = jnp.array([0, 1, 1, 1])
-        out1 = bt.spike_bitwise_or(self.x, self.y)
-        out2 = bt.spike_bitwise(self.x, self.y, 'or')
+        out1 = braintools.spike_bitwise_or(self.x, self.y)
+        out2 = braintools.spike_bitwise(self.x, self.y, 'or')
         np.testing.assert_array_equal(np.array(out1), np.array(expected))
         np.testing.assert_array_equal(np.array(out2), np.array(expected))
 
     def test_bitwise_and(self):
         expected = jnp.array([0, 0, 0, 1])
-        out1 = bt.spike_bitwise_and(self.x, self.y)
-        out2 = bt.spike_bitwise(self.x, self.y, 'and')
+        out1 = braintools.spike_bitwise_and(self.x, self.y)
+        out2 = braintools.spike_bitwise(self.x, self.y, 'and')
         np.testing.assert_array_equal(np.array(out1), np.array(expected))
         np.testing.assert_array_equal(np.array(out2), np.array(expected))
 
     def test_bitwise_iand(self):
         # (NOT x) AND y -> 0,1,0,0
         expected = jnp.array([0, 1, 0, 0])
-        out1 = bt.spike_bitwise_iand(self.x, self.y)
-        out2 = bt.spike_bitwise(self.x, self.y, 'iand')
+        out1 = braintools.spike_bitwise_iand(self.x, self.y)
+        out2 = braintools.spike_bitwise(self.x, self.y, 'iand')
         np.testing.assert_array_equal(np.array(out1), np.array(expected))
         np.testing.assert_array_equal(np.array(out2), np.array(expected))
 
     def test_bitwise_not(self):
         expected = jnp.array([1, 1, 0, 0])
-        out = bt.spike_bitwise_not(self.x)
+        out = braintools.spike_bitwise_not(self.x)
         np.testing.assert_array_equal(np.array(out), np.array(expected))
 
     def test_bitwise_xor(self):
         expected = jnp.array([0, 1, 1, 0])
-        out1 = bt.spike_bitwise_xor(self.x, self.y)
-        out2 = bt.spike_bitwise(self.x, self.y, 'xor')
+        out1 = braintools.spike_bitwise_xor(self.x, self.y)
+        out2 = braintools.spike_bitwise(self.x, self.y, 'xor')
         np.testing.assert_array_equal(np.array(out1), np.array(expected))
         np.testing.assert_array_equal(np.array(out2), np.array(expected))
 
     def test_bitwise_ixor(self):
         # IXOR as implemented equals XOR on binary inputs
         expected = jnp.array([0, 1, 1, 0])
-        out1 = bt.spike_bitwise_ixor(self.x, self.y)
-        out2 = bt.spike_bitwise(self.x, self.y, 'ixor')
+        out1 = braintools.spike_bitwise_ixor(self.x, self.y)
+        out2 = braintools.spike_bitwise(self.x, self.y, 'ixor')
         np.testing.assert_array_equal(np.array(out1), np.array(expected))
         np.testing.assert_array_equal(np.array(out2), np.array(expected))
 
     def test_bitwise_invalid_op_raises(self):
         with self.assertRaises(NotImplementedError):
-            _ = bt.spike_bitwise(self.x, self.y, 'nand')
+            _ = braintools.spike_bitwise(self.x, self.y, 'nand')
 
     def test_broadcasting(self):
         # Ensure elementwise broadcasting works as expected
@@ -80,12 +80,12 @@ class TestSpikeBitwiseOps(unittest.TestCase):
 
         # OR truth table broadcast -> [[0,1],[1,1]]
         expected_or = jnp.array([[0, 1], [1, 1]])
-        out_or = bt.spike_bitwise_or(x, y)
+        out_or = braintools.spike_bitwise_or(x, y)
         np.testing.assert_array_equal(np.array(out_or), np.array(expected_or))
 
         # AND truth table broadcast -> [[0,0],[0,1]]
         expected_and = jnp.array([[0, 0], [0, 1]])
-        out_and = bt.spike_bitwise_and(x, y)
+        out_and = braintools.spike_bitwise_and(x, y)
         np.testing.assert_array_equal(np.array(out_and), np.array(expected_and))
 
 
