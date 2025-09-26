@@ -100,84 +100,102 @@ class Input:
     --------
     Basic arithmetic operations:
     
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> from braintools.input import Ramp, Sinusoidal, Step
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> from braintools.input import Ramp, Sinusoidal, Step
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    >>> # Add two inputs
-    >>> ramp = Ramp(0, 1, 500 * u.ms)
-    >>> sine = Sinusoidal(0.5, 10 * u.Hz, 500 * u.ms)
-    >>> combined = ramp + sine
+
+        >>> # Add two inputs
+        >>> ramp = Ramp(0, 1, 500 * u.ms)
+        >>> sine = Sinusoidal(0.5, 10 * u.Hz, 500 * u.ms)
+        >>> combined = ramp + sine
     
-    >>> # Scale an input
-    >>> scaled_ramp = ramp * 2.0
-    >>> half_sine = sine.scale(0.5)
+
+        >>> # Scale an input
+        >>> scaled_ramp = ramp * 2.0
+        >>> half_sine = sine.scale(0.5)
     
-    >>> # Subtract a baseline
-    >>> centered = sine - 0.25
+
+        >>> # Subtract a baseline
+        >>> centered = sine - 0.25
     
     Complex compositions:
     
-    >>> # Amplitude modulation
-    >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 1000 * u.ms)
-    >>> envelope = Ramp(0, 1, 1000 * u.ms)
-    >>> am_signal = carrier * envelope
+    .. code-block:: python
+
+        >>> # Amplitude modulation
+        >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 1000 * u.ms)
+        >>> envelope = Ramp(0, 1, 1000 * u.ms)
+        >>> am_signal = carrier * envelope
     
-    >>> # Sequential stimulation protocol
-    >>> baseline = Step([0], [0], 200 * u.ms)
-    >>> stim = Step([1], [0], 500 * u.ms)
-    >>> recovery = Step([0], [0], 300 * u.ms)
-    >>> protocol = baseline & stim & recovery
+
+        >>> # Sequential stimulation protocol
+        >>> baseline = Step([0], [0 * u.ms], 200 * u.ms)
+        >>> stim = Step([1], [0 * u.ms], 500 * u.ms)
+        >>> recovery = Step([0], [0 * u.ms], 300 * u.ms)
+        >>> protocol = baseline & stim & recovery
     
-    >>> # Overlay (maximum) for redundant stimulation
-    >>> stim1 = Step([0, 1, 0], [0, 100, 400], 500 * u.ms)
-    >>> stim2 = Step([0, 0.8, 0], [0, 200, 450], 500 * u.ms)
-    >>> combined_stim = stim1 | stim2
+
+        >>> # Overlay (maximum) for redundant stimulation
+        >>> stim1 = Step([0, 1, 0], [0, 100, 400] * u.ms, 500 * u.ms)
+        >>> stim2 = Step([0, 0.8, 0], [0, 200, 450] * u.ms, 500 * u.ms)
+        >>> combined_stim = stim1 | stim2
     
     Transformations:
     
-    >>> # Time shifting for delayed responses
-    >>> delayed_sine = sine.shift(50 * u.ms)
-    >>> advanced_ramp = ramp.shift(-20 * u.ms)
+    .. code-block:: python
+
+        >>> # Time shifting for delayed responses
+        >>> delayed_sine = sine.shift(50 * u.ms)
+        >>> advanced_ramp = ramp.shift(-20 * u.ms)
     
-    >>> # Clipping for saturation effects
-    >>> clipped = (ramp * 2).clip(0, 1.5)
+
+        >>> # Clipping for saturation effects
+        >>> clipped = (ramp * 2).clip(0, 1.5)
     
-    >>> # Smoothing for filtering
-    >>> smooth_steps = Step([0, 1, 0.5, 1, 0], 
-    ...                          [0, 100, 200, 300, 400], 
-    ...                          500 * u.ms).smooth(10 * u.ms)
+
+        >>> # Smoothing for filtering
+        >>> smooth_steps = Step([0, 1, 0.5, 1, 0],
+        ...                     [0, 100, 200, 300, 400] * u.ms,
+        ...                     500 * u.ms).smooth(10 * u.ms)
     
-    >>> # Repeating patterns
-    >>> burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
-    >>> repeated_bursts = burst.repeat(10)
+
+        >>> # Repeating patterns
+        >>> burst = Step([0, 1, 0], [0, 10, 20] * u.ms, 50 * u.ms)
+        >>> repeated_bursts = burst.repeat(10)
     
-    >>> # Custom transformations
-    >>> import jax.numpy as jnp
-    >>> rectified = sine.apply(lambda x: jnp.maximum(x, 0))
-    >>> squared = sine.apply(lambda x: x ** 2)
+
+        >>> # Custom transformations
+        >>> import jax.numpy as jnp
+        >>> rectified = sine.apply(lambda x: jnp.maximum(x, 0))
+        >>> squared = sine.apply(lambda x: x ** 2)
     
     Advanced protocols:
     
-    >>> # Complex experimental protocol
-    >>> pre_baseline = Step([0], [0], 1000 * u.ms)
-    >>> conditioning = Sinusoidal(0.5, 5 * u.Hz, 2000 * u.ms)
-    >>> test_pulse = Step([2], [0], 100 * u.ms)
-    >>> post_baseline = Step([0], [0], 1000 * u.ms)
-    >>> 
-    >>> protocol = (pre_baseline & 
-    ...            (conditioning + 0.5).clip(0, 1) & 
-    ...            test_pulse & 
-    ...            post_baseline)
+    .. code-block:: python
+
+        >>> # Complex experimental protocol
+        >>> pre_baseline = Step([0], [0 * u.ms], 1000 * u.ms)
+        >>> conditioning = Sinusoidal(0.5, 5 * u.Hz, 2000 * u.ms)
+        >>> test_pulse = Step([2], [0 * u.ms], 100 * u.ms)
+        >>> post_baseline = Step([0], [0 * u.ms], 1000 * u.ms)
+        >>>
+        >>> protocol = (pre_baseline &
+        ...            (conditioning + 0.5).clip(0, 1) &
+        ...            test_pulse &
+        ...            post_baseline)
     
-    >>> # Noisy modulated signal
-    >>> from braintools.input import WienerProcess
-    >>> signal = Sinusoidal(1.0, 20 * u.Hz, 1000 * u.ms)
-    >>> noise = WienerProcess(1000 * u.ms, sigma=0.1)
-    >>> modulator = (Ramp(0.5, 1.5, 1000 * u.ms) + 
-    ...             Sinusoidal(0.2, 2 * u.Hz, 1000 * u.ms))
-    >>> noisy_modulated = (signal + noise) * modulator
+
+        >>> # Noisy modulated signal
+        >>> from braintools.input import WienerProcess
+        >>> signal = Sinusoidal(1.0, 20 * u.Hz, 1000 * u.ms)
+        >>> noise = WienerProcess(1000 * u.ms, sigma=0.1)
+        >>> modulator = (Ramp(0.5, 1.5, 1000 * u.ms) +
+        ...             Sinusoidal(0.2, 2 * u.Hz, 1000 * u.ms))
+        >>> noisy_modulated = (signal + noise) * modulator
     """
 
     __module__ = 'braintools.input'
@@ -220,13 +238,16 @@ class Input:
             
         Examples
         --------
-        >>> ramp = Ramp(0, 1, 100 * u.ms)
-        >>> # First call generates and caches
-        >>> arr1 = ramp()
-        >>> # Second call uses cache (faster)
-        >>> arr2 = ramp()
-        >>> # Force regeneration
-        >>> arr3 = ramp(recompute=True)
+
+        .. code-block:: python
+
+            >>> ramp = Ramp(0, 1, 100 * u.ms)
+            >>> # First call generates and caches
+            >>> arr1 = ramp()
+            >>> # Second call uses cache (faster)
+            >>> arr2 = ramp()
+            >>> # Force regeneration
+            >>> arr3 = ramp(recompute=True)
         """
         if self._cached_array is None or recompute:
             self._cached_array = self._generate()
@@ -286,12 +307,15 @@ class Input:
             
         Examples
         --------
-        >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
-        >>> sine2 = Sinusoidal(0.5, 20 * u.Hz, 100 * u.ms)
-        >>> # Add two inputs
-        >>> combined = sine1 + sine2
-        >>> # Add a DC offset
-        >>> with_offset = sine1 + 0.5
+
+        .. code-block:: python
+
+            >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
+            >>> sine2 = Sinusoidal(0.5, 20 * u.Hz, 100 * u.ms)
+            >>> # Add two inputs
+            >>> combined = sine1 + sine2
+            >>> # Add a DC offset
+            >>> with_offset = sine1 + 0.5
         """
         if isinstance(other, Input):
             return Composite(self, other, operator='+')
@@ -317,12 +341,15 @@ class Input:
             
         Examples
         --------
-        >>> ramp = Ramp(0, 2, 100 * u.ms)
-        >>> baseline = Step([0.5], [0], 100 * u.ms)
-        >>> # Subtract baseline
-        >>> corrected = ramp - baseline
-        >>> # Remove DC offset
-        >>> centered = ramp - 1.0
+
+        .. code-block:: python
+
+            >>> ramp = Ramp(0, 2, 100 * u.ms)
+            >>> baseline = Step([0.5], [0], 100 * u.ms)
+            >>> # Subtract baseline
+            >>> corrected = ramp - baseline
+            >>> # Remove DC offset
+            >>> centered = ramp - 1.0
         """
         if isinstance(other, Input):
             return Composite(self, other, operator='-')
@@ -351,12 +378,15 @@ class Input:
             
         Examples
         --------
-        >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 500 * u.ms)
-        >>> envelope = Ramp(0, 1, 500 * u.ms)
-        >>> # Amplitude modulation
-        >>> am_signal = carrier * envelope
-        >>> # Simple scaling
-        >>> doubled = carrier * 2.0
+
+        .. code-block:: python
+
+            >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 500 * u.ms)
+            >>> envelope = Ramp(0, 1, 500 * u.ms)
+            >>> # Amplitude modulation
+            >>> am_signal = carrier * envelope
+            >>> # Simple scaling
+            >>> doubled = carrier * 2.0
         """
         if isinstance(other, Input):
             return Composite(self, other, operator='*')
@@ -382,12 +412,15 @@ class Input:
             
         Examples
         --------
-        >>> signal = Sinusoidal(2.0, 10 * u.Hz, 100 * u.ms)
-        >>> normalizer = Ramp(1, 2, 100 * u.ms)
-        >>> # Normalize by varying factor
-        >>> normalized = signal / normalizer
-        >>> # Scale down
-        >>> halved = signal / 2.0
+
+        .. code-block:: python
+
+            >>> signal = Sinusoidal(2.0, 10 * u.Hz, 100 * u.ms)
+            >>> normalizer = Ramp(1, 2, 100 * u.ms)
+            >>> # Normalize by varying factor
+            >>> normalized = signal / normalizer
+            >>> # Scale down
+            >>> halved = signal / 2.0
         """
         if isinstance(other, Input):
             return Composite(self, other, operator='/')
@@ -416,12 +449,15 @@ class Input:
             
         Examples
         --------
-        >>> baseline = Step([0], [0], 100 * u.ms)
-        >>> stimulus = Step([1], [0], 200 * u.ms)
-        >>> recovery = Step([0], [0], 100 * u.ms)
-        >>> # Create sequential protocol
-        >>> protocol = baseline & stimulus & recovery
-        >>> # Total duration is 400 ms
+
+        .. code-block:: python
+
+            >>> baseline = Step([0], [0], 100 * u.ms)
+            >>> stimulus = Step([1], [0], 200 * u.ms)
+            >>> recovery = Step([0], [0], 100 * u.ms)
+            >>> # Create sequential protocol
+            >>> protocol = baseline & stimulus & recovery
+            >>> # Total duration is 400 ms
         """
         if not isinstance(other, Input):
             raise TypeError("Can only concatenate with another Input object")
@@ -442,11 +478,14 @@ class Input:
             
         Examples
         --------
-        >>> stim1 = Step([0, 1, 0], [0, 100, 300], 400 * u.ms)
-        >>> stim2 = Step([0, 0.8, 0], [0, 150, 350], 400 * u.ms)
-        >>> # Take maximum at each point
-        >>> combined = stim1 | stim2
-        >>> # Results in 1.0 from 100-150ms, 0.8 from 150-300ms, etc.
+
+        .. code-block:: python
+
+            >>> stim1 = Step([0, 1, 0], [0, 100, 300], 400 * u.ms)
+            >>> stim2 = Step([0, 0.8, 0], [0, 150, 350], 400 * u.ms)
+            >>> # Take maximum at each point
+            >>> combined = stim1 | stim2
+            >>> # Results in 1.0 from 100-150ms, 0.8 from 150-300ms, etc.
         """
         if isinstance(other, Input):
             return Composite(self, other, operator='max')
@@ -463,9 +502,12 @@ class Input:
             
         Examples
         --------
-        >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
-        >>> # Invert the signal
-        >>> inverted = -sine
+
+        .. code-block:: python
+
+            >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
+            >>> # Invert the signal
+            >>> inverted = -sine
         """
         return self.apply(lambda x: -x)
 
@@ -484,11 +526,14 @@ class Input:
             
         Examples
         --------
-        >>> ramp = Ramp(0, 1, 100 * u.ms)
-        >>> # Double the amplitude
-        >>> doubled = ramp.scale(2.0)
-        >>> # Reduce to 30%
-        >>> reduced = ramp.scale(0.3)
+
+        .. code-block:: python
+
+            >>> ramp = Ramp(0, 1, 100 * u.ms)
+            >>> # Double the amplitude
+            >>> doubled = ramp.scale(2.0)
+            >>> # Reduce to 30%
+            >>> reduced = ramp.scale(0.3)
         """
         return self * factor
 
@@ -508,11 +553,14 @@ class Input:
             
         Examples
         --------
-        >>> pulse = Step([1], [100 * u.ms], 200 * u.ms)
-        >>> # Delay by 50ms (pulse now at 150ms)
-        >>> delayed = pulse.shift(50 * u.ms)
-        >>> # Advance by 30ms (pulse now at 70ms)  
-        >>> advanced = pulse.shift(-30 * u.ms)
+
+        .. code-block:: python
+
+            >>> pulse = Step([1], [100 * u.ms], 200 * u.ms)
+            >>> # Delay by 50ms (pulse now at 150ms)
+            >>> delayed = pulse.shift(50 * u.ms)
+            >>> # Advance by 30ms (pulse now at 70ms)
+            >>> advanced = pulse.shift(-30 * u.ms)
         """
         return TimeShifted(self, time_shift)
 
@@ -533,13 +581,16 @@ class Input:
             
         Examples
         --------
-        >>> ramp = Ramp(-2, 2, 100 * u.ms)
-        >>> # Clip to [0, 1]
-        >>> saturated = ramp.clip(0, 1)
-        >>> # Only upper bound
-        >>> capped = ramp.clip(max_val=1.5)
-        >>> # Only lower bound (rectification)
-        >>> rectified = ramp.clip(min_val=0)
+
+        .. code-block:: python
+
+            >>> ramp = Ramp(-2, 2, 100 * u.ms)
+            >>> # Clip to [0, 1]
+            >>> saturated = ramp.clip(0, 1)
+            >>> # Only upper bound
+            >>> capped = ramp.clip(max_val=1.5)
+            >>> # Only lower bound (rectification)
+            >>> rectified = ramp.clip(min_val=0)
         """
         return Clipped(self, min_val, max_val)
 
@@ -565,13 +616,16 @@ class Input:
             
         Examples
         --------
-        >>> steps = Step([0, 1, 0.5, 1, 0], 
-        ...                   [0, 50, 100, 150, 200], 
-        ...                   250 * u.ms)
-        >>> # Smooth transitions with 10ms time constant
-        >>> smooth = steps.smooth(10 * u.ms)
-        >>> # Heavy smoothing with 50ms time constant
-        >>> very_smooth = steps.smooth(50 * u.ms)
+
+        .. code-block:: python
+
+            >>> steps = Step([0, 1, 0.5, 1, 0],
+            ...                   [0, 50, 100, 150, 200],
+            ...                   250 * u.ms)
+            >>> # Smooth transitions with 10ms time constant
+            >>> smooth = steps.smooth(10 * u.ms)
+            >>> # Heavy smoothing with 50ms time constant
+            >>> very_smooth = steps.smooth(50 * u.ms)
         """
         return Smoothed(self, tau)
 
@@ -590,14 +644,17 @@ class Input:
             
         Examples
         --------
-        >>> # Create a burst pattern
-        >>> burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
-        >>> # Repeat 10 times for 500ms total
-        >>> burst_train = burst.repeat(10)
-        >>> 
-        >>> # Repeated sine wave packets
-        >>> packet = Sinusoidal(1.0, 50 * u.Hz, 100 * u.ms)
-        >>> packets = packet.repeat(5)  # 500ms total
+
+        .. code-block:: python
+
+            >>> # Create a burst pattern
+            >>> burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
+            >>> # Repeat 10 times for 500ms total
+            >>> burst_train = burst.repeat(10)
+            >>>
+            >>> # Repeated sine wave packets
+            >>> packet = Sinusoidal(1.0, 50 * u.Hz, 100 * u.ms)
+            >>> packets = packet.repeat(5)  # 500ms total
         """
         return Repeated(self, n_times)
 
@@ -617,24 +674,27 @@ class Input:
             
         Examples
         --------
-        >>> import jax.numpy as jnp
-        >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
-        >>> 
-        >>> # Rectification
-        >>> rectified = sine.apply(lambda x: jnp.maximum(x, 0))
-        >>> 
-        >>> # Squaring
-        >>> squared = sine.apply(lambda x: x ** 2)
-        >>> 
-        >>> # Custom nonlinearity
-        >>> sigmoid = sine.apply(lambda x: 1 / (1 + jnp.exp(-5 * x)))
-        >>> 
-        >>> # Add noise
-        >>> import jax.random as jrandom
-        >>> key = jrandom.PRNGKey(0)
-        >>> noisy = sine.apply(
-        ...     lambda x: x + 0.1 * jrandom.normal(key, x.shape)
-        ... )
+
+        .. code-block:: python
+
+            >>> import jax.numpy as jnp
+            >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
+            >>>
+            >>> # Rectification
+            >>> rectified = sine.apply(lambda x: jnp.maximum(x, 0))
+            >>>
+            >>> # Squaring
+            >>> squared = sine.apply(lambda x: x ** 2)
+            >>>
+            >>> # Custom nonlinearity
+            >>> sigmoid = sine.apply(lambda x: 1 / (1 + jnp.exp(-5 * x)))
+            >>>
+            >>> # Add noise
+            >>> import jax.random as jrandom
+            >>> key = jrandom.PRNGKey(0)
+            >>> noisy = sine.apply(
+            ...     lambda x: x + 0.1 * jrandom.normal(key, x.shape)
+            ... )
         """
         return Transformed(self, func)
 
@@ -660,15 +720,18 @@ class Composite(Input):
     
     Examples
     --------
-    >>> # Direct construction (usually use operators instead)
-    >>> ramp = Ramp(0, 1, 100 * u.ms)
-    >>> sine = Sinusoidal(0.5, 10 * u.Hz, 100 * u.ms)
-    >>> added = Composite(ramp, sine, '+')
-    >>> 
-    >>> # More commonly created via operators
-    >>> added = ramp + sine
-    >>> multiplied = ramp * sine
-    >>> maximum = ramp | sine  # Uses 'max' operator
+
+    .. code-block:: python
+
+        >>> # Direct construction (usually use operators instead)
+        >>> ramp = Ramp(0, 1, 100 * u.ms)
+        >>> sine = Sinusoidal(0.5, 10 * u.Hz, 100 * u.ms)
+        >>> added = Composite(ramp, sine, '+')
+        >>>
+        >>> # More commonly created via operators
+        >>> added = ramp + sine
+        >>> multiplied = ramp * sine
+        >>> maximum = ramp | sine  # Uses 'max' operator
     """
     __module__ = 'braintools.input'
 
@@ -735,12 +798,15 @@ class ConstantValue(Input):
         
     Examples
     --------
-    >>> # Usually created implicitly
-    >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
-    >>> with_offset = sine + 0.5  # Creates ConstantValue(0.5, 100*u.ms)
-    >>> 
-    >>> # Direct construction
-    >>> baseline = ConstantValue(0.1, 500 * u.ms)
+
+    .. code-block:: python
+
+        >>> # Usually created implicitly
+        >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
+        >>> with_offset = sine + 0.5  # Creates ConstantValue(0.5, 100*u.ms)
+        >>>
+        >>> # Direct construction
+        >>> baseline = ConstantValue(0.1, 500 * u.ms)
     """
     __module__ = 'braintools.input'
 
@@ -766,17 +832,20 @@ class Sequential(Input):
         
     Examples
     --------
-    >>> # Three-phase protocol
-    >>> baseline = Step([0], [0], 500 * u.ms)
-    >>> stimulus = Ramp(0, 1, 1000 * u.ms)
-    >>> recovery = Step([0], [0], 500 * u.ms)
-    >>> 
-    >>> # Chain using & operator
-    >>> protocol = baseline & stimulus & recovery
-    >>> # Total duration is 2000 ms
-    >>> 
-    >>> # Direct construction
-    >>> two_phase = Sequential(baseline, stimulus)
+
+    .. code-block:: python
+
+        >>> # Three-phase protocol
+        >>> baseline = Step([0], [0], 500 * u.ms)
+        >>> stimulus = Ramp(0, 1, 1000 * u.ms)
+        >>> recovery = Step([0], [0], 500 * u.ms)
+        >>>
+        >>> # Chain using & operator
+        >>> protocol = baseline & stimulus & recovery
+        >>> # Total duration is 2000 ms
+        >>>
+        >>> # Direct construction
+        >>> two_phase = Sequential(baseline, stimulus)
     """
     __module__ = 'braintools.input'
 
@@ -809,16 +878,19 @@ class TimeShifted(Input):
         
     Examples
     --------
-    >>> pulse = Step([1], [200 * u.ms], 500 * u.ms)
-    >>> 
-    >>> # Delay by 100ms (pulse now at 300ms)
-    >>> delayed = TimeShifted(pulse, 100 * u.ms)
-    >>> 
-    >>> # Advance by 50ms (pulse now at 150ms)
-    >>> advanced = TimeShifted(pulse, -50 * u.ms)
-    >>> 
-    >>> # Usually created via shift() method
-    >>> delayed = pulse.shift(100 * u.ms)
+
+    .. code-block:: python
+
+        >>> pulse = Step([1], [200 * u.ms], 500 * u.ms)
+        >>>
+        >>> # Delay by 100ms (pulse now at 300ms)
+        >>> delayed = TimeShifted(pulse, 100 * u.ms)
+        >>>
+        >>> # Advance by 50ms (pulse now at 150ms)
+        >>> advanced = TimeShifted(pulse, -50 * u.ms)
+        >>>
+        >>> # Usually created via shift() method
+        >>> delayed = pulse.shift(100 * u.ms)
     """
     __module__ = 'braintools.input'
 
@@ -871,19 +943,22 @@ class Clipped(Input):
         
     Examples
     --------
-    >>> ramp = Ramp(-2, 2, 200 * u.ms)
-    >>> 
-    >>> # Clip to [0, 1] range
-    >>> saturated = Clipped(ramp, 0, 1)
-    >>> 
-    >>> # Only lower bound (rectification)
-    >>> rectified = Clipped(ramp, min_val=0)
-    >>> 
-    >>> # Only upper bound (saturation)
-    >>> capped = Clipped(ramp, max_val=1.5)
-    >>> 
-    >>> # Usually created via clip() method
-    >>> saturated = ramp.clip(0, 1)
+
+    .. code-block:: python
+
+        >>> ramp = Ramp(-2, 2, 200 * u.ms)
+        >>>
+        >>> # Clip to [0, 1] range
+        >>> saturated = Clipped(ramp, 0, 1)
+        >>>
+        >>> # Only lower bound (rectification)
+        >>> rectified = Clipped(ramp, min_val=0)
+        >>>
+        >>> # Only upper bound (saturation)
+        >>> capped = Clipped(ramp, max_val=1.5)
+        >>>
+        >>> # Usually created via clip() method
+        >>> saturated = ramp.clip(0, 1)
     """
     __module__ = 'braintools.input'
 
@@ -938,19 +1013,22 @@ class Smoothed(Input):
         
     Examples
     --------
-    >>> # Sharp steps
-    >>> steps = Step([0, 1, 0.5, 1, 0], 
-    ...                   [0, 50, 100, 150, 200],
-    ...                   250 * u.ms)
-    >>> 
-    >>> # Light smoothing (fast response)
-    >>> light = Smoothed(steps, 5 * u.ms)
-    >>> 
-    >>> # Heavy smoothing (slow response)
-    >>> heavy = Smoothed(steps, 25 * u.ms)
-    >>> 
-    >>> # Usually created via smooth() method
-    >>> smooth = steps.smooth(10 * u.ms)
+
+    .. code-block:: python
+
+        >>> # Sharp steps
+        >>> steps = Step([0, 1, 0.5, 1, 0],
+        ...                   [0, 50, 100, 150, 200],
+        ...                   250 * u.ms)
+        >>>
+        >>> # Light smoothing (fast response)
+        >>> light = Smoothed(steps, 5 * u.ms)
+        >>>
+        >>> # Heavy smoothing (slow response)
+        >>> heavy = Smoothed(steps, 25 * u.ms)
+        >>>
+        >>> # Usually created via smooth() method
+        >>> smooth = steps.smooth(10 * u.ms)
     """
     __module__ = 'braintools.input'
 
@@ -999,18 +1077,21 @@ class Repeated(Input):
     
     Examples
     --------
-    >>> # Single burst
-    >>> burst = Step([0, 1, 0], [0, 10, 30], 50 * u.ms)
-    >>> 
-    >>> # Burst train (10 bursts, 500ms total)
-    >>> train = Repeated(burst, 10)
-    >>> 
-    >>> # Oscillation packets
-    >>> packet = Sinusoidal(1.0, 100 * u.Hz, 100 * u.ms)
-    >>> packets = Repeated(packet, 5)  # 500ms total
-    >>> 
-    >>> # Usually created via repeat() method
-    >>> train = burst.repeat(10)
+
+    .. code-block:: python
+
+        >>> # Single burst
+        >>> burst = Step([0, 1, 0], [0, 10, 30], 50 * u.ms)
+        >>>
+        >>> # Burst train (10 bursts, 500ms total)
+        >>> train = Repeated(burst, 10)
+        >>>
+        >>> # Oscillation packets
+        >>> packet = Sinusoidal(1.0, 100 * u.Hz, 100 * u.ms)
+        >>> packets = Repeated(packet, 5)  # 500ms total
+        >>>
+        >>> # Usually created via repeat() method
+        >>> train = burst.repeat(10)
     """
     __module__ = 'braintools.input'
 
@@ -1051,21 +1132,24 @@ class Transformed(Input):
         
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> sine = Sinusoidal(1.0, 10 * u.Hz, 200 * u.ms)
-    >>> 
-    >>> # Half-wave rectification
-    >>> rectified = Transformed(sine, lambda x: jnp.maximum(x, 0))
-    >>> 
-    >>> # Squaring (frequency doubling)
-    >>> squared = Transformed(sine, lambda x: x ** 2)
-    >>> 
-    >>> # Sigmoid nonlinearity
-    >>> sigmoid = Transformed(sine, 
-    ...     lambda x: 1 / (1 + jnp.exp(-10 * x)))
-    >>> 
-    >>> # Usually created via apply() method
-    >>> transformed = sine.apply(lambda x: jnp.abs(x))
+
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> sine = Sinusoidal(1.0, 10 * u.Hz, 200 * u.ms)
+        >>>
+        >>> # Half-wave rectification
+        >>> rectified = Transformed(sine, lambda x: jnp.maximum(x, 0))
+        >>>
+        >>> # Squaring (frequency doubling)
+        >>> squared = Transformed(sine, lambda x: x ** 2)
+        >>>
+        >>> # Sigmoid nonlinearity
+        >>> sigmoid = Transformed(sine,
+        ...     lambda x: 1 / (1 + jnp.exp(-10 * x)))
+        >>>
+        >>> # Usually created via apply() method
+        >>> transformed = sine.apply(lambda x: jnp.abs(x))
     """
     __module__ = 'braintools.input'
 

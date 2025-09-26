@@ -85,46 +85,57 @@ class Section(Input):
     --------
     Simple three-phase protocol:
     
-    >>> section = Section(
-    ...     values=[0, 1, 0] * u.pA,
-    ...     durations=[100, 300, 100] * u.ms
-    ... )
-    >>> array = section()  # Generate the array
+    .. code-block:: python
+
+        >>> section = Section(
+        ...     values=[0, 1, 0] * u.pA,
+        ...     durations=[100, 300, 100] * u.ms
+        ... )
+        >>> array = section()  # Generate the array
     
     Multi-channel input:
     
-    >>> values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
-    >>> section = Section(
-    ...     values=values,
-    ...     durations=[50, 100, 50] * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
+        >>> section = Section(
+        ...     values=values,
+        ...     durations=[50, 100, 50] * u.ms
+        ... )
     
     Combine with other inputs:
     
-    >>> # Add noise to section input
-    >>> from braintools.input import WienerProcess
-    >>> noisy_section = section + WienerProcess(500 * u.ms, sigma=0.1)
+    .. code-block:: python
+
+        >>> # Add noise to section input
+        >>> from braintools.input import WienerProcess
+        >>> noisy_section = section + WienerProcess(500 * u.ms, sigma=0.1)
     
-    >>> # Modulate with sinusoid
-    >>> from braintools.input import Sinusoidal
-    >>> sine = Sinusoidal(0.2, 10 * u.Hz, 500 * u.ms)
-    >>> modulated = section * (1 + sine)
+
+        >>> # Modulate with sinusoid
+        >>> from braintools.input import Sinusoidal
+        >>> sine = Sinusoidal(0.2, 10 * u.Hz, 500 * u.ms)
+        >>> modulated = section * (1 + sine)
     
     Complex protocol with smooth transitions:
     
-    >>> # Create step protocol and smooth it
-    >>> protocol = Section(
-    ...     values=[0, 0.5, 1.0, 1.5, 1.0, 0.5, 0],
-    ...     durations=[50, 30, 100, 150, 100, 30, 50]
-    ... )
-    >>> smooth_protocol = protocol.smooth(tau=10 * u.ms)
+    .. code-block:: python
+
+        >>> # Create step protocol and smooth it
+        >>> protocol = Section(
+        ...     values=[0, 0.5, 1.0, 1.5, 1.0, 0.5, 0],
+        ...     durations=[50, 30, 100, 150, 100, 30, 50]
+        ... )
+        >>> smooth_protocol = protocol.smooth(tau=10 * u.ms)
     
     Sequential composition:
     
-    >>> baseline = Section([0], [200])
-    >>> stim = Section([0.5, 1.0, 0.5], [50, 100, 50])
-    >>> recovery = Section([0], [200])
-    >>> full_protocol = baseline & stim & recovery
+    .. code-block:: python
+
+        >>> baseline = Section([0], [200])
+        >>> stim = Section([0.5, 1.0, 0.5], [50, 100, 50])
+        >>> recovery = Section([0], [200])
+        >>> full_protocol = baseline & stim & recovery
     """
     __module__ = 'braintools.input'
 
@@ -194,65 +205,77 @@ class Constant(Input):
     --------
     Simple two-phase protocol:
     
-    >>> const = Constant([
-    ...     (0 * u.pA, 100 * u.ms),
-    ...     (10 * u.pA, 200 * u.ms)
-    ... ])
-    >>> array = const()
+    .. code-block:: python
+
+        >>> const = Constant([
+        ...     (0 * u.pA, 100 * u.ms),
+        ...     (10 * u.pA, 200 * u.ms)
+        ... ])
+        >>> array = const()
     
     Multi-step current injection:
     
-    >>> # Incrementally increasing steps
-    >>> steps = Constant([
-    ...     (0 * u.nA, 50 * u.ms),
-    ...     (0.5 * u.nA, 50 * u.ms),
-    ...     (1.0 * u.nA, 50 * u.ms),
-    ...     (1.5 * u.nA, 50 * u.ms),
-    ...     (0 * u.nA, 50 * u.ms),
-    ... ])
+    .. code-block:: python
+
+        >>> # Incrementally increasing steps
+        >>> steps = Constant([
+        ...     (0 * u.nA, 50 * u.ms),
+        ...     (0.5 * u.nA, 50 * u.ms),
+        ...     (1.0 * u.nA, 50 * u.ms),
+        ...     (1.5 * u.nA, 50 * u.ms),
+        ...     (0 * u.nA, 50 * u.ms),
+        ... ])
     
     Smooth transitions between levels:
     
-    >>> # Create sharp steps and smooth them
-    >>> const = Constant([
-    ...     (0, 100),
-    ...     (1, 100),
-    ...     (0.5, 100),
-    ...     (0, 100)
-    ... ])
-    >>> smoothed = const.smooth(tau=20 * u.ms)
+    .. code-block:: python
+
+        >>> # Create sharp steps and smooth them
+        >>> const = Constant([
+        ...     (0, 100),
+        ...     (1, 100),
+        ...     (0.5, 100),
+        ...     (0, 100)
+        ... ])
+        >>> smoothed = const.smooth(tau=20 * u.ms)
     
     Combine with oscillations:
     
-    >>> from braintools.input import Sinusoidal
-    >>> baseline = Constant([(0.5, 500)])
-    >>> oscillation = Sinusoidal(0.2, 5 * u.Hz, 500)
-    >>> combined = baseline + oscillation
+    .. code-block:: python
+
+        >>> from braintools.input import Sinusoidal
+        >>> baseline = Constant([(0.5, 500)])
+        >>> oscillation = Sinusoidal(0.2, 5 * u.Hz, 500)
+        >>> combined = baseline + oscillation
     
     Create complex protocols:
     
-    >>> # Paired-pulse protocol
-    >>> protocol = Constant([
-    ...     (0 * u.pA, 100 * u.ms),    # baseline
-    ...     (5 * u.pA, 20 * u.ms),     # first pulse
-    ...     (0 * u.pA, 50 * u.ms),     # inter-pulse interval
-    ...     (5 * u.pA, 20 * u.ms),     # second pulse
-    ...     (0 * u.pA, 100 * u.ms),    # recovery
-    ... ])
-    >>> # Add noise for more realistic stimulation
-    >>> from braintools.input import WienerProcess
-    >>> noisy_protocol = protocol + WienerProcess(290 * u.ms, sigma=0.1)
+    .. code-block:: python
+
+        >>> # Paired-pulse protocol
+        >>> protocol = Constant([
+        ...     (0 * u.pA, 100 * u.ms),    # baseline
+        ...     (5 * u.pA, 20 * u.ms),     # first pulse
+        ...     (0 * u.pA, 50 * u.ms),     # inter-pulse interval
+        ...     (5 * u.pA, 20 * u.ms),     # second pulse
+        ...     (0 * u.pA, 100 * u.ms),    # recovery
+        ... ])
+        >>> # Add noise for more realistic stimulation
+        >>> from braintools.input import WienerProcess
+        >>> noisy_protocol = protocol + WienerProcess(290 * u.ms, sigma=0.1)
     
     Use transformations:
     
-    >>> # Scale amplitude
-    >>> scaled = const.scale(0.5)
-    >>> 
-    >>> # Clip to physiological range
-    >>> clipped = const.clip(-80, 40)
-    >>> 
-    >>> # Repeat pattern
-    >>> repeated = const.repeat(3)
+    .. code-block:: python
+
+        >>> # Scale amplitude
+        >>> scaled = const.scale(0.5)
+        >>>
+        >>> # Clip to physiological range
+        >>> clipped = const.clip(-80, 40)
+        >>>
+        >>> # Repeat pattern
+        >>> repeated = const.repeat(3)
     """
     __module__ = 'braintools.input'
 
@@ -320,69 +343,83 @@ class Step(Input):
     --------
     Simple three-level step function:
     
-    >>> steps = Step(
-    ...     amplitudes=[0, 10, 5] * u.pA,
-    ...     step_times=[0, 50, 150] * u.ms,
-    ...     duration=200 * u.ms
-    ... )
-    >>> array = steps()
+    .. code-block:: python
+
+        >>> steps = Step(
+        ...     amplitudes=[0, 10, 5] * u.pA,
+        ...     step_times=[0, 50, 150] * u.ms,
+        ...     duration=200 * u.ms
+        ... )
+        >>> array = steps()
     
     Staircase protocol for I-V curve:
     
-    >>> # Incrementally increasing current steps
-    >>> amplitudes = np.arange(0, 101, 10) * u.pA
-    >>> times = np.arange(0, 1100, 100) * u.ms
-    >>> staircase = Step(amplitudes, times, 1200 * u.ms)
+    .. code-block:: python
+
+        >>> # Incrementally increasing current steps
+        >>> amplitudes = np.arange(0, 101, 10) * u.pA
+        >>> times = np.arange(0, 1100, 100) * u.ms
+        >>> staircase = Step(amplitudes, times, 1200 * u.ms)
     
     Multiple pulses with return to baseline:
     
-    >>> pulses = Step(
-    ...     amplitudes=[0, 5, 0, 10, 0, 15, 0] * u.pA,
-    ...     step_times=[0, 20, 40, 60, 80, 100, 120] * u.ms,
-    ...     duration=150 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> pulses = Step(
+        ...     amplitudes=[0, 5, 0, 10, 0, 15, 0] * u.pA,
+        ...     step_times=[0, 20, 40, 60, 80, 100, 120] * u.ms,
+        ...     duration=150 * u.ms
+        ... )
     
     Combine with noise for realistic stimulation:
     
-    >>> from braintools.input import WienerProcess
-    >>> steps = Step([0, 1, 0.5], [0, 100, 200], 300 * u.ms)
-    >>> noise = WienerProcess(300 * u.ms, sigma=0.1)
-    >>> noisy_steps = steps + noise
+    .. code-block:: python
+
+        >>> from braintools.input import WienerProcess
+        >>> steps = Step([0, 1, 0.5], [0, 100, 200] * u.ms, 300 * u.ms)
+        >>> noise = WienerProcess(300 * u.ms, sigma=0.1)
+        >>> noisy_steps = steps + noise
     
     Create complex protocols with transformations:
     
-    >>> # Smoothed steps for gradual transitions
-    >>> sharp_steps = Step(
-    ...     [0, 1, 0.5, 1, 0],
-    ...     [0, 50, 100, 150, 200],
-    ...     250 * u.ms
-    ... )
-    >>> smooth_steps = sharp_steps.smooth(tau=10 * u.ms)
-    >>> 
-    >>> # Clipped to physiological range
-    >>> clipped = sharp_steps.clip(0, 0.8)
+    .. code-block:: python
+
+        >>> # Smoothed steps for gradual transitions
+        >>> sharp_steps = Step(
+        ...     [0, 1, 0.5, 1, 0],
+        ...     [0, 50, 100, 150, 200] * u.ms,
+        ...     250 * u.ms
+        ... )
+        >>> smooth_steps = sharp_steps.smooth(tau=10 * u.ms)
+        >>>
+        >>> # Clipped to physiological range
+        >>> clipped = sharp_steps.clip(0, 0.8)
     
     Unsorted times are automatically handled:
     
-    >>> # Times will be sorted to [0, 50, 100]
-    >>> steps = Step(
-    ...     amplitudes=[5, 0, 10] * u.pA,
-    ...     step_times=[50, 0, 100] * u.ms,
-    ...     duration=150 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> # Times will be sorted to [0, 50, 100]
+        >>> steps = Step(
+        ...     amplitudes=[5, 0, 10] * u.pA,
+        ...     step_times=[50, 0, 100] * u.ms,
+        ...     duration=150 * u.ms
+        ... )
     
     Sequential composition:
     
-    >>> baseline = Step([0], [0], 100 * u.ms)
-    >>> test = Step([0, 1, 0], [0, 20, 80], 100 * u.ms)
-    >>> protocol = baseline & test & baseline
+    .. code-block:: python
+
+        >>> baseline = Step([0], [0 * u.ms], 100 * u.ms)
+        >>> test = Step([0, 1, 0], [0, 20, 80] * u.ms, 100 * u.ms)
+        >>> protocol = baseline & test & baseline
     """
     __module__ = 'braintools.input'
 
     def __init__(self,
                  amplitudes: Sequence[float],
                  step_times: Sequence[Union[float, u.Quantity]],
-                 duration: Union[float, u.Quantity]):
+                 duration: Union[float, u.Quantity] = None):
         """Initialize step input.
         
         Parameters
@@ -394,26 +431,16 @@ class Step(Input):
         duration : Union[float, u.Quantity]
             Total duration of the input.
         """
+        duration = duration if duration is not None else functools.reduce(lambda x, y: x + y, step_times)
         super().__init__(duration)
         self.amplitudes = amplitudes
         self.step_times = step_times
 
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the step input array."""
-        # Convert step_times to have proper units if they don't
-        dt_unit = u.get_unit(self.dt)
-        step_times_with_units = []
-        for t in self.step_times:
-            if hasattr(t, 'unit'):
-                step_times_with_units.append(t)
-            else:
-                # Assume it's in the same unit as dt if no unit is provided
-                step_times_with_units.append(t * dt_unit)
-
-        # Use the functional API
         return step(
             self.amplitudes,
-            step_times_with_units,
+            self.step_times,
             self.duration
         )
 
@@ -473,72 +500,88 @@ class Ramp(Input):
     --------
     Simple linear ramp:
     
-    >>> ramp = Ramp(
-    ...     c_start=0 * u.pA,
-    ...     c_end=10 * u.pA,
-    ...     duration=100 * u.ms
-    ... )
-    >>> array = ramp()
+    .. code-block:: python
+
+        >>> ramp = Ramp(
+        ...     c_start=0 * u.pA,
+        ...     c_end=10 * u.pA,
+        ...     duration=100 * u.ms
+        ... )
+        >>> array = ramp()
     
     Decreasing ramp (from high to low):
     
-    >>> down_ramp = Ramp(
-    ...     c_start=10 * u.pA,
-    ...     c_end=0 * u.pA,
-    ...     duration=100 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> down_ramp = Ramp(
+        ...     c_start=10 * u.pA,
+        ...     c_end=0 * u.pA,
+        ...     duration=100 * u.ms
+        ... )
     
     Ramp with delay and early stop:
     
-    >>> # Ramp starts at 50ms and ends at 150ms
-    >>> delayed_ramp = Ramp(
-    ...     c_start=0 * u.nA,
-    ...     c_end=5 * u.nA,
-    ...     duration=200 * u.ms,
-    ...     t_start=50 * u.ms,
-    ...     t_end=150 * u.ms
-    ... )
+    .. code-block:: python
+
+        >>> # Ramp starts at 50ms and ends at 150ms
+        >>> delayed_ramp = Ramp(
+        ...     c_start=0 * u.nA,
+        ...     c_end=5 * u.nA,
+        ...     duration=200 * u.ms,
+        ...     t_start=50 * u.ms,
+        ...     t_end=150 * u.ms
+        ... )
     
     Combine with oscillations for amplitude modulation:
     
-    >>> from braintools.input import Sinusoidal
-    >>> envelope = Ramp(0, 1, 500 * u.ms)
-    >>> carrier = Sinusoidal(1.0, 20 * u.Hz, 500 * u.ms)
-    >>> am_signal = envelope * carrier
+    .. code-block:: python
+
+        >>> from braintools.input import Sinusoidal
+        >>> envelope = Ramp(0, 1, 500 * u.ms)
+        >>> carrier = Sinusoidal(1.0, 20 * u.Hz, 500 * u.ms)
+        >>> am_signal = envelope * carrier
     
     Create sawtooth wave by repeating:
     
-    >>> single_tooth = Ramp(0, 1, 50 * u.ms)
-    >>> sawtooth = single_tooth.repeat(10)  # 500ms total
+    .. code-block:: python
+
+        >>> single_tooth = Ramp(0, 1, 50 * u.ms)
+        >>> sawtooth = single_tooth.repeat(10)  # 500ms total
     
     Complex protocols with transformations:
     
-    >>> # Ramp with saturation
-    >>> ramp = Ramp(-2, 2, 400 * u.ms)
-    >>> saturated = ramp.clip(-1, 1)
-    >>> 
-    >>> # Smoothed ramp (reduces sharp corners)
-    >>> smooth_ramp = ramp.smooth(tau=5 * u.ms)
+    .. code-block:: python
+
+        >>> # Ramp with saturation
+        >>> ramp = Ramp(-2, 2, 400 * u.ms)
+        >>> saturated = ramp.clip(-1, 1)
+        >>>
+        >>> # Smoothed ramp (reduces sharp corners)
+        >>> smooth_ramp = ramp.smooth(tau=5 * u.ms)
     
     I-V curve measurement protocol:
     
-    >>> # Slow voltage ramp for I-V curves
-    >>> iv_ramp = Ramp(
-    ...     c_start=-100 * u.pA,
-    ...     c_end=100 * u.pA,
-    ...     duration=1000 * u.ms
-    ... )
-    >>> # Add small oscillation to avoid hysteresis
-    >>> from braintools.input import Sinusoidal
-    >>> wobble = Sinusoidal(5 * u.pA, 100 * u.Hz, 1000 * u.ms)
-    >>> iv_protocol = iv_ramp + wobble
+    .. code-block:: python
+
+        >>> # Slow voltage ramp for I-V curves
+        >>> iv_ramp = Ramp(
+        ...     c_start=-100 * u.pA,
+        ...     c_end=100 * u.pA,
+        ...     duration=1000 * u.ms
+        ... )
+        >>> # Add small oscillation to avoid hysteresis
+        >>> from braintools.input import Sinusoidal
+        >>> wobble = Sinusoidal(5 * u.pA, 100 * u.Hz, 1000 * u.ms)
+        >>> iv_protocol = iv_ramp + wobble
     
     Sequential ramps for plasticity protocols:
     
-    >>> up_ramp = Ramp(0, 1, 100 * u.ms)
-    >>> plateau = Constant([(1, 50)])
-    >>> down_ramp = Ramp(1, 0, 100 * u.ms)
-    >>> protocol = up_ramp & plateau & down_ramp
+    .. code-block:: python
+
+        >>> up_ramp = Ramp(0, 1, 100 * u.ms)
+        >>> plateau = Constant([(1, 50)])
+        >>> down_ramp = Ramp(1, 0, 100 * u.ms)
+        >>> protocol = up_ramp & plateau & down_ramp
     """
     __module__ = 'braintools.input'
 

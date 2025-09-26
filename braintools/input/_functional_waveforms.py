@@ -83,56 +83,77 @@ def sinusoidal(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple 10 Hz sinusoid
-    >>> current = sinusoidal(
-    ...     amplitude=5 * u.pA,
-    ...     frequency=10 * u.Hz,
-    ...     duration=1000 * u.ms
-    ... )
+    Simple 10 Hz sinusoid
+
+    .. code-block:: python
+
+        >>> current = sinusoidal(
+        ...     amplitude=5 * u.pA,
+        ...     frequency=10 * u.Hz,
+        ...     duration=1000 * u.ms
+        ... )
     
-    # High-frequency stimulation
-    >>> current = sinusoidal(
-    ...     amplitude=2 * u.nA,
-    ...     frequency=100 * u.Hz,
-    ...     duration=500 * u.ms
-    ... )
+    High-frequency stimulation
+
+    .. code-block:: python
+
+        >>> current = sinusoidal(
+        ...     amplitude=2 * u.nA,
+        ...     frequency=100 * u.Hz,
+        ...     duration=500 * u.ms
+        ... )
     
-    # Sinusoid with positive bias (always >= 0)
-    >>> current = sinusoidal(
-    ...     amplitude=10 * u.pA,
-    ...     frequency=5 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     bias=True  # Oscillates between 0 and 20 pA
-    ... )
+    Sinusoid with positive bias (always >= 0)
+
+    .. code-block:: python
+
+        >>> current = sinusoidal(
+        ...     amplitude=10 * u.pA,
+        ...     frequency=5 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     bias=True  # Oscillates between 0 and 20 pA
+        ... )
     
-    # Windowed sinusoid
-    >>> current = sinusoidal(
-    ...     amplitude=8 * u.pA,
-    ...     frequency=20 * u.Hz,
-    ...     duration=1000 * u.ms,
-    ...     t_start=200 * u.ms,
-    ...     t_end=800 * u.ms
-    ... )
+    Windowed sinusoid
+
+    .. code-block:: python
+
+        >>> current = sinusoidal(
+        ...     amplitude=8 * u.pA,
+        ...     frequency=20 * u.Hz,
+        ...     duration=1000 * u.ms,
+        ...     t_start=200 * u.ms,
+        ...     t_end=800 * u.ms
+        ... )
     
-    # Testing resonance at theta frequency
-    >>> current = sinusoidal(
-    ...     amplitude=1 * u.nA,
-    ...     frequency=8 * u.Hz,  # Theta band
-    ...     duration=5000 * u.ms
-    ... )
+    Testing resonance at theta frequency
+
+    .. code-block:: python
+
+        >>> current = sinusoidal(
+        ...     amplitude=1 * u.nA,
+        ...     frequency=8 * u.Hz,  # Theta band
+        ...     duration=5000 * u.ms
+        ... )
     
-    # Subthreshold membrane oscillations
-    >>> current = sinusoidal(
-    ...     amplitude=0.1 * u.nA,
-    ...     frequency=40 * u.Hz,  # Gamma band
-    ...     duration=200 * u.ms,
-    ...     t_start=50 * u.ms,
-    ...     t_end=150 * u.ms
-    ... )
+    Subthreshold membrane oscillations
+
+    .. code-block:: python
+
+        >>> current = sinusoidal(
+        ...     amplitude=0.1 * u.nA,
+        ...     frequency=40 * u.Hz,  # Gamma band
+        ...     duration=200 * u.ms,
+        ...     t_start=50 * u.ms,
+        ...     t_end=150 * u.ms
+        ... )
     
     Notes
     -----
@@ -260,57 +281,78 @@ def square(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Symmetric square wave at 2 Hz
-    >>> current = square(
-    ...     amplitude=10 * u.pA,
-    ...     frequency=2 * u.Hz,
-    ...     duration=2000 * u.ms
-    ... )
+    Symmetric square wave at 2 Hz
+
+    .. code-block:: python
+
+        >>> current = square(
+        ...     amplitude=10 * u.pA,
+        ...     frequency=2 * u.Hz,
+        ...     duration=2000 * u.ms
+        ... )
     
-    # High-frequency pulse train
-    >>> current = square(
-    ...     amplitude=5 * u.nA,
-    ...     frequency=50 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     duty_cycle=0.2  # 20% on, 80% off
-    ... )
+    High-frequency pulse train
+
+    .. code-block:: python
+
+        >>> current = square(
+        ...     amplitude=5 * u.nA,
+        ...     frequency=50 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     duty_cycle=0.2  # 20% on, 80% off
+        ... )
     
-    # Square wave with positive bias
-    >>> current = square(
-    ...     amplitude=8 * u.pA,
-    ...     frequency=10 * u.Hz,
-    ...     duration=1000 * u.ms,
-    ...     bias=True  # Alternates between 0 and 16 pA
-    ... )
+    Square wave with positive bias
+
+    .. code-block:: python
+
+        >>> current = square(
+        ...     amplitude=8 * u.pA,
+        ...     frequency=10 * u.Hz,
+        ...     duration=1000 * u.ms,
+        ...     bias=True  # Alternates between 0 and 16 pA
+        ... )
     
-    # Windowed stimulation
-    >>> current = square(
-    ...     amplitude=3 * u.nA,
-    ...     frequency=5 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     t_start=500 * u.ms,
-    ...     t_end=1500 * u.ms
-    ... )
+    Windowed stimulation
+
+    .. code-block:: python
+
+        >>> current = square(
+        ...     amplitude=3 * u.nA,
+        ...     frequency=5 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     t_start=500 * u.ms,
+        ...     t_end=1500 * u.ms
+        ... )
     
-    # Asymmetric pulse train (10% duty cycle)
-    >>> current = square(
-    ...     amplitude=20 * u.pA,
-    ...     frequency=1 * u.Hz,
-    ...     duration=5000 * u.ms,
-    ...     duty_cycle=0.1  # Short pulses
-    ... )
+    Asymmetric pulse train (10% duty cycle)
+
+    .. code-block:: python
+
+        >>> current = square(
+        ...     amplitude=20 * u.pA,
+        ...     frequency=1 * u.Hz,
+        ...     duration=5000 * u.ms,
+        ...     duty_cycle=0.1  # Short pulses
+        ... )
     
-    # Clock signal for synchronization
-    >>> current = square(
-    ...     amplitude=1 * u.nA,
-    ...     frequency=40 * u.Hz,
-    ...     duration=250 * u.ms,
-    ...     duty_cycle=0.5
-    ... )
+    Clock signal for synchronization
+
+    .. code-block:: python
+
+        >>> current = square(
+        ...     amplitude=1 * u.nA,
+        ...     frequency=40 * u.Hz,
+        ...     duration=250 * u.ms,
+        ...     duty_cycle=0.5
+        ... )
     
     Notes
     -----
@@ -419,54 +461,75 @@ def triangular(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple triangular wave at 5 Hz
-    >>> current = triangular(
-    ...     amplitude=10 * u.pA,
-    ...     frequency=5 * u.Hz,
-    ...     duration=1000 * u.ms
-    ... )
+    Simple triangular wave at 5 Hz
+
+    .. code-block:: python
+
+        >>> current = triangular(
+        ...     amplitude=10 * u.pA,
+        ...     frequency=5 * u.Hz,
+        ...     duration=1000 * u.ms
+        ... )
     
-    # Slow triangular ramp for I-V curves
-    >>> current = triangular(
-    ...     amplitude=100 * u.pA,
-    ...     frequency=0.5 * u.Hz,  # 2 second period
-    ...     duration=4000 * u.ms
-    ... )
+    Slow triangular ramp for I-V curves
+
+    .. code-block:: python
+
+        >>> current = triangular(
+        ...     amplitude=100 * u.pA,
+        ...     frequency=0.5 * u.Hz,  # 2 second period
+        ...     duration=4000 * u.ms
+        ... )
     
-    # Triangular wave with positive bias
-    >>> current = triangular(
-    ...     amplitude=5 * u.nA,
-    ...     frequency=10 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     bias=True  # Oscillates between 0 and 10 nA
-    ... )
+    Triangular wave with positive bias
+
+    .. code-block:: python
+
+        >>> current = triangular(
+        ...     amplitude=5 * u.nA,
+        ...     frequency=10 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     bias=True  # Oscillates between 0 and 10 nA
+        ... )
     
-    # Windowed triangular stimulation
-    >>> current = triangular(
-    ...     amplitude=8 * u.pA,
-    ...     frequency=2 * u.Hz,
-    ...     duration=3000 * u.ms,
-    ...     t_start=500 * u.ms,
-    ...     t_end=2500 * u.ms
-    ... )
+    Windowed triangular stimulation
+
+    .. code-block:: python
+
+        >>> current = triangular(
+        ...     amplitude=8 * u.pA,
+        ...     frequency=2 * u.Hz,
+        ...     duration=3000 * u.ms,
+        ...     t_start=500 * u.ms,
+        ...     t_end=2500 * u.ms
+        ... )
     
-    # High-frequency triangular wave
-    >>> current = triangular(
-    ...     amplitude=2 * u.nA,
-    ...     frequency=50 * u.Hz,
-    ...     duration=200 * u.ms
-    ... )
+    High-frequency triangular wave
+
+    .. code-block:: python
+
+        >>> current = triangular(
+        ...     amplitude=2 * u.nA,
+        ...     frequency=50 * u.Hz,
+        ...     duration=200 * u.ms
+        ... )
     
-    # Testing adaptation with slow ramps
-    >>> current = triangular(
-    ...     amplitude=15 * u.pA,
-    ...     frequency=1 * u.Hz,
-    ...     duration=5000 * u.ms
-    ... )
+    Testing adaptation with slow ramps
+
+    .. code-block:: python
+
+        >>> current = triangular(
+        ...     amplitude=15 * u.pA,
+        ...     frequency=1 * u.Hz,
+        ...     duration=5000 * u.ms
+        ... )
     
     Notes
     -----
@@ -570,54 +633,75 @@ def sawtooth(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Simple sawtooth at 2 Hz
-    >>> current = sawtooth(
-    ...     amplitude=10 * u.pA,
-    ...     frequency=2 * u.Hz,
-    ...     duration=2000 * u.ms
-    ... )
+    Simple sawtooth at 2 Hz
+
+    .. code-block:: python
+
+        >>> current = sawtooth(
+        ...     amplitude=10 * u.pA,
+        ...     frequency=2 * u.Hz,
+        ...     duration=2000 * u.ms
+        ... )
     
-    # Slow ramp for threshold detection
-    >>> current = sawtooth(
-    ...     amplitude=50 * u.pA,
-    ...     frequency=0.5 * u.Hz,  # 2 second ramp
-    ...     duration=4000 * u.ms
-    ... )
+    Slow ramp for threshold detection
+
+    .. code-block:: python
+
+        >>> current = sawtooth(
+        ...     amplitude=50 * u.pA,
+        ...     frequency=0.5 * u.Hz,  # 2 second ramp
+        ...     duration=4000 * u.ms
+        ... )
     
-    # Sawtooth with positive bias
-    >>> current = sawtooth(
-    ...     amplitude=5 * u.nA,
-    ...     frequency=10 * u.Hz,
-    ...     duration=500 * u.ms,
-    ...     bias=True  # Ramps from 0 to 10 nA
-    ... )
+    Sawtooth with positive bias
+
+    .. code-block:: python
+
+        >>> current = sawtooth(
+        ...     amplitude=5 * u.nA,
+        ...     frequency=10 * u.Hz,
+        ...     duration=500 * u.ms,
+        ...     bias=True  # Ramps from 0 to 10 nA
+        ... )
     
-    # Windowed sawtooth stimulation
-    >>> current = sawtooth(
-    ...     amplitude=8 * u.pA,
-    ...     frequency=5 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     t_start=400 * u.ms,
-    ...     t_end=1600 * u.ms
-    ... )
+    Windowed sawtooth stimulation
+
+    .. code-block:: python
+
+        >>> current = sawtooth(
+        ...     amplitude=8 * u.pA,
+        ...     frequency=5 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     t_start=400 * u.ms,
+        ...     t_end=1600 * u.ms
+        ... )
     
-    # Fast sawtooth for reset testing
-    >>> current = sawtooth(
-    ...     amplitude=20 * u.pA,
-    ...     frequency=20 * u.Hz,
-    ...     duration=250 * u.ms
-    ... )
+    Fast sawtooth for reset testing
+
+    .. code-block:: python
+
+        >>> current = sawtooth(
+        ...     amplitude=20 * u.pA,
+        ...     frequency=20 * u.Hz,
+        ...     duration=250 * u.ms
+        ... )
     
-    # Repeated ramp protocol
-    >>> current = sawtooth(
-    ...     amplitude=100 * u.pA,
-    ...     frequency=1 * u.Hz,
-    ...     duration=10000 * u.ms
-    ... )
+    Repeated ramp protocol
+
+    .. code-block:: python
+
+        >>> current = sawtooth(
+        ...     amplitude=100 * u.pA,
+        ...     frequency=1 * u.Hz,
+        ...     duration=10000 * u.ms
+        ... )
     
     Notes
     -----
@@ -731,63 +815,84 @@ def chirp(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Linear frequency sweep from 1 to 50 Hz
-    >>> current = chirp(
-    ...     amplitude=5 * u.pA,
-    ...     f_start=1 * u.Hz,
-    ...     f_end=50 * u.Hz,
-    ...     duration=2000 * u.ms,
-    ...     method='linear'
-    ... )
+    Linear frequency sweep from 1 to 50 Hz
+
+    .. code-block:: python
+
+        >>> current = chirp(
+        ...     amplitude=5 * u.pA,
+        ...     f_start=1 * u.Hz,
+        ...     f_end=50 * u.Hz,
+        ...     duration=2000 * u.ms,
+        ...     method='linear'
+        ... )
     
-    # Logarithmic sweep for spectral analysis
-    >>> current = chirp(
-    ...     amplitude=2 * u.nA,
-    ...     f_start=0.1 * u.Hz,
-    ...     f_end=100 * u.Hz,
-    ...     duration=5000 * u.ms,
-    ...     method='logarithmic'
-    ... )
+    Logarithmic sweep for spectral analysis
+
+    .. code-block:: python
+
+        >>> current = chirp(
+        ...     amplitude=2 * u.nA,
+        ...     f_start=0.1 * u.Hz,
+        ...     f_end=100 * u.Hz,
+        ...     duration=5000 * u.ms,
+        ...     method='logarithmic'
+        ... )
     
-    # Chirp with positive bias
-    >>> current = chirp(
-    ...     amplitude=10 * u.pA,
-    ...     f_start=5 * u.Hz,
-    ...     f_end=20 * u.Hz,
-    ...     duration=1000 * u.ms,
-    ...     bias=True  # Always positive
-    ... )
+    Chirp with positive bias
+
+    .. code-block:: python
+
+        >>> current = chirp(
+        ...     amplitude=10 * u.pA,
+        ...     f_start=5 * u.Hz,
+        ...     f_end=20 * u.Hz,
+        ...     duration=1000 * u.ms,
+        ...     bias=True  # Always positive
+        ... )
     
-    # Windowed chirp for specific testing
-    >>> current = chirp(
-    ...     amplitude=8 * u.pA,
-    ...     f_start=2 * u.Hz,
-    ...     f_end=40 * u.Hz,
-    ...     duration=3000 * u.ms,
-    ...     t_start=500 * u.ms,
-    ...     t_end=2500 * u.ms
-    ... )
+    Windowed chirp for specific testing
+
+    .. code-block:: python
+
+        >>> current = chirp(
+        ...     amplitude=8 * u.pA,
+        ...     f_start=2 * u.Hz,
+        ...     f_end=40 * u.Hz,
+        ...     duration=3000 * u.ms,
+        ...     t_start=500 * u.ms,
+        ...     t_end=2500 * u.ms
+        ... )
     
-    # Reverse chirp (high to low frequency)
-    >>> current = chirp(
-    ...     amplitude=3 * u.nA,
-    ...     f_start=100 * u.Hz,
-    ...     f_end=1 * u.Hz,
-    ...     duration=2000 * u.ms
-    ... )
+    Reverse chirp (high to low frequency)
+
+    .. code-block:: python
+
+        >>> current = chirp(
+        ...     amplitude=3 * u.nA,
+        ...     f_start=100 * u.Hz,
+        ...     f_end=1 * u.Hz,
+        ...     duration=2000 * u.ms
+        ... )
     
-    # Testing resonance in theta-gamma range
-    >>> current = chirp(
-    ...     amplitude=1 * u.nA,
-    ...     f_start=4 * u.Hz,   # Theta start
-    ...     f_end=80 * u.Hz,    # Gamma end
-    ...     duration=10000 * u.ms,
-    ...     method='logarithmic'
-    ... )
+    Testing resonance in theta-gamma range
+
+    .. code-block:: python
+
+        >>> current = chirp(
+        ...     amplitude=1 * u.nA,
+        ...     f_start=4 * u.Hz,   # Theta start
+        ...     f_end=80 * u.Hz,    # Gamma end
+        ...     duration=10000 * u.ms,
+        ...     method='logarithmic'
+        ... )
     
     Notes
     -----
@@ -919,61 +1024,82 @@ def noisy_sinusoidal(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> import brainstate
-    >>> brainstate.environ.set(dt=0.1 * u.ms)
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import brainstate
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
     
-    # Sinusoid with small noise
-    >>> current = noisy_sinusoidal(
-    ...     amplitude=10 * u.pA,
-    ...     frequency=10 * u.Hz,
-    ...     noise_amplitude=1 * u.pA,  # 10% noise
-    ...     duration=1000 * u.ms
-    ... )
+    Sinusoid with small noise
+
+    .. code-block:: python
+
+        >>> current = noisy_sinusoidal(
+        ...     amplitude=10 * u.pA,
+        ...     frequency=10 * u.Hz,
+        ...     noise_amplitude=1 * u.pA,  # 10% noise
+        ...     duration=1000 * u.ms
+        ... )
     
-    # High noise for stochastic resonance
-    >>> current = noisy_sinusoidal(
-    ...     amplitude=5 * u.pA,
-    ...     frequency=5 * u.Hz,
-    ...     noise_amplitude=10 * u.pA,  # Noise > signal
-    ...     duration=2000 * u.ms
-    ... )
+    High noise for stochastic resonance
+
+    .. code-block:: python
+
+        >>> current = noisy_sinusoidal(
+        ...     amplitude=5 * u.pA,
+        ...     frequency=5 * u.Hz,
+        ...     noise_amplitude=10 * u.pA,  # Noise > signal
+        ...     duration=2000 * u.ms
+        ... )
     
-    # Theta rhythm with synaptic noise
-    >>> current = noisy_sinusoidal(
-    ...     amplitude=2 * u.nA,
-    ...     frequency=8 * u.Hz,  # Theta frequency
-    ...     noise_amplitude=0.5 * u.nA,
-    ...     duration=5000 * u.ms
-    ... )
+    Theta rhythm with synaptic noise
+
+    .. code-block:: python
+
+        >>> current = noisy_sinusoidal(
+        ...     amplitude=2 * u.nA,
+        ...     frequency=8 * u.Hz,  # Theta frequency
+        ...     noise_amplitude=0.5 * u.nA,
+        ...     duration=5000 * u.ms
+        ... )
     
-    # Windowed noisy stimulation
-    >>> current = noisy_sinusoidal(
-    ...     amplitude=8 * u.pA,
-    ...     frequency=20 * u.Hz,
-    ...     noise_amplitude=2 * u.pA,
-    ...     duration=1000 * u.ms,
-    ...     t_start=200 * u.ms,
-    ...     t_end=800 * u.ms
-    ... )
+    Windowed noisy stimulation
+
+    .. code-block:: python
+
+        >>> current = noisy_sinusoidal(
+        ...     amplitude=8 * u.pA,
+        ...     frequency=20 * u.Hz,
+        ...     noise_amplitude=2 * u.pA,
+        ...     duration=1000 * u.ms,
+        ...     t_start=200 * u.ms,
+        ...     t_end=800 * u.ms
+        ... )
     
-    # Reproducible noisy signal
-    >>> current = noisy_sinusoidal(
-    ...     amplitude=15 * u.pA,
-    ...     frequency=40 * u.Hz,
-    ...     noise_amplitude=3 * u.pA,
-    ...     duration=500 * u.ms,
-    ...     seed=42  # Fixed random seed
-    ... )
+    Reproducible noisy signal
+
+    .. code-block:: python
+
+        >>> current = noisy_sinusoidal(
+        ...     amplitude=15 * u.pA,
+        ...     frequency=40 * u.Hz,
+        ...     noise_amplitude=3 * u.pA,
+        ...     duration=500 * u.ms,
+        ...     seed=42  # Fixed random seed
+        ... )
     
-    # Subthreshold oscillation with realistic noise
-    >>> current = noisy_sinusoidal(
-    ...     amplitude=0.1 * u.nA,
-    ...     frequency=60 * u.Hz,  # Gamma frequency
-    ...     noise_amplitude=0.05 * u.nA,
-    ...     duration=2000 * u.ms,
-    ...     t_start=500 * u.ms
-    ... )
+    Subthreshold oscillation with realistic noise
+
+    .. code-block:: python
+
+        >>> current = noisy_sinusoidal(
+        ...     amplitude=0.1 * u.nA,
+        ...     frequency=60 * u.Hz,  # Gamma frequency
+        ...     noise_amplitude=0.05 * u.nA,
+        ...     duration=2000 * u.ms,
+        ...     t_start=500 * u.ms
+        ... )
     
     Notes
     -----

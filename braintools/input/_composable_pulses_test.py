@@ -319,7 +319,7 @@ class TestExponentialDecay(TestCase):
         """Test gated decay with step function."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             decay = ExponentialDecay(2.0, 30 * u.ms, 500 * u.ms, t_start=100 * u.ms)
-            step = Step([0, 1], [0, 100], 500 * u.ms)
+            step = Step([0, 1], [0, 100] * u.ms, 500 * u.ms)
             gated_decay = decay * step
 
             array = gated_decay()
@@ -350,7 +350,7 @@ class TestExponentialDecay(TestCase):
     def test_adaptation_current(self):
         """Test adaptation current simulation."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            trigger = Step([0, 1, 0], [0, 50, 150], 300 * u.ms)
+            trigger = Step([0, 1, 0], [0, 50, 150] * u.ms, 300 * u.ms)
             adaptation = ExponentialDecay(0.3, 40 * u.ms, 300 * u.ms, t_start=50 * u.ms)
             net_current = trigger - adaptation
 
