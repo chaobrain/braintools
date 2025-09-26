@@ -21,8 +21,7 @@ import numpy as np
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
 
-# Import visualization modules
-from braintools.visualize import statistical
+import braintools
 
 
 class TestStatisticalVisualization(unittest.TestCase):
@@ -36,7 +35,7 @@ class TestStatisticalVisualization(unittest.TestCase):
 
     def test_correlation_matrix(self):
         """Test correlation matrix visualization."""
-        ax = statistical.correlation_matrix(
+        ax = braintools.visualize.correlation_matrix(
             self.data,
             labels=self.labels,
             show_values=True
@@ -46,7 +45,7 @@ class TestStatisticalVisualization(unittest.TestCase):
 
     def test_distribution_plot(self):
         """Test distribution plotting."""
-        ax = statistical.distribution_plot(
+        ax = braintools.visualize.distribution_plot(
             self.data[:, 0],
             plot_type='hist',
             fit_normal=True
@@ -56,7 +55,7 @@ class TestStatisticalVisualization(unittest.TestCase):
 
     def test_qq_plot(self):
         """Test Q-Q plot."""
-        ax = statistical.qq_plot(
+        ax = braintools.visualize.qq_plot(
             self.data[:, 0],
             distribution='norm'
         )
@@ -66,7 +65,7 @@ class TestStatisticalVisualization(unittest.TestCase):
     def test_box_plot(self):
         """Test box plot."""
         data_list = [self.data[:, i] for i in range(3)]
-        ax = statistical.box_plot(
+        ax = braintools.visualize.box_plot(
             data_list,
             labels=['A', 'B', 'C']
         )
@@ -77,7 +76,7 @@ class TestStatisticalVisualization(unittest.TestCase):
         """Test regression plot."""
         x = self.data[:, 0]
         y = 2 * x + np.random.randn(len(x)) * 0.5
-        ax = statistical.regression_plot(
+        ax = braintools.visualize.regression_plot(
             x, y,
             fit_line=True,
             confidence_interval=True
@@ -89,7 +88,7 @@ class TestStatisticalVisualization(unittest.TestCase):
         """Test confusion matrix visualization."""
         y_true = np.random.randint(0, 3, 100)
         y_pred = np.random.randint(0, 3, 100)
-        ax = statistical.confusion_matrix(
+        ax = braintools.visualize.confusion_matrix(
             y_true, y_pred,
             labels=['A', 'B', 'C']
         )
@@ -99,7 +98,7 @@ class TestStatisticalVisualization(unittest.TestCase):
     def test_scatter_matrix(self):
         """Test scatter matrix visualization."""
         # Test full scatter matrix (standalone)
-        fig = statistical.scatter_matrix(
+        fig = braintools.visualize.scatter_matrix(
             self.data[:, :3],  # Use 3 features for manageable matrix
             labels=self.labels[:3],
             figsize=(8, 8),
@@ -111,7 +110,7 @@ class TestStatisticalVisualization(unittest.TestCase):
 
         # Test simplified scatter matrix (with ax parameter)
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-        result_fig = statistical.scatter_matrix(
+        result_fig = braintools.visualize.scatter_matrix(
             self.data[:, :3],
             labels=self.labels[:3],
             ax=ax,

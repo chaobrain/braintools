@@ -22,8 +22,7 @@ import numpy as np
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
 
-# Import visualization modules
-from braintools.visualize import three_d
+import braintools
 
 
 class TestThreeDVisualization(unittest.TestCase):
@@ -38,7 +37,7 @@ class TestThreeDVisualization(unittest.TestCase):
     def test_neural_network_3d(self):
         """Test 3D neural network visualization."""
         layer_sizes = [5, 10, 3]
-        ax = three_d.neural_network_3d(layer_sizes)
+        ax = braintools.visualize.neural_network_3d(layer_sizes)
         self.assertIsNotNone(ax)
         plt.close()
 
@@ -48,7 +47,7 @@ class TestThreeDVisualization(unittest.TestCase):
         target_pos = self.positions[5:]
         connections = np.random.binomial(1, 0.3, (5, 5))
 
-        ax = three_d.connectivity_3d(
+        ax = braintools.visualize.connectivity_3d(
             source_pos, target_pos, connections
         )
         self.assertIsNotNone(ax)
@@ -56,7 +55,7 @@ class TestThreeDVisualization(unittest.TestCase):
 
     def test_trajectory_3d(self):
         """Test 3D trajectory visualization."""
-        ax = three_d.trajectory_3d(
+        ax = braintools.visualize.trajectory_3d(
             self.trajectory,
             time_colors=True
         )

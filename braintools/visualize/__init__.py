@@ -14,26 +14,36 @@
 # ==============================================================================
 
 
-from .animation import *
-from .animation import __all__ as _animation_all
-from .colormaps import *
-from .colormaps import __all__ as _colormaps_all
-from .figures import *
-from .figures import __all__ as _figures_all
-from .interactive import *
-from .interactive import __all__ as _interactive_all
-from .neural import *
-from .neural import __all__ as _neural_all
-from .plots import *
-from .plots import __all__ as _plots_all
-from .statistical import *
-from .statistical import __all__ as _statistical_all
-from .style import *
-from .three_d import *
-from .three_d import __all__ as _three_d_all
+from ._animation import *
+from ._animation import __all__ as _animation_all
+from ._colormaps import *
+from ._colormaps import __all__ as _colormaps_all
+from ._figures import *
+from ._figures import __all__ as _figures_all
+from ._interactive import *
+from ._interactive import __all__ as _interactive_all
+from ._neural import *
+from ._neural import __all__ as _neural_all
+from ._plots import *
+from ._plots import __all__ as _plots_all
+from ._statistical import *
+from ._statistical import __all__ as _statistical_all
+from ._style import *
+from ._three_d import *
+from ._three_d import __all__ as _three_d_all
 
 __all__ = _figures_all + _plots_all + _animation_all + _neural_all
 __all__ = __all__ + _statistical_all + _interactive_all + _three_d_all + _colormaps_all
 
 del _figures_all, _plots_all, _animation_all, _neural_all
 del _statistical_all, _interactive_all, _three_d_all, _colormaps_all
+
+from . import _animation as animation
+from . import _colormaps as colormaps
+from . import _figures as figures
+from . import _interactive as interactive
+from . import _neural as neural
+from . import _plots as plots
+from . import _statistical as statistical
+from . import _style as style
+from . import _three_d as three_d

@@ -14,8 +14,8 @@
 # ==============================================================================
 
 
-__version_info__ = (0, 0, 13)
 __version__ = "0.0.13"
+__version_info__ = (0, 0, 13)
 
 from . import conn
 from . import file
@@ -25,9 +25,14 @@ from . import optim
 from . import quad
 from . import tree
 from . import visualize
-from ._others import *
-from ._others import __all__ as _other_all
+from ._spike_encoder import *
+from ._spike_encoder import __all__ as encoder_all
+from ._spike_operation import *
+from ._spike_operation import __all__ as operation_all
+from ._transform import *
+from ._transform import __all__ as transform_all
 
-__all__ = ['conn', 'input', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad'] + _other_all
+__all__ = ['conn', 'input', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad']
+__all__ = __all__ + encoder_all + transform_all + operation_all
 
-del _other_all
+del encoder_all, transform_all, operation_all

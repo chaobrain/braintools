@@ -20,8 +20,7 @@ import numpy as np
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
 
-# Import visualization modules
-from braintools.visualize import neural, plots, colormaps
+import braintools
 
 
 class TestIntegration(unittest.TestCase):
@@ -30,14 +29,14 @@ class TestIntegration(unittest.TestCase):
     def test_style_integration(self):
         """Test that styles work with plotting functions."""
         # Apply neural style
-        colormaps.neural_style()
+        braintools.visualize.neural_style()
 
         # Generate data
         time = np.linspace(0, 1, 100)
         values = np.random.randn(100, 2)
 
         # Create plot
-        ax = plots.line_plot(time, values, legend='Test')
+        ax = braintools.visualize.line_plot(time, values, legend='Test')
         self.assertIsNotNone(ax)
         plt.close()
 
@@ -56,18 +55,18 @@ class TestIntegration(unittest.TestCase):
         fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
         # Spike raster
-        neural.spike_raster(spike_times, ax=axes[0, 0], title='Spike Raster')
+        braintools.visualize.spike_raster(spike_times, ax=axes[0, 0], title='Spike Raster')
 
         # Population activity
-        neural.population_activity(population_activity[:, None], time=time,
+        braintools.visualize.population_activity(population_activity[:, None], time=time,
                                    ax=axes[0, 1], title='Population Activity')
 
         # ISI distribution
-        neural.isi_distribution(spike_times, ax=axes[1, 0], title='ISI Distribution')
+        braintools.visualize.isi_distribution(spike_times, ax=axes[1, 0], title='ISI Distribution')
 
         # Spike histogram
         all_spikes = np.concatenate(spike_times)
-        neural.spike_histogram(all_spikes, ax=axes[1, 1], title='PSTH')
+        braintools.visualize.spike_histogram(all_spikes, ax=axes[1, 1], title='PSTH')
 
         plt.tight_layout()
         plt.close()

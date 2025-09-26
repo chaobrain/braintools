@@ -13,10 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 
-from .matfile import *
-from .matfile import __all__ as _matfile_all
-from .msg_checkpoint import *
-from .msg_checkpoint import __all__ as _msg_checkpoint_all
+from ._matfile import *
+from ._matfile import __all__ as _matfile_all
+from ._msg_checkpoint import *
+from ._msg_checkpoint import __all__ as _msg_checkpoint_all
 
 __all__ = _matfile_all + _msg_checkpoint_all
 del _matfile_all, _msg_checkpoint_all
+
+from . import _matfile as matfile
+from . import _msg_checkpoint as msg_checkpoint
