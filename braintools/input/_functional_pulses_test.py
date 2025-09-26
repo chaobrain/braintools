@@ -24,7 +24,7 @@ import brainunit as u
 import matplotlib.pyplot as plt
 import numpy as np
 
-from braintools.input import (spike_input, gaussian_pulse, exponential_decay, double_exponential, burst_input)
+from braintools.input import (spike, gaussian_pulse, exponential_decay, double_exponential, burst)
 
 block = False
 
@@ -44,10 +44,10 @@ def show(current, duration, title=''):
 
 
 class TestPulseInputs(TestCase):
-    def test_spike_input(self):
+    def test_spike(self):
         with brainstate.environ.context(dt=0.1*u.ms):
             # Test with time values (backward compatibility)
-            current = spike_input(
+            current = spike(
                 sp_times=[10, 20, 30, 200, 300] * u.ms,
                 sp_lens=1. * u.ms,
                 sp_sizes=0.5 * u.nA,
@@ -56,10 +56,10 @@ class TestPulseInputs(TestCase):
             show(current, 400 * u.ms, 'Spike Input Example')
             self.assertEqual(current.shape[0], 4000)
 
-    def test_spike_input_variable_params(self):
+    def test_spike_variable_params(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Test with variable spike lengths and sizes
-            current = spike_input(
+            current = spike(
                 sp_times=[50, 150, 250] * u.ms,
                 sp_lens=[1., 2., 3.] * u.ms,  # Different spike lengths
                 sp_sizes=[0.5, 1.0, 0.3] * u.nA,  # Different spike amplitudes
@@ -68,11 +68,11 @@ class TestPulseInputs(TestCase):
             show(current, 350 * u.ms, 'Spike Input with Variable Parameters')
             self.assertEqual(current.shape[0], 3500)
     
-    def test_spike_input_from_docstring(self):
-        """Test examples from spike_input docstring."""
+    def test_spike_from_docstring(self):
+        """Test examples from spike docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Simple spike train with uniform properties
-            current = spike_input(
+            current = spike(
                 sp_times=[10, 20, 30, 200, 300] * u.ms,
                 sp_lens=1 * u.ms,  # All spikes 1ms long
                 sp_sizes=0.5 * u.nA,  # All spikes 0.5nA amplitude
@@ -82,7 +82,7 @@ class TestPulseInputs(TestCase):
             self.assertEqual(u.get_unit(current), u.nA)
 
             # Variable spike properties
-            current = spike_input(
+            current = spike(
                 sp_times=np.array([10, 50, 100]) * u.ms,
                 sp_lens=np.array([1, 2, 0.5]) * u.ms,  # Different durations
                 sp_sizes=np.array([0.5, 1.0, 0.3]) * u.nA,  # Different amplitudes
@@ -92,7 +92,7 @@ class TestPulseInputs(TestCase):
 
             # High-frequency burst
             times = np.arange(0, 50, 2) * u.ms  # Every 2ms
-            current = spike_input(
+            current = spike(
                 sp_times=times,
                 sp_lens=0.5 * u.ms,
                 sp_sizes=1.0 * u.pA,
@@ -299,10 +299,10 @@ class TestPulseInputs(TestCase):
             show(current, duration, 'Double Exponential (Fast Rise, Slow Decay)')
             self.assertEqual(current.shape[0], 8000)
 
-    def test_burst_input(self):
+    def test_burst(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1000 * u.ms
-            current = burst_input(
+            current = burst(
                 burst_amp=1.0 * u.nA,
                 burst_freq=100 * u.Hz,  # Added frequency parameter
                 burst_duration=50 * u.ms,
@@ -313,11 +313,11 @@ class TestPulseInputs(TestCase):
             show(current, duration, 'Burst Input (5 bursts)')
             self.assertEqual(current.shape[0], 10000)
     
-    def test_burst_input_from_docstring(self):
-        """Test examples from burst_input docstring."""
+    def test_burst_from_docstring(self):
+        """Test examples from burst docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Theta burst stimulation
-            current = burst_input(
+            current = burst(
                 burst_amp=10 * u.pA,
                 burst_freq=100 * u.Hz,  # 100Hz within burst
                 burst_duration=50 * u.ms,  # 50ms bursts
@@ -329,7 +329,7 @@ class TestPulseInputs(TestCase):
             self.assertEqual(u.get_unit(current), u.pA)
 
             # Gamma burst pattern
-            current = burst_input(
+            current = burst(
                 burst_amp=5 * u.nA,
                 burst_freq=40 * u.Hz,  # Gamma frequency
                 burst_duration=100 * u.ms,
@@ -340,7 +340,7 @@ class TestPulseInputs(TestCase):
             self.assertEqual(current.shape[0], 20000)
 
             # High-frequency stimulation protocol
-            current = burst_input(
+            current = burst(
                 burst_amp=20 * u.pA,
                 burst_freq=200 * u.Hz,
                 burst_duration=20 * u.ms,
@@ -351,7 +351,7 @@ class TestPulseInputs(TestCase):
             self.assertEqual(current.shape[0], 20000)
 
             # Slow oscillatory bursts
-            current = burst_input(
+            current = burst(
                 burst_amp=1 * u.nA,
                 burst_freq=5 * u.Hz,  # Slow oscillation
                 burst_duration=500 * u.ms,
@@ -361,11 +361,11 @@ class TestPulseInputs(TestCase):
             )
             self.assertEqual(current.shape[0], 30000)
         
-    def test_burst_input_with_frequency(self):
+    def test_burst_with_frequency(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Test burst input with different frequencies
             duration = 1500 * u.ms
-            current = burst_input(
+            current = burst(
                 burst_amp=0.7 * u.nA,
                 burst_freq=50 * u.Hz,  # 50 Hz oscillation
                 burst_duration=100 * u.ms,

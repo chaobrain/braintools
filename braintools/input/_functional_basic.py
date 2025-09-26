@@ -26,17 +26,18 @@ import brainunit as u
 import numpy as np
 
 from braintools._misc import set_module_as
+from ._deprecation import create_deprecated_function
 
 __all__ = [
-    'section_input',
-    'constant_input',
-    'step_input',
-    'ramp_input',
+    'section',
+    'constant',
+    'step',
+    'ramp',
 ]
 
 
 @set_module_as('braintools.input')
-def section_input(
+def section(
     values: Sequence,
     durations: Sequence,
     return_length: bool = False
@@ -81,7 +82,7 @@ def section_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple step protocol
-    >>> current = section_input(
+    >>> current = section(
     ...     values=[0, 10, 0] * u.pA,
     ...     durations=[100, 200, 100] * u.ms
     ... )
@@ -89,13 +90,13 @@ def section_input(
     # Multiple channel input
     >>> import numpy as np
     >>> values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
-    >>> current = section_input(
+    >>> current = section(
     ...     values=values,
     ...     durations=[50, 100, 50] * u.ms
     ... )
     
     # Get both current and duration
-    >>> current, duration = section_input(
+    >>> current, duration = section(
     ...     values=[0, 1, 2, 1, 0] * u.pA,
     ...     durations=[20, 20, 40, 20, 20] * u.ms,
     ...     return_length=True
@@ -105,7 +106,7 @@ def section_input(
     # Complex protocol with different phases
     >>> protocol_values = [0, 2, 5, 10, 5, 2, 0] * u.pA
     >>> protocol_durations = [50, 30, 30, 100, 30, 30, 50] * u.ms  
-    >>> current = section_input(protocol_values, protocol_durations)
+    >>> current = section(protocol_values, protocol_durations)
     
     Notes
     -----
@@ -156,11 +157,11 @@ def section_input(
         return currents
 
 
-def constant_input(I_and_duration):
+def constant(I_and_duration):
     """Format constant input currents with specified durations.
 
     Creates a sequence of constant current pulses, where each pulse has a
-    specified amplitude and duration. This function is similar to section_input
+    specified amplitude and duration. This function is similar to section
     but uses a different input format.
 
     Parameters
@@ -185,13 +186,13 @@ def constant_input(I_and_duration):
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple two-phase protocol
-    >>> current, duration = constant_input([
+    >>> current, duration = constant([
     ...     (0 * u.pA, 100 * u.ms),
     ...     (10 * u.pA, 200 * u.ms)
     ... ])
     
     # Mixed scalar and array values
-    >>> current, duration = constant_input([
+    >>> current, duration = constant([
     ...     (0, 50 * u.ms),
     ...     (np.array([1, 2, 3]) * u.nA, 100 * u.ms),
     ...     (0, 50 * u.ms)
@@ -205,12 +206,12 @@ def constant_input(I_and_duration):
     ...     (2 * u.pA, 30 * u.ms),      # recovery
     ...     (0 * u.pA, 50 * u.ms),      # rest
     ... ]
-    >>> current, total_time = constant_input(phases)
+    >>> current, total_time = constant(phases)
     >>> print(f"Total stimulation time: {total_time}")
     
     # Using arrays for spatial patterns
     >>> spatial_pattern = np.array([[1, 0], [0, 1]]) * u.nA
-    >>> current, duration = constant_input([
+    >>> current, duration = constant([
     ...     (np.zeros((2, 2)) * u.nA, 100 * u.ms),
     ...     (spatial_pattern, 200 * u.ms),
     ...     (np.zeros((2, 2)) * u.nA, 100 * u.ms)
@@ -218,7 +219,7 @@ def constant_input(I_and_duration):
     
     # Ramp-like approximation with many steps
     >>> steps = [(i * u.pA, 10 * u.ms) for i in range(11)]
-    >>> current, duration = constant_input(steps)
+    >>> current, duration = constant(steps)
     
     Notes
     -----
@@ -267,7 +268,7 @@ def constant_input(I_and_duration):
     return currents, I_duration
 
 
-def step_input(
+def step(
     amplitudes,
     step_times,
     duration: brainstate.typing.ArrayLike,
@@ -301,7 +302,7 @@ def step_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple three-level step function
-    >>> current = step_input(
+    >>> current = step(
     ...     amplitudes=[0, 10, 5] * u.pA,
     ...     step_times=[0, 50, 150] * u.ms,
     ...     duration=200 * u.ms
@@ -310,24 +311,24 @@ def step_input(
     # Staircase protocol
     >>> amplitudes = [0, 2, 4, 6, 8, 10] * u.nA
     >>> times = [0, 20, 40, 60, 80, 100] * u.ms
-    >>> current = step_input(amplitudes, times, 120 * u.ms)
+    >>> current = step(amplitudes, times, 120 * u.ms)
     
     # Multiple pulses with return to baseline
-    >>> current = step_input(
+    >>> current = step(
     ...     amplitudes=[0, 5, 0, 10, 0] * u.pA,
     ...     step_times=[0, 20, 40, 60, 80] * u.ms,
     ...     duration=100 * u.ms
     ... )
     
     # Unsorted times are automatically sorted
-    >>> current = step_input(
+    >>> current = step(
     ...     amplitudes=[5, 0, 10] * u.pA,
     ...     step_times=[50, 0, 100] * u.ms,  # Will be sorted to [0, 50, 100]
     ...     duration=150 * u.ms
     ... )
     
     # Protocol with negative values
-    >>> current = step_input(
+    >>> current = step(
     ...     amplitudes=[-5, 0, 5, 0, -5] * u.pA,
     ...     step_times=[0, 25, 50, 75, 100] * u.ms,
     ...     duration=125 * u.ms
@@ -337,7 +338,7 @@ def step_input(
     >>> import numpy as np
     >>> amplitudes = np.linspace(0, 50, 11) * u.pA
     >>> times = np.linspace(0, 1000, 11) * u.ms
-    >>> current = step_input(amplitudes, times, 1100 * u.ms)
+    >>> current = step(amplitudes, times, 1100 * u.ms)
     
     Notes
     -----
@@ -384,7 +385,7 @@ def step_input(
     return u.maybe_decimal(currents * c_unit)
 
 
-def ramp_input(
+def ramp(
     c_start: brainstate.typing.ArrayLike,
     c_end: brainstate.typing.ArrayLike,
     duration: brainstate.typing.ArrayLike,
@@ -429,21 +430,21 @@ def ramp_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple linear ramp from 0 to 10 pA over 100 ms
-    >>> current = ramp_input(
+    >>> current = ramp(
     ...     c_start=0 * u.pA,
     ...     c_end=10 * u.pA,
     ...     duration=100 * u.ms
     ... )
     
     # Decreasing ramp (10 to 0 pA)
-    >>> current = ramp_input(
+    >>> current = ramp(
     ...     c_start=10 * u.pA,
     ...     c_end=0 * u.pA,
     ...     duration=100 * u.ms
     ... )
     
     # Ramp with delay and early stop
-    >>> current = ramp_input(
+    >>> current = ramp(
     ...     c_start=0 * u.nA,
     ...     c_end=5 * u.nA,
     ...     duration=200 * u.ms,
@@ -452,14 +453,14 @@ def ramp_input(
     ... )
     
     # Negative to positive ramp
-    >>> current = ramp_input(
+    >>> current = ramp(
     ...     c_start=-5 * u.pA,
     ...     c_end=5 * u.pA,
     ...     duration=100 * u.ms
     ... )
     
     # Slow ramp for adaptation studies
-    >>> current = ramp_input(
+    >>> current = ramp(
     ...     c_start=0 * u.pA,
     ...     c_end=20 * u.pA,
     ...     duration=1000 * u.ms,
@@ -468,14 +469,14 @@ def ramp_input(
     ... )
     
     # Ramp for I-V curve measurements
-    >>> current = ramp_input(
+    >>> current = ramp(
     ...     c_start=-100 * u.pA,
     ...     c_end=100 * u.pA,
     ...     duration=500 * u.ms
     ... )
     
     # Sawtooth wave component
-    >>> current = ramp_input(
+    >>> current = ramp(
     ...     c_start=0 * u.pA,
     ...     c_end=10 * u.pA,
     ...     duration=10 * u.ms,
@@ -509,3 +510,11 @@ def ramp_input(
     cc = np.linspace(c_start, c_end, p2 - p1)
     current[p1: p2] = cc
     return u.maybe_decimal(current * c_unit)
+
+
+section_input = create_deprecated_function(section, 'section_input', 'section')
+constant_input = create_deprecated_function(constant, 'constant_input', 'constant')
+step_input = create_deprecated_function(step, 'step_input', 'step')
+ramp_input = create_deprecated_function(ramp, 'ramp_input', 'ramp')
+
+__all__.extend(['section', 'constant', 'step', 'ramp'])

@@ -29,17 +29,18 @@ from typing import Optional, Union, Callable
 import brainstate
 import brainunit as u
 import numpy as np
+from ._deprecation import create_deprecated_class
 
 __all__ = [
     'Input',
-    'CompositeInput',
+    'Composite',
     'ConstantValue',
-    'SequentialInput',
-    'TimeShiftedInput',
-    'ClippedInput',
-    'SmoothedInput',
-    'RepeatedInput',
-    'TransformedInput'
+    'Sequential',
+    'TimeShifted',
+    'Clipped',
+    'Smoothed',
+    'Repeated',
+    'Transformed'
 ]
 
 
@@ -100,12 +101,12 @@ class Input:
     
     >>> import brainunit as u
     >>> import brainstate
-    >>> from braintools.input import RampInput, SinusoidalInput, StepInput
+    >>> from braintools.input import Ramp, Sinusoidal, Step
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     >>> # Add two inputs
-    >>> ramp = RampInput(0, 1, 500 * u.ms)
-    >>> sine = SinusoidalInput(0.5, 10 * u.Hz, 500 * u.ms)
+    >>> ramp = Ramp(0, 1, 500 * u.ms)
+    >>> sine = Sinusoidal(0.5, 10 * u.Hz, 500 * u.ms)
     >>> combined = ramp + sine
     
     >>> # Scale an input
@@ -118,19 +119,19 @@ class Input:
     Complex compositions:
     
     >>> # Amplitude modulation
-    >>> carrier = SinusoidalInput(1.0, 100 * u.Hz, 1000 * u.ms)
-    >>> envelope = RampInput(0, 1, 1000 * u.ms)
+    >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 1000 * u.ms)
+    >>> envelope = Ramp(0, 1, 1000 * u.ms)
     >>> am_signal = carrier * envelope
     
     >>> # Sequential stimulation protocol
-    >>> baseline = StepInput([0], [0], 200 * u.ms)
-    >>> stim = StepInput([1], [0], 500 * u.ms)
-    >>> recovery = StepInput([0], [0], 300 * u.ms)
+    >>> baseline = Step([0], [0], 200 * u.ms)
+    >>> stim = Step([1], [0], 500 * u.ms)
+    >>> recovery = Step([0], [0], 300 * u.ms)
     >>> protocol = baseline & stim & recovery
     
     >>> # Overlay (maximum) for redundant stimulation
-    >>> stim1 = StepInput([0, 1, 0], [0, 100, 400], 500 * u.ms)
-    >>> stim2 = StepInput([0, 0.8, 0], [0, 200, 450], 500 * u.ms)
+    >>> stim1 = Step([0, 1, 0], [0, 100, 400], 500 * u.ms)
+    >>> stim2 = Step([0, 0.8, 0], [0, 200, 450], 500 * u.ms)
     >>> combined_stim = stim1 | stim2
     
     Transformations:
@@ -143,12 +144,12 @@ class Input:
     >>> clipped = (ramp * 2).clip(0, 1.5)
     
     >>> # Smoothing for filtering
-    >>> smooth_steps = StepInput([0, 1, 0.5, 1, 0], 
+    >>> smooth_steps = Step([0, 1, 0.5, 1, 0], 
     ...                          [0, 100, 200, 300, 400], 
     ...                          500 * u.ms).smooth(10 * u.ms)
     
     >>> # Repeating patterns
-    >>> burst = StepInput([0, 1, 0], [0, 10, 20], 50 * u.ms)
+    >>> burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
     >>> repeated_bursts = burst.repeat(10)
     
     >>> # Custom transformations
@@ -159,10 +160,10 @@ class Input:
     Advanced protocols:
     
     >>> # Complex experimental protocol
-    >>> pre_baseline = StepInput([0], [0], 1000 * u.ms)
-    >>> conditioning = SinusoidalInput(0.5, 5 * u.Hz, 2000 * u.ms)
-    >>> test_pulse = StepInput([2], [0], 100 * u.ms)
-    >>> post_baseline = StepInput([0], [0], 1000 * u.ms)
+    >>> pre_baseline = Step([0], [0], 1000 * u.ms)
+    >>> conditioning = Sinusoidal(0.5, 5 * u.Hz, 2000 * u.ms)
+    >>> test_pulse = Step([2], [0], 100 * u.ms)
+    >>> post_baseline = Step([0], [0], 1000 * u.ms)
     >>> 
     >>> protocol = (pre_baseline & 
     ...            (conditioning + 0.5).clip(0, 1) & 
@@ -171,10 +172,10 @@ class Input:
     
     >>> # Noisy modulated signal
     >>> from braintools.input import WienerProcess
-    >>> signal = SinusoidalInput(1.0, 20 * u.Hz, 1000 * u.ms)
+    >>> signal = Sinusoidal(1.0, 20 * u.Hz, 1000 * u.ms)
     >>> noise = WienerProcess(1000 * u.ms, sigma=0.1)
-    >>> modulator = (RampInput(0.5, 1.5, 1000 * u.ms) + 
-    ...             SinusoidalInput(0.2, 2 * u.Hz, 1000 * u.ms))
+    >>> modulator = (Ramp(0.5, 1.5, 1000 * u.ms) + 
+    ...             Sinusoidal(0.2, 2 * u.Hz, 1000 * u.ms))
     >>> noisy_modulated = (signal + noise) * modulator
     """
 
@@ -218,7 +219,7 @@ class Input:
             
         Examples
         --------
-        >>> ramp = RampInput(0, 1, 100 * u.ms)
+        >>> ramp = Ramp(0, 1, 100 * u.ms)
         >>> # First call generates and caches
         >>> arr1 = ramp()
         >>> # Second call uses cache (faster)
@@ -279,22 +280,22 @@ class Input:
             
         Returns
         -------
-        result : CompositeInput
+        result : Composite
             The sum of the two inputs.
             
         Examples
         --------
-        >>> sine1 = SinusoidalInput(1.0, 10 * u.Hz, 100 * u.ms)
-        >>> sine2 = SinusoidalInput(0.5, 20 * u.Hz, 100 * u.ms)
+        >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
+        >>> sine2 = Sinusoidal(0.5, 20 * u.Hz, 100 * u.ms)
         >>> # Add two inputs
         >>> combined = sine1 + sine2
         >>> # Add a DC offset
         >>> with_offset = sine1 + 0.5
         """
         if isinstance(other, Input):
-            return CompositeInput(self, other, operator='+')
+            return Composite(self, other, operator='+')
         else:
-            return CompositeInput(self, ConstantValue(other, self.duration), operator='+')
+            return Composite(self, ConstantValue(other, self.duration), operator='+')
 
     def __radd__(self, other):
         """Right addition (for scalar + Input)."""
@@ -310,29 +311,29 @@ class Input:
             
         Returns
         -------
-        result : CompositeInput
+        result : Composite
             The difference of the two inputs.
             
         Examples
         --------
-        >>> ramp = RampInput(0, 2, 100 * u.ms)
-        >>> baseline = StepInput([0.5], [0], 100 * u.ms)
+        >>> ramp = Ramp(0, 2, 100 * u.ms)
+        >>> baseline = Step([0.5], [0], 100 * u.ms)
         >>> # Subtract baseline
         >>> corrected = ramp - baseline
         >>> # Remove DC offset
         >>> centered = ramp - 1.0
         """
         if isinstance(other, Input):
-            return CompositeInput(self, other, operator='-')
+            return Composite(self, other, operator='-')
         else:
-            return CompositeInput(self, ConstantValue(other, self.duration), operator='-')
+            return Composite(self, ConstantValue(other, self.duration), operator='-')
 
     def __rsub__(self, other):
         """Right subtraction (for scalar - Input)."""
         if isinstance(other, Input):
-            return CompositeInput(other, self, operator='-')
+            return Composite(other, self, operator='-')
         else:
-            return CompositeInput(ConstantValue(other, self.duration), self, operator='-')
+            return Composite(ConstantValue(other, self.duration), self, operator='-')
 
     def __mul__(self, other):
         """Multiply two inputs or multiply by a constant.
@@ -344,22 +345,22 @@ class Input:
             
         Returns
         -------
-        result : CompositeInput
+        result : Composite
             The product of the two inputs.
             
         Examples
         --------
-        >>> carrier = SinusoidalInput(1.0, 100 * u.Hz, 500 * u.ms)
-        >>> envelope = RampInput(0, 1, 500 * u.ms)
+        >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 500 * u.ms)
+        >>> envelope = Ramp(0, 1, 500 * u.ms)
         >>> # Amplitude modulation
         >>> am_signal = carrier * envelope
         >>> # Simple scaling
         >>> doubled = carrier * 2.0
         """
         if isinstance(other, Input):
-            return CompositeInput(self, other, operator='*')
+            return Composite(self, other, operator='*')
         else:
-            return CompositeInput(self, ConstantValue(other, self.duration), operator='*')
+            return Composite(self, ConstantValue(other, self.duration), operator='*')
 
     def __rmul__(self, other):
         """Right multiplication (for scalar * Input)."""
@@ -375,29 +376,29 @@ class Input:
             
         Returns
         -------
-        result : CompositeInput
+        result : Composite
             The quotient of the two inputs.
             
         Examples
         --------
-        >>> signal = SinusoidalInput(2.0, 10 * u.Hz, 100 * u.ms)
-        >>> normalizer = RampInput(1, 2, 100 * u.ms)
+        >>> signal = Sinusoidal(2.0, 10 * u.Hz, 100 * u.ms)
+        >>> normalizer = Ramp(1, 2, 100 * u.ms)
         >>> # Normalize by varying factor
         >>> normalized = signal / normalizer
         >>> # Scale down
         >>> halved = signal / 2.0
         """
         if isinstance(other, Input):
-            return CompositeInput(self, other, operator='/')
+            return Composite(self, other, operator='/')
         else:
-            return CompositeInput(self, ConstantValue(other, self.duration), operator='/')
+            return Composite(self, ConstantValue(other, self.duration), operator='/')
 
     def __rtruediv__(self, other):
         """Right division (for scalar / Input)."""
         if isinstance(other, Input):
-            return CompositeInput(other, self, operator='/')
+            return Composite(other, self, operator='/')
         else:
-            return CompositeInput(ConstantValue(other, self.duration), self, operator='/')
+            return Composite(ConstantValue(other, self.duration), self, operator='/')
 
     def __and__(self, other):
         """Concatenate two inputs in time (sequential composition).
@@ -409,21 +410,21 @@ class Input:
             
         Returns
         -------
-        result : SequentialInput
+        result : Sequential
             The concatenated inputs.
             
         Examples
         --------
-        >>> baseline = StepInput([0], [0], 100 * u.ms)
-        >>> stimulus = StepInput([1], [0], 200 * u.ms)
-        >>> recovery = StepInput([0], [0], 100 * u.ms)
+        >>> baseline = Step([0], [0], 100 * u.ms)
+        >>> stimulus = Step([1], [0], 200 * u.ms)
+        >>> recovery = Step([0], [0], 100 * u.ms)
         >>> # Create sequential protocol
         >>> protocol = baseline & stimulus & recovery
         >>> # Total duration is 400 ms
         """
         if not isinstance(other, Input):
             raise TypeError("Can only concatenate with another Input object")
-        return SequentialInput(self, other)
+        return Sequential(self, other)
 
     def __or__(self, other):
         """Overlay two inputs (take maximum at each point).
@@ -435,19 +436,19 @@ class Input:
             
         Returns
         -------
-        result : CompositeInput
+        result : Composite
             The maximum of the two inputs at each time point.
             
         Examples
         --------
-        >>> stim1 = StepInput([0, 1, 0], [0, 100, 300], 400 * u.ms)
-        >>> stim2 = StepInput([0, 0.8, 0], [0, 150, 350], 400 * u.ms)
+        >>> stim1 = Step([0, 1, 0], [0, 100, 300], 400 * u.ms)
+        >>> stim2 = Step([0, 0.8, 0], [0, 150, 350], 400 * u.ms)
         >>> # Take maximum at each point
         >>> combined = stim1 | stim2
         >>> # Results in 1.0 from 100-150ms, 0.8 from 150-300ms, etc.
         """
         if isinstance(other, Input):
-            return CompositeInput(self, other, operator='max')
+            return Composite(self, other, operator='max')
         else:
             raise TypeError("Can only overlay with another Input object")
 
@@ -456,12 +457,12 @@ class Input:
         
         Returns
         -------
-        result : CompositeInput
+        result : Composite
             The negated input.
             
         Examples
         --------
-        >>> sine = SinusoidalInput(1.0, 10 * u.Hz, 100 * u.ms)
+        >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
         >>> # Invert the signal
         >>> inverted = -sine
         """
@@ -477,12 +478,12 @@ class Input:
             
         Returns
         -------
-        scaled : CompositeInput
+        scaled : Composite
             The scaled input (equivalent to self * factor).
             
         Examples
         --------
-        >>> ramp = RampInput(0, 1, 100 * u.ms)
+        >>> ramp = Ramp(0, 1, 100 * u.ms)
         >>> # Double the amplitude
         >>> doubled = ramp.scale(2.0)
         >>> # Reduce to 30%
@@ -501,18 +502,18 @@ class Input:
             
         Returns
         -------
-        shifted : TimeShiftedInput
+        shifted : TimeShifted
             The time-shifted input.
             
         Examples
         --------
-        >>> pulse = StepInput([1], [100 * u.ms], 200 * u.ms)
+        >>> pulse = Step([1], [100 * u.ms], 200 * u.ms)
         >>> # Delay by 50ms (pulse now at 150ms)
         >>> delayed = pulse.shift(50 * u.ms)
         >>> # Advance by 30ms (pulse now at 70ms)  
         >>> advanced = pulse.shift(-30 * u.ms)
         """
-        return TimeShiftedInput(self, time_shift)
+        return TimeShifted(self, time_shift)
 
     def clip(self, min_val: Optional[float] = None, max_val: Optional[float] = None):
         """Clip the input values to a range.
@@ -526,12 +527,12 @@ class Input:
             
         Returns
         -------
-        clipped : ClippedInput
+        clipped : Clipped
             The clipped input.
             
         Examples
         --------
-        >>> ramp = RampInput(-2, 2, 100 * u.ms)
+        >>> ramp = Ramp(-2, 2, 100 * u.ms)
         >>> # Clip to [0, 1]
         >>> saturated = ramp.clip(0, 1)
         >>> # Only upper bound
@@ -539,7 +540,7 @@ class Input:
         >>> # Only lower bound (rectification)
         >>> rectified = ramp.clip(min_val=0)
         """
-        return ClippedInput(self, min_val, max_val)
+        return Clipped(self, min_val, max_val)
 
     def smooth(self, tau: Union[float, u.Quantity]):
         """Apply exponential smoothing to the input.
@@ -552,7 +553,7 @@ class Input:
             
         Returns
         -------
-        smoothed : SmoothedInput
+        smoothed : Smoothed
             The exponentially smoothed input.
             
         Notes
@@ -563,7 +564,7 @@ class Input:
             
         Examples
         --------
-        >>> steps = StepInput([0, 1, 0.5, 1, 0], 
+        >>> steps = Step([0, 1, 0.5, 1, 0], 
         ...                   [0, 50, 100, 150, 200], 
         ...                   250 * u.ms)
         >>> # Smooth transitions with 10ms time constant
@@ -571,7 +572,7 @@ class Input:
         >>> # Heavy smoothing with 50ms time constant
         >>> very_smooth = steps.smooth(50 * u.ms)
         """
-        return SmoothedInput(self, tau)
+        return Smoothed(self, tau)
 
     def repeat(self, n_times: int):
         """Repeat the input pattern n times.
@@ -583,21 +584,21 @@ class Input:
             
         Returns
         -------
-        repeated : RepeatedInput
+        repeated : Repeated
             The repeated input with duration n_times * original_duration.
             
         Examples
         --------
         >>> # Create a burst pattern
-        >>> burst = StepInput([0, 1, 0], [0, 10, 20], 50 * u.ms)
+        >>> burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
         >>> # Repeat 10 times for 500ms total
         >>> burst_train = burst.repeat(10)
         >>> 
         >>> # Repeated sine wave packets
-        >>> packet = SinusoidalInput(1.0, 50 * u.Hz, 100 * u.ms)
+        >>> packet = Sinusoidal(1.0, 50 * u.Hz, 100 * u.ms)
         >>> packets = packet.repeat(5)  # 500ms total
         """
-        return RepeatedInput(self, n_times)
+        return Repeated(self, n_times)
 
     def apply(self, func: Callable):
         """Apply a custom function to the input.
@@ -610,13 +611,13 @@ class Input:
             
         Returns
         -------
-        transformed : TransformedInput
+        transformed : Transformed
             The transformed input.
             
         Examples
         --------
         >>> import jax.numpy as jnp
-        >>> sine = SinusoidalInput(1.0, 10 * u.Hz, 100 * u.ms)
+        >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
         >>> 
         >>> # Rectification
         >>> rectified = sine.apply(lambda x: jnp.maximum(x, 0))
@@ -634,10 +635,10 @@ class Input:
         ...     lambda x: x + 0.1 * jrandom.normal(key, x.shape)
         ... )
         """
-        return TransformedInput(self, func)
+        return Transformed(self, func)
 
 
-class CompositeInput(Input):
+class Composite(Input):
     """Composite input created by combining two inputs with an operator.
     
     Parameters
@@ -659,9 +660,9 @@ class CompositeInput(Input):
     Examples
     --------
     >>> # Direct construction (usually use operators instead)
-    >>> ramp = RampInput(0, 1, 100 * u.ms)
-    >>> sine = SinusoidalInput(0.5, 10 * u.Hz, 100 * u.ms)
-    >>> added = CompositeInput(ramp, sine, '+')
+    >>> ramp = Ramp(0, 1, 100 * u.ms)
+    >>> sine = Sinusoidal(0.5, 10 * u.Hz, 100 * u.ms)
+    >>> added = Composite(ramp, sine, '+')
     >>> 
     >>> # More commonly created via operators
     >>> added = ramp + sine
@@ -733,7 +734,7 @@ class ConstantValue(Input):
     Examples
     --------
     >>> # Usually created implicitly
-    >>> sine = SinusoidalInput(1.0, 10 * u.Hz, 100 * u.ms)
+    >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
     >>> with_offset = sine + 0.5  # Creates ConstantValue(0.5, 100*u.ms)
     >>> 
     >>> # Direct construction
@@ -749,7 +750,7 @@ class ConstantValue(Input):
         return u.math.ones(self.n_steps, dtype=brainstate.environ.dftype()) * self.value
 
 
-class SequentialInput(Input):
+class Sequential(Input):
     """Sequential composition of two inputs.
     
     Concatenates two inputs in time, with the second input
@@ -765,16 +766,16 @@ class SequentialInput(Input):
     Examples
     --------
     >>> # Three-phase protocol
-    >>> baseline = StepInput([0], [0], 500 * u.ms)
-    >>> stimulus = RampInput(0, 1, 1000 * u.ms)
-    >>> recovery = StepInput([0], [0], 500 * u.ms)
+    >>> baseline = Step([0], [0], 500 * u.ms)
+    >>> stimulus = Ramp(0, 1, 1000 * u.ms)
+    >>> recovery = Step([0], [0], 500 * u.ms)
     >>> 
     >>> # Chain using & operator
     >>> protocol = baseline & stimulus & recovery
     >>> # Total duration is 2000 ms
     >>> 
     >>> # Direct construction
-    >>> two_phase = SequentialInput(baseline, stimulus)
+    >>> two_phase = Sequential(baseline, stimulus)
     """
 
     def __init__(self, input1: Input, input2: Input):
@@ -800,7 +801,7 @@ class SequentialInput(Input):
         return u.math.concatenate([arr1, arr2])
 
 
-class TimeShiftedInput(Input):
+class TimeShifted(Input):
     """Time-shifted version of an input.
     
     Shifts an input forward (delay) or backward (advance) in time.
@@ -817,13 +818,13 @@ class TimeShiftedInput(Input):
         
     Examples
     --------
-    >>> pulse = StepInput([1], [200 * u.ms], 500 * u.ms)
+    >>> pulse = Step([1], [200 * u.ms], 500 * u.ms)
     >>> 
     >>> # Delay by 100ms (pulse now at 300ms)
-    >>> delayed = TimeShiftedInput(pulse, 100 * u.ms)
+    >>> delayed = TimeShifted(pulse, 100 * u.ms)
     >>> 
     >>> # Advance by 50ms (pulse now at 150ms)
-    >>> advanced = TimeShiftedInput(pulse, -50 * u.ms)
+    >>> advanced = TimeShifted(pulse, -50 * u.ms)
     >>> 
     >>> # Usually created via shift() method
     >>> delayed = pulse.shift(100 * u.ms)
@@ -861,7 +862,7 @@ class TimeShiftedInput(Input):
             return arr
 
 
-class ClippedInput(Input):
+class Clipped(Input):
     """Clipped version of an input.
     
     Clips input values to stay within specified bounds,
@@ -878,16 +879,16 @@ class ClippedInput(Input):
         
     Examples
     --------
-    >>> ramp = RampInput(-2, 2, 200 * u.ms)
+    >>> ramp = Ramp(-2, 2, 200 * u.ms)
     >>> 
     >>> # Clip to [0, 1] range
-    >>> saturated = ClippedInput(ramp, 0, 1)
+    >>> saturated = Clipped(ramp, 0, 1)
     >>> 
     >>> # Only lower bound (rectification)
-    >>> rectified = ClippedInput(ramp, min_val=0)
+    >>> rectified = Clipped(ramp, min_val=0)
     >>> 
     >>> # Only upper bound (saturation)
-    >>> capped = ClippedInput(ramp, max_val=1.5)
+    >>> capped = Clipped(ramp, max_val=1.5)
     >>> 
     >>> # Usually created via clip() method
     >>> saturated = ramp.clip(0, 1)
@@ -921,7 +922,7 @@ class ClippedInput(Input):
         return arr
 
 
-class SmoothedInput(Input):
+class Smoothed(Input):
     """Exponentially smoothed version of an input.
     
     Applies exponential smoothing (low-pass filtering) to an input,
@@ -945,15 +946,15 @@ class SmoothedInput(Input):
     Examples
     --------
     >>> # Sharp steps
-    >>> steps = StepInput([0, 1, 0.5, 1, 0], 
+    >>> steps = Step([0, 1, 0.5, 1, 0], 
     ...                   [0, 50, 100, 150, 200],
     ...                   250 * u.ms)
     >>> 
     >>> # Light smoothing (fast response)
-    >>> light = SmoothedInput(steps, 5 * u.ms)
+    >>> light = Smoothed(steps, 5 * u.ms)
     >>> 
     >>> # Heavy smoothing (slow response)
-    >>> heavy = SmoothedInput(steps, 25 * u.ms)
+    >>> heavy = Smoothed(steps, 25 * u.ms)
     >>> 
     >>> # Usually created via smooth() method
     >>> smooth = steps.smooth(10 * u.ms)
@@ -985,7 +986,7 @@ class SmoothedInput(Input):
         return u.maybe_decimal(smoothed * arr_unit)
 
 
-class RepeatedInput(Input):
+class Repeated(Input):
     """Repeated version of an input pattern.
     
     Repeats an input pattern multiple times, useful for
@@ -1005,14 +1006,14 @@ class RepeatedInput(Input):
     Examples
     --------
     >>> # Single burst
-    >>> burst = StepInput([0, 1, 0], [0, 10, 30], 50 * u.ms)
+    >>> burst = Step([0, 1, 0], [0, 10, 30], 50 * u.ms)
     >>> 
     >>> # Burst train (10 bursts, 500ms total)
-    >>> train = RepeatedInput(burst, 10)
+    >>> train = Repeated(burst, 10)
     >>> 
     >>> # Oscillation packets
-    >>> packet = SinusoidalInput(1.0, 100 * u.Hz, 100 * u.ms)
-    >>> packets = RepeatedInput(packet, 5)  # 500ms total
+    >>> packet = Sinusoidal(1.0, 100 * u.Hz, 100 * u.ms)
+    >>> packets = Repeated(packet, 5)  # 500ms total
     >>> 
     >>> # Usually created via repeat() method
     >>> train = burst.repeat(10)
@@ -1039,7 +1040,7 @@ class RepeatedInput(Input):
         return u.math.tile(arr, self.n_times)
 
 
-class TransformedInput(Input):
+class Transformed(Input):
     """Custom transformation applied to an input.
     
     Applies an arbitrary function to transform an input,
@@ -1056,16 +1057,16 @@ class TransformedInput(Input):
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> sine = SinusoidalInput(1.0, 10 * u.Hz, 200 * u.ms)
+    >>> sine = Sinusoidal(1.0, 10 * u.Hz, 200 * u.ms)
     >>> 
     >>> # Half-wave rectification
-    >>> rectified = TransformedInput(sine, lambda x: jnp.maximum(x, 0))
+    >>> rectified = Transformed(sine, lambda x: jnp.maximum(x, 0))
     >>> 
     >>> # Squaring (frequency doubling)
-    >>> squared = TransformedInput(sine, lambda x: x ** 2)
+    >>> squared = Transformed(sine, lambda x: x ** 2)
     >>> 
     >>> # Sigmoid nonlinearity
-    >>> sigmoid = TransformedInput(sine, 
+    >>> sigmoid = Transformed(sine, 
     ...     lambda x: 1 / (1 + jnp.exp(-10 * x)))
     >>> 
     >>> # Usually created via apply() method
@@ -1090,3 +1091,14 @@ class TransformedInput(Input):
         """Generate the transformed input."""
         arr = self.input_obj()
         return self.func(arr)
+
+
+CompositeInput = create_deprecated_class(Composite, 'CompositeInput', 'Composite')
+SequentialInput = create_deprecated_class(Sequential, 'SequentialInput', 'Sequential')
+TimeShiftedInput = create_deprecated_class(TimeShifted, 'TimeShiftedInput', 'TimeShifted')
+ClippedInput = create_deprecated_class(Clipped, 'ClippedInput', 'Clipped')
+SmoothedInput = create_deprecated_class(Smoothed, 'SmoothedInput', 'Smoothed')
+RepeatedInput = create_deprecated_class(Repeated, 'RepeatedInput', 'Repeated')
+TransformedInput = create_deprecated_class(Transformed, 'TransformedInput', 'Transformed')
+
+__all__.extend(['CompositeInput', 'SequentialInput', 'TimeShiftedInput', 'ClippedInput', 'SmoothedInput', 'RepeatedInput', 'TransformedInput'])

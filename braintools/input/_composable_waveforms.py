@@ -30,20 +30,21 @@ import brainunit as u
 
 from ._composable_base import Input
 from . import _functional_waveforms as functional
+from ._deprecation import create_deprecated_class
 
 ArrayLike = brainstate.typing.ArrayLike
 
 __all__ = [
-    'SinusoidalInput',
-    'SquareInput',
-    'TriangularInput',
-    'SawtoothInput',
-    'ChirpInput',
-    'NoisySinusoidalInput',
+    'Sinusoidal',
+    'Square',
+    'Triangular',
+    'Sawtooth',
+    'Chirp',
+    'NoisySinusoidal',
 ]
 
 
-class SinusoidalInput(Input):
+class Sinusoidal(Input):
     r"""Composable sinusoidal input generator.
 
     Creates a sinusoidal waveform with specified amplitude and frequency.
@@ -96,32 +97,32 @@ class SinusoidalInput(Input):
 
     Create simple sinusoidal input:
 
-    >>> sine = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
+    >>> sine = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
     >>> signal = sine()
 
     Create amplitude-modulated signal:
 
-    >>> from braintools.input import RampInput
-    >>> carrier = SinusoidalInput(1.0, 100 * u.Hz, 500 * u.ms)
-    >>> envelope = RampInput(0, 1, 500 * u.ms)
+    >>> from braintools.input import Ramp
+    >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 500 * u.ms)
+    >>> envelope = Ramp(0, 1, 500 * u.ms)
     >>> am_signal = carrier * envelope
 
     Create frequency beats by combining sinusoids:
 
-    >>> sine1 = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
-    >>> sine2 = SinusoidalInput(1.0, 11 * u.Hz, 1000 * u.ms)
+    >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
+    >>> sine2 = Sinusoidal(1.0, 11 * u.Hz, 1000 * u.ms)
     >>> beats = sine1 + sine2  # 1 Hz beat frequency
 
     Create complex waveform with harmonics:
 
-    >>> fundamental = SinusoidalInput(1.0, 5 * u.Hz, 2000 * u.ms)
-    >>> third = SinusoidalInput(0.3, 15 * u.Hz, 2000 * u.ms)
-    >>> fifth = SinusoidalInput(0.2, 25 * u.Hz, 2000 * u.ms)
+    >>> fundamental = Sinusoidal(1.0, 5 * u.Hz, 2000 * u.ms)
+    >>> third = Sinusoidal(0.3, 15 * u.Hz, 2000 * u.ms)
+    >>> fifth = Sinusoidal(0.2, 25 * u.Hz, 2000 * u.ms)
     >>> complex_wave = fundamental + third + fifth
 
     Test resonance with windowed sinusoid:
 
-    >>> resonance = SinusoidalInput(
+    >>> resonance = Sinusoidal(
     ...     amplitude=2.0,
     ...     frequency=8 * u.Hz,  # Theta frequency
     ...     duration=5000 * u.ms,
@@ -131,14 +132,14 @@ class SinusoidalInput(Input):
 
     Create phase-shifted sinusoids:
 
-    >>> sine1 = SinusoidalInput(1.0, 10 * u.Hz, 1000 * u.ms)
+    >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 1000 * u.ms)
     >>> # Shift by 250ms (90 degrees for 10Hz)
     >>> sine2 = sine1.shift(25 * u.ms)
     >>> quadrature = sine1 + sine2
 
     Sinusoid with positive bias (rectified):
 
-    >>> positive_sine = SinusoidalInput(
+    >>> positive_sine = Sinusoidal(
     ...     amplitude=5.0,
     ...     frequency=5 * u.Hz,
     ...     duration=2000 * u.ms,
@@ -155,10 +156,10 @@ class SinusoidalInput(Input):
 
     See Also
     --------
-    SquareInput : Square wave generator
-    ChirpInput : Frequency sweep generator
-    NoisySinusoidalInput : Sinusoid with additive noise
-    sinusoidal_input : Functional API for sinusoidal input
+    Square : Square wave generator
+    Chirp : Frequency sweep generator
+    NoisySinusoidal : Sinusoid with additive noise
+    sinusoidal : Functional API for sinusoidal input
     """
 
     def __init__(self,
@@ -179,7 +180,7 @@ class SinusoidalInput(Input):
 
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the sinusoidal input using the functional API."""
-        return functional.sinusoidal_input(
+        return functional.sinusoidal(
             amplitude=self.amplitude,
             frequency=self.frequency,
             duration=self.duration,
@@ -189,7 +190,7 @@ class SinusoidalInput(Input):
         )
 
 
-class SquareInput(Input):
+class Square(Input):
     r"""Composable square wave input generator.
 
     Creates a square wave that alternates between two levels at a specified
@@ -242,12 +243,12 @@ class SquareInput(Input):
 
     Create symmetric square wave:
 
-    >>> square = SquareInput(1.0, 5 * u.Hz, 1000 * u.ms)
+    >>> square = Square(1.0, 5 * u.Hz, 1000 * u.ms)
     >>> signal = square()
 
     Create pulse train with 20% duty cycle:
 
-    >>> pulses = SquareInput(
+    >>> pulses = Square(
     ...     amplitude=5.0,
     ...     frequency=10 * u.Hz,
     ...     duration=500 * u.ms,
@@ -256,12 +257,12 @@ class SquareInput(Input):
 
     Smooth square wave transitions:
 
-    >>> square = SquareInput(2.0, 5 * u.Hz, 800 * u.ms)
+    >>> square = Square(2.0, 5 * u.Hz, 800 * u.ms)
     >>> smoothed = square.smooth(tau=5 * u.ms)  # Low-pass filter
 
     Create clock signal for synchronization:
 
-    >>> clock = SquareInput(
+    >>> clock = Square(
     ...     amplitude=1.0,
     ...     frequency=40 * u.Hz,
     ...     duration=250 * u.ms,
@@ -270,21 +271,21 @@ class SquareInput(Input):
 
     Combine with DC offset:
 
-    >>> from braintools.input import ConstantInput
-    >>> square = SquareInput(3.0, 2 * u.Hz, 2000 * u.ms)
-    >>> offset = ConstantInput([(2.0, 2000 * u.ms)])
+    >>> from braintools.input import Constant
+    >>> square = Square(3.0, 2 * u.Hz, 2000 * u.ms)
+    >>> offset = Constant([(2.0, 2000 * u.ms)])
     >>> shifted_square = square + offset
 
     Create gated stimulation:
 
-    >>> from braintools.input import StepInput
-    >>> square = SquareInput(1.0, 50 * u.Hz, 1000 * u.ms)
-    >>> gate = StepInput([0, 1, 0], [0 * u.ms, 200 * u.ms, 800 * u.ms], 1000 * u.ms)
+    >>> from braintools.input import Step
+    >>> square = Square(1.0, 50 * u.Hz, 1000 * u.ms)
+    >>> gate = Step([0, 1, 0], [0 * u.ms, 200 * u.ms, 800 * u.ms], 1000 * u.ms)
     >>> gated = square * gate
 
     Square wave with positive bias:
 
-    >>> positive_square = SquareInput(
+    >>> positive_square = Square(
     ...     amplitude=4.0,
     ...     frequency=10 * u.Hz,
     ...     duration=500 * u.ms,
@@ -293,7 +294,7 @@ class SquareInput(Input):
 
     Create PWM-like signal:
 
-    >>> pwm = SquareInput(
+    >>> pwm = Square(
     ...     amplitude=5.0,
     ...     frequency=100 * u.Hz,
     ...     duration=100 * u.ms,
@@ -310,9 +311,9 @@ class SquareInput(Input):
 
     See Also
     --------
-    SinusoidalInput : Sinusoidal wave generator
-    TriangularInput : Triangular wave generator
-    square_input : Functional API for square wave input
+    Sinusoidal : Sinusoidal wave generator
+    Triangular : Triangular wave generator
+    square : Functional API for square wave input
     """
 
     def __init__(self,
@@ -335,7 +336,7 @@ class SquareInput(Input):
 
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the square wave using the functional API."""
-        return functional.square_input(
+        return functional.square(
             amplitude=self.amplitude,
             frequency=self.frequency,
             duration=self.duration,
@@ -346,7 +347,7 @@ class SquareInput(Input):
         )
 
 
-class TriangularInput(Input):
+class Triangular(Input):
     r"""Composable triangular wave input generator.
 
     Creates a triangular (linear ramping) waveform that linearly increases
@@ -394,12 +395,12 @@ class TriangularInput(Input):
 
     Simple triangular wave:
 
-    >>> tri = TriangularInput(2.0, 3 * u.Hz, 1000 * u.ms)
+    >>> tri = Triangular(2.0, 3 * u.Hz, 1000 * u.ms)
     >>> signal = tri()
 
     Slow ramp for I-V curve measurements:
 
-    >>> ramp = TriangularInput(
+    >>> ramp = Triangular(
     ...     amplitude=100.0,
     ...     frequency=0.5 * u.Hz,  # 2 second period
     ...     duration=4000 * u.ms
@@ -407,19 +408,19 @@ class TriangularInput(Input):
 
     Clipped triangular wave:
 
-    >>> tri = TriangularInput(5.0, 4 * u.Hz, 600 * u.ms)
+    >>> tri = Triangular(5.0, 4 * u.Hz, 600 * u.ms)
     >>> clipped = tri.clip(-3.0, 3.0)  # Trapezoidal shape
 
     Triangular wave with envelope:
 
     >>> from braintools.input import GaussianPulse
-    >>> tri = TriangularInput(2.0, 10 * u.Hz, 1000 * u.ms)
+    >>> tri = Triangular(2.0, 10 * u.Hz, 1000 * u.ms)
     >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
     >>> modulated = tri * envelope
 
     Testing adaptation with slow ramps:
 
-    >>> adaptation_test = TriangularInput(
+    >>> adaptation_test = Triangular(
     ...     amplitude=20.0,
     ...     frequency=1 * u.Hz,
     ...     duration=5000 * u.ms
@@ -427,7 +428,7 @@ class TriangularInput(Input):
 
     Triangular wave with positive bias:
 
-    >>> positive_tri = TriangularInput(
+    >>> positive_tri = Triangular(
     ...     amplitude=3.0,
     ...     frequency=5 * u.Hz,
     ...     duration=800 * u.ms,
@@ -437,14 +438,14 @@ class TriangularInput(Input):
     Create sawtooth approximation:
 
     >>> # Combine triangular with step for asymmetric ramp
-    >>> tri = TriangularInput(1.0, 2 * u.Hz, 1000 * u.ms)
-    >>> from braintools.input import StepInput
-    >>> step = StepInput([0, 0.5], [0 * u.ms, 250 * u.ms], 1000 * u.ms)
+    >>> tri = Triangular(1.0, 2 * u.Hz, 1000 * u.ms)
+    >>> from braintools.input import Step
+    >>> step = Step([0, 0.5], [0 * u.ms, 250 * u.ms], 1000 * u.ms)
     >>> asymmetric = tri + step
 
     Windowed triangular stimulation:
 
-    >>> windowed_tri = TriangularInput(
+    >>> windowed_tri = Triangular(
     ...     amplitude=4.0,
     ...     frequency=2 * u.Hz,
     ...     duration=3000 * u.ms,
@@ -462,9 +463,9 @@ class TriangularInput(Input):
 
     See Also
     --------
-    SawtoothInput : Sawtooth wave generator
-    SinusoidalInput : Sinusoidal wave generator
-    triangular_input : Functional API for triangular wave
+    Sawtooth : Sawtooth wave generator
+    Sinusoidal : Sinusoidal wave generator
+    triangular : Functional API for triangular wave
     """
 
     def __init__(self,
@@ -485,7 +486,7 @@ class TriangularInput(Input):
 
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the triangular wave using the functional API."""
-        return functional.triangular_input(
+        return functional.triangular(
             amplitude=self.amplitude,
             frequency=self.frequency,
             duration=self.duration,
@@ -495,7 +496,7 @@ class TriangularInput(Input):
         )
 
 
-class SawtoothInput(Input):
+class Sawtooth(Input):
     r"""Composable sawtooth wave input generator.
 
     Creates a sawtooth waveform that ramps up linearly and then drops sharply.
@@ -542,12 +543,12 @@ class SawtoothInput(Input):
 
     Simple sawtooth wave:
 
-    >>> saw = SawtoothInput(1.0, 2 * u.Hz, 2000 * u.ms)
+    >>> saw = Sawtooth(1.0, 2 * u.Hz, 2000 * u.ms)
     >>> signal = saw()
 
     Slow ramp for threshold detection:
 
-    >>> threshold_test = SawtoothInput(
+    >>> threshold_test = Sawtooth(
     ...     amplitude=50.0,
     ...     frequency=0.5 * u.Hz,  # 2 second ramp
     ...     duration=4000 * u.ms
@@ -555,14 +556,14 @@ class SawtoothInput(Input):
 
     Combine with DC offset:
 
-    >>> from braintools.input import ConstantInput
-    >>> saw = SawtoothInput(3.0, 3 * u.Hz, 1000 * u.ms)
-    >>> offset = ConstantInput([(2.0, 1000 * u.ms)])
+    >>> from braintools.input import Constant
+    >>> saw = Sawtooth(3.0, 3 * u.Hz, 1000 * u.ms)
+    >>> offset = Constant([(2.0, 1000 * u.ms)])
     >>> shifted_saw = saw + offset
 
     Fast reset testing:
 
-    >>> reset_test = SawtoothInput(
+    >>> reset_test = Sawtooth(
     ...     amplitude=20.0,
     ...     frequency=20 * u.Hz,
     ...     duration=250 * u.ms
@@ -570,7 +571,7 @@ class SawtoothInput(Input):
 
     Repeated ramp protocol:
 
-    >>> ramp_protocol = SawtoothInput(
+    >>> ramp_protocol = Sawtooth(
     ...     amplitude=100.0,
     ...     frequency=1 * u.Hz,
     ...     duration=10000 * u.ms
@@ -578,7 +579,7 @@ class SawtoothInput(Input):
 
     Sawtooth with positive bias:
 
-    >>> positive_saw = SawtoothInput(
+    >>> positive_saw = Sawtooth(
     ...     amplitude=5.0,
     ...     frequency=4 * u.Hz,
     ...     duration=500 * u.ms,
@@ -587,14 +588,14 @@ class SawtoothInput(Input):
 
     Modulated sawtooth:
 
-    >>> from braintools.input import SinusoidalInput
-    >>> saw = SawtoothInput(2.0, 5 * u.Hz, 1000 * u.ms)
-    >>> modulation = SinusoidalInput(0.5, 1 * u.Hz, 1000 * u.ms, bias=True)
+    >>> from braintools.input import Sinusoidal
+    >>> saw = Sawtooth(2.0, 5 * u.Hz, 1000 * u.ms)
+    >>> modulation = Sinusoidal(0.5, 1 * u.Hz, 1000 * u.ms, bias=True)
     >>> modulated = saw * modulation
 
     Windowed sawtooth stimulation:
 
-    >>> windowed_saw = SawtoothInput(
+    >>> windowed_saw = Sawtooth(
     ...     amplitude=8.0,
     ...     frequency=3 * u.Hz,
     ...     duration=2000 * u.ms,
@@ -604,7 +605,7 @@ class SawtoothInput(Input):
 
     Create staircase by clipping sawtooth:
 
-    >>> saw = SawtoothInput(10.0, 1 * u.Hz, 3000 * u.ms)
+    >>> saw = Sawtooth(10.0, 1 * u.Hz, 3000 * u.ms)
     >>> # Clip to create discrete levels
     >>> staircase = saw.apply(lambda x: u.math.round(x / 2) * 2)
 
@@ -618,9 +619,9 @@ class SawtoothInput(Input):
 
     See Also
     --------
-    TriangularInput : Triangular wave generator
-    RampInput : Single linear ramp
-    sawtooth_input : Functional API for sawtooth wave
+    Triangular : Triangular wave generator
+    Ramp : Single linear ramp
+    sawtooth : Functional API for sawtooth wave
     """
 
     def __init__(self,
@@ -641,7 +642,7 @@ class SawtoothInput(Input):
 
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the sawtooth wave using the functional API."""
-        return functional.sawtooth_input(
+        return functional.sawtooth(
             amplitude=self.amplitude,
             frequency=self.frequency,
             duration=self.duration,
@@ -651,7 +652,7 @@ class SawtoothInput(Input):
         )
 
 
-class ChirpInput(Input):
+class Chirp(Input):
     r"""Composable chirp (frequency sweep) signal generator.
 
     Creates a sinusoidal signal with time-varying frequency that sweeps from
@@ -716,7 +717,7 @@ class ChirpInput(Input):
 
     Linear frequency sweep:
 
-    >>> chirp = ChirpInput(
+    >>> chirp = Chirp(
     ...     amplitude=1.0,
     ...     f_start=1 * u.Hz,
     ...     f_end=50 * u.Hz,
@@ -727,7 +728,7 @@ class ChirpInput(Input):
 
     Logarithmic sweep for spectral analysis:
 
-    >>> log_chirp = ChirpInput(
+    >>> log_chirp = Chirp(
     ...     amplitude=2.0,
     ...     f_start=0.1 * u.Hz,
     ...     f_end=100 * u.Hz,
@@ -737,12 +738,12 @@ class ChirpInput(Input):
 
     Repeat chirp multiple times:
 
-    >>> chirp = ChirpInput(1.0, 1 * u.Hz, 10 * u.Hz, 500 * u.ms)
+    >>> chirp = Chirp(1.0, 1 * u.Hz, 10 * u.Hz, 500 * u.ms)
     >>> repeated = chirp.repeat(3)  # Repeat 3 times
 
     Reverse chirp (high to low frequency):
 
-    >>> reverse_chirp = ChirpInput(
+    >>> reverse_chirp = Chirp(
     ...     amplitude=3.0,
     ...     f_start=100 * u.Hz,
     ...     f_end=1 * u.Hz,
@@ -751,7 +752,7 @@ class ChirpInput(Input):
 
     Test resonance in theta-gamma range:
 
-    >>> resonance_test = ChirpInput(
+    >>> resonance_test = Chirp(
     ...     amplitude=1.0,
     ...     f_start=4 * u.Hz,   # Theta start
     ...     f_end=80 * u.Hz,    # Gamma end
@@ -761,7 +762,7 @@ class ChirpInput(Input):
 
     Windowed chirp for specific testing:
 
-    >>> windowed_chirp = ChirpInput(
+    >>> windowed_chirp = Chirp(
     ...     amplitude=2.0,
     ...     f_start=2 * u.Hz,
     ...     f_end=40 * u.Hz,
@@ -772,20 +773,20 @@ class ChirpInput(Input):
 
     Chirp with amplitude envelope:
 
-    >>> from braintools.input import RampInput
-    >>> chirp = ChirpInput(1.0, 5 * u.Hz, 50 * u.Hz, 1000 * u.ms)
-    >>> envelope = RampInput(0.1, 1.0, 1000 * u.ms)
+    >>> from braintools.input import Ramp
+    >>> chirp = Chirp(1.0, 5 * u.Hz, 50 * u.Hz, 1000 * u.ms)
+    >>> envelope = Ramp(0.1, 1.0, 1000 * u.ms)
     >>> ramped_chirp = chirp * envelope
 
     Multiple chirps with different ranges:
 
-    >>> low_chirp = ChirpInput(1.0, 0.5 * u.Hz, 5 * u.Hz, 2000 * u.ms)
-    >>> high_chirp = ChirpInput(0.5, 20 * u.Hz, 100 * u.Hz, 2000 * u.ms)
+    >>> low_chirp = Chirp(1.0, 0.5 * u.Hz, 5 * u.Hz, 2000 * u.ms)
+    >>> high_chirp = Chirp(0.5, 20 * u.Hz, 100 * u.Hz, 2000 * u.ms)
     >>> broadband = low_chirp + high_chirp
 
     Chirp with positive bias:
 
-    >>> positive_chirp = ChirpInput(
+    >>> positive_chirp = Chirp(
     ...     amplitude=5.0,
     ...     f_start=10 * u.Hz,
     ...     f_end=30 * u.Hz,
@@ -803,9 +804,9 @@ class ChirpInput(Input):
 
     See Also
     --------
-    SinusoidalInput : Fixed frequency sinusoid
-    NoisySinusoidalInput : Sinusoid with noise
-    chirp_input : Functional API for chirp signal
+    Sinusoidal : Fixed frequency sinusoid
+    NoisySinusoidal : Sinusoid with noise
+    chirp : Functional API for chirp signal
     """
 
     def __init__(self,
@@ -831,7 +832,7 @@ class ChirpInput(Input):
 
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the chirp signal using the functional API."""
-        return functional.chirp_input(
+        return functional.chirp(
             amplitude=self.amplitude,
             f_start=self.f_start,
             f_end=self.f_end,
@@ -843,7 +844,7 @@ class ChirpInput(Input):
         )
 
 
-class NoisySinusoidalInput(Input):
+class NoisySinusoidal(Input):
     r"""Composable sinusoidal input with additive noise.
 
     Creates a sinusoidal waveform with added Gaussian white noise. This class
@@ -899,7 +900,7 @@ class NoisySinusoidalInput(Input):
 
     Sinusoid with small noise:
 
-    >>> noisy = NoisySinusoidalInput(
+    >>> noisy = NoisySinusoidal(
     ...     amplitude=10.0,
     ...     frequency=10 * u.Hz,
     ...     noise_amplitude=1.0,  # 10% noise
@@ -909,7 +910,7 @@ class NoisySinusoidalInput(Input):
 
     High noise for stochastic resonance:
 
-    >>> stochastic = NoisySinusoidalInput(
+    >>> stochastic = NoisySinusoidal(
     ...     amplitude=5.0,
     ...     frequency=5 * u.Hz,
     ...     noise_amplitude=10.0,  # Noise > signal
@@ -918,12 +919,12 @@ class NoisySinusoidalInput(Input):
 
     Filter noisy signal:
 
-    >>> noisy = NoisySinusoidalInput(1.0, 20 * u.Hz, 0.5, 500 * u.ms)
+    >>> noisy = NoisySinusoidal(1.0, 20 * u.Hz, 0.5, 500 * u.ms)
     >>> filtered = noisy.smooth(tau=10 * u.ms)  # Low-pass filter
 
     Theta rhythm with synaptic noise:
 
-    >>> theta_noisy = NoisySinusoidalInput(
+    >>> theta_noisy = NoisySinusoidal(
     ...     amplitude=2.0,
     ...     frequency=8 * u.Hz,  # Theta frequency
     ...     noise_amplitude=0.5,
@@ -932,13 +933,13 @@ class NoisySinusoidalInput(Input):
 
     Combine multiple noisy oscillations:
 
-    >>> theta = NoisySinusoidalInput(1.0, 8 * u.Hz, 0.2, 1000 * u.ms, seed=42)
-    >>> gamma = NoisySinusoidalInput(0.5, 40 * u.Hz, 0.1, 1000 * u.ms, seed=43)
+    >>> theta = NoisySinusoidal(1.0, 8 * u.Hz, 0.2, 1000 * u.ms, seed=42)
+    >>> gamma = NoisySinusoidal(0.5, 40 * u.Hz, 0.1, 1000 * u.ms, seed=43)
     >>> cross_frequency = theta + gamma
 
     Windowed noisy stimulation:
 
-    >>> windowed_noisy = NoisySinusoidalInput(
+    >>> windowed_noisy = NoisySinusoidal(
     ...     amplitude=8.0,
     ...     frequency=20 * u.Hz,
     ...     noise_amplitude=2.0,
@@ -949,7 +950,7 @@ class NoisySinusoidalInput(Input):
 
     Reproducible noisy signal:
 
-    >>> reproducible = NoisySinusoidalInput(
+    >>> reproducible = NoisySinusoidal(
     ...     amplitude=15.0,
     ...     frequency=40 * u.Hz,
     ...     noise_amplitude=3.0,
@@ -960,7 +961,7 @@ class NoisySinusoidalInput(Input):
     Test signal detection in noise:
 
     >>> # Weak signal in strong noise
-    >>> weak_signal = NoisySinusoidalInput(
+    >>> weak_signal = NoisySinusoidal(
     ...     amplitude=1.0,
     ...     frequency=10 * u.Hz,
     ...     noise_amplitude=5.0,  # 5x noise
@@ -970,7 +971,7 @@ class NoisySinusoidalInput(Input):
     Modulate noisy sinusoid:
 
     >>> from braintools.input import GaussianPulse
-    >>> noisy = NoisySinusoidalInput(2.0, 30 * u.Hz, 0.5, 1000 * u.ms)
+    >>> noisy = NoisySinusoidal(2.0, 30 * u.Hz, 0.5, 1000 * u.ms)
     >>> envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
     >>> burst = noisy * envelope
 
@@ -984,7 +985,7 @@ class NoisySinusoidalInput(Input):
 
     See Also
     --------
-    SinusoidalInput : Clean sinusoidal wave
+    Sinusoidal : Clean sinusoidal wave
     WienerProcess : Pure noise process
     noisy_sinusoidal : Functional API for noisy sinusoid
     """
@@ -1018,3 +1019,12 @@ class NoisySinusoidalInput(Input):
             t_end=self.t_end,
             seed=self.seed
         )
+
+SinusoidalInput = create_deprecated_class(Sinusoidal, 'SinusoidalInput', 'Sinusoidal')
+SquareInput = create_deprecated_class(Square, 'SquareInput', 'Square')
+TriangularInput = create_deprecated_class(Triangular, 'TriangularInput', 'Triangular')
+SawtoothInput = create_deprecated_class(Sawtooth, 'SawtoothInput', 'Sawtooth')
+ChirpInput = create_deprecated_class(Chirp, 'ChirpInput', 'Chirp')
+NoisySinusoidalInput = create_deprecated_class(NoisySinusoidal, 'NoisySinusoidalInput', 'NoisySinusoidal')
+
+__all__.extend(['SinusoidalInput', 'SquareInput', 'TriangularInput', 'SawtoothInput', 'ChirpInput', 'NoisySinusoidalInput'])

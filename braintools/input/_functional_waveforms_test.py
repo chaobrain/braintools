@@ -24,7 +24,7 @@ import brainunit as u
 import matplotlib.pyplot as plt
 import numpy as np
 
-from braintools.input import (sinusoidal_input, square_input, triangular_input, sawtooth_input, chirp_input, noisy_sinusoidal)
+from braintools.input import (sinusoidal, square, triangular, sawtooth, chirp, noisy_sinusoidal)
 
 block = False
 
@@ -42,20 +42,20 @@ def show(current, duration, title=''):
 
 
 class TestWaveformInputs(TestCase):
-    def test_sinusoidal_input(self):
+    def test_sinusoidal(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 2000 * u.ms
-            current = sinusoidal_input(amplitude=1. * u.pA,
+            current = sinusoidal(amplitude=1. * u.pA,
                                        frequency=2.0 * u.Hz,
                                        duration=duration,
                                        t_start=100. * u.ms)
             show(current, duration, 'Sinusoidal Input')
             self.assertEqual(current.shape[0], 20000)
 
-    def test_sinusoidal_input_with_bias(self):
+    def test_sinusoidal_with_bias(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1000 * u.ms
-            current = sinusoidal_input(amplitude=0.5 * u.pA,
+            current = sinusoidal(amplitude=0.5 * u.pA,
                                        frequency=5.0 * u.Hz,
                                        duration=duration,
                                        bias=True)
@@ -64,11 +64,11 @@ class TestWaveformInputs(TestCase):
             self.assertTrue(np.all(u.get_magnitude(current) >= -0.01))  # Allow small numerical errors
             self.assertEqual(current.shape[0], 10000)
 
-    def test_sinusoidal_input_from_docstring(self):
-        """Test examples from sinusoidal_input docstring."""
+    def test_sinusoidal_from_docstring(self):
+        """Test examples from sinusoidal docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Simple 10 Hz sinusoid
-            current = sinusoidal_input(
+            current = sinusoidal(
                 amplitude=5 * u.pA,
                 frequency=10 * u.Hz,
                 duration=1000 * u.ms
@@ -77,7 +77,7 @@ class TestWaveformInputs(TestCase):
             self.assertEqual(u.get_unit(current), u.pA)
 
             # High-frequency stimulation
-            current = sinusoidal_input(
+            current = sinusoidal(
                 amplitude=2 * u.nA,
                 frequency=100 * u.Hz,
                 duration=500 * u.ms
@@ -85,7 +85,7 @@ class TestWaveformInputs(TestCase):
             self.assertEqual(current.shape[0], 5000)
 
             # Sinusoid with positive bias
-            current = sinusoidal_input(
+            current = sinusoidal(
                 amplitude=10 * u.pA,
                 frequency=5 * u.Hz,
                 duration=2000 * u.ms,
@@ -95,7 +95,7 @@ class TestWaveformInputs(TestCase):
             self.assertTrue(np.all(u.get_magnitude(current) >= -0.01))
 
             # Windowed sinusoid
-            current = sinusoidal_input(
+            current = sinusoidal(
                 amplitude=8 * u.pA,
                 frequency=20 * u.Hz,
                 duration=1000 * u.ms,
@@ -108,37 +108,37 @@ class TestWaveformInputs(TestCase):
             self.assertAlmostEqual(u.get_magnitude(current[1999]), 0.0, places=5)
             self.assertAlmostEqual(u.get_magnitude(current[8000]), 0.0, places=5)
 
-    def test_square_input(self):
+    def test_square(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 2000 * u.ms
-            current = square_input(amplitude=1. * u.pA,
+            current = square(amplitude=1. * u.pA,
                                    frequency=2.0 * u.Hz,
                                    duration=duration,
                                    t_start=100 * u.ms)
             show(current, duration, 'Square Input')
             self.assertEqual(current.shape[0], 20000)
 
-    def test_square_input_with_bias(self):
+    def test_square_with_bias(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1000 * u.ms
-            current = square_input(amplitude=0.5 * u.pA, frequency=3.0 * u.Hz,
+            current = square(amplitude=0.5 * u.pA, frequency=3.0 * u.Hz,
                                    duration=duration, bias=True)
             show(current, duration, 'Square Input with Bias')
             self.assertEqual(current.shape[0], 10000)
 
-    def test_square_input_with_duty_cycle(self):
+    def test_square_with_duty_cycle(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1000 * u.ms
-            current = square_input(amplitude=1.0 * u.nA, frequency=2.0 * u.Hz,
+            current = square(amplitude=1.0 * u.nA, frequency=2.0 * u.Hz,
                                    duration=duration, duty_cycle=0.2)
             show(current, duration, 'Square Input with 20% Duty Cycle')
             self.assertEqual(current.shape[0], 10000)
 
-    def test_square_input_from_docstring(self):
-        """Test examples from square_input docstring."""
+    def test_square_from_docstring(self):
+        """Test examples from square docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Symmetric square wave at 2 Hz
-            current = square_input(
+            current = square(
                 amplitude=10 * u.pA,
                 frequency=2 * u.Hz,
                 duration=2000 * u.ms
@@ -146,7 +146,7 @@ class TestWaveformInputs(TestCase):
             self.assertEqual(current.shape[0], 20000)
 
             # High-frequency pulse train with duty cycle
-            current = square_input(
+            current = square(
                 amplitude=5 * u.nA,
                 frequency=50 * u.Hz,
                 duration=500 * u.ms,
@@ -155,7 +155,7 @@ class TestWaveformInputs(TestCase):
             self.assertEqual(current.shape[0], 5000)
 
             # Square wave with positive bias
-            current = square_input(
+            current = square(
                 amplitude=8 * u.pA,
                 frequency=10 * u.Hz,
                 duration=1000 * u.ms,
@@ -163,28 +163,28 @@ class TestWaveformInputs(TestCase):
             )
             self.assertEqual(current.shape[0], 10000)
 
-    def test_triangular_input(self):
+    def test_triangular(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1500 * u.ms
-            current = triangular_input(amplitude=1.0 * u.pA, frequency=1.5 * u.Hz,
+            current = triangular(amplitude=1.0 * u.pA, frequency=1.5 * u.Hz,
                                        duration=duration)
             show(current, duration, 'Triangular Wave Input')
             self.assertEqual(current.shape[0], 15000)
 
-    def test_triangular_input_with_bias(self):
+    def test_triangular_with_bias(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1000 * u.ms
-            current = triangular_input(amplitude=0.8 * u.pA, frequency=2.0 * u.Hz,
+            current = triangular(amplitude=0.8 * u.pA, frequency=2.0 * u.Hz,
                                        duration=duration, bias=True,
                                        t_start=50 * u.ms, t_end=950 * u.ms)
             show(current, duration, 'Triangular Wave with Bias')
             self.assertEqual(current.shape[0], 10000)
 
-    def test_triangular_input_from_docstring(self):
-        """Test examples from triangular_input docstring."""
+    def test_triangular_from_docstring(self):
+        """Test examples from triangular docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Simple triangular wave at 5 Hz
-            current = triangular_input(
+            current = triangular(
                 amplitude=10 * u.pA,
                 frequency=5 * u.Hz,
                 duration=1000 * u.ms
@@ -192,35 +192,35 @@ class TestWaveformInputs(TestCase):
             self.assertEqual(current.shape[0], 10000)
 
             # Slow triangular ramp
-            current = triangular_input(
+            current = triangular(
                 amplitude=100 * u.pA,
                 frequency=0.5 * u.Hz,
                 duration=4000 * u.ms
             )
             self.assertEqual(current.shape[0], 40000)
 
-    def test_sawtooth_input(self):
+    def test_sawtooth(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1500 * u.ms
-            current = sawtooth_input(amplitude=1.0 * u.pA, frequency=1.0 * u.Hz,
+            current = sawtooth(amplitude=1.0 * u.pA, frequency=1.0 * u.Hz,
                                      duration=duration)
             show(current, duration, 'Sawtooth Wave Input')
             self.assertEqual(current.shape[0], 15000)
 
-    def test_sawtooth_input_with_time_window(self):
+    def test_sawtooth_with_time_window(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 2000 * u.ms
-            current = sawtooth_input(amplitude=0.7 * u.pA, frequency=2.5 * u.Hz,
+            current = sawtooth(amplitude=0.7 * u.pA, frequency=2.5 * u.Hz,
                                      duration=duration,
                                      t_start=200 * u.ms, t_end=1800 * u.ms)
             show(current, duration, 'Sawtooth Wave with Time Window')
             self.assertEqual(current.shape[0], 20000)
 
-    def test_sawtooth_input_from_docstring(self):
-        """Test examples from sawtooth_input docstring."""
+    def test_sawtooth_from_docstring(self):
+        """Test examples from sawtooth docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Simple sawtooth at 2 Hz
-            current = sawtooth_input(
+            current = sawtooth(
                 amplitude=10 * u.pA,
                 frequency=2 * u.Hz,
                 duration=2000 * u.ms
@@ -228,7 +228,7 @@ class TestWaveformInputs(TestCase):
             self.assertEqual(current.shape[0], 20000)
 
             # Sawtooth with positive bias
-            current = sawtooth_input(
+            current = sawtooth(
                 amplitude=5 * u.nA,
                 frequency=10 * u.Hz,
                 duration=500 * u.ms,
@@ -236,10 +236,10 @@ class TestWaveformInputs(TestCase):
             )
             self.assertEqual(current.shape[0], 5000)
 
-    def test_chirp_input_linear(self):
+    def test_chirp_linear(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 2000 * u.ms
-            current = chirp_input(amplitude=1.0 * u.pA,
+            current = chirp(amplitude=1.0 * u.pA,
                                   f_start=0.5 * u.Hz,
                                   f_end=5.0 * u.Hz,
                                   duration=duration,
@@ -247,10 +247,10 @@ class TestWaveformInputs(TestCase):
             show(current, duration, 'Linear Chirp Input (0.5 Hz to 5 Hz)')
             self.assertEqual(current.shape[0], 20000)
 
-    def test_chirp_input_logarithmic(self):
+    def test_chirp_logarithmic(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 2000 * u.ms
-            current = chirp_input(amplitude=0.8 * u.pA,
+            current = chirp(amplitude=0.8 * u.pA,
                                   f_start=1.0 * u.Hz,
                                   f_end=10.0 * u.Hz,
                                   duration=duration,
@@ -258,10 +258,10 @@ class TestWaveformInputs(TestCase):
             show(current, duration, 'Logarithmic Chirp Input (1 Hz to 10 Hz)')
             self.assertEqual(current.shape[0], 20000)
 
-    def test_chirp_input_with_bias(self):
+    def test_chirp_with_bias(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 1500 * u.ms
-            current = chirp_input(amplitude=0.5 * u.pA,
+            current = chirp(amplitude=0.5 * u.pA,
                                   f_start=2.0 * u.Hz,
                                   f_end=8.0 * u.Hz,
                                   duration=duration,
@@ -271,11 +271,11 @@ class TestWaveformInputs(TestCase):
             show(current, duration, 'Chirp with Bias and Time Window')
             self.assertEqual(current.shape[0], 15000)
 
-    def test_chirp_input_from_docstring(self):
-        """Test examples from chirp_input docstring."""
+    def test_chirp_from_docstring(self):
+        """Test examples from chirp docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Linear frequency sweep
-            current = chirp_input(
+            current = chirp(
                 amplitude=5 * u.pA,
                 f_start=1 * u.Hz,
                 f_end=50 * u.Hz,
@@ -285,7 +285,7 @@ class TestWaveformInputs(TestCase):
             self.assertEqual(current.shape[0], 20000)
 
             # Logarithmic sweep
-            current = chirp_input(
+            current = chirp(
                 amplitude=2 * u.nA,
                 f_start=0.1 * u.Hz,
                 f_end=100 * u.Hz,
@@ -295,7 +295,7 @@ class TestWaveformInputs(TestCase):
             self.assertEqual(current.shape[0], 50000)
 
             # Reverse chirp (high to low)
-            current = chirp_input(
+            current = chirp(
                 amplitude=3 * u.nA,
                 f_start=100 * u.Hz,
                 f_end=1 * u.Hz,

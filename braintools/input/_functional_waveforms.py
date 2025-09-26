@@ -24,18 +24,19 @@ from typing import Optional
 import brainstate
 import brainunit as u
 import numpy as np
+from ._deprecation import create_deprecated_function
 
 __all__ = [
-    'sinusoidal_input',
-    'square_input',
-    'triangular_input',
-    'sawtooth_input',
-    'chirp_input',
+    'sinusoidal',
+    'square',
+    'triangular',
+    'sawtooth',
+    'chirp',
     'noisy_sinusoidal',
 ]
 
 
-def sinusoidal_input(
+def sinusoidal(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
     duration: brainstate.typing.ArrayLike,
@@ -84,21 +85,21 @@ def sinusoidal_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple 10 Hz sinusoid
-    >>> current = sinusoidal_input(
+    >>> current = sinusoidal(
     ...     amplitude=5 * u.pA,
     ...     frequency=10 * u.Hz,
     ...     duration=1000 * u.ms
     ... )
     
     # High-frequency stimulation
-    >>> current = sinusoidal_input(
+    >>> current = sinusoidal(
     ...     amplitude=2 * u.nA,
     ...     frequency=100 * u.Hz,
     ...     duration=500 * u.ms
     ... )
     
     # Sinusoid with positive bias (always >= 0)
-    >>> current = sinusoidal_input(
+    >>> current = sinusoidal(
     ...     amplitude=10 * u.pA,
     ...     frequency=5 * u.Hz,
     ...     duration=2000 * u.ms,
@@ -106,7 +107,7 @@ def sinusoidal_input(
     ... )
     
     # Windowed sinusoid
-    >>> current = sinusoidal_input(
+    >>> current = sinusoidal(
     ...     amplitude=8 * u.pA,
     ...     frequency=20 * u.Hz,
     ...     duration=1000 * u.ms,
@@ -115,14 +116,14 @@ def sinusoidal_input(
     ... )
     
     # Testing resonance at theta frequency
-    >>> current = sinusoidal_input(
+    >>> current = sinusoidal(
     ...     amplitude=1 * u.nA,
     ...     frequency=8 * u.Hz,  # Theta band
     ...     duration=5000 * u.ms
     ... )
     
     # Subthreshold membrane oscillations
-    >>> current = sinusoidal_input(
+    >>> current = sinusoidal(
     ...     amplitude=0.1 * u.nA,
     ...     frequency=40 * u.Hz,  # Gamma band
     ...     duration=200 * u.ms,
@@ -204,7 +205,7 @@ def _square_wave(t, duty=0.5):
     return y
 
 
-def square_input(
+def square(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
     duration: brainstate.typing.ArrayLike,
@@ -259,14 +260,14 @@ def square_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Symmetric square wave at 2 Hz
-    >>> current = square_input(
+    >>> current = square(
     ...     amplitude=10 * u.pA,
     ...     frequency=2 * u.Hz,
     ...     duration=2000 * u.ms
     ... )
     
     # High-frequency pulse train
-    >>> current = square_input(
+    >>> current = square(
     ...     amplitude=5 * u.nA,
     ...     frequency=50 * u.Hz,
     ...     duration=500 * u.ms,
@@ -274,7 +275,7 @@ def square_input(
     ... )
     
     # Square wave with positive bias
-    >>> current = square_input(
+    >>> current = square(
     ...     amplitude=8 * u.pA,
     ...     frequency=10 * u.Hz,
     ...     duration=1000 * u.ms,
@@ -282,7 +283,7 @@ def square_input(
     ... )
     
     # Windowed stimulation
-    >>> current = square_input(
+    >>> current = square(
     ...     amplitude=3 * u.nA,
     ...     frequency=5 * u.Hz,
     ...     duration=2000 * u.ms,
@@ -291,7 +292,7 @@ def square_input(
     ... )
     
     # Asymmetric pulse train (10% duty cycle)
-    >>> current = square_input(
+    >>> current = square(
     ...     amplitude=20 * u.pA,
     ...     frequency=1 * u.Hz,
     ...     duration=5000 * u.ms,
@@ -299,7 +300,7 @@ def square_input(
     ... )
     
     # Clock signal for synchronization
-    >>> current = square_input(
+    >>> current = square(
     ...     amplitude=1 * u.nA,
     ...     frequency=40 * u.Hz,
     ...     duration=250 * u.ms,
@@ -368,7 +369,7 @@ def square_input(
     return u.maybe_decimal(currents * c_unit)
 
 
-def triangular_input(
+def triangular(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
     duration: brainstate.typing.ArrayLike,
@@ -417,21 +418,21 @@ def triangular_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple triangular wave at 5 Hz
-    >>> current = triangular_input(
+    >>> current = triangular(
     ...     amplitude=10 * u.pA,
     ...     frequency=5 * u.Hz,
     ...     duration=1000 * u.ms
     ... )
     
     # Slow triangular ramp for I-V curves
-    >>> current = triangular_input(
+    >>> current = triangular(
     ...     amplitude=100 * u.pA,
     ...     frequency=0.5 * u.Hz,  # 2 second period
     ...     duration=4000 * u.ms
     ... )
     
     # Triangular wave with positive bias
-    >>> current = triangular_input(
+    >>> current = triangular(
     ...     amplitude=5 * u.nA,
     ...     frequency=10 * u.Hz,
     ...     duration=500 * u.ms,
@@ -439,7 +440,7 @@ def triangular_input(
     ... )
     
     # Windowed triangular stimulation
-    >>> current = triangular_input(
+    >>> current = triangular(
     ...     amplitude=8 * u.pA,
     ...     frequency=2 * u.Hz,
     ...     duration=3000 * u.ms,
@@ -448,14 +449,14 @@ def triangular_input(
     ... )
     
     # High-frequency triangular wave
-    >>> current = triangular_input(
+    >>> current = triangular(
     ...     amplitude=2 * u.nA,
     ...     frequency=50 * u.Hz,
     ...     duration=200 * u.ms
     ... )
     
     # Testing adaptation with slow ramps
-    >>> current = triangular_input(
+    >>> current = triangular(
     ...     amplitude=15 * u.pA,
     ...     frequency=1 * u.Hz,
     ...     duration=5000 * u.ms
@@ -519,7 +520,7 @@ def triangular_input(
     return u.maybe_decimal(currents * c_unit)
 
 
-def sawtooth_input(
+def sawtooth(
     amplitude: brainstate.typing.ArrayLike,
     frequency: brainstate.typing.ArrayLike,
     duration: brainstate.typing.ArrayLike,
@@ -567,21 +568,21 @@ def sawtooth_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple sawtooth at 2 Hz
-    >>> current = sawtooth_input(
+    >>> current = sawtooth(
     ...     amplitude=10 * u.pA,
     ...     frequency=2 * u.Hz,
     ...     duration=2000 * u.ms
     ... )
     
     # Slow ramp for threshold detection
-    >>> current = sawtooth_input(
+    >>> current = sawtooth(
     ...     amplitude=50 * u.pA,
     ...     frequency=0.5 * u.Hz,  # 2 second ramp
     ...     duration=4000 * u.ms
     ... )
     
     # Sawtooth with positive bias
-    >>> current = sawtooth_input(
+    >>> current = sawtooth(
     ...     amplitude=5 * u.nA,
     ...     frequency=10 * u.Hz,
     ...     duration=500 * u.ms,
@@ -589,7 +590,7 @@ def sawtooth_input(
     ... )
     
     # Windowed sawtooth stimulation
-    >>> current = sawtooth_input(
+    >>> current = sawtooth(
     ...     amplitude=8 * u.pA,
     ...     frequency=5 * u.Hz,
     ...     duration=2000 * u.ms,
@@ -598,14 +599,14 @@ def sawtooth_input(
     ... )
     
     # Fast sawtooth for reset testing
-    >>> current = sawtooth_input(
+    >>> current = sawtooth(
     ...     amplitude=20 * u.pA,
     ...     frequency=20 * u.Hz,
     ...     duration=250 * u.ms
     ... )
     
     # Repeated ramp protocol
-    >>> current = sawtooth_input(
+    >>> current = sawtooth(
     ...     amplitude=100 * u.pA,
     ...     frequency=1 * u.Hz,
     ...     duration=10000 * u.ms
@@ -669,7 +670,7 @@ def sawtooth_input(
     return u.maybe_decimal(currents * c_unit)
 
 
-def chirp_input(
+def chirp(
     amplitude: brainstate.typing.ArrayLike,
     f_start: brainstate.typing.ArrayLike,
     f_end: brainstate.typing.ArrayLike,
@@ -727,7 +728,7 @@ def chirp_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Linear frequency sweep from 1 to 50 Hz
-    >>> current = chirp_input(
+    >>> current = chirp(
     ...     amplitude=5 * u.pA,
     ...     f_start=1 * u.Hz,
     ...     f_end=50 * u.Hz,
@@ -736,7 +737,7 @@ def chirp_input(
     ... )
     
     # Logarithmic sweep for spectral analysis
-    >>> current = chirp_input(
+    >>> current = chirp(
     ...     amplitude=2 * u.nA,
     ...     f_start=0.1 * u.Hz,
     ...     f_end=100 * u.Hz,
@@ -745,7 +746,7 @@ def chirp_input(
     ... )
     
     # Chirp with positive bias
-    >>> current = chirp_input(
+    >>> current = chirp(
     ...     amplitude=10 * u.pA,
     ...     f_start=5 * u.Hz,
     ...     f_end=20 * u.Hz,
@@ -754,7 +755,7 @@ def chirp_input(
     ... )
     
     # Windowed chirp for specific testing
-    >>> current = chirp_input(
+    >>> current = chirp(
     ...     amplitude=8 * u.pA,
     ...     f_start=2 * u.Hz,
     ...     f_end=40 * u.Hz,
@@ -764,7 +765,7 @@ def chirp_input(
     ... )
     
     # Reverse chirp (high to low frequency)
-    >>> current = chirp_input(
+    >>> current = chirp(
     ...     amplitude=3 * u.nA,
     ...     f_start=100 * u.Hz,
     ...     f_end=1 * u.Hz,
@@ -772,7 +773,7 @@ def chirp_input(
     ... )
     
     # Testing resonance in theta-gamma range
-    >>> current = chirp_input(
+    >>> current = chirp(
     ...     amplitude=1 * u.nA,
     ...     f_start=4 * u.Hz,   # Theta start
     ...     f_end=80 * u.Hz,    # Gamma end
@@ -1025,3 +1026,11 @@ def noisy_sinusoidal(
     currents[start_i:end_i] = noisy_signal
     
     return u.maybe_decimal(currents * c_unit)
+
+sinusoidal_input = create_deprecated_function(sinusoidal, 'sinusoidal_input', 'sinusoidal')
+square_input = create_deprecated_function(square, 'square_input', 'square')
+triangular_input = create_deprecated_function(triangular, 'triangular_input', 'triangular')
+sawtooth_input = create_deprecated_function(sawtooth, 'sawtooth_input', 'sawtooth')
+chirp_input = create_deprecated_function(chirp, 'chirp_input', 'chirp')
+
+__all__.extend(['sinusoidal', 'square', 'triangular', 'sawtooth', 'chirp'])

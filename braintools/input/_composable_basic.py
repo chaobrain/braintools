@@ -30,17 +30,18 @@ import brainunit as u
 import numpy as np
 
 from ._composable_base import Input
-from ._functional_basic import section_input, constant_input, step_input, ramp_input
+from ._functional_basic import section, constant, step, ramp
+from ._deprecation import create_deprecated_class
 
 __all__ = [
-    'SectionInput',
-    'ConstantInput',
-    'StepInput',
-    'RampInput',
+    'Section',
+    'Constant',
+    'Step',
+    'Ramp',
 ]
 
 
-class SectionInput(Input):
+class Section(Input):
     """Generate input current with different sections.
     
     A section input consists of different constant values maintained for
@@ -72,12 +73,12 @@ class SectionInput(Input):
     
     See Also
     --------
-    ConstantInput : Similar but with (value, duration) pairs.
-    StepInput : Creates steps at specific time points.
+    Constant : Similar but with (value, duration) pairs.
+    Step : Creates steps at specific time points.
     
     Notes
     -----
-    The SectionInput class uses the functional API internally to generate
+    The Section class uses the functional API internally to generate
     the actual current arrays. It provides a composable interface that
     allows combining with other inputs using operators.
     
@@ -85,7 +86,7 @@ class SectionInput(Input):
     --------
     Simple three-phase protocol:
     
-    >>> section = SectionInput(
+    >>> section = Section(
     ...     values=[0, 1, 0] * u.pA,
     ...     durations=[100, 300, 100] * u.ms
     ... )
@@ -94,7 +95,7 @@ class SectionInput(Input):
     Multi-channel input:
     
     >>> values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
-    >>> section = SectionInput(
+    >>> section = Section(
     ...     values=values,
     ...     durations=[50, 100, 50] * u.ms
     ... )
@@ -106,14 +107,14 @@ class SectionInput(Input):
     >>> noisy_section = section + WienerProcess(500 * u.ms, sigma=0.1)
     
     >>> # Modulate with sinusoid
-    >>> from braintools.input import SinusoidalInput
-    >>> sine = SinusoidalInput(0.2, 10 * u.Hz, 500 * u.ms)
+    >>> from braintools.input import Sinusoidal
+    >>> sine = Sinusoidal(0.2, 10 * u.Hz, 500 * u.ms)
     >>> modulated = section * (1 + sine)
     
     Complex protocol with smooth transitions:
     
     >>> # Create step protocol and smooth it
-    >>> protocol = SectionInput(
+    >>> protocol = Section(
     ...     values=[0, 0.5, 1.0, 1.5, 1.0, 0.5, 0],
     ...     durations=[50, 30, 100, 150, 100, 30, 50]
     ... )
@@ -121,9 +122,9 @@ class SectionInput(Input):
     
     Sequential composition:
     
-    >>> baseline = SectionInput([0], [200])
-    >>> stim = SectionInput([0.5, 1.0, 0.5], [50, 100, 50])
-    >>> recovery = SectionInput([0], [200])
+    >>> baseline = Section([0], [200])
+    >>> stim = Section([0.5, 1.0, 0.5], [50, 100, 50])
+    >>> recovery = Section([0], [200])
     >>> full_protocol = baseline & stim & recovery
     """
 
@@ -155,14 +156,14 @@ class SectionInput(Input):
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the section input array."""
         # Use the functional API
-        return section_input(self.values, self.durations, return_length=False)
+        return section(self.values, self.durations, return_length=False)
 
 
-class ConstantInput(Input):
+class Constant(Input):
     """Generate constant input with specified durations.
     
     Creates a piecewise constant input where each piece has a specific
-    value and duration. This is similar to SectionInput but uses
+    value and duration. This is similar to Section but uses
     (value, duration) pairs for convenience.
     
     Parameters
@@ -180,12 +181,12 @@ class ConstantInput(Input):
     
     See Also
     --------
-    SectionInput : Similar but with separate values and durations lists.
-    StepInput : Creates steps at specific time points.
+    Section : Similar but with separate values and durations lists.
+    Step : Creates steps at specific time points.
     
     Notes
     -----
-    ConstantInput internally uses the functional constant_input API.
+    Constant internally uses the functional constant API.
     The composable interface allows for easy combination with other
     inputs and transformations.
     
@@ -193,7 +194,7 @@ class ConstantInput(Input):
     --------
     Simple two-phase protocol:
     
-    >>> const = ConstantInput([
+    >>> const = Constant([
     ...     (0 * u.pA, 100 * u.ms),
     ...     (10 * u.pA, 200 * u.ms)
     ... ])
@@ -202,7 +203,7 @@ class ConstantInput(Input):
     Multi-step current injection:
     
     >>> # Incrementally increasing steps
-    >>> steps = ConstantInput([
+    >>> steps = Constant([
     ...     (0 * u.nA, 50 * u.ms),
     ...     (0.5 * u.nA, 50 * u.ms),
     ...     (1.0 * u.nA, 50 * u.ms),
@@ -213,7 +214,7 @@ class ConstantInput(Input):
     Smooth transitions between levels:
     
     >>> # Create sharp steps and smooth them
-    >>> const = ConstantInput([
+    >>> const = Constant([
     ...     (0, 100),
     ...     (1, 100),
     ...     (0.5, 100),
@@ -223,15 +224,15 @@ class ConstantInput(Input):
     
     Combine with oscillations:
     
-    >>> from braintools.input import SinusoidalInput
-    >>> baseline = ConstantInput([(0.5, 500)])
-    >>> oscillation = SinusoidalInput(0.2, 5 * u.Hz, 500)
+    >>> from braintools.input import Sinusoidal
+    >>> baseline = Constant([(0.5, 500)])
+    >>> oscillation = Sinusoidal(0.2, 5 * u.Hz, 500)
     >>> combined = baseline + oscillation
     
     Create complex protocols:
     
     >>> # Paired-pulse protocol
-    >>> protocol = ConstantInput([
+    >>> protocol = Constant([
     ...     (0 * u.pA, 100 * u.ms),    # baseline
     ...     (5 * u.pA, 20 * u.ms),     # first pulse
     ...     (0 * u.pA, 50 * u.ms),     # inter-pulse interval
@@ -271,11 +272,11 @@ class ConstantInput(Input):
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the constant input array."""
         # Use the functional API - it returns (current, duration) tuple
-        current, _ = constant_input(self.I_and_duration)
+        current, _ = constant(self.I_and_duration)
         return current
 
 
-class StepInput(Input):
+class Step(Input):
     """Generate step function input with multiple levels.
     
     Creates a step function where the input jumps to specified amplitude
@@ -304,21 +305,21 @@ class StepInput(Input):
     
     See Also
     --------
-    SectionInput : For specifying durations instead of time points.
-    ConstantInput : For piecewise constant inputs with durations.
-    RampInput : For linearly changing inputs.
+    Section : For specifying durations instead of time points.
+    Constant : For piecewise constant inputs with durations.
+    Ramp : For linearly changing inputs.
     
     Notes
     -----
     If step_times are not sorted, they will be automatically sorted along
-    with their corresponding amplitudes. The functional step_input API is
+    with their corresponding amplitudes. The functional step API is
     used internally for array generation.
     
     Examples
     --------
     Simple three-level step function:
     
-    >>> steps = StepInput(
+    >>> steps = Step(
     ...     amplitudes=[0, 10, 5] * u.pA,
     ...     step_times=[0, 50, 150] * u.ms,
     ...     duration=200 * u.ms
@@ -330,11 +331,11 @@ class StepInput(Input):
     >>> # Incrementally increasing current steps
     >>> amplitudes = np.arange(0, 101, 10) * u.pA
     >>> times = np.arange(0, 1100, 100) * u.ms
-    >>> staircase = StepInput(amplitudes, times, 1200 * u.ms)
+    >>> staircase = Step(amplitudes, times, 1200 * u.ms)
     
     Multiple pulses with return to baseline:
     
-    >>> pulses = StepInput(
+    >>> pulses = Step(
     ...     amplitudes=[0, 5, 0, 10, 0, 15, 0] * u.pA,
     ...     step_times=[0, 20, 40, 60, 80, 100, 120] * u.ms,
     ...     duration=150 * u.ms
@@ -343,14 +344,14 @@ class StepInput(Input):
     Combine with noise for realistic stimulation:
     
     >>> from braintools.input import WienerProcess
-    >>> steps = StepInput([0, 1, 0.5], [0, 100, 200], 300 * u.ms)
+    >>> steps = Step([0, 1, 0.5], [0, 100, 200], 300 * u.ms)
     >>> noise = WienerProcess(300 * u.ms, sigma=0.1)
     >>> noisy_steps = steps + noise
     
     Create complex protocols with transformations:
     
     >>> # Smoothed steps for gradual transitions
-    >>> sharp_steps = StepInput(
+    >>> sharp_steps = Step(
     ...     [0, 1, 0.5, 1, 0],
     ...     [0, 50, 100, 150, 200],
     ...     250 * u.ms
@@ -363,7 +364,7 @@ class StepInput(Input):
     Unsorted times are automatically handled:
     
     >>> # Times will be sorted to [0, 50, 100]
-    >>> steps = StepInput(
+    >>> steps = Step(
     ...     amplitudes=[5, 0, 10] * u.pA,
     ...     step_times=[50, 0, 100] * u.ms,
     ...     duration=150 * u.ms
@@ -371,8 +372,8 @@ class StepInput(Input):
     
     Sequential composition:
     
-    >>> baseline = StepInput([0], [0], 100 * u.ms)
-    >>> test = StepInput([0, 1, 0], [0, 20, 80], 100 * u.ms)
+    >>> baseline = Step([0], [0], 100 * u.ms)
+    >>> test = Step([0, 1, 0], [0, 20, 80], 100 * u.ms)
     >>> protocol = baseline & test & baseline
     """
 
@@ -408,14 +409,14 @@ class StepInput(Input):
                 step_times_with_units.append(t * dt_unit)
         
         # Use the functional API
-        return step_input(
+        return step(
             self.amplitudes,
             step_times_with_units,
             self.duration
         )
 
 
-class RampInput(Input):
+class Ramp(Input):
     """Generate linearly changing (ramp) input current.
     
     Creates a linear ramp from a starting value to an ending value over
@@ -457,20 +458,20 @@ class RampInput(Input):
     
     See Also
     --------
-    StepInput : For instantaneous changes.
-    SectionInput : For piecewise constant inputs.
+    Step : For instantaneous changes.
+    Section : For piecewise constant inputs.
     
     Notes
     -----
     The ramp is linear between t_start and t_end. Before t_start, the
     output is c_start. After t_end, the output is c_end. This uses the
-    functional ramp_input API internally.
+    functional ramp API internally.
     
     Examples
     --------
     Simple linear ramp:
     
-    >>> ramp = RampInput(
+    >>> ramp = Ramp(
     ...     c_start=0 * u.pA,
     ...     c_end=10 * u.pA,
     ...     duration=100 * u.ms
@@ -479,7 +480,7 @@ class RampInput(Input):
     
     Decreasing ramp (from high to low):
     
-    >>> down_ramp = RampInput(
+    >>> down_ramp = Ramp(
     ...     c_start=10 * u.pA,
     ...     c_end=0 * u.pA,
     ...     duration=100 * u.ms
@@ -488,7 +489,7 @@ class RampInput(Input):
     Ramp with delay and early stop:
     
     >>> # Ramp starts at 50ms and ends at 150ms
-    >>> delayed_ramp = RampInput(
+    >>> delayed_ramp = Ramp(
     ...     c_start=0 * u.nA,
     ...     c_end=5 * u.nA,
     ...     duration=200 * u.ms,
@@ -498,20 +499,20 @@ class RampInput(Input):
     
     Combine with oscillations for amplitude modulation:
     
-    >>> from braintools.input import SinusoidalInput
-    >>> envelope = RampInput(0, 1, 500 * u.ms)
-    >>> carrier = SinusoidalInput(1.0, 20 * u.Hz, 500 * u.ms)
+    >>> from braintools.input import Sinusoidal
+    >>> envelope = Ramp(0, 1, 500 * u.ms)
+    >>> carrier = Sinusoidal(1.0, 20 * u.Hz, 500 * u.ms)
     >>> am_signal = envelope * carrier
     
     Create sawtooth wave by repeating:
     
-    >>> single_tooth = RampInput(0, 1, 50 * u.ms)
+    >>> single_tooth = Ramp(0, 1, 50 * u.ms)
     >>> sawtooth = single_tooth.repeat(10)  # 500ms total
     
     Complex protocols with transformations:
     
     >>> # Ramp with saturation
-    >>> ramp = RampInput(-2, 2, 400 * u.ms)
+    >>> ramp = Ramp(-2, 2, 400 * u.ms)
     >>> saturated = ramp.clip(-1, 1)
     >>> 
     >>> # Smoothed ramp (reduces sharp corners)
@@ -520,21 +521,21 @@ class RampInput(Input):
     I-V curve measurement protocol:
     
     >>> # Slow voltage ramp for I-V curves
-    >>> iv_ramp = RampInput(
+    >>> iv_ramp = Ramp(
     ...     c_start=-100 * u.pA,
     ...     c_end=100 * u.pA,
     ...     duration=1000 * u.ms
     ... )
     >>> # Add small oscillation to avoid hysteresis
-    >>> from braintools.input import SinusoidalInput
-    >>> wobble = SinusoidalInput(5 * u.pA, 100 * u.Hz, 1000 * u.ms)
+    >>> from braintools.input import Sinusoidal
+    >>> wobble = Sinusoidal(5 * u.pA, 100 * u.Hz, 1000 * u.ms)
     >>> iv_protocol = iv_ramp + wobble
     
     Sequential ramps for plasticity protocols:
     
-    >>> up_ramp = RampInput(0, 1, 100 * u.ms)
-    >>> plateau = ConstantInput([(1, 50)])
-    >>> down_ramp = RampInput(1, 0, 100 * u.ms)
+    >>> up_ramp = Ramp(0, 1, 100 * u.ms)
+    >>> plateau = Constant([(1, 50)])
+    >>> down_ramp = Ramp(1, 0, 100 * u.ms)
     >>> protocol = up_ramp & plateau & down_ramp
     """
 
@@ -570,10 +571,18 @@ class RampInput(Input):
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the ramp input array."""
         # Use the functional API
-        return ramp_input(
+        return ramp(
             self.c_start,
             self.c_end,
             self.duration,
             self.t_start,
             self.t_end
         )
+
+
+SectionInput = create_deprecated_class(Section, 'SectionInput', 'Section')
+ConstantInput = create_deprecated_class(Constant, 'ConstantInput', 'Constant')
+StepInput = create_deprecated_class(Step, 'StepInput', 'Step')
+RampInput = create_deprecated_class(Ramp, 'RampInput', 'Ramp')
+
+__all__.extend(['SectionInput', 'ConstantInput', 'StepInput', 'RampInput'])

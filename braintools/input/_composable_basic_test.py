@@ -24,18 +24,18 @@ import brainunit as u
 import numpy as np
 
 from braintools.input import (
-    SectionInput, ConstantInput, StepInput, RampInput,
-    WienerProcess, SinusoidalInput
+    Section, Constant, Step, Ramp,
+    WienerProcess, Sinusoidal
 )
 
 
-class TestSectionInput(TestCase):
-    """Test SectionInput class and its docstring examples."""
+class TestSection(TestCase):
+    """Test Section class and its docstring examples."""
 
     def test_simple_three_phase_protocol(self):
         """Test simple three-phase protocol from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            section = SectionInput(
+            section = Section(
                 values=[0, 1, 0] * u.pA,
                 durations=[100, 300, 100] * u.ms
             )
@@ -51,7 +51,7 @@ class TestSectionInput(TestCase):
         """Test multi-channel input from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             values = [np.zeros(3), np.ones(3) * 5, np.zeros(3)] * u.nA
-            section = SectionInput(
+            section = Section(
                 values=values,
                 durations=[50, 100, 50] * u.ms
             )
@@ -65,7 +65,7 @@ class TestSectionInput(TestCase):
     def test_combine_with_noise(self):
         """Test combining with noise from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            section = SectionInput(
+            section = Section(
                 values=[0, 1, 0],
                 durations=[100, 300, 100] * u.ms
             )
@@ -80,11 +80,11 @@ class TestSectionInput(TestCase):
     def test_modulation_with_sinusoid(self):
         """Test modulation with sinusoid from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            section = SectionInput(
+            section = Section(
                 values=[0, 1, 0],
                 durations=[100, 300, 100] * u.ms
             )
-            sine = SinusoidalInput(0.2, 10 * u.Hz, 500 * u.ms)
+            sine = Sinusoidal(0.2, 10 * u.Hz, 500 * u.ms)
             modulated = section * (1 + sine)
 
             array = modulated()
@@ -93,7 +93,7 @@ class TestSectionInput(TestCase):
     def test_smooth_protocol(self):
         """Test smooth protocol from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            protocol = SectionInput(
+            protocol = Section(
                 values=[0, 0.5, 1.0, 1.5, 1.0, 0.5, 0],
                 durations=[50, 30, 100, 150, 100, 30, 50] * u.ms
             )
@@ -109,9 +109,9 @@ class TestSectionInput(TestCase):
     def test_sequential_composition(self):
         """Test sequential composition from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            baseline = SectionInput([0], [200] * u.ms)
-            stim = SectionInput([0.5, 1.0, 0.5], [50, 100, 50] * u.ms)
-            recovery = SectionInput([0], [200] * u.ms)
+            baseline = Section([0], [200] * u.ms)
+            stim = Section([0.5, 1.0, 0.5], [50, 100, 50] * u.ms)
+            recovery = Section([0], [200] * u.ms)
             full_protocol = baseline & stim & recovery
 
             array = full_protocol()
@@ -120,19 +120,19 @@ class TestSectionInput(TestCase):
     def test_values_durations_mismatch(self):
         """Test that mismatched lengths raise ValueError."""
         with self.assertRaises(ValueError):
-            SectionInput(
+            Section(
                 values=[0, 1, 0],
                 durations=[100, 200]  # Wrong length
             )
 
 
-class TestConstantInput(TestCase):
-    """Test ConstantInput class and its docstring examples."""
+class TestConstant(TestCase):
+    """Test Constant class and its docstring examples."""
 
     def test_simple_two_phase_protocol(self):
         """Test simple two-phase protocol from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            const = ConstantInput([
+            const = Constant([
                 (0 * u.pA, 100 * u.ms),
                 (10 * u.pA, 200 * u.ms)
             ])
@@ -146,7 +146,7 @@ class TestConstantInput(TestCase):
     def test_multi_step_injection(self):
         """Test multi-step current injection from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            steps = ConstantInput([
+            steps = Constant([
                 (0 * u.nA, 50 * u.ms),
                 (0.5 * u.nA, 50 * u.ms),
                 (1.0 * u.nA, 50 * u.ms),
@@ -166,7 +166,7 @@ class TestConstantInput(TestCase):
     def test_smooth_transitions(self):
         """Test smooth transitions from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            const = ConstantInput([
+            const = Constant([
                 (0, 100 * u.ms),
                 (1, 100 * u.ms),
                 (0.5, 100 * u.ms),
@@ -184,8 +184,8 @@ class TestConstantInput(TestCase):
     def test_combine_with_oscillations(self):
         """Test combining with oscillations from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            baseline = ConstantInput([(0.5, 500 * u.ms)])
-            oscillation = SinusoidalInput(0.2, 5 * u.Hz, 500 * u.ms)
+            baseline = Constant([(0.5, 500 * u.ms)])
+            oscillation = Sinusoidal(0.2, 5 * u.Hz, 500 * u.ms)
             combined = baseline + oscillation
 
             array = combined()
@@ -197,7 +197,7 @@ class TestConstantInput(TestCase):
     def test_paired_pulse_protocol(self):
         """Test paired-pulse protocol from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            protocol = ConstantInput([
+            protocol = Constant([
                 (0 * u.pA, 100 * u.ms),  # baseline
                 (5 * u.pA, 20 * u.ms),  # first pulse
                 (0 * u.pA, 50 * u.ms),  # inter-pulse interval
@@ -218,7 +218,7 @@ class TestConstantInput(TestCase):
     def test_transformations(self):
         """Test transformations from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            const = ConstantInput([(1, 100 * u.ms), (2, 100 * u.ms)])
+            const = Constant([(1, 100 * u.ms), (2, 100 * u.ms)])
 
             # Scale amplitude
             scaled = const.scale(0.5)
@@ -236,13 +236,13 @@ class TestConstantInput(TestCase):
             self.assertEqual(array.shape[0], 6000)  # 200ms * 3
 
 
-class TestStepInput(TestCase):
-    """Test StepInput class and its docstring examples."""
+class TestStep(TestCase):
+    """Test Step class and its docstring examples."""
 
     def test_simple_three_level_step(self):
         """Test simple three-level step function from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            steps = StepInput(
+            steps = Step(
                 amplitudes=[0, 10, 5] * u.pA,
                 step_times=[0, 50, 150] * u.ms,
                 duration=200 * u.ms
@@ -260,7 +260,7 @@ class TestStepInput(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             amplitudes = np.arange(0, 101, 10) * u.pA
             times = np.arange(0, 1100, 100) * u.ms
-            staircase = StepInput(amplitudes, times, 1200 * u.ms)
+            staircase = Step(amplitudes, times, 1200 * u.ms)
 
             array = staircase()
             self.assertEqual(array.shape[0], 12000)
@@ -273,7 +273,7 @@ class TestStepInput(TestCase):
     def test_multiple_pulses(self):
         """Test multiple pulses with return to baseline from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            pulses = StepInput(
+            pulses = Step(
                 amplitudes=[0, 5, 0, 10, 0, 15, 0] * u.pA,
                 step_times=[0, 20, 40, 60, 80, 100, 120] * u.ms,
                 duration=150 * u.ms
@@ -290,7 +290,7 @@ class TestStepInput(TestCase):
     def test_combine_with_noise(self):
         """Test combining with noise from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            steps = StepInput([0, 1, 0.5], [0, 100, 200], 300 * u.ms)
+            steps = Step([0, 1, 0.5], [0, 100, 200], 300 * u.ms)
             noise = WienerProcess(300 * u.ms, sigma=0.1, seed=123)
             noisy_steps = steps + noise
 
@@ -304,7 +304,7 @@ class TestStepInput(TestCase):
     def test_smooth_steps(self):
         """Test smoothed steps for gradual transitions from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            sharp_steps = StepInput(
+            sharp_steps = Step(
                 [0, 1, 0.5, 1, 0],
                 [0, 50, 100, 150, 200],
                 250 * u.ms
@@ -324,7 +324,7 @@ class TestStepInput(TestCase):
     def test_clipped_steps(self):
         """Test clipping to physiological range from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            steps = StepInput(
+            steps = Step(
                 [0, 1, 0.5, 1, 0],
                 [0, 50, 100, 150, 200],
                 250 * u.ms
@@ -338,7 +338,7 @@ class TestStepInput(TestCase):
     def test_unsorted_times(self):
         """Test unsorted times are automatically handled from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            steps = StepInput(
+            steps = Step(
                 amplitudes=[5, 0, 10] * u.pA,
                 step_times=[50, 0, 100] * u.ms,
                 duration=150 * u.ms
@@ -355,21 +355,21 @@ class TestStepInput(TestCase):
     def test_sequential_composition(self):
         """Test sequential composition from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            baseline = StepInput([0], [0], 100 * u.ms)
-            test = StepInput([0, 1, 0], [0, 20, 80], 100 * u.ms)
+            baseline = Step([0], [0], 100 * u.ms)
+            test = Step([0, 1, 0], [0, 20, 80], 100 * u.ms)
             protocol = baseline & test & baseline
 
             array = protocol()
             self.assertEqual(array.shape[0], 3000)  # 100 + 100 + 100 = 300ms
 
 
-class TestRampInput(TestCase):
-    """Test RampInput class and its docstring examples."""
+class TestRamp(TestCase):
+    """Test Ramp class and its docstring examples."""
 
     def test_simple_linear_ramp(self):
         """Test simple linear ramp from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            ramp = RampInput(
+            ramp = Ramp(
                 c_start=0 * u.pA,
                 c_end=10 * u.pA,
                 duration=100 * u.ms
@@ -389,7 +389,7 @@ class TestRampInput(TestCase):
     def test_decreasing_ramp(self):
         """Test decreasing ramp from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            down_ramp = RampInput(
+            down_ramp = Ramp(
                 c_start=10 * u.pA,
                 c_end=0 * u.pA,
                 duration=100 * u.ms
@@ -404,7 +404,7 @@ class TestRampInput(TestCase):
     def test_ramp_with_delay(self):
         """Test ramp with delay and early stop from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            delayed_ramp = RampInput(
+            delayed_ramp = Ramp(
                 c_start=0 * u.nA,
                 c_end=5 * u.nA,
                 duration=200 * u.ms,
@@ -428,8 +428,8 @@ class TestRampInput(TestCase):
     def test_amplitude_modulation(self):
         """Test amplitude modulation from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            envelope = RampInput(0, 1, 500 * u.ms)
-            carrier = SinusoidalInput(1.0, 20 * u.Hz, 500 * u.ms)
+            envelope = Ramp(0, 1, 500 * u.ms)
+            carrier = Sinusoidal(1.0, 20 * u.Hz, 500 * u.ms)
             am_signal = envelope * carrier
 
             array = am_signal()
@@ -443,7 +443,7 @@ class TestRampInput(TestCase):
     def test_sawtooth_by_repeating(self):
         """Test creating sawtooth wave by repeating from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            single_tooth = RampInput(0, 1, 50 * u.ms)
+            single_tooth = Ramp(0, 1, 50 * u.ms)
             sawtooth = single_tooth.repeat(10)
 
             array = sawtooth()
@@ -461,7 +461,7 @@ class TestRampInput(TestCase):
     def test_ramp_with_saturation(self):
         """Test ramp with saturation from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            ramp = RampInput(-2, 2, 400 * u.ms)
+            ramp = Ramp(-2, 2, 400 * u.ms)
             saturated = ramp.clip(-1, 1)
 
             array = saturated()
@@ -474,7 +474,7 @@ class TestRampInput(TestCase):
     def test_smooth_ramp(self):
         """Test smoothed ramp from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            ramp = RampInput(-2, 2, 400 * u.ms)
+            ramp = Ramp(-2, 2, 400 * u.ms)
             smooth_ramp = ramp.smooth(tau=5 * u.ms)
 
             array = smooth_ramp()
@@ -483,12 +483,12 @@ class TestRampInput(TestCase):
     def test_iv_curve_protocol(self):
         """Test I-V curve measurement protocol from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            iv_ramp = RampInput(
+            iv_ramp = Ramp(
                 c_start=-100 * u.pA,
                 c_end=100 * u.pA,
                 duration=1000 * u.ms
             )
-            wobble = SinusoidalInput(5 * u.pA, 100 * u.Hz, 1000 * u.ms)
+            wobble = Sinusoidal(5 * u.pA, 100 * u.Hz, 1000 * u.ms)
             iv_protocol = iv_ramp + wobble
 
             array = iv_protocol()
@@ -503,9 +503,9 @@ class TestRampInput(TestCase):
     def test_sequential_ramps(self):
         """Test sequential ramps for plasticity protocols from docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            up_ramp = RampInput(0, 1, 100 * u.ms)
-            plateau = ConstantInput([(1, 50 * u.ms)])
-            down_ramp = RampInput(1, 0, 100 * u.ms)
+            up_ramp = Ramp(0, 1, 100 * u.ms)
+            plateau = Constant([(1, 50 * u.ms)])
+            down_ramp = Ramp(1, 0, 100 * u.ms)
             protocol = up_ramp & plateau & down_ramp
 
             array = protocol()
@@ -524,10 +524,10 @@ class TestIntegration(TestCase):
         """Test mixing different input types."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Create a complex protocol
-            baseline = ConstantInput([(0, 100 * u.ms)])
-            ramp_up = RampInput(0, 1, 100 * u.ms)
-            steps = StepInput([1, 0.5, 1, 0], [0, 50, 100, 150], 200 * u.ms)
-            sections = SectionInput([0.5, 0], [50, 50] * u.ms)
+            baseline = Constant([(0, 100 * u.ms)])
+            ramp_up = Ramp(0, 1, 100 * u.ms)
+            steps = Step([1, 0.5, 1, 0], [0, 50, 100, 150], 200 * u.ms)
+            sections = Section([0.5, 0], [50, 50] * u.ms)
 
             protocol = baseline & ramp_up & steps & sections
 
@@ -538,10 +538,10 @@ class TestIntegration(TestCase):
         """Test that all input types support standard transformations."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             inputs = [
-                SectionInput([0, 1, 0], [50, 100, 50] * u.ms),
-                ConstantInput([(0.5, 200 * u.ms)]),
-                StepInput([0, 1, 0.5], [0, 50, 150], 200 * u.ms),
-                RampInput(0, 1, 200 * u.ms)
+                Section([0, 1, 0], [50, 100, 50] * u.ms),
+                Constant([(0.5, 200 * u.ms)]),
+                Step([0, 1, 0.5], [0, 50, 150], 200 * u.ms),
+                Ramp(0, 1, 200 * u.ms)
             ]
 
             for inp in inputs:

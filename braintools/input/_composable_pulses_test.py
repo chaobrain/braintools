@@ -24,21 +24,21 @@ import brainunit as u
 import numpy as np
 
 from braintools.input import (
-    SpikeInput, GaussianPulse, ExponentialDecay,
-    DoubleExponential, BurstInput,
+    Spike, GaussianPulse, ExponentialDecay,
+    DoubleExponential, Burst,
     # For combining examples
-    ConstantInput, RampInput, StepInput,
-    WienerProcess, SinusoidalInput
+    Constant, Ramp, Step,
+    WienerProcess, Sinusoidal
 )
 
 
-class TestSpikeInput(TestCase):
-    """Test SpikeInput class and its docstring examples."""
+class TestSpike(TestCase):
+    """Test Spike class and its docstring examples."""
 
     def test_simple_spike_train(self):
         """Test simple spike train with uniform properties."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            spikes = SpikeInput(
+            spikes = Spike(
                 sp_times=[10, 20, 30, 200, 300] * u.ms,
                 duration=400 * u.ms,
                 sp_lens=1 * u.ms,  # All spikes 1ms long
@@ -55,7 +55,7 @@ class TestSpikeInput(TestCase):
     def test_variable_spike_properties(self):
         """Test spikes with different durations and amplitudes."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            spikes = SpikeInput(
+            spikes = Spike(
                 sp_times=[10, 50, 100] * u.ms,
                 duration=150 * u.ms,
                 sp_lens=[1, 2, 0.5] * u.ms,  # Different durations
@@ -72,8 +72,8 @@ class TestSpikeInput(TestCase):
     def test_add_to_background(self):
         """Test adding spikes to background activity."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            spikes = SpikeInput([10, 50, 100, 150] * u.ms, 200 * u.ms, sp_lens=1. * u.ms, sp_sizes=1.0)
-            background = ConstantInput([(0.1, 200 * u.ms)])
+            spikes = Spike([10, 50, 100, 150] * u.ms, 200 * u.ms, sp_lens=1. * u.ms, sp_sizes=1.0)
+            background = Constant([(0.1, 200 * u.ms)])
             combined = spikes + background
 
             array = combined()
@@ -88,7 +88,7 @@ class TestSpikeInput(TestCase):
         """Test high-frequency burst simulation."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             times = np.arange(0, 50, 2) * u.ms  # Every 2ms
-            spikes = SpikeInput(
+            spikes = Spike(
                 sp_times=times,
                 duration=100 * u.ms,
                 sp_lens=0.5 * u.ms,
@@ -111,7 +111,7 @@ class TestSpikeInput(TestCase):
     def test_combine_with_noise(self):
         """Test combining spikes with noise."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            spikes = SpikeInput([20, 40, 60] * u.ms, 100 * u.ms, sp_lens=1. * u.ms, )
+            spikes = Spike([20, 40, 60] * u.ms, 100 * u.ms, sp_lens=1. * u.ms, )
             noise = WienerProcess(100 * u.ms, sigma=0.05, seed=123)
             noisy_spikes = spikes + noise
 
@@ -127,7 +127,7 @@ class TestSpikeInput(TestCase):
         with brainstate.environ.context(dt=0.1 * u.ms):
             amplitudes = np.linspace(0.5, 2.0, 10)
             times = np.linspace(10, 190, 10) * u.ms
-            increasing_spikes = SpikeInput(
+            increasing_spikes = Spike(
                 sp_times=times,
                 duration=200 * u.ms,
                 sp_sizes=amplitudes * u.nA,
@@ -148,7 +148,7 @@ class TestSpikeInput(TestCase):
     def test_paired_pulse_facilitation(self):
         """Test paired-pulse facilitation protocol."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            paired = SpikeInput(
+            paired = Spike(
                 sp_times=[50, 70] * u.ms,  # 20ms interval
                 duration=150 * u.ms,
                 sp_lens=2 * u.ms,
@@ -208,7 +208,7 @@ class TestGaussianPulse(TestCase):
         """Test amplitude modulation with Gaussian envelope."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             envelope = GaussianPulse(1.0, 250 * u.ms, 50 * u.ms, 500 * u.ms)
-            carrier = SinusoidalInput(1.0, 50 * u.Hz, 500 * u.ms)
+            carrier = Sinusoidal(1.0, 50 * u.Hz, 500 * u.ms)
             modulated = envelope * carrier
 
             array = modulated()
@@ -319,7 +319,7 @@ class TestExponentialDecay(TestCase):
         """Test gated decay with step function."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             decay = ExponentialDecay(2.0, 30 * u.ms, 500 * u.ms, t_start=100 * u.ms)
-            step = StepInput([0, 1], [0, 100], 500 * u.ms)
+            step = Step([0, 1], [0, 100], 500 * u.ms)
             gated_decay = decay * step
 
             array = gated_decay()
@@ -350,7 +350,7 @@ class TestExponentialDecay(TestCase):
     def test_adaptation_current(self):
         """Test adaptation current simulation."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            trigger = StepInput([0, 1, 0], [0, 50, 150], 300 * u.ms)
+            trigger = Step([0, 1, 0], [0, 50, 150], 300 * u.ms)
             adaptation = ExponentialDecay(0.3, 40 * u.ms, 300 * u.ms, t_start=50 * u.ms)
             net_current = trigger - adaptation
 
@@ -438,13 +438,13 @@ class TestDoubleExponential(TestCase):
             self.assertTrue(u.get_magnitude(array[min_idx]) < -0.7)
 
 
-class TestBurstInput(TestCase):
-    """Test BurstInput class and its docstring examples."""
+class TestBurst(TestCase):
+    """Test Burst class and its docstring examples."""
 
     def test_oscillatory_bursts_50hz(self):
         """Test oscillatory bursts at 50Hz."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            bursts = BurstInput(
+            bursts = Burst(
                 n_bursts=5,
                 burst_amp=1.0 * u.nA,
                 burst_freq=50 * u.Hz,  # 50Hz oscillation
@@ -469,7 +469,7 @@ class TestBurstInput(TestCase):
     def test_oscillatory_bursts(self):
         """Test oscillatory bursts (theta-burst stimulation)."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            theta_bursts = BurstInput(
+            theta_bursts = Burst(
                 n_bursts=10,
                 burst_amp=2.0,
                 burst_freq=100 * u.Hz,  # 100Hz oscillation within bursts
@@ -491,8 +491,8 @@ class TestBurstInput(TestCase):
     def test_bursts_with_ramped_amplitude(self):
         """Test bursts with ramped amplitude."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            burst = BurstInput(5, 1.0, 50 * u.Hz, 30 * u.ms, 100 * u.ms, 500 * u.ms)
-            ramp = RampInput(0.5, 1.5, 500 * u.ms)
+            burst = Burst(5, 1.0, 50 * u.Hz, 30 * u.ms, 100 * u.ms, 500 * u.ms)
+            ramp = Ramp(0.5, 1.5, 500 * u.ms)
             modulated_burst = burst * ramp
 
             array = modulated_burst()
@@ -508,7 +508,7 @@ class TestBurstInput(TestCase):
     def test_burst_with_noise(self):
         """Test burst pattern with noise."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            bursts = BurstInput(4, 1.5, 30 * u.Hz, 50 * u.ms, 150 * u.ms, 600 * u.ms)
+            bursts = Burst(4, 1.5, 30 * u.Hz, 50 * u.ms, 150 * u.ms, 600 * u.ms)
             noise = WienerProcess(600 * u.ms, sigma=0.1, seed=456)
             noisy_bursts = bursts + noise
 
@@ -523,7 +523,7 @@ class TestBurstInput(TestCase):
     def test_gamma_in_theta(self):
         """Test gamma bursts in theta rhythm."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            gamma_in_theta = BurstInput(
+            gamma_in_theta = Burst(
                 n_bursts=15,
                 burst_amp=1.0 * u.nA,
                 burst_freq=40 * u.Hz,  # Gamma frequency

@@ -25,17 +25,18 @@ import brainstate
 import brainunit as u
 import jax
 import numpy as np
+from ._deprecation import create_deprecated_function
 
 __all__ = [
-    'spike_input',
+    'spike',
     'gaussian_pulse',
     'exponential_decay',
     'double_exponential',
-    'burst_input',
+    'burst',
 ]
 
 
-def spike_input(
+def spike(
     sp_times: Sequence,
     sp_lens: Union[float, Sequence],
     sp_sizes: Union[float, Sequence],
@@ -79,7 +80,7 @@ def spike_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple spike train with uniform properties
-    >>> current = spike_input(
+    >>> current = spike(
     ...     sp_times=[10, 20, 30, 200, 300] * u.ms,
     ...     sp_lens=1 * u.ms,  # All spikes 1ms long
     ...     sp_sizes=0.5 * u.nA,  # All spikes 0.5nA amplitude
@@ -87,7 +88,7 @@ def spike_input(
     ... )
     
     # Variable spike properties
-    >>> current = spike_input(
+    >>> current = spike(
     ...     sp_times=[10, 50, 100] * u.ms,
     ...     sp_lens=[1, 2, 0.5] * u.ms,  # Different durations
     ...     sp_sizes=[0.5, 1.0, 0.3] * u.nA,  # Different amplitudes
@@ -97,7 +98,7 @@ def spike_input(
     # High-frequency burst
     >>> import numpy as np
     >>> times = np.arange(0, 50, 2) * u.ms  # Every 2ms
-    >>> current = spike_input(
+    >>> current = spike(
     ...     sp_times=times,
     ...     sp_lens=0.5 * u.ms,
     ...     sp_sizes=1.0 * u.pA,
@@ -495,7 +496,7 @@ def double_exponential(
     return u.maybe_decimal(currents * c_unit)
 
 
-def burst_input(
+def burst(
     burst_amp: brainstate.typing.ArrayLike,
     burst_freq: brainstate.typing.ArrayLike,
     burst_duration: brainstate.typing.ArrayLike,
@@ -541,7 +542,7 @@ def burst_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Theta burst stimulation
-    >>> current = burst_input(
+    >>> current = burst(
     ...     burst_amp=10 * u.pA,
     ...     burst_freq=100 * u.Hz,  # 100Hz within burst
     ...     burst_duration=50 * u.ms,  # 50ms bursts
@@ -551,7 +552,7 @@ def burst_input(
     ... )
     
     # Gamma burst pattern
-    >>> current = burst_input(
+    >>> current = burst(
     ...     burst_amp=5 * u.nA,
     ...     burst_freq=40 * u.Hz,  # Gamma frequency
     ...     burst_duration=100 * u.ms,
@@ -561,7 +562,7 @@ def burst_input(
     ... )
     
     # High-frequency stimulation protocol
-    >>> current = burst_input(
+    >>> current = burst(
     ...     burst_amp=20 * u.pA,
     ...     burst_freq=200 * u.Hz,
     ...     burst_duration=20 * u.ms,
@@ -571,7 +572,7 @@ def burst_input(
     ... )
     
     # Slow oscillatory bursts
-    >>> current = burst_input(
+    >>> current = burst(
     ...     burst_amp=1 * u.nA,
     ...     burst_freq=5 * u.Hz,  # Slow oscillation
     ...     burst_duration=500 * u.ms,
@@ -633,3 +634,9 @@ def burst_input(
         currents[start_i:end_i] = burst[:actual_length]
 
     return u.maybe_decimal(currents * c_unit)
+
+
+spike_input = create_deprecated_function(spike, 'spike_input', 'spike')
+burst_input = create_deprecated_function(burst, 'burst_input', 'burst')
+
+__all__.extend(['spike', 'burst'])

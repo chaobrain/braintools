@@ -22,13 +22,14 @@ Stochastic and random process input generators.
 from typing import Optional, Union
 
 import numpy as np
+from ._deprecation import create_deprecated_function
 import brainstate
 import brainunit as u
 
 __all__ = [
     'wiener_process',
     'ou_process',
-    'poisson_input',
+    'poisson',
 ]
 
 
@@ -306,7 +307,7 @@ def ou_process(
     return u.maybe_decimal(currents * c_unit)
 
 
-def poisson_input(
+def poisson(
     rate: brainstate.typing.ArrayLike,
     duration: brainstate.typing.ArrayLike,
     amplitude: brainstate.typing.ArrayLike = 1.0,
@@ -361,21 +362,21 @@ def poisson_input(
     >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     # Simple Poisson spike train
-    >>> spikes = poisson_input(
+    >>> spikes = poisson(
     ...     rate=10 * u.Hz,
     ...     duration=1000 * u.ms,
     ...     amplitude=1 * u.pA
     ... )
     
     # High-frequency background activity
-    >>> spikes = poisson_input(
+    >>> spikes = poisson(
     ...     rate=100 * u.Hz,
     ...     duration=500 * u.ms,
     ...     amplitude=0.5 * u.nA
     ... )
     
     # Multiple independent spike trains
-    >>> spikes = poisson_input(
+    >>> spikes = poisson(
     ...     rate=20 * u.Hz,
     ...     duration=2000 * u.ms,
     ...     amplitude=2 * u.pA,
@@ -383,7 +384,7 @@ def poisson_input(
     ... )
     
     # Windowed spiking activity
-    >>> spikes = poisson_input(
+    >>> spikes = poisson(
     ...     rate=50 * u.Hz,
     ...     duration=1000 * u.ms,
     ...     amplitude=1 * u.nA,
@@ -392,7 +393,7 @@ def poisson_input(
     ... )
     
     # Low rate spontaneous activity
-    >>> spikes = poisson_input(
+    >>> spikes = poisson(
     ...     rate=1 * u.Hz,
     ...     duration=10000 * u.ms,
     ...     amplitude=5 * u.pA,
@@ -454,3 +455,8 @@ def poisson_input(
     currents[i_start:i_end] = spike_values
     
     return u.maybe_decimal(currents * c_unit)
+
+
+poisson_input = create_deprecated_function(poisson, 'poisson_input', 'poisson')
+
+__all__.append('poisson')

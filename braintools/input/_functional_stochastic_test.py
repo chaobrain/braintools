@@ -24,7 +24,7 @@ import brainunit as u
 import matplotlib.pyplot as plt
 import numpy as np
 
-from braintools.input import wiener_process, ou_process, poisson_input
+from braintools.input import wiener_process, ou_process, poisson
 
 block = False
 
@@ -204,30 +204,30 @@ class TestStochasticInputs(TestCase):
             self.assertAlmostEqual(u.get_magnitude(current[999]), 0.0, places=5)
             self.assertAlmostEqual(u.get_magnitude(current[4000]), 0.0, places=5)
 
-    def test_poisson_input(self):
+    def test_poisson(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 500 * u.ms
-            current = poisson_input(rate=20 * u.Hz,
+            current = poisson(rate=20 * u.Hz,
                                     duration=duration,
                                     amplitude=1 * u.pA,
                                     n=3)
             show(current, duration, 'Poisson Input (20 Hz)')
             self.assertEqual(current.shape, (5000, 3))
 
-    def test_poisson_input_high_rate(self):
+    def test_poisson_high_rate(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 300 * u.ms
-            current = poisson_input(rate=100 * u.Hz,
+            current = poisson(rate=100 * u.Hz,
                                     duration=duration,
                                     amplitude=0.5 * u.nA,
                                     n=2)
             show(current, duration, 'Poisson Input (High Rate: 100 Hz)')
             self.assertEqual(current.shape, (3000, 2))
 
-    def test_poisson_input_with_time_window(self):
+    def test_poisson_with_time_window(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 600 * u.ms
-            current = poisson_input(rate=30 * u.Hz,
+            current = poisson(rate=30 * u.Hz,
                                     duration=duration,
                                     amplitude=2 * u.pA,
                                     n=1,
@@ -242,27 +242,27 @@ class TestStochasticInputs(TestCase):
             self.assertTrue(np.all(before_window == 0))
             self.assertTrue(np.all(after_window == 0))
 
-    def test_poisson_input_with_seed(self):
+    def test_poisson_with_seed(self):
         with brainstate.environ.context(dt=0.1 * u.ms):
             duration = 200 * u.ms
             # Test reproducibility
-            current1 = poisson_input(rate=50 * u.Hz,
+            current1 = poisson(rate=50 * u.Hz,
                                      duration=duration,
                                      amplitude=1 * u.nA,
                                      n=4,
                                      seed=456)
-            current2 = poisson_input(rate=50 * u.Hz,
+            current2 = poisson(rate=50 * u.Hz,
                                      duration=duration,
                                      amplitude=1 * u.nA,
                                      n=4,
                                      seed=456)
             assert u.math.allclose(current1, current2)
 
-    def test_poisson_input_from_docstring(self):
-        """Test examples from poisson_input docstring."""
+    def test_poisson_from_docstring(self):
+        """Test examples from poisson docstring."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Simple Poisson spike train
-            spikes = poisson_input(
+            spikes = poisson(
                 rate=10 * u.Hz,
                 duration=1000 * u.ms,
                 amplitude=1 * u.pA
@@ -271,7 +271,7 @@ class TestStochasticInputs(TestCase):
             self.assertEqual(u.get_unit(spikes), u.pA)
 
             # High-frequency background activity
-            spikes = poisson_input(
+            spikes = poisson(
                 rate=100 * u.Hz,
                 duration=500 * u.ms,
                 amplitude=0.5 * u.nA
@@ -280,7 +280,7 @@ class TestStochasticInputs(TestCase):
             self.assertEqual(u.get_unit(spikes), u.nA)
 
             # Multiple independent spike trains
-            spikes = poisson_input(
+            spikes = poisson(
                 rate=20 * u.Hz,
                 duration=2000 * u.ms,
                 amplitude=2 * u.pA,
@@ -289,7 +289,7 @@ class TestStochasticInputs(TestCase):
             self.assertEqual(spikes.shape, (20000, 50))
 
             # Windowed spiking activity
-            spikes = poisson_input(
+            spikes = poisson(
                 rate=50 * u.Hz,
                 duration=1000 * u.ms,
                 amplitude=1 * u.nA,
@@ -302,7 +302,7 @@ class TestStochasticInputs(TestCase):
             self.assertTrue(np.all(u.get_magnitude(spikes[8000:]) == 0))
 
             # Low rate spontaneous activity
-            spikes = poisson_input(
+            spikes = poisson(
                 rate=1 * u.Hz,
                 duration=10000 * u.ms,
                 amplitude=5 * u.pA,
@@ -310,7 +310,7 @@ class TestStochasticInputs(TestCase):
             )
             self.assertEqual(spikes.shape[0], 100000)
             # Test reproducibility
-            spikes2 = poisson_input(
+            spikes2 = poisson(
                 rate=1 * u.Hz,
                 duration=10000 * u.ms,
                 amplitude=5 * u.pA,

@@ -29,25 +29,26 @@ import brainunit as u
 
 from ._composable_base import Input
 from ._functional_pulses import (
-    spike_input,
+    spike,
     gaussian_pulse,
     exponential_decay,
     double_exponential,
-    burst_input
+    burst
 )
+from ._deprecation import create_deprecated_class
 
 ArrayLike = brainstate.typing.ArrayLike
 
 __all__ = [
-    'SpikeInput',
+    'Spike',
     'GaussianPulse',
     'ExponentialDecay',
     'DoubleExponential',
-    'BurstInput',
+    'Burst',
 ]
 
 
-class SpikeInput(Input):
+class Spike(Input):
     """Generate spike input at specified times.
     
     Creates a series of rectangular current pulses (spikes) at specified
@@ -81,20 +82,20 @@ class SpikeInput(Input):
     
     See Also
     --------
-    BurstInput : For generating bursts of activity.
+    Burst : For generating bursts of activity.
     GaussianPulse : For smooth pulse shapes.
     
     Notes
     -----
     The spikes are rectangular pulses. For more realistic synaptic currents,
     consider using DoubleExponential or combining with smoothing operations.
-    This class uses the functional spike_input API internally.
+    This class uses the functional spike API internally.
     
     Examples
     --------
     Simple spike train with uniform properties:
     
-    >>> spikes = SpikeInput(
+    >>> spikes = Spike(
     ...     sp_times=[10, 20, 30, 200, 300] * u.ms,
     ...     duration=400 * u.ms,
     ...     sp_lens=1 * u.ms,  # All spikes 1ms long
@@ -104,7 +105,7 @@ class SpikeInput(Input):
     
     Variable spike properties:
     
-    >>> spikes = SpikeInput(
+    >>> spikes = Spike(
     ...     sp_times=[10, 50, 100] * u.ms,
     ...     duration=150 * u.ms,
     ...     sp_lens=[1, 2, 0.5] * u.ms,  # Different durations
@@ -113,16 +114,16 @@ class SpikeInput(Input):
     
     Add to background activity:
     
-    >>> from braintools.input import ConstantInput
-    >>> spikes = SpikeInput([10, 50, 100, 150] * u.ms, 200 * u.ms, sp_sizes=1.0)
-    >>> background = ConstantInput([(0.1, 200 * u.ms)])
+    >>> from braintools.input import Constant
+    >>> spikes = Spike([10, 50, 100, 150] * u.ms, 200 * u.ms, sp_sizes=1.0)
+    >>> background = Constant([(0.1, 200 * u.ms)])
     >>> combined = spikes + background
     
     High-frequency burst simulation:
     
     >>> import numpy as np
     >>> times = np.arange(0, 50, 2) * u.ms  # Every 2ms
-    >>> spikes = SpikeInput(
+    >>> spikes = Spike(
     ...     sp_times=times,
     ...     duration=100 * u.ms,
     ...     sp_lens=0.5 * u.ms,
@@ -132,7 +133,7 @@ class SpikeInput(Input):
     Combine with noise for realistic inputs:
     
     >>> from braintools.input import WienerProcess
-    >>> spikes = SpikeInput([20, 40, 60] * u.ms, 100 * u.ms)
+    >>> spikes = Spike([20, 40, 60] * u.ms, 100 * u.ms)
     >>> noise = WienerProcess(100 * u.ms, sigma=0.05)
     >>> noisy_spikes = spikes + noise
     
@@ -140,7 +141,7 @@ class SpikeInput(Input):
     
     >>> amplitudes = np.linspace(0.5, 2.0, 10)
     >>> times = np.linspace(10, 190, 10) * u.ms
-    >>> increasing_spikes = SpikeInput(
+    >>> increasing_spikes = Spike(
     ...     sp_times=times,
     ...     duration=200 * u.ms,
     ...     sp_sizes=amplitudes * u.nA
@@ -149,7 +150,7 @@ class SpikeInput(Input):
     Paired-pulse facilitation protocol:
     
     >>> # Two spikes with short interval
-    >>> paired = SpikeInput(
+    >>> paired = Spike(
     ...     sp_times=[50, 70] * u.ms,  # 20ms interval
     ...     duration=150 * u.ms,
     ...     sp_lens=2 * u.ms,
@@ -191,7 +192,7 @@ class SpikeInput(Input):
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the spike input array using functional API."""
         # Use the functional API
-        return spike_input(
+        return spike(
             sp_times=self.sp_times,
             sp_lens=self.sp_lens,
             sp_sizes=self.sp_sizes,
@@ -270,9 +271,9 @@ class GaussianPulse(Input):
     
     Amplitude modulation with Gaussian envelope:
     
-    >>> from braintools.input import SinusoidalInput
+    >>> from braintools.input import Sinusoidal
     >>> envelope = GaussianPulse(1.0, 250 * u.ms, 50 * u.ms, 500 * u.ms)
-    >>> carrier = SinusoidalInput(1.0, 50 * u.Hz, 500 * u.ms)
+    >>> carrier = Sinusoidal(1.0, 50 * u.Hz, 500 * u.ms)
     >>> modulated = envelope * carrier
     
     Noisy Gaussian pulse:
@@ -400,9 +401,9 @@ class ExponentialDecay(Input):
     
     Gated decay with step function:
     
-    >>> from braintools.input import StepInput
+    >>> from braintools.input import Step
     >>> decay = ExponentialDecay(2.0, 30 * u.ms, 500 * u.ms, t_start=100 * u.ms)
-    >>> step = StepInput([0, 1], [0, 100], 500 * u.ms)
+    >>> step = Step([0, 1], [0, 100], 500 * u.ms)
     >>> gated_decay = decay * step  # Gate the decay
     
     Multiple decay phases:
@@ -414,8 +415,8 @@ class ExponentialDecay(Input):
     Adaptation current simulation:
     
     >>> # Triggered by step input
-    >>> from braintools.input import StepInput
-    >>> trigger = StepInput([0, 1, 0], [0, 50, 150], 300 * u.ms)
+    >>> from braintools.input import Step
+    >>> trigger = Step([0, 1, 0], [0, 50, 150], 300 * u.ms)
     >>> adaptation = ExponentialDecay(0.3, 40 * u.ms, 300 * u.ms, t_start=50 * u.ms)
     >>> net_current = trigger - adaptation  # Adaptation reduces input
     
@@ -633,7 +634,7 @@ class DoubleExponential(Input):
         )
 
 
-class BurstInput(Input):
+class Burst(Input):
     """Generate burst pattern input.
     
     Creates a pattern of rectangular bursts separated by quiet periods.
@@ -672,21 +673,21 @@ class BurstInput(Input):
     
     See Also
     --------
-    SpikeInput : For individual spikes at specific times.
+    Spike : For individual spikes at specific times.
     DoubleExponential : For more realistic burst shapes.
     
     Notes
     -----
     The bursts are oscillatory (sinusoidal) at the specified frequency.
-    The functional burst_input API generates sin(2*pi*freq*t) oscillations.
+    The functional burst API generates sin(2*pi*freq*t) oscillations.
     For DC (rectangular) bursts, this class is not suitable - use repeated
-    StepInput or SpikeInput instead.
+    Step or Spike instead.
     
     Examples
     --------
     Oscillatory bursts at 50Hz:
     
-    >>> bursts = BurstInput(
+    >>> bursts = Burst(
     ...     n_bursts=5,
     ...     burst_amp=1.0 * u.nA,
     ...     burst_freq=50 * u.Hz,  # 50Hz oscillation
@@ -697,7 +698,7 @@ class BurstInput(Input):
     >>> array = bursts()
     Oscillatory bursts (theta-burst stimulation):
     
-    >>> theta_bursts = BurstInput(
+    >>> theta_bursts = Burst(
     ...     n_bursts=10,
     ...     burst_amp=2.0,
     ...     burst_freq=100 * u.Hz,  # 100Hz oscillation within bursts
@@ -707,20 +708,20 @@ class BurstInput(Input):
     ... )
     Bursts with ramped amplitude:
     
-    >>> from braintools.input import RampInput
-    >>> burst = BurstInput(5, 1.0, 50 * u.Hz, 30 * u.ms, 100 * u.ms, 500 * u.ms)
-    >>> ramp = RampInput(0.5, 1.5, 500 * u.ms)
+    >>> from braintools.input import Ramp
+    >>> burst = Burst(5, 1.0, 50 * u.Hz, 30 * u.ms, 100 * u.ms, 500 * u.ms)
+    >>> ramp = Ramp(0.5, 1.5, 500 * u.ms)
     >>> modulated_burst = burst * ramp
     Burst pattern with noise:
     
     >>> from braintools.input import WienerProcess
-    >>> bursts = BurstInput(4, 1.5, 30 * u.Hz, 50 * u.ms, 150 * u.ms, 600 * u.ms)
+    >>> bursts = Burst(4, 1.5, 30 * u.Hz, 50 * u.ms, 150 * u.ms, 600 * u.ms)
     >>> noise = WienerProcess(600 * u.ms, sigma=0.1)
     >>> noisy_bursts = bursts + noise
     Gamma bursts in theta rhythm:
     
     >>> # 40Hz gamma bursts at 5Hz theta rhythm
-    >>> gamma_in_theta = BurstInput(
+    >>> gamma_in_theta = Burst(
     ...     n_bursts=15,
     ...     burst_amp=1.0 * u.nA,
     ...     burst_freq=40 * u.Hz,  # Gamma frequency
@@ -731,14 +732,14 @@ class BurstInput(Input):
     Paired bursts protocol:
     
     >>> # Two bursts with short interval, then long gap
-    >>> burst1 = BurstInput(1, 1.0, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms)
-    >>> burst2 = BurstInput(1, 1.2, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms).shift(30 * u.ms)
+    >>> burst1 = Burst(1, 1.0, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms)
+    >>> burst2 = Burst(1, 1.2, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms).shift(30 * u.ms)
     >>> paired = burst1 + burst2
     >>> protocol = paired.repeat(5)  # Repeat paired bursts
     Burst with exponential decay envelope:
     
     >>> from braintools.input import ExponentialDecay
-    >>> bursts = BurstInput(8, 1.0, 50 * u.Hz, 25 * u.ms, 75 * u.ms, 600 * u.ms)
+    >>> bursts = Burst(8, 1.0, 50 * u.Hz, 25 * u.ms, 75 * u.ms, 600 * u.ms)
     >>> envelope = ExponentialDecay(1.0, 150 * u.ms, 600 * u.ms)
     >>> decaying_bursts = bursts * envelope
     """
@@ -778,7 +779,7 @@ class BurstInput(Input):
     def _generate(self) -> brainstate.typing.ArrayLike:
         """Generate the burst input array using functional API."""
         # Use the functional API
-        return burst_input(
+        return burst(
             burst_amp=self.burst_amp,
             burst_freq=self.burst_freq,
             burst_duration=self.burst_duration,
@@ -786,3 +787,9 @@ class BurstInput(Input):
             n_bursts=self.n_bursts,
             duration=self.duration
         )
+
+
+SpikeInput = create_deprecated_class(Spike, 'SpikeInput', 'Spike')
+BurstInput = create_deprecated_class(Burst, 'BurstInput', 'Burst')
+
+__all__.extend(['SpikeInput', 'BurstInput'])

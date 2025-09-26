@@ -27,9 +27,9 @@ The module now supports two APIs:
 Composable API Example:
 -----------------------
 >>> import brainunit as u
->>> from braintools.input import RampInput, SinusoidalInput
->>> ramp = RampInput(0, 1, 500 * u.ms)
->>> sine = SinusoidalInput(0.5, 10 * u.Hz, 500 * u.ms)
+>>> from braintools.input import Ramp, Sinusoidal
+>>> ramp = Ramp(0, 1, 500 * u.ms)
+>>> sine = Sinusoidal(0.5, 10 * u.Hz, 500 * u.ms)
 >>> combined = ramp + sine  # Combine inputs
 >>> scaled = combined.scale(0.5)  # Transform result
 >>> array = scaled()  # Generate the array
@@ -37,10 +37,14 @@ Composable API Example:
 Functional API Example:
 -----------------------
 >>> import brainunit as u
->>> from braintools.input import ramp_input, sinusoidal_input
->>> ramp = ramp_input(0, 1, 500 * u.ms)
->>> sine = sinusoidal_input(0.5, 10 * u.Hz, 500 * u.ms)
->>> combined = ramp + sine  # Simple array addition
+>>> from braintools.input import ramp, sinusoidal
+>>> ramp_signal = ramp(0, 1, 500 * u.ms)
+>>> sine_signal = sinusoidal(0.5, 10 * u.Hz, 500 * u.ms)
+>>> combined = ramp_signal + sine_signal  # Simple array addition
+
+Legacy Notice:
+----------------
+Legacy names ending with `Input`/`_input` remain available as deprecated aliases and emit `DeprecationWarning`.
 """
 
 # Import functional API for backward compatibility

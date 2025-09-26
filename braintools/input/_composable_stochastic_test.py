@@ -25,9 +25,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from braintools.input import GaussianPulse
-from braintools.input import RampInput, StepInput
-from braintools.input import SinusoidalInput
-from braintools.input import WienerProcess, OUProcess, PoissonInput
+from braintools.input import Ramp, Step
+from braintools.input import Sinusoidal
+from braintools.input import WienerProcess, OUProcess, Poisson
 
 block = False
 
@@ -97,7 +97,7 @@ class TestWienerProcess(TestCase):
     def test_noisy_drift(self):
         """Test combining Wiener process with drift from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            drift = RampInput(0, 0.5, 500 * u.ms)
+            drift = Ramp(0, 0.5, 500 * u.ms)
             noise = WienerProcess(500 * u.ms, sigma=0.1)
             drifting_noise = noise + drift
             signal = drifting_noise()
@@ -108,7 +108,7 @@ class TestWienerProcess(TestCase):
         """Test modulated noise from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             noise = WienerProcess(500 * u.ms, sigma=0.2)
-            envelope = StepInput([0, 1.0], [0 * u.ms, 100 * u.ms], 500 * u.ms)
+            envelope = Step([0, 1.0], [0 * u.ms, 100 * u.ms], 500 * u.ms)
             modulated = noise * envelope
             signal = modulated()
             self.assertEqual(signal.shape[0], 5000)
@@ -233,7 +233,7 @@ class TestOUProcess(TestCase):
         """Test OU process with time-varying mean from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             ou = OUProcess(mean=0.5, sigma=0.1, tau=20 * u.ms, duration=500 * u.ms)
-            sine_mean = SinusoidalInput(0.3, 2 * u.Hz, 500 * u.ms)
+            sine_mean = Sinusoidal(0.3, 2 * u.Hz, 500 * u.ms)
             modulated_ou = ou + sine_mean
             signal = modulated_ou()
             self.assertEqual(signal.shape[0], 5000)
@@ -243,7 +243,7 @@ class TestOUProcess(TestCase):
         """Test gated OU process from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             ou = OUProcess(mean=0.5, sigma=0.1, tau=20 * u.ms, duration=500 * u.ms)
-            gate = StepInput([0, 1.0], [0 * u.ms, 50 * u.ms], 500 * u.ms)
+            gate = Step([0, 1.0], [0 * u.ms, 50 * u.ms], 500 * u.ms)
             gated_ou = ou * gate
             signal = gated_ou()
             self.assertEqual(signal.shape[0], 5000)
@@ -292,13 +292,13 @@ class TestOUProcess(TestCase):
             self.assertEqual(slow_signal.shape[0], 2000)
 
 
-class TestPoissonInput(TestCase):
-    """Test PoissonInput class."""
+class TestPoisson(TestCase):
+    """Test Poisson class."""
 
     def test_simple_poisson(self):
         """Test simple Poisson spike train from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            spikes = PoissonInput(
+            spikes = Poisson(
                 rate=10 * u.Hz,
                 duration=1000 * u.ms
             )
@@ -309,7 +309,7 @@ class TestPoissonInput(TestCase):
     def test_high_frequency_background(self):
         """Test high-frequency background activity from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            background = PoissonInput(
+            background = Poisson(
                 rate=100 * u.Hz,
                 duration=500 * u.ms,
                 amplitude=0.5  # Smaller amplitude
@@ -321,7 +321,7 @@ class TestPoissonInput(TestCase):
     def test_multiple_spike_trains(self):
         """Test multiple independent spike trains from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            multi_spikes = PoissonInput(
+            multi_spikes = Poisson(
                 rate=20 * u.Hz,
                 duration=2000 * u.ms,
                 n=50,  # 50 independent spike trains
@@ -335,7 +335,7 @@ class TestPoissonInput(TestCase):
     def test_windowed_spiking(self):
         """Test windowed spiking activity from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            burst = PoissonInput(
+            burst = Poisson(
                 rate=50 * u.Hz,
                 duration=1000 * u.ms,
                 t_start=200 * u.ms,
@@ -354,7 +354,7 @@ class TestPoissonInput(TestCase):
     def test_low_rate_spontaneous(self):
         """Test low rate spontaneous activity from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            spontaneous = PoissonInput(
+            spontaneous = Poisson(
                 rate=1 * u.Hz,
                 duration=10000 * u.ms,
                 amplitude=5.0
@@ -371,7 +371,7 @@ class TestPoissonInput(TestCase):
     def test_gaussian_modulated_poisson(self):
         """Test Poisson spikes with Gaussian envelope from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            poisson = PoissonInput(50 * u.Hz, 1000 * u.ms)
+            poisson = Poisson(50 * u.Hz, 1000 * u.ms)
             envelope = GaussianPulse(1.0, 500 * u.ms, 100 * u.ms, 1000 * u.ms)
             modulated = poisson * envelope
             signal = modulated()
@@ -381,8 +381,8 @@ class TestPoissonInput(TestCase):
     def test_rhythmic_modulation(self):
         """Test rhythmic modulation of spike rate from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            poisson = PoissonInput(50 * u.Hz, 1000 * u.ms)
-            rhythm = SinusoidalInput(0.5, 5 * u.Hz, 1000 * u.ms)
+            poisson = Poisson(50 * u.Hz, 1000 * u.ms)
+            rhythm = Sinusoidal(0.5, 5 * u.Hz, 1000 * u.ms)
             rhythmic_spikes = poisson * (1 + rhythm)
             signal = rhythmic_spikes()
             self.assertEqual(signal.shape[0], 10000)
@@ -391,14 +391,14 @@ class TestPoissonInput(TestCase):
     def test_reproducible_spikes(self):
         """Test reproducible spike pattern from docstring example."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            fixed_spikes1 = PoissonInput(
+            fixed_spikes1 = Poisson(
                 rate=30 * u.Hz,
                 duration=500 * u.ms,
                 seed=456  # Fixed seed for reproducibility
             )
             signal1 = fixed_spikes1()
 
-            fixed_spikes2 = PoissonInput(
+            fixed_spikes2 = Poisson(
                 rate=30 * u.Hz,
                 duration=500 * u.ms,
                 seed=456  # Same seed
@@ -410,13 +410,13 @@ class TestPoissonInput(TestCase):
 
     def test_increasing_rate(self):
         """Test inhomogeneous Poisson process with increasing rate from docstring example."""
-        from braintools.input._composable_basic import RampInput
+        from braintools.input._composable_basic import Ramp
 
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Base Poisson process
-            base_poisson = PoissonInput(10 * u.Hz, 1000 * u.ms)
+            base_poisson = Poisson(10 * u.Hz, 1000 * u.ms)
             # Increasing rate envelope
-            ramp = RampInput(0.1, 1.0, 1000 * u.ms)
+            ramp = Ramp(0.1, 1.0, 1000 * u.ms)
             increasing_rate = base_poisson * ramp
             signal = increasing_rate()
             self.assertEqual(signal.shape[0], 10000)
@@ -426,11 +426,11 @@ class TestPoissonInput(TestCase):
         """Test Poisson input with different rates."""
         with brainstate.environ.context(dt=0.1 * u.ms):
             # Very low rate
-            low_rate = PoissonInput(rate=0.5 * u.Hz, duration=1000 * u.ms, amplitude=10.0)
+            low_rate = Poisson(rate=0.5 * u.Hz, duration=1000 * u.ms, amplitude=10.0)
             low_signal = low_rate()
 
             # Very high rate
-            high_rate = PoissonInput(rate=200 * u.Hz, duration=1000 * u.ms, amplitude=0.1)
+            high_rate = Poisson(rate=200 * u.Hz, duration=1000 * u.ms, amplitude=0.1)
             high_signal = high_rate()
 
             self.assertEqual(low_signal.shape[0], 10000)
@@ -460,7 +460,7 @@ class TestCombinedStochastic(TestCase):
     def test_poisson_plus_ou(self):
         """Test combining Poisson spikes with OU background."""
         with brainstate.environ.context(dt=0.1 * u.ms):
-            poisson = PoissonInput(rate=20 * u.Hz, duration=500 * u.ms, amplitude=2.0)
+            poisson = Poisson(rate=20 * u.Hz, duration=500 * u.ms, amplitude=2.0)
             ou = OUProcess(mean=0.2, sigma=0.05, tau=15 * u.ms, duration=500 * u.ms)
             combined = poisson + ou
             signal = combined()
@@ -477,7 +477,7 @@ class TestCombinedStochastic(TestCase):
             wiener = WienerProcess(duration=1000 * u.ms, sigma=0.05)
 
             # Add Poisson spikes
-            poisson = PoissonInput(rate=5 * u.Hz, duration=1000 * u.ms, amplitude=1.0)
+            poisson = Poisson(rate=5 * u.Hz, duration=1000 * u.ms, amplitude=1.0)
 
             # Combine all
             combined = ou + wiener + poisson
@@ -550,7 +550,7 @@ class TestStochasticStatistics(TestCase):
             rate = 50  # Hz
             duration = 10000 * u.ms
 
-            poisson = PoissonInput(rate=rate * u.Hz, duration=duration, n=10)
+            poisson = Poisson(rate=rate * u.Hz, duration=duration, n=10)
             signals = poisson()
 
             # Count spikes
