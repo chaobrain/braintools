@@ -4,6 +4,9 @@
 .. currentmodule:: braintools.file 
 .. automodule:: braintools.file 
 
+Utilities for loading and saving experiment artifacts, including MATLAB
+archives and high-performance MsgPack checkpoints.
+
 .. autosummary::
     :toctree: generated/
     :nosignatures:

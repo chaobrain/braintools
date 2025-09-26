@@ -1,11 +1,17 @@
 ``braintools.visualize`` module
 ===============================
 
-.. currentmodule:: braintools.visualize 
-.. automodule:: braintools.visualize 
+.. currentmodule:: braintools.visualize
+
+The visualization toolkit spans quick exploratory plots, rich publication
+figures, and interactive dashboards tailored to neural data analysis. The
+sections below outline the main families of helpers and chart builders.
 
 Neural Visualization
 --------------------
+
+High-level helpers that focus on spike trains, trajectories, and other neural
+recordings.
 
 .. autosummary::
    :toctree: generated/
@@ -26,6 +32,9 @@ Neural Visualization
 
 Statistical Visualization
 -------------------------
+
+Utility plots to inspect distributions, correlations, and model evaluation
+metrics derived from experiments.
 
 .. autosummary::
    :toctree: generated/
@@ -49,6 +58,9 @@ Statistical Visualization
 Interactive Visualization
 -------------------------
 
+Widget-backed tools for exploratory analysis and dashboards that support live
+updates or user interaction.
+
 .. autosummary::
    :toctree: generated/
    :nosignatures:
@@ -64,6 +76,8 @@ Interactive Visualization
 
 3D Visualization
 ----------------
+
+Renderers and figure factories optimized for volumetric or spatial datasets.
 
 .. autosummary::
    :toctree: generated/
@@ -83,6 +97,8 @@ Interactive Visualization
 Basic Plotting
 --------------
 
+Lightweight wrappers around matplotlib primitives for quick inspection.
+
 .. autosummary::
    :toctree: generated/
    :nosignatures:
@@ -96,6 +112,9 @@ Basic Plotting
 
 Styling and Colormaps
 ---------------------
+
+Functions for consistent theming, color palettes, and style presets across
+figures.
 
 .. autosummary::
    :toctree: generated/
@@ -115,6 +134,9 @@ Styling and Colormaps
 
 Figure Utilities
 ----------------
+
+Low-level helpers to obtain figure handles or tweak aesthetics pre/post
+rendering.
 
 .. autosummary::
    :toctree: generated/

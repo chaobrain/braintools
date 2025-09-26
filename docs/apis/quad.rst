@@ -4,10 +4,14 @@
 .. currentmodule:: braintools.quad 
 .. automodule:: braintools.quad 
 
-
+Time-stepping schemes for deterministic, stochastic, and implicit-explicit
+equations used in neural simulations.
 
 ODE Numerical Integrators
 -------------------------
+
+Explicit integrators for deterministic dynamics, ranging from Euler to
+higher-order Runge-Kutta variants.
 
 .. autosummary::
     :toctree: generated/
@@ -39,6 +43,9 @@ ODE Numerical Integrators
 IMEX Numerical Integrators
 --------------------------
 
+Hybrid implicit-explicit solvers suited for stiff systems that mix fast and
+slow processes.
+
 .. autosummary::
     :toctree: generated/
     :nosignatures:
@@ -51,6 +58,9 @@ IMEX Numerical Integrators
 
 SDE Numerical Integrators
 -------------------------
+
+Stochastic integrators that support noise-driven dynamics and diffusion
+processes.
 
 .. autosummary::
     :toctree: generated/
