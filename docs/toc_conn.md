@@ -13,6 +13,7 @@ Comprehensive tools for generating neural connectivity patterns across different
 :maxdepth: 1
 
 conn_tutorial_01_fundamentals.ipynb
-conn_tutorial_02_point_neurons.ipynb
-conn_tutorial_03_population_compartment.ipynb
+conn_tutorial_02_model_specific.ipynb
+conn_tutorial_03_composable_initialization.ipynb
+conn_tutorial_04_spatial_advanced.ipynb
 ```
