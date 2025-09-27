@@ -52,228 +52,53 @@ def line_plot(
     linewidth=1.0,
     **kwargs
 ):
-    """Plot time series data for neural trajectories.
-
-    This function creates line plots for time-series neural data such as
-    membrane potentials, synaptic currents, or any other monitored variables
-    from neural simulations. It supports plotting multiple traces with
-    customizable styling and legend options.
+    """Show the specified value in the given object (Neurons or Synapses.)
 
     Parameters
     ----------
-    ts : array_like
-        Time array with shape (n_timesteps,). Time values for the x-axis.
-    val_matrix : array_like
-        Value matrix with shape (n_timesteps, n_variables). Contains the
-        recorded history trajectory data from neural simulations.
-    plot_ids : {None, int, array_like}, default=None
-        Indices of variables to plot. If None, plots the first variable (index 0).
-        Can be a single integer or array of integers specifying which columns
-        to plot from val_matrix.
-    ax : {None, matplotlib.axes.Axes}, default=None
-        Axes object to plot on. If None, uses current matplotlib pyplot state.
-    xlim : {None, tuple}, default=None
-        X-axis limits as (xmin, xmax). If None, uses matplotlib defaults.
-    ylim : {None, tuple}, default=None
-        Y-axis limits as (ymin, ymax). If None, uses matplotlib defaults.
-    xlabel : str, default='Time (ms)'
-        Label for the x-axis.
-    ylabel : {None, str}, default=None
-        Label for the y-axis. If None, no ylabel is set.
-    legend : {None, str}, default=None
-        Legend prefix for the plotted lines. If provided, creates legend entries.
-        For multiple lines, appends variable index to the prefix.
-    title : {None, str}, default=None
-        Plot title. If None, no title is set.
-    show : bool, default=False
-        Whether to call plt.show() after plotting.
-    colors : {None, list}, default=None
-        List of colors for each line. If fewer colors than lines are provided,
-        colors will be cycled.
-    alpha : float, default=1.0
-        Alpha transparency value between 0 (transparent) and 1 (opaque).
-    linewidth : float, default=1.0
-        Width of the plotted lines.
+    ts : np.ndarray
+        The time steps.
+    val_matrix : np.ndarray
+        The value matrix which record the history trajectory.
+        It can be easily accessed by specifying the ``monitors``
+        of NeuGroup/SynConn by:
+        ``neu/syn = NeuGroup/SynConn(..., monitors=[k1, k2])``
+    plot_ids : None, int, tuple, a_list
+        The index of the value to plot.
+    ax : None, Axes
+        The figure to plot.
+    xlim : list, tuple
+        The xlim.
+    ylim : list, tuple
+        The ylim.
+    xlabel : str
+        The xlabel.
+    ylabel : str
+        The ylabel.
+    legend : str
+        The prefix of legend for plot.
+    show : bool
+        Whether show the figure.
+    colors : list, optional
+        Colors for each line.
+    alpha : float
+        Alpha transparency value.
+    linewidth : float
+        Width of lines.
     **kwargs
-        Additional keyword arguments passed to matplotlib.pyplot.plot().
-
+        Additional keyword arguments passed to plot().
+        
     Returns
     -------
     ax : matplotlib.axes.Axes
         The axes object containing the plot.
-
+    
     Raises
     ------
     TypeError
-        If plot_ids is not int, list, tuple, or 1D numpy array.
+        If plot_ids is not the correct type.
     ValueError
-        If val_matrix is empty, ts and val_matrix have incompatible dimensions,
-        or plot_ids contains invalid indices.
-
-    Notes
-    -----
-    This function is designed for plotting neural simulation data that has been
-    recorded over time. Common use cases include:
-
-    - Membrane potential traces from individual neurons
-    - Synaptic current recordings
-    - Population activity summaries
-    - State variable evolution during simulations
-
-    The val_matrix is reshaped to 2D if needed, with time as the first dimension
-    and variables as the second dimension.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import braintools as bt
-
-        # Basic membrane potential plot
-        time = np.linspace(0, 100, 1000)
-        membrane_potential = -65 + 15 * np.sin(time * 0.1) + np.random.randn(1000) * 2
-
-        # Single trace plot
-        bt.visualize.line_plot(
-            ts=time,
-            val_matrix=membrane_potential.reshape(-1, 1),
-            xlabel='Time (ms)',
-            ylabel='Membrane Potential (mV)',
-            title='Single Neuron Membrane Potential'
-        )
-        plt.show()
-
-        # Multiple neuron traces
-        n_neurons = 5
-        membrane_data = np.zeros((len(time), n_neurons))
-
-        for i in range(n_neurons):
-            baseline = -65 + i * 2  # Different resting potentials
-            oscillation = 10 * np.sin(time * 0.08 + i * np.pi/3)
-            noise = np.random.randn(len(time)) * 1.5
-            membrane_data[:, i] = baseline + oscillation + noise
-
-        # Plot all neurons with custom colors
-        colors = ['red', 'blue', 'green', 'orange', 'purple']
-        ax = bt.visualize.line_plot(
-            ts=time,
-            val_matrix=membrane_data,
-            plot_ids=list(range(n_neurons)),
-            colors=colors,
-            legend='Neuron',
-            xlabel='Time (ms)',
-            ylabel='Membrane Potential (mV)',
-            title='Multi-Neuron Membrane Potentials',
-            linewidth=1.5,
-            alpha=0.8
-        )
-        plt.show()
-
-        # Synaptic current analysis
-        dt = 0.1
-        duration = 50
-        time = np.arange(0, duration, dt)
-
-        # Simulate different synaptic currents
-        excitatory = 2 * np.exp(-time/5) * np.sin(time * 0.5)
-        inhibitory = -1.5 * np.exp(-time/8) * np.cos(time * 0.3)
-        total_current = excitatory + inhibitory
-
-        current_data = np.column_stack([excitatory, inhibitory, total_current])
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-
-        # Plot individual currents
-        bt.visualize.line_plot(
-            ts=time,
-            val_matrix=current_data[:, :2],
-            plot_ids=[0, 1],
-            ax=ax1,
-            colors=['red', 'blue'],
-            legend='Current',
-            xlabel='Time (ms)',
-            ylabel='Current (nA)',
-            title='Excitatory and Inhibitory Currents',
-            linewidth=2
-        )
-
-        # Plot total current
-        bt.visualize.line_plot(
-            ts=time,
-            val_matrix=current_data[:, 2:3],
-            ax=ax2,
-            colors=['black'],
-            xlabel='Time (ms)',
-            ylabel='Total Current (nA)',
-            title='Net Synaptic Current',
-            linewidth=2
-        )
-
-        plt.tight_layout()
-        plt.show()
-
-        # Population activity with subselection
-        n_population = 20
-        population_data = np.random.randn(len(time), n_population)
-
-        # Add some correlation structure
-        for i in range(n_population):
-            phase = i * 2 * np.pi / n_population
-            population_data[:, i] += 3 * np.sin(time * 0.1 + phase)
-
-        # Plot subset of population
-        selected_neurons = [0, 5, 10, 15]
-        bt.visualize.line_plot(
-            ts=time,
-            val_matrix=population_data,
-            plot_ids=selected_neurons,
-            legend='Unit',
-            xlabel='Time (ms)',
-            ylabel='Activity',
-            title='Population Neural Activity (Selected Units)',
-            alpha=0.7,
-            xlim=(20, 80),
-            ylim=(-6, 6)
-        )
-        plt.show()
-
-        # Custom styling example
-        fig, ax = plt.subplots(figsize=(12, 6))
-
-        # Generate bursting neuron activity
-        burst_time = np.linspace(0, 200, 2000)
-        burst_pattern = np.zeros_like(burst_time)
-
-        # Add bursts every 50ms
-        for start in range(25, 200, 50):
-            burst_mask = (burst_time >= start) & (burst_time <= start + 10)
-            burst_pattern[burst_mask] = -55 + 20 * np.sin((burst_time[burst_mask] - start) * 2)
-
-        # Background oscillation
-        background = -65 + 5 * np.sin(burst_time * 0.05)
-        full_signal = background + burst_pattern
-
-        bt.visualize.line_plot(
-            ts=burst_time,
-            val_matrix=full_signal.reshape(-1, 1),
-            ax=ax,
-            xlabel='Time (ms)',
-            ylabel='Membrane Potential (mV)',
-            title='Bursting Neuron Pattern',
-            color='darkred',
-            linewidth=2,
-            linestyle='-',
-            marker='.',
-            markersize=0.5,
-            markevery=20
-        )
-
-        # Add threshold line
-        ax.axhline(y=-55, color='gray', linestyle='--', alpha=0.7, label='Threshold')
-        ax.legend()
-        plt.show()
+        If val_matrix is empty or incompatible dimensions.
     """
     # Input validation
     if val_matrix is None or len(val_matrix) == 0:

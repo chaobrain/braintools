@@ -41,61 +41,53 @@ def animator(
     interval=40,
     cmap="plasma"
 ):
-    """Generate an animation by looping through the first dimension of spiking data.
+    """Generate an animation by looping through the first dimension of a
+    sample of spiking data.
+    Time must be the first dimension of ``data``.
 
-    Time must be the first dimension of ``data``. This function creates an
-    animation by capturing snapshots of each time step and combining them
-    into a video or GIF format.
+    Example::
 
-    Parameters
-    ----------
-    data : array_like
-        Data tensor for a single sample across time steps with shape
-        ``[num_steps, *spatial_dims]``. Time must be the first dimension.
-    fig : matplotlib.figure.Figure
-        Top level container for all plot elements.
-    ax : matplotlib.axes.Axes
-        Contains additional figure elements and sets the coordinate system.
-    num_steps : int or False, default=False
-        Number of time steps to plot. If ``False``, the number of entries
-        in the first dimension of ``data`` will automatically be used.
-    interval : int, default=40
-        Delay between frames in milliseconds.
-    cmap : str, default="plasma"
-        Matplotlib colormap name for rendering the data.
+        import matplotlib.pyplot as plt
 
-    Returns
-    -------
-    matplotlib.animation.ArtistAnimation
-        Animation object that can be displayed using ``matplotlib.pyplot.show()``
-        or saved to file.
+        #  Index into a single sample from a minibatch
+        spike_data_sample = bm.random.rand(100, 28, 28)
+        print(spike_data_sample.shape)
+        >>> (100, 28, 28)
 
-    Examples
-    --------
-    .. code-block:: python
+        #  Plot
+        fig, ax = plt.subplots()
+        anim = splt.animator(spike_data_sample, fig, ax)
+        HTML(anim.to_html5_video())
 
-        >>> import matplotlib.pyplot as plt
-        >>> import braintools
-        >>> import jax.numpy as jnp
-        >>> from IPython.display import HTML
-        >>>
-        >>> # Index into a single sample from a minibatch
-        >>> spike_data_sample = jnp.random.rand(100, 28, 28)
-        >>> print(spike_data_sample.shape)
-        (100, 28, 28)
-        >>>
-        >>> # Plot
-        >>> fig, ax = plt.subplots()
-        >>> anim = braintools.visualize.animator(spike_data_sample, fig, ax)
-        >>> HTML(anim.to_html5_video())
-        >>>
-        >>> # Save as a gif
-        >>> anim.save("spike_mnist.gif")
+        #  Save as a gif
+        anim.save("spike_mnist.gif")
 
-    Notes
-    -----
-    This function uses the Camera class internally to capture snapshots
-    of the matplotlib figure at each time step and create the animation.
+    :param data: Data tensor for a single sample across time steps of
+        shape [num_steps x input_size]
+    :type data: torch.Tensor
+
+    :param fig: Top level container for all plot elements
+    :type fig: matplotlib.figure.Figure
+
+    :param ax: Contains additional figure elements and sets the coordinate
+        system. E.g.:
+            fig, ax = plt.subplots(facecolor='w', figsize=(12, 7))
+    :type ax: matplotlib.axes._subplots.AxesSubplot
+
+    :param num_steps: Number of time steps to plot. If not specified,
+        the number of entries in the first dimension
+            of ``data`` will automatically be used, defaults to ``False``
+    :type num_steps: int, optional
+
+    :param interval: Delay between frames in milliseconds, defaults to ``40``
+    :type interval: int, optional
+
+    :param cmap: color map, defaults to ``plasma``
+    :type cmap: string, optional
+
+    :return: animation to be displayed using ``matplotlib.pyplot.show()``
+    :rtype: FuncAnimation
+
     """
 
     data = as_numpy(data)
@@ -114,21 +106,11 @@ def animator(
 
 
 class Camera:
-    """Make animations easier by capturing figure snapshots.
-
-    This class provides a simple interface for creating animations from
-    matplotlib figures by capturing the current state at each frame.
-    """
     __module__ = 'braintools.visualize'
+    """Make animations easier."""
 
     def __init__(self, figure: Figure) -> None:
-        """Create camera from matplotlib figure.
-
-        Parameters
-        ----------
-        figure : matplotlib.figure.Figure
-            The matplotlib figure to capture snapshots from.
-        """
+        """Create camera from matplotlib figure."""
         self._figure = figure
         # need to keep track off artists for each axis
         self._offsets: Dict[str, Dict[int, int]] = {
@@ -145,13 +127,7 @@ class Camera:
         self._photos: List[List[Artist]] = []
 
     def snap(self) -> List[Artist]:
-        """Capture current state of the figure.
-
-        Returns
-        -------
-        List[matplotlib.artist.Artist]
-            List of artists captured in this frame.
-        """
+        """Capture current state of the figure."""
         frame_artists: List[Artist] = []
         for i, axis in enumerate(self._figure.axes):
             if axis.legend_ is not None:
@@ -165,20 +141,9 @@ class Camera:
 
     def animate(self, *args, **kwargs) -> ArtistAnimation:
         """Animate the snapshots taken.
-
-        Uses matplotlib.animation.ArtistAnimation to create the animation
-        from all captured snapshots.
-
-        Parameters
-        ----------
-        *args
-            Positional arguments passed to ArtistAnimation.
-        **kwargs
-            Keyword arguments passed to ArtistAnimation.
-
+        Uses matplotlib.animation.ArtistAnimation
         Returns
         -------
-        matplotlib.animation.ArtistAnimation
-            The created animation object.
+        ArtistAnimation
         """
         return ArtistAnimation(self._figure, self._photos, *args, **kwargs)

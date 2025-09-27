@@ -154,60 +154,52 @@ def unitary_LFP(
     --------
     Calculate LFP from excitatory and inhibitory populations:
 
-    .. code-block:: python
-
-        >>> import brainstate
-        >>> import jax.numpy as jnp
-        >>> import braintools
-        >>> # Set up simulation parameters
-        >>> brainstate.random.seed(42)
-        >>> n_time, n_exc, n_inh = 1000, 100, 25
-        >>> dt = 0.1  # ms
-        >>> times = jnp.arange(n_time) * dt
-        >>> # Generate sparse random spike trains
-        >>> exc_spikes = (brainstate.random.random((n_time, n_exc)) < 0.02).astype(float)
-        >>> inh_spikes = (brainstate.random.random((n_time, n_inh)) < 0.04).astype(float)
-        >>> # Calculate LFP components
-        >>> lfp_exc = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', seed=42)
-        >>> lfp_inh = braintools.metric.unitary_LFP(times, inh_spikes, 'inh', seed=42)
-        >>> total_lfp = lfp_exc + lfp_inh
-        >>> print(f"LFP shape: {total_lfp.shape}")
-        >>> print(f"LFP range: {total_lfp.min():.3f} to {total_lfp.max():.3f}")
+    >>> import brainstate as brainstate
+    >>> import jax.numpy as jnp
+    >>> import braintools as braintools
+    >>> # Set up simulation parameters
+    >>> brainstate.random.seed(42)
+    >>> n_time, n_exc, n_inh = 1000, 100, 25
+    >>> dt = 0.1  # ms
+    >>> times = jnp.arange(n_time) * dt
+    >>> # Generate sparse random spike trains
+    >>> exc_spikes = (brainstate.random.random((n_time, n_exc)) < 0.02).astype(float)
+    >>> inh_spikes = (brainstate.random.random((n_time, n_inh)) < 0.04).astype(float)
+    >>> # Calculate LFP components
+    >>> lfp_exc = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', seed=42)
+    >>> lfp_inh = braintools.metric.unitary_LFP(times, inh_spikes, 'inh', seed=42)
+    >>> total_lfp = lfp_exc + lfp_inh
+    >>> print(f"LFP shape: {total_lfp.shape}")
+    >>> print(f"LFP range: {total_lfp.min():.3f} to {total_lfp.max():.3f}")
 
     Compare different recording locations:
 
-    .. code-block:: python
-
-        >>> # Same spike data, different recording depths
-        >>> lfp_soma = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
-        ...                                  location='soma layer')
-        >>> lfp_deep = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
-        ...                                  location='deep layer')
-        >>> lfp_surface = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
-        ...                                      location='surface')
+    >>> # Same spike data, different recording depths
+    >>> lfp_soma = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
+    ...                                  location='soma layer')
+    >>> lfp_deep = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
+    ...                                  location='deep layer')
+    >>> lfp_surface = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
+    ...                                      location='surface')
 
     Analyze the effect of spatial parameters:
 
-    .. code-block:: python
-
-        >>> # Larger population area
-        >>> lfp_large = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
-        ...                                   xmax=0.5, ymax=0.5)
-        >>> # Faster conduction velocity
-        >>> lfp_fast = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', va=500.0)
+    >>> # Larger population area
+    >>> lfp_large = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
+    ...                                   xmax=0.5, ymax=0.5)
+    >>> # Faster conduction velocity
+    >>> lfp_fast = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', va=500.0)
 
     Visualize the results:
 
-    .. code-block:: python
-
-        >>> import matplotlib.pyplot as plt
-        >>> plt.figure(figsize=(10, 6))
-        >>> plt.plot(times[:500], total_lfp[:500], 'k-', linewidth=1)
-        >>> plt.xlabel('Time (ms)')
-        >>> plt.ylabel('LFP Amplitude (μV)')
-        >>> plt.title('Simulated Local Field Potential')
-        >>> plt.grid(True, alpha=0.3)
-        >>> plt.show()
+    >>> import matplotlib.pyplot as plt
+    >>> plt.figure(figsize=(10, 6))
+    >>> plt.plot(times[:500], total_lfp[:500], 'k-', linewidth=1)
+    >>> plt.xlabel('Time (ms)')
+    >>> plt.ylabel('LFP Amplitude (μV)')
+    >>> plt.title('Simulated Local Field Potential')
+    >>> plt.grid(True, alpha=0.3)
+    >>> plt.show()
 
     See Also
     --------
@@ -279,77 +271,27 @@ def power_spectral_density(
     noverlap: int = None,
     freq_range: tuple = None
 ) -> tuple:
-    """Compute power spectral density (PSD) of LFP signals using FFT-based periodogram.
-
-    Estimates the power spectral density of LFP signals to analyze frequency content
-    and identify oscillatory activity. This implementation uses an FFT-based approach
-    with windowing for spectral leakage reduction.
-
+    """Compute power spectral density (PSD) of LFP signals using Welch's method.
+    
     Parameters
     ----------
     lfp : brainstate.typing.ArrayLike
-        LFP signal array with shape ``(n_time,)`` for single channel or
-        ``(n_time, n_channels)`` for multi-channel recordings.
+        LFP signal array with shape (n_time,) or (n_time, n_channels).
     dt : float
-        Sampling interval in seconds. Used to compute frequency axis and normalize PSD.
+        Sampling interval in seconds.
     nperseg : int, optional
-        Length of each segment for PSD calculation. If None, uses ``n_time // 8``.
-        Longer segments provide better frequency resolution but less temporal averaging.
+        Length of each segment for PSD calculation. Default: n_time // 8.
     noverlap : int, optional
-        Number of points to overlap between segments. If None, uses ``nperseg // 2``.
-        Currently not implemented in this simplified version.
+        Number of points to overlap between segments. Default: nperseg // 2.
     freq_range : tuple, optional
-        Frequency range ``(f_min, f_max)`` in Hz to extract. If None, returns all
-        positive frequencies up to Nyquist frequency.
-
+        Frequency range (f_min, f_max) in Hz to extract. If None, returns all frequencies.
+    
     Returns
     -------
     freqs : jax.Array
-        Array of sample frequencies in Hz with shape ``(n_freqs,)``.
+        Array of sample frequencies.
     psd : jax.Array
-        Power spectral density estimate in units²/Hz. Shape is ``(n_freqs,)`` for
-        single channel or ``(n_freqs, n_channels)`` for multi-channel.
-
-    Examples
-    --------
-    Analyze oscillatory content of simulated LFP:
-
-    .. code-block:: python
-
-        >>> import jax.numpy as jnp
-        >>> import braintools
-        >>> # Generate LFP with theta (6 Hz) and gamma (40 Hz) components
-        >>> dt = 0.001  # 1 ms sampling
-        >>> t = jnp.arange(0, 2, dt)  # 2 seconds
-        >>> theta = jnp.sin(2 * jnp.pi * 6 * t)
-        >>> gamma = 0.3 * jnp.sin(2 * jnp.pi * 40 * t)
-        >>> noise = 0.1 * jnp.random.normal(size=len(t))
-        >>> lfp = theta + gamma + noise
-        >>> freqs, psd = braintools.metric.power_spectral_density(lfp, dt)
-        >>> print(f"Frequency resolution: {freqs[1] - freqs[0]:.2f} Hz")
-        >>> print(f"Peak frequencies: {freqs[jnp.argsort(psd)[-3:]]}")
-
-    Focus on specific frequency bands:
-
-    .. code-block:: python
-
-        >>> # Extract theta band (4-8 Hz) power
-        >>> freqs_theta, psd_theta = braintools.metric.power_spectral_density(
-        ...     lfp, dt, freq_range=(4, 8)
-        ... )
-        >>> theta_power = jnp.sum(psd_theta)
-        >>> print(f"Theta power: {theta_power:.3f}")
-
-    See Also
-    --------
-    coherence_analysis : Coherence between two LFP signals
-    spectral_entropy : Spectral complexity measure
-
-    Notes
-    -----
-    This implementation uses a simplified periodogram approach rather than Welch's
-    method for JAX compatibility. The signal is windowed with a Hanning window
-    to reduce spectral leakage.
+        Power spectral density estimate.
     """
     lfp = jnp.asarray(lfp)
     if lfp.ndim == 1:
@@ -391,68 +333,23 @@ def coherence_analysis(
     dt: float,
     nperseg: int = None
 ) -> tuple:
-    """Compute magnitude-squared coherence between two LFP signals.
-
-    Coherence quantifies the linear relationship between two signals as a function
-    of frequency. It ranges from 0 (no linear relationship) to 1 (perfect linear
-    relationship) at each frequency.
-
-    The magnitude-squared coherence is computed as:
-
-    .. math::
-
-        C_{xy}(f) = \frac{|P_{xy}(f)|^2}{P_{xx}(f) P_{yy}(f)}
-
-    where :math:`P_{xy}(f)` is the cross-power spectral density and
-    :math:`P_{xx}(f)`, :math:`P_{yy}(f)` are the auto-power spectral densities.
-
+    """Compute coherence between two LFP signals.
+    
     Parameters
     ----------
     lfp1, lfp2 : brainstate.typing.ArrayLike
-        LFP signals with shape ``(n_time,)``. Both signals must have the same length.
+        LFP signals with shape (n_time,).
     dt : float
         Sampling interval in seconds.
     nperseg : int, optional
-        Length of each segment for coherence calculation. If None, uses ``n_time // 8``.
-
+        Length of each segment. Default: n_time // 8.
+    
     Returns
     -------
     freqs : jax.Array
-        Array of sample frequencies in Hz with shape ``(n_freqs,)``.
+        Array of sample frequencies.
     coherence : jax.Array
-        Magnitude-squared coherence values with shape ``(n_freqs,)``.
-        Values range from 0 to 1.
-
-    Examples
-    --------
-    Analyze coherence between two brain regions:
-
-    .. code-block:: python
-
-        >>> import jax.numpy as jnp
-        >>> import braintools
-        >>> # Generate two coupled LFP signals with shared theta oscillation
-        >>> dt = 0.001
-        >>> t = jnp.arange(0, 2, dt)
-        >>> shared_theta = jnp.sin(2 * jnp.pi * 6 * t)
-        >>> noise1 = 0.5 * jnp.random.normal(size=len(t))
-        >>> noise2 = 0.5 * jnp.random.normal(size=len(t))
-        >>> lfp1 = shared_theta + noise1
-        >>> lfp2 = 0.8 * shared_theta + noise2  # Partially coupled
-        >>> freqs, coh = braintools.metric.coherence_analysis(lfp1, lfp2, dt)
-        >>> theta_idx = jnp.argmin(jnp.abs(freqs - 6))  # Find 6 Hz
-        >>> print(f"Coherence at 6 Hz: {coh[theta_idx]:.3f}")
-
-    See Also
-    --------
-    power_spectral_density : PSD of individual signals
-    lfp_phase_coherence : Phase-based coherence measure
-
-    Notes
-    -----
-    This implementation uses a single-segment approach for simplicity. For more
-    robust estimates with real data, consider using multiple segments or longer
-    recordings.
+        Magnitude-squared coherence.
     """
     lfp1, lfp2 = jnp.asarray(lfp1), jnp.asarray(lfp2)
     n_time = len(lfp1)
@@ -491,87 +388,28 @@ def phase_amplitude_coupling(
     n_bins: int = 18
 ) -> tuple:
     """Compute phase-amplitude coupling (PAC) using the modulation index.
-
-    Phase-amplitude coupling quantifies the relationship between the phase of
-    slow oscillations and the amplitude of fast oscillations. This is a key
-    mechanism for cross-frequency coupling in neural networks.
-
-    The modulation index is computed as:
-
-    .. math::
-
-        MI = \frac{H_{max} - H}{H_{max}}
-
-    where :math:`H` is the Shannon entropy of the amplitude distribution across
-    phase bins and :math:`H_{max} = \log(N)` is the maximum entropy.
-
+    
     Parameters
     ----------
     lfp : brainstate.typing.ArrayLike
-        LFP signal with shape ``(n_time,)``.
+        LFP signal with shape (n_time,).
     dt : float
         Sampling interval in seconds.
     phase_freq_range : tuple, default=(4, 8)
-        Frequency range in Hz for phase extraction (low frequency band,
-        e.g., theta: 4-8 Hz).
+        Frequency range for phase extraction (low frequency, e.g., theta).
     amplitude_freq_range : tuple, default=(30, 100)
-        Frequency range in Hz for amplitude extraction (high frequency band,
-        e.g., gamma: 30-100 Hz).
+        Frequency range for amplitude extraction (high frequency, e.g., gamma).
     n_bins : int, default=18
-        Number of phase bins for amplitude distribution analysis.
-        More bins provide finer resolution but require longer signals.
-
+        Number of phase bins for analysis.
+    
     Returns
     -------
     modulation_index : float
-        Normalized entropy-based modulation index ranging from 0 (no coupling)
-        to 1 (maximum coupling).
+        Normalized entropy-based modulation index.
     phase_bins : jax.Array
-        Phase bin centers in radians with shape ``(n_bins,)``.
+        Phase bin centers.
     mean_amplitudes : jax.Array
-        Mean amplitude in each phase bin with shape ``(n_bins,)``.
-
-    Examples
-    --------
-    Detect theta-gamma coupling in simulated data:
-
-    .. code-block:: python
-
-        >>> import jax.numpy as jnp
-        >>> import braintools
-        >>> # Generate theta-modulated gamma oscillation
-        >>> dt = 0.001
-        >>> t = jnp.arange(0, 4, dt)
-        >>> theta_phase = 2 * jnp.pi * 6 * t
-        >>> gamma_amplitude = 1 + 0.5 * jnp.cos(theta_phase)  # Amplitude modulation
-        >>> gamma_signal = gamma_amplitude * jnp.sin(2 * jnp.pi * 40 * t)
-        >>> theta_signal = jnp.sin(theta_phase)
-        >>> lfp = theta_signal + gamma_signal + 0.1 * jnp.random.normal(size=len(t))
-        >>> mi, phases, amps = braintools.metric.phase_amplitude_coupling(lfp, dt)
-        >>> print(f"Modulation Index: {mi:.3f}")
-        >>> print(f"Peak amplitude at phase: {phases[jnp.argmax(amps)]:.2f} rad")
-
-    Compare coupling strength across conditions:
-
-    .. code-block:: python
-
-        >>> # No coupling case
-        >>> uncoupled_gamma = jnp.sin(2 * jnp.pi * 40 * t)
-        >>> uncoupled_lfp = theta_signal + uncoupled_gamma
-        >>> mi_uncoupled, _, _ = braintools.metric.phase_amplitude_coupling(uncoupled_lfp, dt)
-        >>> print(f"Uncoupled MI: {mi_uncoupled:.3f}")
-        >>> print(f"Coupling strength difference: {mi - mi_uncoupled:.3f}")
-
-    See Also
-    --------
-    theta_gamma_coupling : Specific theta-gamma coupling analysis
-    power_spectral_density : Frequency domain analysis
-
-    References
-    ----------
-    .. [1] Tort, Adriano BL, et al. "Measuring phase-amplitude coupling between
-           neuronal oscillations of different frequencies." Journal of
-           neurophysiology 104.2 (2010): 1195-1210.
+        Mean amplitude in each phase bin.
     """
     lfp = jnp.asarray(lfp)
     

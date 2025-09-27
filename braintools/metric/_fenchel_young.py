@@ -82,26 +82,22 @@ def make_fenchel_young_loss(
     --------
     Create a softmax-based Fenchel-Young loss:
 
-    .. code-block:: python
-
-        >>> import jax.numpy as jnp
-        >>> from jax.scipy.special import logsumexp
-        >>> import braintools
-        >>> # Create the loss function
-        >>> fy_loss = braintools.metric.make_fenchel_young_loss(max_fun=logsumexp)
-        >>> # Example usage
-        >>> scores = jnp.array([[2.0, 1.0, 0.5], [1.5, 2.5, 1.0]])
-        >>> targets = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-        >>> loss = fy_loss(scores, targets)
-        >>> print(f"Fenchel-Young loss: {loss}")
+    >>> import jax.numpy as jnp
+    >>> from jax.scipy.special import logsumexp
+    >>> import braintools as braintools
+    >>> # Create the loss function
+    >>> fy_loss = braintools.metric.make_fenchel_young_loss(max_fun=logsumexp)
+    >>> # Example usage
+    >>> scores = jnp.array([[2.0, 1.0, 0.5], [1.5, 2.5, 1.0]])
+    >>> targets = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    >>> loss = fy_loss(scores, targets)
+    >>> print(f"Fenchel-Young loss: {loss}")
 
     Create a custom max function for structured prediction:
 
-    .. code-block:: python
-
-        >>> def custom_max(x):
-        ...     return jnp.max(x) + 0.1 * jnp.sum(x**2)  # L2 regularized max
-        >>> structured_loss = braintools.metric.make_fenchel_young_loss(max_fun=custom_max)
+    >>> def custom_max(x):
+    ...     return jnp.max(x) + 0.1 * jnp.sum(x**2)  # L2 regularized max
+    >>> structured_loss = braintools.metric.make_fenchel_young_loss(max_fun=custom_max)
 
     See Also
     --------

@@ -57,129 +57,41 @@ def spike_raster(
 ) -> plt.Axes:
     """
     Create a spike raster plot for neural spike data.
-
-    This function creates a raster plot where each row represents a neuron and
-    each vertical line represents a spike. It's one of the most common
-    visualizations in neuroscience for displaying spiking activity across
-    a population of neurons over time.
-
+    
     Parameters
     ----------
-    spike_times : array_like or list of array_like
+    spike_times : array-like
         Array of spike times or list of spike time arrays for each neuron.
-        If a single array, must provide neuron_ids. If list, each element
-        corresponds to spike times for that neuron index.
-    neuron_ids : array_like, optional
+    neuron_ids : array-like, optional
         Array of neuron IDs corresponding to spike_times. If None, assumes
         spike_times is a list with one array per neuron.
-    time_range : tuple of float, optional
-        (start, end) time range to display. If None, shows entire time range.
-    neuron_range : tuple of int, optional
-        (start, end) neuron ID range to display. If None, shows all neurons.
-    color : str or array_like, default='black'
-        Color for spikes. Can be a single color string or array of colors
-        for each neuron.
-    marker : str, default='|'
-        Marker style for spikes. Common options: '|', '.', 'o', 's'.
-    markersize : float, default=1.0
+    time_range : tuple, optional
+        (start, end) time range to display.
+    neuron_range : tuple, optional
+        (start, end) neuron ID range to display.
+    color : str or array-like
+        Color for spikes. Can be a single color or array of colors.
+    marker : str
+        Marker style for spikes.
+    markersize : float
         Size of spike markers.
-    alpha : float, default=1.0
-        Alpha transparency value (0.0 to 1.0).
+    alpha : float
+        Alpha transparency value.
     ax : matplotlib.axes.Axes, optional
         Axes to plot on. If None, creates new figure.
-    figsize : tuple of float, default=(10, 6)
-        Figure size (width, height) if creating new figure.
-    xlabel : str, default='Time'
-        X-axis label.
-    ylabel : str, default='Neuron ID'
-        Y-axis label.
-    title : str, optional
-        Plot title. If None, no title is set.
-    show_stats : bool, default=False
-        Whether to show firing rate statistics in the plot.
+    figsize : tuple
+        Figure size if creating new figure.
+    xlabel, ylabel, title : str
+        Axis labels and title.
+    show_stats : bool
+        Whether to show firing rate statistics.
     **kwargs
         Additional arguments passed to scatter plot.
-
+        
     Returns
     -------
-    matplotlib.axes.Axes
+    ax : matplotlib.axes.Axes
         The axes object containing the plot.
-
-    Notes
-    -----
-    Raster plots are essential for visualizing population dynamics in neural
-    networks. They help identify:
-
-    - Synchronization patterns across neurons
-    - Population bursts or quiet periods
-    - Individual neuron firing patterns
-    - Temporal correlations in activity
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import braintools as bt
-
-        # Basic raster plot with separate arrays
-        spike_times = np.array([1.2, 1.5, 2.1, 2.8, 3.2, 3.9, 4.1])
-        neuron_ids = np.array([0, 1, 0, 2, 1, 0, 2])
-
-        ax = bt.visualize.spike_raster(spike_times, neuron_ids)
-        plt.show()
-
-        # Raster plot with list of spike times per neuron
-        neuron_spikes = [
-            np.array([1.2, 2.1, 3.9]),  # Neuron 0 spikes
-            np.array([1.5, 3.2]),       # Neuron 1 spikes
-            np.array([2.8, 4.1])        # Neuron 2 spikes
-        ]
-
-        ax = bt.visualize.spike_raster(neuron_spikes)
-        plt.show()
-
-        # Advanced raster plot with custom styling
-        np.random.seed(42)
-        n_neurons = 50
-        duration = 10.0
-
-        # Generate random spike trains
-        spike_data = []
-        for i in range(n_neurons):
-            # Poisson-like spike generation
-            n_spikes = np.random.poisson(duration * 5)  # 5 Hz average
-            spikes = np.sort(np.random.uniform(0, duration, n_spikes))
-            spike_data.append(spikes)
-
-        # Create raster with color coding by neuron type
-        colors = ['red' if i < 40 else 'blue' for i in range(n_neurons)]
-
-        fig, ax = plt.subplots(figsize=(12, 8))
-        bt.visualize.spike_raster(
-            spike_data,
-            color=colors,
-            marker='|',
-            markersize=2.0,
-            alpha=0.8,
-            ax=ax,
-            title='Population Spike Raster (Red: Excitatory, Blue: Inhibitory)',
-            show_stats=True
-        )
-        plt.show()
-
-        # Focused view on specific time and neuron ranges
-        ax = bt.visualize.spike_raster(
-            spike_data,
-            time_range=(2.0, 6.0),
-            neuron_range=(10, 30),
-            color='purple',
-            marker='.',
-            markersize=3.0,
-            title='Focused Raster View'
-        )
-        plt.show()
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
@@ -261,158 +173,40 @@ def population_activity(
 ) -> plt.Axes:
     """
     Plot population activity over time.
-
-    This function aggregates neural activity across a population of neurons
-    and visualizes the temporal dynamics. It's useful for understanding
-    overall network activity patterns and population-level responses.
-
+    
     Parameters
     ----------
     data : np.ndarray
-        Neural activity data of shape (time, neurons) or (time,) for single neuron.
+        Neural activity data of shape (time, neurons) or (time,).
     time : np.ndarray, optional
-        Time array corresponding to data. If None, uses indices or dt.
+        Time array. If None, uses indices.
     dt : float, optional
-        Time step in milliseconds. Used if time is None to create time array.
-    method : {'mean', 'sum', 'std', 'var', 'median'}, default='mean'
-        Aggregation method for combining activity across neurons.
+        Time step. Used if time is None.
+    method : str
+        Aggregation method: 'mean', 'sum', 'std', 'var', 'median'.
     window_size : int, optional
-        Size of sliding window for smoothing. If None, no smoothing applied.
-    neuron_ids : array_like, optional
-        Specific neuron indices to include in aggregation.
+        Size of sliding window for smoothing.
+    neuron_ids : array-like, optional
+        Specific neuron IDs to include.
     ax : matplotlib.axes.Axes, optional
-        Axes to plot on. If None, creates new figure.
-    figsize : tuple of float, default=(10, 6)
-        Figure size (width, height) if creating new figure.
-    color : str, default='blue'
-        Line color for the plot.
-    alpha : float, default=0.7
-        Alpha transparency value (0.0 to 1.0).
-    fill : bool, default=True
+        Axes to plot on.
+    figsize : tuple
+        Figure size if creating new figure.
+    color : str
+        Line color.
+    alpha : float
+        Alpha transparency.
+    fill : bool
         Whether to fill area under curve.
-    xlabel : str, default='Time'
-        X-axis label.
-    ylabel : str, optional
-        Y-axis label. If None, auto-generated based on method.
-    title : str, optional
-        Plot title. If None, no title is set.
+    xlabel, ylabel, title : str
+        Axis labels and title.
     **kwargs
-        Additional arguments passed to plot or fill_between.
-
+        Additional arguments passed to plot.
+        
     Returns
     -------
-    matplotlib.axes.Axes
+    ax : matplotlib.axes.Axes
         The axes object containing the plot.
-
-    Notes
-    -----
-    Population activity plots help visualize:
-
-    - Overall network activation levels
-    - Temporal dynamics of population responses
-    - Variability across the population (using 'std' or 'var')
-    - Population synchrony and desynchrony events
-
-    Different aggregation methods provide different insights:
-
-    - 'mean': Average activity level
-    - 'sum': Total population activity
-    - 'std': Population variability
-    - 'median': Robust measure of central tendency
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import braintools as bt
-
-        # Simulate population activity data
-        np.random.seed(42)
-        n_time = 1000
-        n_neurons = 100
-        dt = 0.1  # ms
-
-        # Create time-varying activity with some population dynamics
-        time = np.arange(n_time) * dt
-        base_activity = 5 + 3 * np.sin(2 * np.pi * time / 50)  # Oscillatory component
-        noise = np.random.randn(n_time, n_neurons) * 0.5
-        activity_data = base_activity[:, None] + noise
-
-        # Basic population activity plot
-        ax = bt.visualize.population_activity(
-            activity_data,
-            time=time,
-            method='mean',
-            title='Mean Population Activity'
-        )
-        plt.show()
-
-        # Compare different aggregation methods
-        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-
-        methods = ['mean', 'sum', 'std', 'median']
-        for i, method in enumerate(methods):
-            ax = axes[i // 2, i % 2]
-            bt.visualize.population_activity(
-                activity_data,
-                time=time,
-                method=method,
-                ax=ax,
-                color=['blue', 'red', 'green', 'orange'][i],
-                title=f'Population {method.capitalize()}'
-            )
-
-        plt.tight_layout()
-        plt.show()
-
-        # Smoothed population activity with specific neuron subset
-        selected_neurons = np.arange(0, 50)  # First 50 neurons
-        ax = bt.visualize.population_activity(
-            activity_data,
-            time=time,
-            method='mean',
-            window_size=10,  # Apply smoothing
-            neuron_ids=selected_neurons,
-            color='purple',
-            alpha=0.8,
-            title='Smoothed Activity (Neurons 0-49)'
-        )
-        plt.show()
-
-        # Multiple populations comparison
-        excitatory_data = activity_data[:, :80]  # First 80 neurons
-        inhibitory_data = activity_data[:, 80:]  # Last 20 neurons
-
-        fig, ax = plt.subplots(figsize=(12, 6))
-
-        # Plot excitatory population
-        bt.visualize.population_activity(
-            excitatory_data,
-            time=time,
-            method='mean',
-            ax=ax,
-            color='red',
-            alpha=0.7,
-            fill=False,
-            ylabel='Firing Rate (Hz)'
-        )
-
-        # Plot inhibitory population
-        bt.visualize.population_activity(
-            inhibitory_data,
-            time=time,
-            method='mean',
-            ax=ax,
-            color='blue',
-            alpha=0.7,
-            fill=False
-        )
-
-        ax.legend(['Excitatory', 'Inhibitory'])
-        ax.set_title('Excitatory vs Inhibitory Population Activity')
-        plt.show()
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
@@ -491,143 +285,36 @@ def connectivity_matrix(
 ) -> plt.Axes:
     """
     Visualize connectivity matrix between neural populations.
-
-    This function creates a heatmap visualization of synaptic connection weights
-    between neural populations. It's essential for understanding network structure,
-    connection patterns, and the strength of synaptic connections.
-
+    
     Parameters
     ----------
     weights : np.ndarray
-        Connectivity weight matrix of shape (pre_neurons, post_neurons).
-        Positive values typically represent excitatory connections,
-        negative values represent inhibitory connections.
-    pre_labels : list of str, optional
-        Labels for pre-synaptic neurons/populations (y-axis).
-    post_labels : list of str, optional
-        Labels for post-synaptic neurons/populations (x-axis).
-    cmap : str, default='RdBu_r'
-        Colormap for the matrix. 'RdBu_r' is good for showing positive/negative weights.
-    center_zero : bool, default=True
-        Whether to center colormap at zero (symmetric around zero).
+        Connectivity weight matrix of shape (pre, post).
+    pre_labels, post_labels : list, optional
+        Labels for pre and post-synaptic populations.
+    cmap : str
+        Colormap for the matrix.
+    center_zero : bool
+        Whether to center colormap at zero.
     ax : matplotlib.axes.Axes, optional
-        Axes to plot on. If None, creates new figure.
-    figsize : tuple of float, default=(8, 8)
-        Figure size (width, height) if creating new figure.
-    show_colorbar : bool, default=True
-        Whether to show colorbar indicating weight values.
-    show_values : bool, default=False
-        Whether to show numerical values in each cell.
+        Axes to plot on.
+    figsize : tuple
+        Figure size if creating new figure.
+    show_colorbar : bool
+        Whether to show colorbar.
+    show_values : bool
+        Whether to show values in cells.
     value_threshold : float, optional
-        Only show values in cells where |value| >= threshold.
+        Only show values above this threshold.
     title : str, optional
-        Plot title. If None, no title is set.
+        Plot title.
     **kwargs
         Additional arguments passed to imshow.
-
+        
     Returns
     -------
-    matplotlib.axes.Axes
+    ax : matplotlib.axes.Axes
         The axes object containing the plot.
-
-    Notes
-    -----
-    Connectivity matrices reveal important network properties:
-
-    - Connection strengths between neural populations
-    - Excitatory vs inhibitory connection patterns
-    - Network topology and architectural principles
-    - Synaptic weight distributions
-
-    Interpretation guidelines:
-
-    - Bright red: Strong excitatory connections
-    - Bright blue: Strong inhibitory connections
-    - White/gray: Weak or no connections
-    - Diagonal patterns: Recurrent connections
-    - Block patterns: Population-specific connectivity
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import braintools as bt
-
-        # Create example connectivity matrix
-        np.random.seed(42)
-        n_pre = 20
-        n_post = 15
-
-        # Random connectivity with some structure
-        weights = np.random.randn(n_pre, n_post) * 0.1
-        # Add stronger connections within populations
-        weights[:10, :8] += 0.3  # Excitatory-to-excitatory
-        weights[10:, 8:] -= 0.2  # Inhibitory-to-inhibitory
-        weights[10:, :8] -= 0.4  # Inhibitory-to-excitatory
-
-        # Basic connectivity matrix plot
-        ax = bt.visualize.connectivity_matrix(
-            weights,
-            title='Neural Network Connectivity'
-        )
-        plt.show()
-
-        # Detailed plot with labels and values
-        pre_labels = [f'Pre-{i}' for i in range(n_pre)]
-        post_labels = [f'Post-{i}' for i in range(n_post)]
-
-        ax = bt.visualize.connectivity_matrix(
-            weights,
-            pre_labels=pre_labels,
-            post_labels=post_labels,
-            show_values=True,
-            value_threshold=0.2,  # Only show significant weights
-            title='Labeled Connectivity Matrix',
-            figsize=(10, 12)
-        )
-        plt.xticks(rotation=45)
-        plt.show()
-
-        # Compare different visualization styles
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-
-        # Standard view
-        bt.visualize.connectivity_matrix(
-            weights, ax=axes[0], title='Standard View',
-            cmap='RdBu_r', center_zero=True
-        )
-
-        # Heat map style
-        bt.visualize.connectivity_matrix(
-            weights, ax=axes[1], title='Heat Map Style',
-            cmap='viridis', center_zero=False
-        )
-
-        # Binary connectivity (threshold)
-        binary_weights = (np.abs(weights) > 0.2).astype(float)
-        bt.visualize.connectivity_matrix(
-            binary_weights, ax=axes[2], title='Binary Connectivity',
-            cmap='binary', center_zero=False
-        )
-
-        plt.tight_layout()
-        plt.show()
-
-        # Population-level connectivity
-        pop_names = ['Excitatory', 'Inhibitory']
-        pop_weights = np.array([[0.8, -0.5], [-0.3, -0.2]])
-
-        ax = bt.visualize.connectivity_matrix(
-            pop_weights,
-            pre_labels=pop_names,
-            post_labels=pop_names,
-            show_values=True,
-            title='Population Connectivity',
-            figsize=(6, 6)
-        )
-        plt.show()
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)

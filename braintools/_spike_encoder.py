@@ -38,63 +38,50 @@ __all__ = [
 
 class LatencyEncoder:
     r"""
-    Encode the rate input as the spike train using latency encoding.
+    Encode the rate input as the spike train using the latency encoding.
 
-    Uses input features to determine time-to-first spike. Expected inputs should
-    be between 0 and 1. If not, the latency encoder will normalize ``x`` into
-    the range ``[0, 1]`` according to:
+    Use input features to determine time-to-first spike.
 
-    .. math::
-        x_{\text{normalize}} = \frac{x-\text{min_val}}{\text{max_val} - \text{min_val}}
-
+    Expected inputs should be between 0 and 1. If not, the latency encoder will encode ``x``
+    (normalized into ``[0, 1]`` according to
+    :math:`x_{\text{normalize}} = \frac{x-\text{min_val}}{\text{max_val} - \text{min_val}}`)
     to spikes whose firing time is :math:`0 \le t_f \le \text{num_period}-1`.
     A larger ``x`` will cause the earlier firing time.
 
-    Parameters
-    ----------
-    min_val : float, optional
-        The minimal value in the given data `x`, used for data normalization.
-    max_val : float, optional
-        The maximum value in the given data `x`, used for data normalization.
-    method : {'linear', 'log'}, default='log'
-        How to convert intensity to firing time.
 
+    Example::
+
+      >>> import jax
+      >>> a = jax.numpy.array([0.02, 0.5, 1])
+      >>> encoder = LatencyEncoder(method='linear', normalize=True)
+      >>> encoder(a, n_time=5)
+      Array([[0., 0., 1.],
+             [0., 0., 0.],
+             [0., 1., 0.],
+             [0., 0., 0.],
+             [1., 0., 0.]])
+
+
+    Args:
+      min_val: float. The minimal value in the given data `x`, used to the data normalization.
+      max_val: float. The maximum value in the given data `x`, used to the data normalization.
+      method: str. How to convert intensity to firing time. Currently, we support `linear` or `log`.
         - If ``method='linear'``, the firing rate is calculated as
           :math:`t_f(x) = (\text{num_period} - 1)(1 - x)`.
         - If ``method='log'``, the firing rate is calculated as
           :math:`t_f(x) = (\text{num_period} - 1) - ln(\alpha * x + 1)`,
           where :math:`\alpha` satisfies :math:`t_f(1) = \text{num_period} - 1`.
-    threshold : float, default=0.01
-        Input features below the threshold will fire at the final time step
-        unless ``clip=True`` in which case they will not fire at all.
-    clip : bool, default=False
-        Option to remove spikes from features that fall below the threshold.
-    tau : float, default=1.0 * u.ms
-        RC Time constant for LIF model used to calculate firing time.
-    normalize : bool, default=False
-        Option to normalize the latency code such that the final spike(s)
-        occur within num_steps.
-    first_spk_time : float, default=0.0 * u.ms
-        Time of the first possible spike.
-    epsilon : float, default=1e-7
-        A tiny positive value to avoid rounding errors.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax
-        import jax.numpy as jnp
-
-        # Create encoder with linear method
-        encoder = LatencyEncoder(method='linear', normalize=True)
-
-        # Encode input data
-        data = jnp.array([0.02, 0.5, 1.0])
-        spikes = encoder(data, n_time=5)
-
-        # Output shape: (n_time, n_features)
-        print(spikes.shape)  # (5, 3)
+      threshold: float. Input features below the threhold will fire at the
+        final time step unless ``clip=True`` in which case they will not
+        fire at all, defaults to ``0.01``.
+      clip: bool. Option to remove spikes from features that fall
+          below the threshold, defaults to ``False``.
+      tau: float. RC Time constant for LIF model used to calculate
+        firing time, defaults to ``1``.
+      normalize: bool. Option to normalize the latency code such that
+        the final spike(s) occur within num_steps, defaults to ``False``.
+      epsilon: float. A tiny positive value to avoid rounding errors when
+        using torch.arange, defaults to ``1e-7``.
     """
     __module__ = 'braintools'
 
@@ -130,22 +117,14 @@ class LatencyEncoder:
     def __call__(self, data, n_time: Optional[brainstate.typing.ArrayLike] = None):
         """Generate latency spikes according to the given input data.
 
-        Parameters
-        ----------
-        data : array_like
-            The rate-based input data to encode.
-        n_time : float, optional
-            The total time to generate data. If None, use ``tau`` instead.
+        Ensuring x in [0., 1.].
 
-        Returns
-        -------
-        array_like
-            The output spiking trains with shape (n_time, *data.shape).
+        Args:
+          data: The rate-based input.
+          n_time: float. The total time to generate data. If None, use ``tau`` instead.
 
-        Notes
-        -----
-        Input data is expected to be in the range [0, 1]. Values outside this
-        range will be normalized if min_val and max_val are provided.
+        Returns:
+          out: array. The output spiking trains.
         """
         with jax.ensure_compile_time_eval():
             if n_time is None:
@@ -182,43 +161,27 @@ class LatencyEncoder:
 class RateEncoder:
     r"""
     Encode analog values into spike rates using various rate encoding methods.
-
-    The rate encoder converts continuous input values into spike trains where the
-    firing rate is proportional to the input intensity. Higher input values result
+    
+    The rate encoder converts continuous input values into spike trains where the 
+    firing rate is proportional to the input intensity. Higher input values result 
     in higher firing rates.
-
-    Parameters
-    ----------
-    gain : float, default=100.0
-        Scaling factor to convert normalized input to firing rate (Hz).
-    method : {'linear', 'exponential', 'sqrt'}, default='linear'
-        Rate encoding method to use.
-    min_rate : float, default=0.0
-        Minimum firing rate in Hz.
-    max_rate : float, optional
-        Maximum firing rate in Hz. If None, uses gain value.
-    normalize : bool, default=False
-        Whether to normalize inputs to [0, 1] range.
-    min_val : float, optional
-        Minimum value for normalization.
-    max_val : float, optional
-        Maximum value for normalization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Create rate encoder
-        encoder = RateEncoder(gain=100, method='linear')
-
-        # Encode input data
-        data = jnp.array([0.1, 0.5, 0.9])
-        spikes = encoder(data, n_time=100)
-
-        # Calculate firing rates
-        firing_rates = jnp.mean(spikes, axis=0)  # Should be ~[10, 50, 90] Hz
+    
+    Example::
+    
+      >>> import jax.numpy as jnp
+      >>> data = jnp.array([0.1, 0.5, 0.9])
+      >>> encoder = RateEncoder(gain=100, method='linear')
+      >>> spikes = encoder(data, n_time=100)
+      >>> firing_rates = jnp.mean(spikes, axis=0)  # Should be ~[10, 50, 90] Hz
+    
+    Args:
+      gain: float. Scaling factor to convert normalized input to firing rate (Hz).
+      method: str. Rate encoding method ('linear', 'exponential', 'sqrt').
+      min_rate: float. Minimum firing rate in Hz.
+      max_rate: float. Maximum firing rate in Hz.
+      normalize: bool. Whether to normalize inputs to [0, 1] range.
+      min_val: float. Minimum value for normalization.
+      max_val: float. Maximum value for normalization.
     """
     __module__ = 'braintools'
 
@@ -245,18 +208,13 @@ class RateEncoder:
 
     def __call__(self, data, n_time: int):
         """Generate rate-encoded spikes.
-
-        Parameters
-        ----------
-        data : array_like
-            Input array to encode.
-        n_time : int
-            Number of time steps.
-
-        Returns
-        -------
-        array_like
-            Spike trains with shape (n_time, *data.shape).
+        
+        Args:
+          data: Input array to encode.
+          n_time: Number of time steps.
+        
+        Returns:
+          Spike trains with shape (n_time, *data.shape).
         """
         x = data
         if self.normalize and self.min_val is not None and self.max_val is not None:
@@ -286,33 +244,21 @@ class RateEncoder:
 class PoissonEncoder:
     r"""
     Encode inputs as Poisson spike trains.
-
+    
     Generates spike trains where inter-spike intervals follow a Poisson distribution.
     The input intensity determines the rate parameter of the Poisson process.
-
-    Parameters
-    ----------
-    time_window : float, default=1000.0
-        Time window in ms for rate calculation.
-    normalize : bool, default=False
-        Whether to treat inputs as rates (False) or normalize to rates (True).
-    max_rate : float, default=100.0
-        Maximum rate when normalizing.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Create Poisson encoder
-        encoder = PoissonEncoder()
-
-        # Encode input rates
-        data = jnp.array([10.0, 50.0, 100.0])  # Hz
-        spikes = encoder(data, n_time=1000)  # 1 second at 1ms resolution
-
-        # Mean spike counts should be approximately [10, 50, 100]
+    
+    Example::
+    
+      >>> data = jnp.array([10.0, 50.0, 100.0])  # Hz
+      >>> encoder = PoissonEncoder()
+      >>> spikes = encoder(data, n_time=1000)  # 1 second at 1ms resolution
+      >>> # Mean spike counts should be ~[10, 50, 100]
+    
+    Args:
+      time_window: float. Time window in ms for rate calculation.
+      normalize: bool. Whether to treat inputs as rates (False) or normalize to rates (True).
+      max_rate: float. Maximum rate when normalizing.
     """
     __module__ = 'braintools'
 
@@ -328,18 +274,14 @@ class PoissonEncoder:
 
     def __call__(self, data, n_time: int):
         """Generate Poisson spike trains.
-
-        Parameters
-        ----------
-        data : array_like
-            Input rates in Hz, or values to normalize to rates.
-        n_time : int
-            Number of time steps.
-
-        Returns
-        -------
-        array_like
-            Poisson spike trains with shape (n_time, *data.shape).
+        
+        Args:
+          data: Input rates in Hz, or values to normalize to rates.
+          n_time: Number of time steps.
+          key: JAX random key.
+        
+        Returns:
+          Poisson spike trains with shape (n_time, *data.shape).
         """
         rates = data
         if self.normalize:
@@ -359,36 +301,22 @@ class PoissonEncoder:
 class PopulationEncoder:
     r"""
     Encode scalar values using population coding.
-
-    Each input value is encoded by a population of neurons with overlapping
-    receptive fields. The population response forms a bell curve centered
+    
+    Each input value is encoded by a population of neurons with overlapping 
+    receptive fields. The population response forms a bell curve centered 
     on the input value.
-
-    Parameters
-    ----------
-    n_neurons : int
-        Number of neurons in the population.
-    min_val : float, default=0.0
-        Minimum input value.
-    max_val : float, default=1.0
-        Maximum input value.
-    sigma : float, optional
-        Width of receptive fields (standard deviation). If None, computed
-        as (max_val - min_val) / (n_neurons - 1).
-    max_rate : float, default=100.0
-        Maximum firing rate of neurons.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        # Create population encoder
-        encoder = PopulationEncoder(n_neurons=10, min_val=0, max_val=1)
-
-        # Encode scalar input
-        spikes = encoder(0.5, n_time=100)  # Should peak at neuron 5
-
-        # Output shape: (n_time, n_neurons) for scalar input
+    
+    Example::
+    
+      >>> encoder = PopulationEncoder(n_neurons=10, min_val=0, max_val=1)
+      >>> spikes = encoder(0.5, n_time=100)  # Should peak at neuron 5
+    
+    Args:
+      n_neurons: int. Number of neurons in the population.
+      min_val: float. Minimum input value.
+      max_val: float. Maximum input value.
+      sigma: float. Width of receptive fields (standard deviation).
+      max_rate: float. Maximum firing rate of neurons.
     """
     __module__ = 'braintools'
 
@@ -411,18 +339,14 @@ class PopulationEncoder:
 
     def __call__(self, data, n_time: int):
         """Generate population-encoded spikes.
-
-        Parameters
-        ----------
-        data : array_like
-            Input scalar or array to encode.
-        n_time : int
-            Number of time steps.
-
-        Returns
-        -------
-        array_like
-            Population spike trains with shape (n_time, n_neurons, *data.shape).
+        
+        Args:
+          data: Input scalar or array to encode.
+          n_time: Number of time steps.
+          key: JAX random key.
+        
+        Returns:
+          Population spike trains with shape (n_time, n_neurons, *data.shape).
         """
         data = u.math.asarray(data)
         # Calculate distances from each neuron's preferred value
@@ -458,35 +382,22 @@ class PopulationEncoder:
 class BernoulliEncoder:
     r"""
     Encode inputs using independent Bernoulli processes.
-
+    
     Each input value is converted to a probability, and spikes are generated
     independently at each time step according to this probability.
-
-    Parameters
-    ----------
-    scale : float, default=1.0
-        Scaling factor for input-to-probability conversion.
-    normalize : bool, default=True
-        Whether to normalize inputs to [0, 1].
-    min_val : float, optional
-        Minimum value for normalization.
-    max_val : float, optional
-        Maximum value for normalization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Create Bernoulli encoder
-        encoder = BernoulliEncoder()
-
-        # Encode input probabilities
-        data = jnp.array([0.1, 0.5, 0.9])
-        spikes = encoder(data, n_time=1000)
-
-        # Spike rates should be approximately [100, 500, 900] Hz
+    
+    Example::
+    
+      >>> encoder = BernoulliEncoder()
+      >>> data = jnp.array([0.1, 0.5, 0.9])
+      >>> spikes = encoder(data, n_time=1000)
+      >>> # Spike rates should be ~[100, 500, 900] Hz
+    
+    Args:
+      scale: float. Scaling factor for input-to-probability conversion.
+      normalize: bool. Whether to normalize inputs to [0, 1].
+      min_val: float. Minimum value for normalization.
+      max_val: float. Maximum value for normalization.
     """
     __module__ = 'braintools'
 
@@ -504,18 +415,14 @@ class BernoulliEncoder:
 
     def __call__(self, data, n_time: int):
         """Generate Bernoulli-encoded spikes.
-
-        Parameters
-        ----------
-        data : array_like
-            Input probabilities or values to normalize.
-        n_time : int
-            Number of time steps.
-
-        Returns
-        -------
-        array_like
-            Bernoulli spike trains with shape (n_time, *data.shape).
+        
+        Args:
+          data: Input probabilities or values to normalize.
+          n_time: Number of time steps.
+          key: JAX random key.
+        
+        Returns:
+          Bernoulli spike trains with shape (n_time, *data.shape).
         """
         x = data
         if self.normalize and self.min_val is not None and self.max_val is not None:
@@ -531,31 +438,22 @@ class BernoulliEncoder:
 class DeltaEncoder:
     r"""
     Encode temporal differences (delta changes) in input signals.
-
+    
     Generates spikes when the input signal changes significantly between
     time steps. Useful for encoding dynamic signals and temporal patterns.
-
-    Parameters
-    ----------
-    threshold : float, default=0.1
-        Minimum change required to generate a spike.
-    positive_only : bool, default=False
-        Whether to encode only positive changes.
-    absolute : bool, default=False
-        Whether to use absolute value of changes.
-    normalize : bool, default=True
-        Whether to normalize the input signal.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Encode a changing signal
-        time_series = jnp.array([0, 0.1, 0.8, 0.7, 0.2])
-        encoder = DeltaEncoder(threshold=0.1)
-        spikes = encoder(time_series)  # Spikes at significant changes
+    
+    Example::
+    
+      >>> # Encode a changing signal
+      >>> time_series = jnp.array([0, 0.1, 0.8, 0.7, 0.2])
+      >>> encoder = DeltaEncoder(threshold=0.1)
+      >>> spikes = encoder(time_series)  # Spikes at significant changes
+    
+    Args:
+      threshold: float. Minimum change required to generate a spike.
+      positive_only: bool. Whether to encode only positive changes.
+      absolute: bool. Whether to use absolute value of changes.
+      normalize: bool. Whether to normalize the input signal.
     """
     __module__ = 'braintools'
 
@@ -573,16 +471,12 @@ class DeltaEncoder:
 
     def __call__(self, data):
         """Generate delta-encoded spikes.
-
-        Parameters
-        ----------
-        data : array_like
-            Time series data with shape (n_time, *features).
-
-        Returns
-        -------
-        array_like
-            Delta spike trains with same shape as input.
+        
+        Args:
+          data: Time series data with shape (n_time, *features).
+        
+        Returns:
+          Delta spike trains with same shape as input.
         """
         if data.ndim == 1:
             data = data[..., None]  # Add feature dimension
@@ -609,36 +503,23 @@ class DeltaEncoder:
 class StepCurrentEncoder:
     r"""
     Encode inputs as step current injections for LIF neurons.
-
+    
     Converts input values to constant current levels that can be injected
     into integrate-and-fire neurons. The current amplitude determines the
     firing rate of the neuron.
-
-    Parameters
-    ----------
-    current_scale : float, default=10.0
-        Scaling factor to convert inputs to current (nA).
-    offset : float, default=0.0
-        Baseline current offset.
-    normalize : bool, default=True
-        Whether to normalize inputs.
-    min_val : float, optional
-        Minimum value for normalization.
-    max_val : float, optional
-        Maximum value for normalization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Create step current encoder
-        encoder = StepCurrentEncoder(current_scale=10.0)
-
-        # Encode input values to currents
-        currents = encoder(jnp.array([0.1, 0.5, 1.0]), n_time=100)
-        # Returns current levels [1.0, 5.0, 10.0] nA
+    
+    Example::
+    
+      >>> encoder = StepCurrentEncoder(current_scale=10.0)
+      >>> currents = encoder(jnp.array([0.1, 0.5, 1.0]), n_time=100)
+      >>> # Returns current levels [1.0, 5.0, 10.0] nA
+    
+    Args:
+      current_scale: float. Scaling factor to convert inputs to current (nA).
+      offset: float. Baseline current offset.
+      normalize: bool. Whether to normalize inputs.
+      min_val: float. Minimum value for normalization.
+      max_val: float. Maximum value for normalization.
     """
     __module__ = 'braintools'
 
@@ -658,18 +539,13 @@ class StepCurrentEncoder:
 
     def __call__(self, data, n_time: int):
         """Generate step current signals.
-
-        Parameters
-        ----------
-        data : array_like
-            Input values to convert to currents.
-        n_time : int
-            Number of time steps.
-
-        Returns
-        -------
-        array_like
-            Step current signals with shape (n_time, *data.shape).
+        
+        Args:
+          data: Input values to convert to currents.
+          n_time: Number of time steps.
+        
+        Returns:
+          Step current signals with shape (n_time, *data.shape).
         """
         x = data
         if self.normalize and self.min_val is not None and self.max_val is not None:
@@ -684,32 +560,21 @@ class StepCurrentEncoder:
 class SpikeCountEncoder:
     r"""
     Encode inputs as exact spike counts over time windows.
-
+    
     Distributes a specific number of spikes (determined by input value)
     randomly or regularly over the encoding time window.
-
-    Parameters
-    ----------
-    max_spikes : int, default=10
-        Maximum number of spikes for input value of 1.0.
-    distribution : {'uniform', 'random'}, default='random'
-        How to distribute spikes in time.
-    normalize : bool, default=True
-        Whether to normalize inputs to [0, 1].
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Create spike count encoder
-        encoder = SpikeCountEncoder(max_spikes=10)
-
-        # Encode input values
-        data = jnp.array([0.2, 0.5, 1.0])
-        spikes = encoder(data, n_time=100)
-        # Should generate [2, 5, 10] total spikes respectively
+    
+    Example::
+    
+      >>> encoder = SpikeCountEncoder(max_spikes=10)
+      >>> data = jnp.array([0.2, 0.5, 1.0])
+      >>> spikes = encoder(data, n_time=100)
+      >>> # Should generate [2, 5, 10] total spikes respectively
+    
+    Args:
+      max_spikes: int. Maximum number of spikes for input value of 1.0.
+      distribution: str. How to distribute spikes ('uniform', 'random').
+      normalize: bool. Whether to normalize inputs to [0, 1].
     """
     __module__ = 'braintools'
 
@@ -728,18 +593,14 @@ class SpikeCountEncoder:
 
     def __call__(self, data, n_time: int):
         """Generate spike count-encoded trains.
-
-        Parameters
-        ----------
-        data : array_like
-            Input values determining spike counts.
-        n_time : int
-            Number of time steps.
-
-        Returns
-        -------
-        array_like
-            Spike trains with exact spike counts.
+        
+        Args:
+          data: Input values determining spike counts.
+          n_time: Number of time steps.
+          key: JAX random key.
+        
+        Returns:
+          Spike trains with exact spike counts.
         """
         x = data
         if self.normalize:
@@ -774,31 +635,20 @@ class SpikeCountEncoder:
 class TemporalEncoder:
     r"""
     Encode temporal patterns using synchronized spike timing.
-
+    
     Encodes input sequences by mapping values to precise spike times,
     creating temporal patterns that preserve sequence information.
-
-    Parameters
-    ----------
-    n_patterns : int
-        Number of distinct temporal patterns.
-    pattern_length : int, default=10
-        Length of each temporal pattern in time steps.
-    jitter : float, default=0.1
-        Temporal jitter to add to spike times (fraction of pattern_length).
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Create temporal encoder
-        encoder = TemporalEncoder(n_patterns=3)
-
-        # Encode sequence
-        sequence = jnp.array([0, 1, 2, 1, 0])
-        spikes = encoder(sequence)  # Creates temporal spike pattern
+    
+    Example::
+    
+      >>> encoder = TemporalEncoder(n_patterns=3)
+      >>> sequence = jnp.array([0, 1, 2, 1, 0])
+      >>> spikes = encoder(sequence)  # Creates temporal spike pattern
+    
+    Args:
+      n_patterns: int. Number of distinct temporal patterns.
+      pattern_length: int. Length of each temporal pattern in time steps.
+      jitter: float. Temporal jitter to add to spike times (fraction of pattern_length).
     """
     __module__ = 'braintools'
 
@@ -829,16 +679,13 @@ class TemporalEncoder:
 
     def __call__(self, data):
         """Generate temporally-encoded spikes.
-
-        Parameters
-        ----------
-        data : array_like
-            Sequence of integer values to encode.
-
-        Returns
-        -------
-        array_like
-            Temporal spike patterns with shape (len(data) * pattern_length, n_patterns).
+        
+        Args:
+          data: Sequence of integer values to encode.
+          key: JAX random key for jitter.
+        
+        Returns:
+          Temporal spike patterns with shape (len(data) * pattern_length, n_patterns).
         """
         sequence_length = len(data)
         total_time = sequence_length * self.pattern_length
@@ -865,33 +712,22 @@ class TemporalEncoder:
 class RankOrderEncoder:
     r"""
     Encode inputs using rank order coding.
-
+    
     Orders input features by their values and generates spikes in rank order.
     The most active features spike first, followed by less active ones.
     This preserves the relative ordering of input features.
-
-    Parameters
-    ----------
-    use_values : bool, default=True
-        Whether to use actual values for timing or just ranks.
-    normalize : bool, default=True
-        Whether to normalize input values.
-    invert : bool, default=False
-        Whether to invert the order (smallest first).
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Create rank order encoder
-        encoder = RankOrderEncoder()
-
-        # Encode input features
-        data = jnp.array([0.1, 0.8, 0.3, 0.9, 0.2])
-        spikes = encoder(data, n_time=10)
-        # Feature 3 spikes first (0.9), then feature 1 (0.8), etc.
+    
+    Example::
+    
+      >>> encoder = RankOrderEncoder()
+      >>> data = jnp.array([0.1, 0.8, 0.3, 0.9, 0.2])
+      >>> spikes = encoder(data, n_time=10)
+      >>> # Feature 3 spikes first (0.9), then feature 1 (0.8), etc.
+    
+    Args:
+      use_values: bool. Whether to use actual values for timing or just ranks.
+      normalize: bool. Whether to normalize input values.
+      invert: bool. Whether to invert the order (smallest first).
     """
     __module__ = 'braintools'
 
@@ -907,18 +743,13 @@ class RankOrderEncoder:
 
     def __call__(self, data, n_time: int):
         """Generate rank-order encoded spikes.
-
-        Parameters
-        ----------
-        data : array_like
-            Input feature vector to encode.
-        n_time : int
-            Number of time steps available for encoding.
-
-        Returns
-        -------
-        array_like
-            Rank-order spike trains with shape (n_time, len(data)).
+        
+        Args:
+          data: Input feature vector to encode.
+          n_time: Number of time steps available for encoding.
+        
+        Returns:
+          Rank-order spike trains with shape (n_time, len(data)).
         """
         x = data
         if self.normalize:

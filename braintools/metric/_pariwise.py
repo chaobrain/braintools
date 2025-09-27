@@ -71,102 +71,27 @@ def cosine_similarity(
 
     Examples
     --------
-    Basic cosine similarity computation:
-
-    .. code-block:: python
-
-        >>> import jax.numpy as jnp
-        >>> import braintools
-        >>> # Create sample vectors
-        >>> X = jnp.array([[1, 0, 0], [0, 1, 0], [1, 1, 0]])
-        >>> # Compute pairwise similarities
-        >>> sim_matrix = braintools.metric.cosine_similarity(X)
-        >>> print(sim_matrix)
-        [[1.         0.         0.70710677]
-         [0.         1.         0.70710677]
-         [0.70710677 0.70710677 1.        ]]
-
-    Cross-similarity between different sets:
-
-    .. code-block:: python
-
-        >>> # Compare with different set
-        >>> Y = jnp.array([[1, 1, 1], [0, 0, 1]])
-        >>> cross_sim = braintools.metric.cosine_similarity(X, Y)
-        >>> print(cross_sim.shape)
-        (3, 2)
-        >>> print(cross_sim)
-        [[0.57735026 0.        ]
-         [0.57735026 0.        ]
-         [0.8164966  0.        ]]
-
-    Analyzing vector relationships:
-
-    .. code-block:: python
-
-        >>> # Identical vectors have similarity 1
-        >>> identical = jnp.array([[1, 2, 3], [1, 2, 3]])
-        >>> sim_identical = braintools.metric.cosine_similarity(identical)
-        >>> print(f"Identical vectors similarity: {sim_identical[0, 1]:.6f}")
-
-        >>> # Orthogonal vectors have similarity 0
-        >>> orthogonal = jnp.array([[1, 0], [0, 1]])
-        >>> sim_orthogonal = braintools.metric.cosine_similarity(orthogonal)
-        >>> print(f"Orthogonal vectors similarity: {sim_orthogonal[0, 1]:.6f}")
-
-        >>> # Opposite vectors have similarity -1
-        >>> opposite = jnp.array([[1, 0], [-1, 0]])
-        >>> sim_opposite = braintools.metric.cosine_similarity(opposite)
-        >>> print(f"Opposite vectors similarity: {sim_opposite[0, 1]:.6f}")
-
-    Working with high-dimensional data:
-
-    .. code-block:: python
-
-        >>> # Document embeddings example
-        >>> doc_embeddings = jnp.random.normal(size=(100, 300))  # 100 docs, 300-dim
-        >>> doc_similarities = braintools.metric.cosine_similarity(doc_embeddings)
-        >>> print(f"Document similarity matrix shape: {doc_similarities.shape}")
-        >>> # Find most similar document to the first one
-        >>> most_similar_idx = jnp.argmax(doc_similarities[0, 1:]) + 1
-        >>> print(f"Most similar to doc 0: doc {most_similar_idx}")
-        >>> print(f"Similarity score: {doc_similarities[0, most_similar_idx]:.3f}")
+    >>> import jax.numpy as jnp
+    >>> import braintools as braintools
+    >>> # Create sample vectors
+    >>> X = jnp.array([[1, 0, 0], [0, 1, 0], [1, 1, 0]])
+    >>> # Compute pairwise similarities
+    >>> sim_matrix = braintools.metric.cosine_similarity(X)
+    >>> print(sim_matrix)
+    [[1.         0.         0.70710677]
+     [0.         1.         0.70710677]
+     [0.70710677 0.70710677 1.        ]]
+    >>> 
+    >>> # Compare with different set
+    >>> Y = jnp.array([[1, 1, 1], [0, 0, 1]])
+    >>> cross_sim = braintools.metric.cosine_similarity(X, Y)
+    >>> print(cross_sim.shape)
+    (3, 2)
 
     Notes
     -----
     The function handles zero vectors by adding a small epsilon to avoid
     division by zero. NaN values in the result are replaced with 0.
-
-    Cosine similarity properties:
-
-    - **Range**: Values are bounded between -1 and 1
-    - **Interpretation**:
-      - 1 = identical direction (perfect positive correlation)
-      - 0 = orthogonal vectors (no correlation)
-      - -1 = opposite direction (perfect negative correlation)
-    - **Scale invariant**: Only depends on vector direction, not magnitude
-    - **Symmetric**: cosine_similarity(A, B) = cosine_similarity(B, A)
-
-    Common applications:
-
-    - Document similarity in text mining
-    - Recommendation systems (user/item similarity)
-    - Image feature comparison
-    - Neural network activation analysis
-    - Embedding space analysis
-
-    See Also
-    --------
-    braintools.metric.weighted_correlation : Weighted Pearson correlation
-    jax.numpy.dot : Dot product computation
-    jax.numpy.linalg.norm : Vector norm computation
-
-    References
-    ----------
-    .. [1] Salton, Gerard, and Michael J. McGill. "Introduction to modern
-           information retrieval." (1986).
-    .. [2] Manning, Christopher D., Prabhakar Raghavan, and Hinrich Schütze.
-           "Introduction to information retrieval." Cambridge university press, 2008.
     """
     # If Y is not provided, compute similarity within X
     if Y is None:

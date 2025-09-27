@@ -24,25 +24,21 @@ leading dimensions are considered batch dimensions.
 
 Standalone usage:
 
-.. code-block:: python
-
-    import braintools
-    scores = jnp.array([2., 1., 3.])
-    labels = jnp.array([1., 0., 0.])
-    loss = braintools.metric.ranking_softmax_loss(scores, labels)
-    print(f"{loss:.3f}")
-    1.408
+>>> import braintools as braintools
+>>> scores = jnp.array([2., 1., 3.])
+>>> labels = jnp.array([1., 0., 0.])
+>>> loss = braintools.metric.ranking_softmax_loss(scores, labels)
+>>> print(f"{loss:.3f}")
+1.408
 
 Usage with a batch of data and a mask to indicate valid items.
 
-.. code-block:: python
-
-    scores = jnp.array([[2., 1., 0.], [1., 0.5, 1.5]])
-    labels = jnp.array([[1., 0., 0.], [0., 0., 1.]])
-    where = jnp.array([[True, True, False], [True, True, True]])
-    loss = braintools.metric.ranking_softmax_loss(scores, labels, where=where)
-    print(f"{loss:.3f}")
-    0.497
+>>> scores = jnp.array([[2., 1., 0.], [1., 0.5, 1.5]])
+>>> labels = jnp.array([[1., 0., 0.], [0., 0., 1.]])
+>>> where = jnp.array([[True, True, False], [True, True, True]])
+>>> loss = braintools.metric.ranking_softmax_loss(scores, labels, where=where)
+>>> print(f"{loss:.3f}")
+0.497
 """
 
 from typing import Callable, Optional
@@ -108,28 +104,22 @@ def _safe_reduce(
     --------
     Safe mean reduction with partial masking:
 
-    .. code-block:: python
-
-        import jax.numpy as jnp
-        a = jnp.array([1.0, 2.0, 3.0, 4.0])
-        where = jnp.array([True, True, False, False])
-        result = _safe_reduce(a, where=where, reduce_fn=jnp.mean)
-        # Returns 1.5 (mean of first two elements)
+    >>> import jax.numpy as jnp
+    >>> a = jnp.array([1.0, 2.0, 3.0, 4.0])
+    >>> where = jnp.array([True, True, False, False])
+    >>> result = _safe_reduce(a, where=where, reduce_fn=jnp.mean)
+    >>> # Returns 1.5 (mean of first two elements)
 
     Safe mean reduction with complete masking:
 
-    .. code-block:: python
-
-        where_empty = jnp.array([False, False, False, False])
-        result = _safe_reduce(a, where=where_empty, reduce_fn=jnp.mean)
-        # Returns 0.0 instead of NaN
+    >>> where_empty = jnp.array([False, False, False, False])
+    >>> result = _safe_reduce(a, where=where_empty, reduce_fn=jnp.mean)
+    >>> # Returns 0.0 instead of NaN
 
     No reduction with masking:
 
-    .. code-block:: python
-
-        result = _safe_reduce(a, where=where, reduce_fn=None)
-        # Returns [1.0, 2.0, 0.0, 0.0] (masked elements set to 0)
+    >>> result = _safe_reduce(a, where=where, reduce_fn=None)
+    >>> # Returns [1.0, 2.0, 0.0, 0.0] (masked elements set to 0)
     """
     # Reduce values if there is a reduce_fn, otherwise keep the values as-is.
     output = reduce_fn(a, where=where) if reduce_fn is not None else a
@@ -236,45 +226,37 @@ def ranking_softmax_loss(
     --------
     Basic ranking loss with single query:
 
-    .. code-block:: python
-
-        import jax.numpy as jnp
-        import braintools
-        # Scores for 3 items
-        logits = jnp.array([2.0, 1.0, 3.0])
-        # Relevance: item 3 most relevant, item 1 second, item 2 least
-        labels = jnp.array([1.0, 0.0, 2.0])
-        loss = braintools.metric.ranking_softmax_loss(logits, labels)
-        print(f"Loss: {loss:.4f}")
+    >>> import jax.numpy as jnp
+    >>> import braintools as braintools
+    >>> # Scores for 3 items
+    >>> logits = jnp.array([2.0, 1.0, 3.0])  
+    >>> # Relevance: item 3 most relevant, item 1 second, item 2 least
+    >>> labels = jnp.array([1.0, 0.0, 2.0])
+    >>> loss = braintools.metric.ranking_softmax_loss(logits, labels)
+    >>> print(f"Loss: {loss:.4f}")
 
     Batch processing with masking:
 
-    .. code-block:: python
-
-        # Batch of 2 queries with 3 items each
-        logits = jnp.array([[2.0, 1.0, 0.0], [1.0, 0.5, 1.5]])
-        labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-        # Second query only has first 2 items valid
-        where = jnp.array([[True, True, False], [True, True, True]])
-        loss = braintools.metric.ranking_softmax_loss(logits, labels, where=where)
-        print(f"Batch loss: {loss:.4f}")
+    >>> # Batch of 2 queries with 3 items each
+    >>> logits = jnp.array([[2.0, 1.0, 0.0], [1.0, 0.5, 1.5]])
+    >>> labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    >>> # Second query only has first 2 items valid
+    >>> where = jnp.array([[True, True, False], [True, True, True]])
+    >>> loss = braintools.metric.ranking_softmax_loss(logits, labels, where=where)
+    >>> print(f"Batch loss: {loss:.4f}")
 
     Per-item weighting:
 
-    .. code-block:: python
-
-        weights = jnp.array([1.0, 2.0, 1.0])  # Emphasize middle item
-        loss = braintools.metric.ranking_softmax_loss(logits[0], labels[0], weights=weights)
-        print(f"Weighted loss: {loss:.4f}")
+    >>> weights = jnp.array([1.0, 2.0, 1.0])  # Emphasize middle item
+    >>> loss = braintools.metric.ranking_softmax_loss(logits[0], labels[0], weights=weights)
+    >>> print(f"Weighted loss: {loss:.4f}")
 
     Unreduced losses for analysis:
 
-    .. code-block:: python
-
-        batch_losses = braintools.metric.ranking_softmax_loss(
-            logits, labels, where=where, reduce_fn=None
-        )
-        print(f"Individual losses: {batch_losses}")
+    >>> batch_losses = braintools.metric.ranking_softmax_loss(
+    ...     logits, labels, where=where, reduce_fn=None
+    ... )
+    >>> print(f"Individual losses: {batch_losses}")
 
     See Also
     --------
