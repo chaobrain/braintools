@@ -1,14 +1,13 @@
-
 # Contributor Covenant Code of Conduct
 
 ## Our Pledge
 
-We as members, contributors, and leaders pledge to make participation in our
-community a harassment-free experience for everyone, regardless of age, body
-size, visible or invisible disability, ethnicity, sex characteristics, gender
-identity and expression, level of experience, education, socio-economic status,
-nationality, personal appearance, race, caste, color, religion, or sexual
-identity and orientation.
+We as members, contributors, and leaders pledge to make participation in the
+BrainTools community a harassment-free experience for everyone, regardless of
+age, body size, visible or invisible disability, ethnicity, sex characteristics,
+gender identity and expression, level of experience, education, socio-economic
+status, nationality, personal appearance, race, caste, color, religion, or
+sexual identity and orientation.
 
 We pledge to act and interact in ways that contribute to an open, welcoming,
 diverse, inclusive, and healthy community.
@@ -46,25 +45,28 @@ or harmful.
 
 Community leaders have the right and responsibility to remove, edit, or reject
 comments, commits, code, wiki edits, issues, and other contributions that are
-not aligned to this Code of Conduct, and will communicate reasons for moderation
-decisions when appropriate.
+not aligned with this Code of Conduct, and will communicate reasons for
+moderation decisions when appropriate.
 
 ## Scope
 
 This Code of Conduct applies within all community spaces, and also applies when
 an individual is officially representing the community in public spaces.
-Examples of representing our community include using an official e-mail address,
+Examples of representing our community include using an official email address,
 posting via an official social media account, or acting as an appointed
 representative at an online or offline event.
 
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement at chao.brain@qq.com.
-All complaints will be reviewed and investigated promptly and fairly.
+reported to the community leaders responsible for enforcement at
+conduct@braintools.dev. If email is not possible, you may send a direct message
+to @BrainToolsMaintainers on GitHub. All complaints will be reviewed and
+investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
-reporter of any incident.
+reporter of any incident. Reports are acknowledged within five business days and
+we follow up with regular status updates until the matter is resolved.
 
 ## Enforcement Guidelines
 
@@ -111,6 +113,19 @@ individual, or aggression toward or disparagement of classes of individuals.
 
 **Consequence**: A permanent ban from any sort of public interaction within the
 community.
+
+## Incident Response Process
+
+1. **Acknowledge**: We confirm receipt of a report and outline next steps.
+2. **Assess**: Two maintainers review the report, gather context, and determine
+   whether additional information is needed.
+3. **Act**: Appropriate action is agreed upon and communicated to affected
+   parties.
+4. **Document**: Outcomes are recorded in a private log so that repeated issues
+   can be handled consistently.
+
+Escalation requests may be sent directly to core maintainers if the report
+involves a community leader.
 
 ## Attribution
 

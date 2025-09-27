@@ -1,27 +1,34 @@
-# Install the pre-commit hooks below with
-# 'pre-commit install'
+# Install or update hooks with:
+#   pre-commit install
+#   pre-commit autoupdate
+# Run them manually on all files with:
+#   pre-commit run --all-files
 
-# Auto-update the version of the hooks with
-# 'pre-commit autoupdate'
-
-# Run the hooks on all files with
-# 'pre-commit run --all'
+default_language_version:
+  python: python3
 
 repos:
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
-  hooks:
-  - id: end-of-file-fixer
-    # only include python files
-    files: \.py$
-  - id: debug-statements
-    # only include python files
-    files: \.py$
-  - id: trailing-whitespace
-    # only include python files
-    files: \.py$
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-ast
+      - id: check-json
+      - id: check-yaml
+      - id: debug-statements
+        types: [python]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
 
-- repo: https://github.com/pycqa/flake8
-  rev: '6.1.0'
-  hooks:
-  - id: flake8
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.2
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/tox-dev/pyproject-fmt
+    rev: 2.2.4
+    hooks:
+      - id: pyproject-fmt
