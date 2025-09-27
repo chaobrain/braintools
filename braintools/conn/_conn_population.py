@@ -33,11 +33,12 @@ from typing import Optional, Tuple, Union, Dict, List, Callable
 
 import brainunit as u
 import numpy as np
+from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._base import PopulationRateConnectivity, ConnectionResult
-from ._initialization import Initialization, Initializer
-from ._common import init_call
+from ._conn_base import PopulationRateConnectivity, ConnectionResult
+from ._init_base import init_call
+from ._init_weight import WeightInit
 
 __all__ = [
     # Basic population patterns
@@ -111,10 +112,10 @@ class PopulationCoupling(PopulationRateConnectivity):
     .. code-block:: python
 
         >>> coupling_dict = {
-        ...     ('exc', 'exc'): 0.5 * u.dimensionless,
-        ...     ('exc', 'inh'): 0.8 * u.dimensionless,
-        ...     ('inh', 'exc'): -1.2 * u.dimensionless,
-        ...     ('inh', 'inh'): -0.3 * u.dimensionless
+        ...     ('exc', 'exc'): 0.5,
+        ...     ('exc', 'inh'): 0.8,
+        ...     ('inh', 'exc'): -1.2,
+        ...     ('inh', 'inh'): -0.3
         ... }
         >>> conn = PopulationCoupling(coupling_dict)
 
@@ -146,10 +147,12 @@ class PopulationCoupling(PopulationRateConnectivity):
         self.coupling_type = coupling_type
         self.time_constants = time_constants
 
-    def generate(self,
-                 pre_size: Union[int, Tuple[int, ...]],
-                 post_size: Union[int, Tuple[int, ...]],
-                 **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        **kwargs
+    ) -> ConnectionResult:
         """Generate population coupling connections."""
         if isinstance(pre_size, tuple):
             pre_num = int(np.prod(pre_size))
@@ -216,6 +219,8 @@ class PopulationCoupling(PopulationRateConnectivity):
             delays=delays,
             pre_size=pre_size,
             post_size=post_size,
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             model_type='population_rate',
             metadata={
                 'pattern': 'population_coupling',
@@ -252,7 +257,7 @@ class MeanField(PopulationRateConnectivity):
 
         >>> import brainunit as u
         >>> mf = MeanField(
-        ...     field_strength=0.1 * u.dimensionless,
+        ...     field_strength=0.1,
         ...     normalization='sqrt'
         ... )
         >>> result = mf(pre_size=10, post_size=5)
@@ -345,7 +350,7 @@ class MeanField(PopulationRateConnectivity):
         # Apply distance dependence if provided
         if self.distance_dependence is not None and pre_positions is not None and post_positions is not None:
             distances = cdist(pre_positions[pre_indices].reshape(-1, pre_positions.shape[1]),
-                            post_positions[post_indices].reshape(-1, post_positions.shape[1]))
+                              post_positions[post_indices].reshape(-1, post_positions.shape[1]))
             distance_factors = self.distance_dependence(distances.diagonal())
             weights = weights * distance_factors
 
@@ -618,6 +623,8 @@ class HierarchicalPopulations(PopulationRateConnectivity):
             weights=np.array(weights),
             pre_size=kwargs.get('pre_size', total_pops),
             post_size=kwargs.get('post_size', total_pops),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             model_type='population_rate',
             metadata={
                 'pattern': 'hierarchical_populations',
@@ -701,7 +708,7 @@ class AllToAllPopulations(PopulationRateConnectivity):
         Weight initialization for all connections.
     """
 
-    def __init__(self, weight: Optional[Initializer] = None, **kwargs):
+    def __init__(self, weight: Optional[Union[ArrayLike, WeightInit]] = None, **kwargs):
         super().__init__(**kwargs)
         self.weight_init = weight
 
@@ -756,7 +763,7 @@ class RandomPopulations(PopulationRateConnectivity):
         Weight initialization.
     """
 
-    def __init__(self, prob: float = 0.5, weight: Optional[Initializer] = None, **kwargs):
+    def __init__(self, prob: float = 0.5, weight: Optional[Union[ArrayLike, WeightInit]] = None, **kwargs):
         super().__init__(**kwargs)
         self.prob = prob
         self.weight_init = weight
@@ -1058,7 +1065,7 @@ class PopulationDistance(PopulationRateConnectivity):
         self,
         sigma: Union[float, u.Quantity],
         decay_function: str = 'gaussian',
-        weight: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1200,6 +1207,10 @@ class CustomPopulation(PopulationRateConnectivity):
         return ConnectionResult(
             np.array(pre_indices, dtype=np.int64),
             np.array(post_indices, dtype=np.int64),
+            pre_size=kwargs['pre_size'],
+            post_size=kwargs['post_size'],
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions'),
             weights=np.array(weights),
             model_type='population_rate',
             metadata={'pattern': 'custom_population'}

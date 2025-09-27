@@ -32,14 +32,15 @@ Key Features:
 from typing import Optional, Tuple, Union, Callable, Dict, Any
 
 import brainunit as u
-import jax
 import numpy as np
+from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._base import PointNeuronConnectivity, ConnectionResult
-from ._initialization import Initialization, DistanceProfile, Initializer
-from ._common import init_call
-
+from ._conn_base import PointNeuronConnectivity, ConnectionResult
+from ._init_base import init_call
+from ._init_delay import DelayInit
+from ._init_distance import DistanceProfile
+from ._init_weight import WeightInit
 
 __all__ = [
     # Basic connectivity patterns
@@ -65,14 +66,12 @@ __all__ = [
 
     # Biological patterns
     'ExcitatoryInhibitory',
-    'DalesPrinciple',
     'SynapticPlasticity',
     'ActivityDependent',
 
     # Custom patterns
     'Custom',
 ]
-
 
 
 class Random(PointNeuronConnectivity):
@@ -112,13 +111,13 @@ class Random(PointNeuronConnectivity):
 
         >>> import brainunit as u
         >>> from braintools.conn import Random
-        >>> from braintools.conn import Constant, ConstantDelay
+        >>> from braintools.conn import ConstantInit, ConstantDelayInit
         >>>
         >>> # With weights and delays
         >>> conn = Random(
         ...     prob=0.1,
-        ...     weight=Constant(2.0 * u.nS),
-        ...     delay=ConstantDelay(1.0 * u.ms),
+        ...     weight=ConstantInit(2.0 * u.nS),
+        ...     delay=ConstantDelayInit(1.0 * u.ms),
         ...     seed=42
         ... )
         >>> result = conn.generate(pre_size=1000, post_size=1000)
@@ -135,26 +134,26 @@ class Random(PointNeuronConnectivity):
 
     .. code-block:: python
 
-        >>> from braintools.conn import LogNormal, NormalDelay
+        >>> from braintools.conn import LogNormalInit, NormalDelayInit
         >>>
         >>> # AMPA-like excitatory synapses
         >>> ampa_conn = Random(
         ...     prob=0.05,
-        ...     weight=LogNormal(mean=1.0 * u.nS, std=0.5 * u.nS),
-        ...     delay=NormalDelay(mean=1.5 * u.ms, std=0.3 * u.ms)
+        ...     weight=LogNormalInit(mean=1.0 * u.nS, std=0.5 * u.nS),
+        ...     delay=NormalDelayInit(mean=1.5 * u.ms, std=0.3 * u.ms)
         ... )
 
     Inhibitory connections with Dale's principle:
 
     .. code-block:: python
 
-        >>> from braintools.conn import Normal, ConstantDelay
+        >>> from braintools.conn import NormalInit, ConstantDelayInit
         >>>
         >>> # GABA-like inhibitory synapses
         >>> gaba_conn = Random(
         ...     prob=0.08,
-        ...     weight=Normal(mean=-0.8 * u.nS, std=0.2 * u.nS),
-        ...     delay=ConstantDelay(0.8 * u.ms)
+        ...     weight=NormalInit(mean=-0.8 * u.nS, std=0.2 * u.nS),
+        ...     delay=ConstantDelayInit(0.8 * u.ms)
         ... )
     """
 
@@ -162,8 +161,8 @@ class Random(PointNeuronConnectivity):
         self,
         prob: float,
         allow_self_connections: bool = False,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -247,6 +246,7 @@ class Random(PointNeuronConnectivity):
             delays=delays,
             pre_positions=kwargs.get("pre_positions"),
             post_positions=kwargs.get("post_positions"),
+            model_type='point',
             metadata={
                 'pattern': 'random',
                 'probability': self.prob,
@@ -275,10 +275,10 @@ class AllToAll(PointNeuronConnectivity):
     --------
     .. code-block:: python
 
-        >>> from braintools.conn import Constant, ConstantDelay
+        >>> from braintools.conn import ConstantInit, ConstantDelayInit
         >>> all_to_all = AllToAll(
-        ...     weight=Constant(0.5 * u.nS),
-        ...     delay=ConstantDelay(1.0 * u.ms)
+        ...     weight=ConstantInit(0.5 * u.nS),
+        ...     delay=ConstantDelayInit(1.0 * u.ms)
         ... )
         >>> result = all_to_all.generate(pre_size=50, post_size=50)
     """
@@ -286,8 +286,8 @@ class AllToAll(PointNeuronConnectivity):
     def __init__(
         self,
         include_self_connections: bool = False,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -354,6 +354,7 @@ class AllToAll(PointNeuronConnectivity):
             delays=delays,
             pre_positions=kwargs.get('pre_positions'),
             post_positions=kwargs.get('post_positions'),
+            model_type='point',
             metadata={
                 'pattern': 'all_to_all',
                 'include_self_connections': self.include_self_connections,
@@ -387,8 +388,8 @@ class OneToOne(PointNeuronConnectivity):
 
     def __init__(
         self,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         circular: bool = False,
         **kwargs
     ):
@@ -452,6 +453,7 @@ class OneToOne(PointNeuronConnectivity):
             delays=delays,
             pre_positions=kwargs.get('pre_positions'),
             post_positions=kwargs.get('post_positions'),
+            model_type='point',
             metadata={'pattern': 'one_to_one', 'circular': self.circular}
         )
 
@@ -479,21 +481,21 @@ class DistanceDependent(PointNeuronConnectivity):
         >>> import brainunit as u
         >>> import numpy as np
         >>> from braintools.conn import (
-        ...     GaussianProfile, ExponentialDecay, ConstantDelay
+        ...     GaussianProfileInit, ExponentialDecayInit, ConstantDelayInit
         ... )
         >>>
         >>> # Gaussian distance-dependent connectivity
         >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
         >>> conn = DistanceDependent(
-        ...     distance_profile=GaussianProfile(
+        ...     distance_profile=GaussianProfileInit(
         ...         sigma=100 * u.um,
         ...         max_distance=300 * u.um
         ...     ),
-        ...     weight=ExponentialDecay(
+        ...     weight=ExponentialDecayInit(
         ...         max_weight=3.0 * u.nS,
         ...         decay_constant=80 * u.um
         ...     ),
-        ...     delay=ConstantDelay(1.0 * u.ms),
+        ...     delay=ConstantDelayInit(1.0 * u.ms),
         ...     max_prob=0.3
         ... )
         >>> result = conn.generate(
@@ -504,9 +506,9 @@ class DistanceDependent(PointNeuronConnectivity):
 
     def __init__(
         self,
-        distance_profile: DistanceProfile,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        distance_profile: Optional[Union[ArrayLike, DistanceProfile]] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         max_prob: float = 1.0,
         **kwargs
     ):
@@ -557,7 +559,9 @@ class DistanceDependent(PointNeuronConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                model_type='point'
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+                model_type='point',
             )
 
         n_connections = len(pre_indices)
@@ -597,6 +601,7 @@ class DistanceDependent(PointNeuronConnectivity):
             delays=delays,
             pre_positions=pre_positions,
             post_positions=post_positions,
+            model_type='point',
             metadata={
                 'pattern': 'distance_dependent',
                 'distance_profile': self.distance_profile,
@@ -635,8 +640,8 @@ class SmallWorld(PointNeuronConnectivity):
         self,
         k: int = 6,
         p: float = 0.3,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -715,6 +720,7 @@ class SmallWorld(PointNeuronConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
+            model_type='point',
             pre_positions=kwargs.get('pre_positions'),
             post_positions=kwargs.get('post_positions'),
             metadata={'pattern': 'small_world', 'k': self.k, 'p': self.p}
@@ -761,9 +767,9 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
         exc_ratio: float = 0.8,
         exc_prob: float = 0.1,
         inh_prob: float = 0.2,
-        exc_weight: Optional[Initialization] = None,
-        inh_weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        exc_weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        inh_weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -815,7 +821,9 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                model_type='point'
+                model_type='point',
+                pre_positions=kwargs.get('pre_positions'),
+                post_positions=kwargs.get('post_positions'),
             )
 
         n_connections = len(pre_indices)
@@ -851,10 +859,17 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
             # Handle scalar and array weights
             if exc_weights is not None:
                 if u.math.isscalar(exc_weights):
-                    exc_weights_array = np.full(n_exc_conn, u.get_mantissa(exc_weights) if isinstance(exc_weights, u.Quantity) else exc_weights)
+                    exc_weights_array = np.full(
+                        n_exc_conn,
+                        u.get_mantissa(exc_weights) if isinstance(exc_weights, u.Quantity) else exc_weights
+                    )
                     exc_unit = u.get_unit(exc_weights) if isinstance(exc_weights, u.Quantity) else None
                 else:
-                    exc_weights_array = u.get_mantissa(exc_weights) if isinstance(exc_weights, u.Quantity) else np.asarray(exc_weights)
+                    exc_weights_array = (
+                        u.get_mantissa(exc_weights)
+                        if isinstance(exc_weights, u.Quantity) else
+                        np.asarray(exc_weights)
+                    )
                     exc_unit = u.get_unit(exc_weights) if isinstance(exc_weights, u.Quantity) else None
             else:
                 exc_weights_array = np.zeros(n_exc_conn)
@@ -862,10 +877,16 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
 
             if inh_weights is not None:
                 if u.math.isscalar(inh_weights):
-                    inh_weights_array = np.full(n_inh_conn, u.get_mantissa(inh_weights) if isinstance(inh_weights, u.Quantity) else inh_weights)
+                    inh_weights_array = np.full(
+                        n_inh_conn,
+                        u.get_mantissa(inh_weights) if isinstance(inh_weights, u.Quantity) else inh_weights
+                    )
                     inh_unit = u.get_unit(inh_weights) if isinstance(inh_weights, u.Quantity) else None
                 else:
-                    inh_weights_array = u.get_mantissa(inh_weights) if isinstance(inh_weights, u.Quantity) else np.asarray(inh_weights)
+                    inh_weights_array = (
+                        u.get_mantissa(inh_weights)
+                        if isinstance(inh_weights, u.Quantity) else np.asarray(inh_weights)
+                    )
                     inh_unit = u.get_unit(inh_weights) if isinstance(inh_weights, u.Quantity) else None
             else:
                 inh_weights_array = np.zeros(n_inh_conn)
@@ -899,13 +920,14 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
             delays=delays,
             pre_size=pre_size,
             post_size=post_size,
+            model_type='point',
             pre_positions=kwargs.get('pre_positions'),
             post_positions=kwargs.get('post_positions'),
             metadata={
                 'pattern': 'excitatory_inhibitory',
                 'exc_ratio': self.exc_ratio,
                 'n_excitatory': n_exc,
-                'n_inhibitory': len(inh_neurons)
+                'n_inhibitory': n_inh,
             }
         )
 
@@ -958,6 +980,7 @@ class Custom(PointNeuronConnectivity):
             delays=delays,
             pre_size=pre_size,
             post_size=post_size,
+            model_type='point',
             pre_positions=kwargs.get('pre_positions'),
             post_positions=kwargs.get('post_positions'),
             metadata={'pattern': 'custom'}
@@ -1021,8 +1044,8 @@ class Ring(PointNeuronConnectivity):
     def __init__(
         self,
         neighbors: int = 2,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         bidirectional: bool = True,
         **kwargs
     ):
@@ -1093,6 +1116,9 @@ class Ring(PointNeuronConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
+            model_type='point',
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions'),
             metadata={
                 'pattern': 'ring',
                 'neighbors': self.neighbors,
@@ -1134,8 +1160,8 @@ class Grid(PointNeuronConnectivity):
         self,
         grid_shape: Tuple[int, int],
         connectivity: str = 'von_neumann',
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         periodic: bool = False,
         **kwargs
     ):
@@ -1225,6 +1251,9 @@ class Grid(PointNeuronConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
+            model_type='point',
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions'),
             metadata={
                 'pattern': 'grid',
                 'grid_shape': self.grid_shape,
@@ -1272,8 +1301,8 @@ class RadialPatches(PointNeuronConnectivity):
         patch_radius: Union[float, u.Quantity],
         n_patches: int = 1,
         prob: float = 1.0,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1368,10 +1397,15 @@ class RadialPatches(PointNeuronConnectivity):
         )
 
         return ConnectionResult(
-            pre_indices, post_indices,
-            pre_size=pre_size, post_size=post_size,
-            weights=weights, delays=delays,
-            pre_positions=pre_positions, post_positions=post_positions,
+            pre_indices,
+            post_indices,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            model_type='point',
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={'pattern': 'radial_patches', 'patch_radius': self.patch_radius, 'n_patches': self.n_patches}
         )
 
@@ -1399,8 +1433,8 @@ class ScaleFree(PointNeuronConnectivity):
     def __init__(
         self,
         m: int = 3,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1468,9 +1502,13 @@ class ScaleFree(PointNeuronConnectivity):
 
         return ConnectionResult(
             pre_indices, post_indices,
-            pre_size=pre_size, post_size=post_size,
-            weights=weights, delays=delays,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions'),
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            model_type='point',
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions'),
             metadata={'pattern': 'scale_free', 'm': self.m}
         )
 
@@ -1498,8 +1536,8 @@ class Regular(PointNeuronConnectivity):
     def __init__(
         self,
         degree: int,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1545,9 +1583,13 @@ class Regular(PointNeuronConnectivity):
 
         return ConnectionResult(
             pre_indices, post_indices,
-            pre_size=pre_size, post_size=post_size,
-            weights=weights, delays=delays,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions'),
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            model_type='point',
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions'),
             metadata={'pattern': 'regular', 'degree': self.degree}
         )
 
@@ -1581,8 +1623,8 @@ class Modular(PointNeuronConnectivity):
         n_modules: int,
         intra_prob: float = 0.3,
         inter_prob: float = 0.01,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1629,9 +1671,12 @@ class Modular(PointNeuronConnectivity):
 
         if len(pre_indices) == 0:
             return ConnectionResult(
-                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
-                pre_size=pre_size, post_size=post_size,
-                pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions'),
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=kwargs.get('pre_positions'),
+                post_positions=kwargs.get('post_positions'),
                 model_type='point'
             )
 
@@ -1652,10 +1697,17 @@ class Modular(PointNeuronConnectivity):
 
         return ConnectionResult(
             pre_indices, post_indices,
-            pre_size=pre_size, post_size=post_size,
-            weights=weights, delays=delays,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions'),
-            metadata={'pattern': 'modular', 'n_modules': self.n_modules, 'intra_prob': self.intra_prob, 'inter_prob': self.inter_prob}
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            model_type='point',
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions'),
+            metadata={'pattern': 'modular',
+                      'n_modules': self.n_modules,
+                      'intra_prob': self.intra_prob,
+                      'inter_prob': self.inter_prob}
         )
 
 
@@ -1696,8 +1748,8 @@ class ClusteredRandom(PointNeuronConnectivity):
         prob: float,
         cluster_radius: Union[float, u.Quantity],
         cluster_factor: float = 2.0,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1752,9 +1804,12 @@ class ClusteredRandom(PointNeuronConnectivity):
 
         if len(pre_indices) == 0:
             return ConnectionResult(
-                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
-                pre_size=pre_size, post_size=post_size,
-                pre_positions=pre_positions, post_positions=post_positions,
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point'
             )
 
@@ -1772,42 +1827,17 @@ class ClusteredRandom(PointNeuronConnectivity):
         )
 
         return ConnectionResult(
-            pre_indices, post_indices,
-            pre_size=pre_size, post_size=post_size,
-            weights=weights, delays=delays,
-            pre_positions=pre_positions, post_positions=post_positions,
+            pre_indices,
+            post_indices,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            model_type='point',
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={'pattern': 'clustered_random', 'prob': self.prob, 'cluster_radius': self.cluster_radius}
         )
-
-
-class DalesPrinciple(PointNeuronConnectivity):
-    """Enforces Dale's principle - neurons are either excitatory or inhibitory.
-
-    This is an alias for ExcitatoryInhibitory with clearer naming.
-
-    Parameters
-    ----------
-    exc_ratio : float
-        Fraction of excitatory neurons.
-    exc_prob : float
-        Connection probability from excitatory neurons.
-    inh_prob : float
-        Connection probability from inhibitory neurons.
-    exc_weight : Initialization, optional
-        Excitatory weight initialization.
-    inh_weight : Initialization, optional
-        Inhibitory weight initialization.
-    delay : Initialization, optional
-        Delay initialization.
-    """
-
-    def __init__(self, *args, **kwargs):
-        # Delegate to ExcitatoryInhibitory
-        self._ei = ExcitatoryInhibitory(*args, **kwargs)
-
-    def generate(self, **kwargs) -> ConnectionResult:
-        """Generate connections following Dale's principle."""
-        return self._ei.generate(**kwargs)
 
 
 class SynapticPlasticity(PointNeuronConnectivity):

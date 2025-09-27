@@ -27,10 +27,7 @@ from typing import Optional, Union, Dict, Any, Literal
 import brainunit as u
 import numpy as np
 
-from . import _compartment
-from . import _point
-from . import _population
-from ._base import ConnectionResult
+from ._conn_base import ConnectionResult
 
 __all__ = [
     'connect',
@@ -518,8 +515,10 @@ def convert_connectivity(
         n_populations = conversion_params.get('n_populations', 10)
 
         # Simple approach: group neurons into populations and average connectivity
-        pre_size = result.pre_size if hasattr(result, 'pre_size') and result.pre_size is not None else np.max(result.pre_indices) + 1
-        post_size = result.post_size if hasattr(result, 'post_size') and result.post_size is not None else np.max(result.post_indices) + 1
+        pre_size = result.pre_size if hasattr(result, 'pre_size') and result.pre_size is not None else np.max(
+            result.pre_indices) + 1
+        post_size = result.post_size if hasattr(result, 'post_size') and result.post_size is not None else np.max(
+            result.post_indices) + 1
 
         pre_pop_size = pre_size // n_populations
         post_pop_size = post_size // n_populations

@@ -22,15 +22,17 @@ Useful for implementing center-surround receptive fields, orientation selectivit
 and other spatially-structured connectivity patterns in spiking neural networks.
 """
 
-from typing import Optional, Union, Callable, Dict
+from typing import Optional, Union, Callable
 
 import brainunit as u
 import numpy as np
+from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._base import PointNeuronConnectivity, ConnectionResult
-from ._common import init_call
-from ._initialization import Initialization
+from ._conn_base import PointNeuronConnectivity, ConnectionResult
+from ._init_base import init_call
+from ._init_delay import DelayInit
+from ._init_weight import WeightInit
 
 __all__ = [
     'ConvKernel',
@@ -94,8 +96,8 @@ class ConvKernel(PointNeuronConnectivity):
         kernel: np.ndarray,
         kernel_size: Union[float, u.Quantity],
         threshold: float = 0.0,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -222,6 +224,7 @@ class ConvKernel(PointNeuronConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
+            model_type='point',
             pre_positions=pre_positions,
             post_positions=post_positions,
             metadata={'pattern': 'conv_kernel', 'kernel_shape': self.kernel.shape, 'kernel_size': self.kernel_size}
@@ -268,8 +271,8 @@ class GaussianKernel(PointNeuronConnectivity):
         sigma: Union[float, u.Quantity],
         max_distance: Optional[Union[float, u.Quantity]] = None,
         normalize: bool = True,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -381,6 +384,7 @@ class GaussianKernel(PointNeuronConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
+            model_type='point',
             pre_positions=pre_positions,
             post_positions=post_positions,
             metadata={
@@ -438,8 +442,8 @@ class GaborKernel(PointNeuronConnectivity):
         theta: float,
         phase: float = 0.0,
         max_distance: Optional[Union[float, u.Quantity]] = None,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -568,10 +572,15 @@ class GaborKernel(PointNeuronConnectivity):
         )
 
         return ConnectionResult(
-            pre_indices, post_indices,
-            pre_size=pre_size, post_size=post_size,
-            weights=weights, delays=delays,
-            pre_positions=pre_positions, post_positions=post_positions,
+            pre_indices,
+            post_indices,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            model_type='point',
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'gabor_kernel',
                 'sigma': self.sigma,
@@ -630,8 +639,8 @@ class DoGKernel(PointNeuronConnectivity):
         amplitude_center: float = 1.0,
         amplitude_surround: float = 0.8,
         max_distance: Optional[Union[float, u.Quantity]] = None,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -702,10 +711,13 @@ class DoGKernel(PointNeuronConnectivity):
 
         if len(pre_indices) == 0:
             return ConnectionResult(
-                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
-                pre_size=pre_size, post_size=post_size,
-                pre_positions=pre_positions, post_positions=post_positions,
-                model_type='point'
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+                model_type='point',
             )
 
         n_connections = len(pre_indices)
@@ -788,8 +800,8 @@ class MexicanHat(DoGKernel):
         self,
         sigma: Union[float, u.Quantity],
         max_distance: Optional[Union[float, u.Quantity]] = None,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         # Mexican hat is DoG with sigma_surround = sqrt(2) * sigma_center
@@ -854,8 +866,8 @@ class SobelKernel(PointNeuronConnectivity):
         self,
         direction: str = 'horizontal',
         kernel_size: Union[float, u.Quantity] = 1.0,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -920,7 +932,7 @@ class SobelKernel(PointNeuronConnectivity):
                 seed=self.seed + 1 if self.seed is not None else None
             )
             # Union of both
-            from ._base import CompositeConnectivity
+            from ._conn_base import CompositeConnectivity
             composite = CompositeConnectivity(conv_h, conv_v, 'union')
             result = composite.generate(**kwargs)
             result.metadata['pattern'] = 'sobel_kernel'
@@ -965,8 +977,8 @@ class LaplacianKernel(PointNeuronConnectivity):
         self,
         kernel_type: str = '4-connected',
         kernel_size: Union[float, u.Quantity] = 1.0,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1054,8 +1066,8 @@ class CustomKernel(PointNeuronConnectivity):
         kernel_func: Callable,
         kernel_size: Union[float, u.Quantity],
         threshold: float = 0.0,
-        weight: Optional[Initialization] = None,
-        delay: Optional[Initialization] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1129,10 +1141,13 @@ class CustomKernel(PointNeuronConnectivity):
 
         if len(pre_indices) == 0:
             return ConnectionResult(
-                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
-                pre_size=pre_size, post_size=post_size,
-                pre_positions=pre_positions, post_positions=post_positions,
-                model_type='point'
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+                model_type='point',
             )
 
         pre_indices = np.array(pre_indices, dtype=np.int64)
@@ -1170,9 +1185,13 @@ class CustomKernel(PointNeuronConnectivity):
         )
 
         return ConnectionResult(
-            pre_indices, post_indices,
-            pre_size=pre_size, post_size=post_size,
-            weights=weights, delays=delays,
+            pre_indices,
+            post_indices,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            model_type='point',
             pre_positions=pre_positions, post_positions=post_positions,
             metadata={'pattern': 'custom_kernel', 'kernel_size': self.kernel_size}
         )
