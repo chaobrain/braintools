@@ -21,6 +21,7 @@ import numpy as np
 from matplotlib.colors import Normalize
 
 from braintools.tree import as_numpy
+from braintools._misc import set_module_as
 
 __all__ = [
     'spike_raster',
@@ -36,6 +37,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.visualize')
 def spike_raster(
     spike_times: Union[np.ndarray, List],
     neuron_ids: Optional[Union[np.ndarray, List]] = None,
@@ -151,6 +153,7 @@ def spike_raster(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def population_activity(
     data: np.ndarray,
     time: Optional[np.ndarray] = None,
@@ -265,6 +268,7 @@ def population_activity(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def connectivity_matrix(
     weights: np.ndarray,
     pre_labels: Optional[List[str]] = None,
@@ -358,6 +362,7 @@ def connectivity_matrix(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def neural_trajectory(
     data: np.ndarray,
     dims: Optional[Tuple[int, int, int]] = None,
@@ -461,6 +466,7 @@ def neural_trajectory(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def spike_histogram(
     spike_times: Union[np.ndarray, List],
     bins: Union[int, np.ndarray] = 50,
@@ -549,6 +555,7 @@ def spike_histogram(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def isi_distribution(
     spike_times: Union[np.ndarray, List],
     bins: Union[int, np.ndarray] = 50,
@@ -645,6 +652,7 @@ def isi_distribution(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def firing_rate_map(
     rates: np.ndarray,
     positions: Optional[np.ndarray] = None,
@@ -740,6 +748,7 @@ def firing_rate_map(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def phase_portrait(
     x: np.ndarray,
     y: Optional[np.ndarray] = None,
@@ -825,6 +834,7 @@ def phase_portrait(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def network_topology(
     adjacency: np.ndarray,
     positions: Optional[np.ndarray] = None,
@@ -950,6 +960,7 @@ def network_topology(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def tuning_curve(
     stimulus: np.ndarray,
     response: np.ndarray,

@@ -18,8 +18,10 @@ try:
     import matplotlib.pyplot as plt
     from matplotlib import RcParams, rcParams
     import scienceplots  # noqa: F401
+    from braintools._misc import set_module_as
 
 
+    @set_module_as('braintools.visualize')
     def exclude(rc: RcParams, keys: list):
         rc_new = RcParams()
         for key in rc.keys():
@@ -36,6 +38,7 @@ try:
     plt.style.core.available[:] = sorted(plt.style.library.keys())
 
 
+    @set_module_as('braintools.visualize')
     def plot_style1(fontsize=22, axes_edgecolor='black', figsize='5,4', lw=1):
         """Plot style for publication.
 

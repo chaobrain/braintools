@@ -18,6 +18,7 @@ from typing import Dict, List, Tuple, Optional
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.colors import LinearSegmentedColormap
+from braintools._misc import set_module_as
 
 __all__ = [
     'neural_style',
@@ -57,6 +58,7 @@ COLORBLIND_PALETTE = [
 ]
 
 
+@set_module_as('braintools.visualize')
 def neural_style(
     spike_color: str = '#FF6B6B',
     membrane_color: str = '#96CEB4',
@@ -114,6 +116,7 @@ def neural_style(
     )
 
 
+@set_module_as('braintools.visualize')
 def publication_style(
     fontsize: int = 10,
     figsize: Tuple[float, float] = (6, 4),
@@ -170,6 +173,7 @@ def publication_style(
     rcParams.update(params)
 
 
+@set_module_as('braintools.visualize')
 def dark_style(
     background_color: str = '#2E2E2E',
     text_color: str = '#FFFFFF',
@@ -212,11 +216,13 @@ def dark_style(
     plt.rcParams['axes.prop_cycle'] = plt.cycler('color', dark_colors)
 
 
+@set_module_as('braintools.visualize')
 def colorblind_friendly_style():
     """Apply colorblind-friendly color palette."""
     plt.rcParams['axes.prop_cycle'] = plt.cycler('color', COLORBLIND_PALETTE)
 
 
+@set_module_as('braintools.visualize')
 def create_neural_colormap(
     name: str,
     colors: List[str],
@@ -243,6 +249,7 @@ def create_neural_colormap(
     return cmap
 
 
+@set_module_as('braintools.visualize')
 def brain_colormaps():
     """Create and register brain-specific colormaps."""
     # Membrane potential colormap
@@ -262,6 +269,7 @@ def brain_colormaps():
     create_neural_colormap('brain_activation', brain_colors)
 
 
+@set_module_as('braintools.visualize')
 def apply_style(style_name: str, **kwargs):
     """Apply predefined style by name.
     
@@ -284,6 +292,7 @@ def apply_style(style_name: str, **kwargs):
         raise ValueError(f"Unknown style: {style_name}")
 
 
+@set_module_as('braintools.visualize')
 def get_color_palette(palette_name: str, n_colors: Optional[int] = None) -> List[str]:
     """Get predefined color palette.
     
@@ -318,6 +327,7 @@ def get_color_palette(palette_name: str, n_colors: Optional[int] = None) -> List
     return colors
 
 
+@set_module_as('braintools.visualize')
 def set_default_colors(color_dict: Dict[str, str]):
     """Set default colors for neural elements.
     

@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
 from matplotlib.gridspec import GridSpec
+from braintools._misc import set_module_as
 
 __all__ = [
     'line_plot',
@@ -33,6 +34,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.visualize')
 def line_plot(
     ts,
     val_matrix,
@@ -183,6 +185,7 @@ def line_plot(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def raster_plot(
     ts,
     sp_matrix,
@@ -294,6 +297,7 @@ def raster_plot(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def animate_2D(
     values,
     net_size,
@@ -403,6 +407,7 @@ def animate_2D(
     return anim
 
 
+@set_module_as('braintools.visualize')
 def animate_1D(
     dynamical_vars,
     static_vars=(),
@@ -615,6 +620,7 @@ def animate_1D(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def remove_axis(ax, *pos):
     for p in pos:
         if p not in ['left', 'right', 'top', 'bottom']:
