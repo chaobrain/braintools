@@ -1,4 +1,4 @@
-name: Publish to PyPI.org
+name: Publish to PyPI
 
 on:
   release:
@@ -14,15 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: '3.12'
+          cache: pip
 
       - name: Install build tooling
         run: |
@@ -35,16 +35,20 @@ jobs:
         run: |
           TAG="${{ github.event.release.tag_name }}"
           PKG_VERSION=$(python - <<'PY'
-          import re, pathlib
+          import pathlib, re
           init = pathlib.Path('braintools/__init__.py').read_text(encoding='utf-8')
-          m = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", init)
-          print(m.group(1))
+          match = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", init)
+          if not match:
+              raise SystemExit("Unable to find __version__ in braintools/__init__.py")
+          print(match.group(1))
           PY
           )
           echo "Package version: $PKG_VERSION"
           echo "Tag: $TAG"
           if [[ "$TAG" != "v$PKG_VERSION" && "$TAG" != "$PKG_VERSION" ]]; then
-            echo "Release tag must match package version" >&2; exit 1; fi
+            echo "Release tag must match package version" >&2
+            exit 1
+          fi
 
       - name: Build sdist and wheel
         run: python -m build --sdist --wheel --outdir dist

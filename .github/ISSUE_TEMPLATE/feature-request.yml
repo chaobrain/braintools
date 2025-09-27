@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest an idea or improvement for BrainTools.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to make BrainTools better? Let us know!
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the feature you would like to see.
+      placeholder: Concise description of the feature
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem does this feature solve? Why is it important?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe how the feature should work. Include workflows, API sketches, or UI ideas if relevant.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Did you explore other solutions or workarounds?
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Links, references, or anything else that would help us understand your request.
+  - type: checkboxes
+    id: participation
+    attributes:
+      label: Contribution
+      options:
+        - label: I am interested in contributing an implementation.
+        - label: I would like to collaborate on the design discussion.

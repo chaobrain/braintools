@@ -1,0 +1,87 @@
+name: Bug report
+description: Report a reproducible problem in BrainTools.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve BrainTools! Please complete the fields below so we can reproduce and fix the issue quickly.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: "What's going wrong?"
+      placeholder: Short, descriptive title
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Tell us how to reproduce the issue step-by-step.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe what actually happened, including full error messages or stack traces.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system(s)
+      description: Select all platforms affected.
+      multiple: true
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: e.g. 3.12.2
+    validations:
+      required: true
+  - type: input
+    id: braintools
+    attributes:
+      label: BrainTools version
+      placeholder: e.g. 0.0.13 (run `python -c "import braintools; print(braintools.__version__)"`)
+    validations:
+      required: true
+  - type: textarea
+    id: extras
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, related issues, or anything else that may help.
+      render: text
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked existing [issues](https://github.com/chaobrain/braintools/issues) and PRs to avoid duplicates.
+          required: true
+        - label: I can reproduce this issue with the latest `main` branch.
+          required: false
+        - label: I am willing to help investigate or submit a fix.
+          required: false
