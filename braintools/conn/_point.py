@@ -29,7 +29,7 @@ Key Features:
 - Degree constraints and pruning
 """
 
-from typing import Optional, Tuple, Union, Callable
+from typing import Optional, Tuple, Union, Callable, Dict, Any
 
 import brainunit as u
 import jax
@@ -111,8 +111,8 @@ class Random(PointNeuronConnectivity):
     .. code-block:: python
 
         >>> import brainunit as u
-        >>> from braintools.conn.point import Random
-        >>> from braintools.conn.initialization import Constant, ConstantDelay
+        >>> from braintools.conn import Random
+        >>> from braintools.conn import Constant, ConstantDelay
         >>>
         >>> # With weights and delays
         >>> conn = Random(
@@ -135,7 +135,7 @@ class Random(PointNeuronConnectivity):
 
     .. code-block:: python
 
-        >>> from braintools.conn.initialization import LogNormal, NormalDelay
+        >>> from braintools.conn import LogNormal, NormalDelay
         >>>
         >>> # AMPA-like excitatory synapses
         >>> ampa_conn = Random(
@@ -148,7 +148,7 @@ class Random(PointNeuronConnectivity):
 
     .. code-block:: python
 
-        >>> from braintools.conn.initialization import Normal, ConstantDelay
+        >>> from braintools.conn import Normal, ConstantDelay
         >>>
         >>> # GABA-like inhibitory synapses
         >>> gaba_conn = Random(
@@ -275,7 +275,7 @@ class AllToAll(PointNeuronConnectivity):
     --------
     .. code-block:: python
 
-        >>> from braintools.conn.initialization import Constant, ConstantDelay
+        >>> from braintools.conn import Constant, ConstantDelay
         >>> all_to_all = AllToAll(
         ...     weight=Constant(0.5 * u.nS),
         ...     delay=ConstantDelay(1.0 * u.ms)
@@ -478,7 +478,7 @@ class DistanceDependent(PointNeuronConnectivity):
 
         >>> import brainunit as u
         >>> import numpy as np
-        >>> from braintools.conn.initialization import (
+        >>> from braintools.conn import (
         ...     GaussianProfile, ExponentialDecay, ConstantDelay
         ... )
         >>>

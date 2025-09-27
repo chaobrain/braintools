@@ -22,7 +22,7 @@ Useful for implementing center-surround receptive fields, orientation selectivit
 and other spatially-structured connectivity patterns in spiking neural networks.
 """
 
-from typing import Optional, Union, Callable
+from typing import Optional, Union, Callable, Dict
 
 import brainunit as u
 import numpy as np
