@@ -204,7 +204,7 @@ class Spike(Input):
         self.sp_lens = sp_lens
         self.sp_sizes = sp_sizes
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the spike input array using functional API."""
         # Use the functional API
         return spike(
@@ -352,7 +352,7 @@ class GaussianPulse(Input):
         self.center = center
         self.sigma = sigma
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the Gaussian pulse array using functional API."""
         # Use the functional API - note it has an 'n' parameter for channels
         return gaussian_pulse(
@@ -509,7 +509,7 @@ class ExponentialDecay(Input):
         self.t_start = t_start
         self.t_end = t_end
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the exponential decay array using functional API."""
         # Use the functional API
         return exponential_decay(
@@ -681,7 +681,7 @@ class DoubleExponential(Input):
         self.t_start = t_start
         self.t_end = t_end
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the double exponential array using functional API."""
         # Use the functional API
         return double_exponential(
@@ -851,7 +851,7 @@ class Burst(Input):
         self.burst_duration = burst_duration
         self.inter_burst_interval = inter_burst_interval
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the burst input array using functional API."""
         # Use the functional API
         return burst(
