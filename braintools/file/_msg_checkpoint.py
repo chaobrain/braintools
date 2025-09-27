@@ -32,6 +32,8 @@ import brainunit as u
 import jax
 import numpy as np
 
+from .._misc import set_module_as
+
 try:
     import msgpack
 except (ModuleNotFoundError, ImportError):
@@ -48,6 +50,7 @@ __all__ = [
 
 
 class AlreadyExistsError(Exception):
+    __module__ = 'braintools.file'
     """Attempting to overwrite a file via copy.
 
     You can pass ``overwrite=True`` to disable this behavior and overwrite
@@ -59,6 +62,7 @@ class AlreadyExistsError(Exception):
 
 
 class InvalidCheckpointPath(Exception):
+    __module__ = 'braintools.file'
     """A checkpoint cannot be stored in a directory that already has
 
     a checkpoint at the current or a later step.
@@ -81,6 +85,7 @@ _STATE_DICT_REGISTRY: Dict[Any, Any] = {}
 
 
 class _ErrorContext(threading.local):
+    __module__ = 'braintools.file'
     """Context for deserialization error messages."""
 
     def __init__(self):
@@ -99,27 +104,32 @@ def _record_path(name):
         _error_context.path.pop()
 
 
+@set_module_as('braintools.file')
 def check_msgpack():
     if msgpack is None:
         raise ModuleNotFoundError('\nPlease install msgpack via:\n'
                                   '> pip install msgpack')
 
 
+@set_module_as('braintools.file')
 def current_path():
     """Current state_dict path during deserialization for error messages."""
     return '/'.join(_error_context.path)
 
 
 class _NamedTuple:
+    __module__ = 'braintools.file'
     """Fake type marker for namedtuple for registry."""
     pass
 
 
+@set_module_as('braintools.file')
 def _is_namedtuple(x):
     """Duck typing test for namedtuple factory-generated objects."""
     return isinstance(x, tuple) and hasattr(x, '_fields')
 
 
+@set_module_as('braintools.file')
 def msgpack_from_state_dict(
     target,
     state: Dict[str, Any],
@@ -159,6 +169,7 @@ def msgpack_from_state_dict(
         return ty_from_state_dict(target, state, mismatch)
 
 
+@set_module_as('braintools.file')
 def msgpack_to_state_dict(target) -> Dict[str, Any]:
     """
     Returns a dictionary with the state of the given target.
@@ -182,6 +193,7 @@ def msgpack_to_state_dict(target) -> Dict[str, Any]:
         return state_dict
 
 
+@set_module_as('braintools.file')
 def msgpack_register_serialization(
     ty,
     ty_to_state_dict,
@@ -205,6 +217,7 @@ def msgpack_register_serialization(
     _STATE_DICT_REGISTRY[ty] = (ty_to_state_dict, ty_from_state_dict)
 
 
+@set_module_as('braintools.file')
 def _list_state_dict(xs: List[Any]) -> Dict[str, Any]:
     return {
         str(i): msgpack_to_state_dict(x)
@@ -212,6 +225,7 @@ def _list_state_dict(xs: List[Any]) -> Dict[str, Any]:
     }
 
 
+@set_module_as('braintools.file')
 def _restore_list(xs, state_dict: Dict[str, Any], mismatch: str = 'error') -> List[Any]:
     if len(state_dict) != len(xs):
         msg = ('The size of the list and the state dict do not match,'
@@ -252,6 +266,7 @@ msgpack_register_serialization(
 )
 
 
+@set_module_as('braintools.file')
 def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(xs, brainstate.util.FlattedDict):
         xs = xs.to_nest()
@@ -265,6 +280,7 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+@set_module_as('braintools.file')
 def _restore_dict(xs, states: Dict[str, Any], mismatch: str = 'error') -> Dict[str, Any]:
     if isinstance(xs, brainstate.util.FlattedDict):
         xs = xs.to_nest()
@@ -300,10 +316,12 @@ def _restore_dict(xs, states: Dict[str, Any], mismatch: str = 'error') -> Dict[s
 msgpack_register_serialization(dict, _dict_state_dict, _restore_dict)
 
 
+@set_module_as('braintools.file')
 def _namedtuple_state_dict(nt) -> Dict[str, Any]:
     return {key: msgpack_to_state_dict(getattr(nt, key)) for key in nt._fields}
 
 
+@set_module_as('braintools.file')
 def _restore_namedtuple(xs, state_dict: Dict[str, Any], mismatch: str = 'error'):
     """Rebuild namedtuple from serialized dict."""
     if set(state_dict.keys()) == {'name', 'fields', 'values'}:
@@ -345,6 +363,7 @@ msgpack_register_serialization(
 )
 
 
+@set_module_as('braintools.file')
 def _quantity_dict_state(x: u.Quantity) -> Dict[str, jax.Array]:
     return {
         'mantissa': x.mantissa,
@@ -355,6 +374,7 @@ def _quantity_dict_state(x: u.Quantity) -> Dict[str, jax.Array]:
     }
 
 
+@set_module_as('braintools.file')
 def _restore_quantity(x: u.Quantity, state_dict: Dict, mismatch: str = 'error') -> u.Quantity:
     unit = u.Unit(
         dim=u.Dimension(state_dict['dim']),
@@ -379,10 +399,12 @@ def _restore_quantity(x: u.Quantity, state_dict: Dict, mismatch: str = 'error') 
 msgpack_register_serialization(u.Quantity, _quantity_dict_state, _restore_quantity)
 
 
+@set_module_as('braintools.file')
 def _brainstate_dict_state(x: brainstate.State) -> Dict[str, Any]:
     return msgpack_to_state_dict(x.value)
 
 
+@set_module_as('braintools.file')
 def _restore_brainstate(x: brainstate.State, state_dict: Dict, mismatch: str = 'error') -> brainstate.State:
     x.value = msgpack_from_state_dict(x.value, state_dict, mismatch=mismatch)
     return x
@@ -417,6 +439,7 @@ msgpack_register_serialization(
 #   (real, imag).
 
 
+@set_module_as('braintools.file')
 def _ndarray_to_bytes(arr) -> bytes:
     """Save ndarray to simple msgpack encoding."""
     if isinstance(arr, jax.Array):
@@ -428,6 +451,7 @@ def _ndarray_to_bytes(arr) -> bytes:
     return msgpack.packb(tpl, use_bin_type=True)
 
 
+@set_module_as('braintools.file')
 def _dtype_from_name(name: str):
     """Handle JAX bfloat16 dtype correctly."""
     if name == b'bfloat16':
@@ -436,6 +460,7 @@ def _dtype_from_name(name: str):
         return np.dtype(name)
 
 
+@set_module_as('braintools.file')
 def _ndarray_from_bytes(data: bytes) -> np.ndarray:
     """Load ndarray from simple msgpack encoding."""
     shape, dtype_name, buffer = msgpack.unpackb(data, raw=True)
@@ -446,12 +471,14 @@ def _ndarray_from_bytes(data: bytes) -> np.ndarray:
 
 
 class _MsgpackExtType(enum.IntEnum):
+    __module__ = 'braintools.file'
     """Messagepack custom type ids."""
     ndarray = 1
     native_complex = 2
     npscalar = 3
 
 
+@set_module_as('braintools.file')
 def _msgpack_ext_pack(x):
     """Messagepack encoders for custom types."""
     # TODO: Array here only work when they are fully addressable.
@@ -472,6 +499,7 @@ def _msgpack_ext_pack(x):
     return x
 
 
+@set_module_as('braintools.file')
 def _msgpack_ext_unpack(code, data):
     """Messagepack decoders for custom types."""
     if code == _MsgpackExtType.ndarray:
@@ -485,6 +513,7 @@ def _msgpack_ext_unpack(code, data):
     return msgpack.ExtType(code, data)
 
 
+@set_module_as('braintools.file')
 def _np_convert_in_place(d):
     """Convert any jax devicearray leaves to numpy arrays in place."""
     if isinstance(d, dict):
@@ -502,6 +531,7 @@ _tuple_to_dict = lambda tpl: {str(x): y for x, y in enumerate(tpl)}
 _dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
 
 
+@set_module_as('braintools.file')
 def _chunk(arr) -> Dict[str, Any]:
     """Convert array to a canonical dictionary of chunked arrays."""
     chunksize = max(1, int(MAX_CHUNK_SIZE / arr.dtype.itemsize))
@@ -513,6 +543,7 @@ def _chunk(arr) -> Dict[str, Any]:
     return data
 
 
+@set_module_as('braintools.file')
 def _unchunk(data: Dict[str, Any]):
     """Convert canonical dictionary of chunked arrays back into array."""
     assert '__msgpack_chunked_array__' in data
@@ -521,6 +552,7 @@ def _unchunk(data: Dict[str, Any]):
     return flatarr.reshape(shape)
 
 
+@set_module_as('braintools.file')
 def _chunk_array_leaves_in_place(d):
     """Convert oversized array leaves to safe chunked form in place."""
     if isinstance(d, dict):
@@ -536,6 +568,7 @@ def _chunk_array_leaves_in_place(d):
     return d
 
 
+@set_module_as('braintools.file')
 def _unchunk_array_leaves_in_place(d):
     """Convert chunked array leaves back into array leaves, in place."""
     if isinstance(d, dict):
@@ -550,6 +583,7 @@ def _unchunk_array_leaves_in_place(d):
     return d
 
 
+@set_module_as('braintools.file')
 def _msgpack_serialize(pytree, in_place: bool = False) -> bytes:
     """Save data structure to bytes in msgpack format.
 
@@ -572,6 +606,7 @@ def _msgpack_serialize(pytree, in_place: bool = False) -> bytes:
     return msgpack.packb(pytree, default=_msgpack_ext_pack, strict_types=True)
 
 
+@set_module_as('braintools.file')
 def _msgpack_restore(encoded_pytree: bytes):
     """Restore data structure from bytes in msgpack format.
 
@@ -589,6 +624,7 @@ def _msgpack_restore(encoded_pytree: bytes):
     return _unchunk_array_leaves_in_place(state_dict)
 
 
+@set_module_as('braintools.file')
 def _from_bytes(target, encoded_bytes: bytes, mismatch: str = 'error'):
     """Restore optimizer or other object from msgpack-serialized state-dict.
 
@@ -607,6 +643,7 @@ def _from_bytes(target, encoded_bytes: bytes, mismatch: str = 'error'):
     return msgpack_from_state_dict(target, state_dict, mismatch=mismatch)
 
 
+@set_module_as('braintools.file')
 def _to_bytes(target) -> bytes:
     """Save optimizer or other object as msgpack-serialized state-dict.
 
@@ -623,9 +660,11 @@ def _to_bytes(target) -> bytes:
 
 # the empty node is a struct.dataclass to be compatible with JAX.
 class _EmptyNode:
+    __module__ = 'braintools.file'
     pass
 
 
+@set_module_as('braintools.file')
 def _rename_fn(src, dst, overwrite=False):
     if os.path.exists(src):
         if os.path.exists(dst) and not overwrite:
@@ -634,6 +673,7 @@ def _rename_fn(src, dst, overwrite=False):
 
 
 class AsyncManager(object):
+    __module__ = 'braintools.file'
     """
     A simple object to track async checkpointing.
 
@@ -664,6 +704,7 @@ class AsyncManager(object):
         self.save_future = self.executor.submit(task)  # type: ignore
 
 
+@set_module_as('braintools.file')
 def _save_commit(
     filename: str,
     overwrite: bool,
@@ -683,6 +724,7 @@ def _save_commit(
     _rename_fn(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
 
 
+@set_module_as('braintools.file')
 def _save_main_ckpt_file(
     target: bytes,
     filename: str,
@@ -695,6 +737,7 @@ def _save_main_ckpt_file(
     _save_commit(filename, overwrite)
 
 
+@set_module_as('braintools.file')
 def msgpack_save(
     filename: str,
     target: brainstate.typing.PyTree,
@@ -767,6 +810,7 @@ def msgpack_save(
         save_main_ckpt_task()
 
 
+@set_module_as('braintools.file')
 def msgpack_load(
     filename: str,
     target: Optional[Any] = None,
