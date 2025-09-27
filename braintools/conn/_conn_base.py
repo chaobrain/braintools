@@ -141,15 +141,6 @@ class ConnectionResult:
             return (self.pre_positions, self.post_positions)
         return None
 
-    @positions.setter
-    def positions(self, value: Optional[Tuple[np.ndarray, np.ndarray]]):
-        """Backward compatibility setter for positions."""
-        if value is None:
-            self.pre_positions = None
-            self.post_positions = None
-        else:
-            self.pre_positions, self.post_positions = value
-
     @property
     def shape(self) -> Tuple[int, int]:
         """Shape of the connectivity (pre_size, post_size)."""
@@ -201,10 +192,11 @@ class ConnectionResult:
 
     def get_distances(self) -> Optional[u.Quantity]:
         """Calculate distances between connected elements."""
-        if self.positions is None:
+        if self.pre_positions is None or self.post_positions is None:
             return None
 
-        pre_positions, post_positions = self.positions
+        pre_positions = self.pre_positions
+        post_positions = self.post_positions
         if len(self.pre_indices) == 0:
             return u.maybe_decimal(u.Quantity([], unit=u.get_unit(pre_positions)))
 

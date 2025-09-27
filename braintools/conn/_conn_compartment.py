@@ -28,6 +28,7 @@ Key Features:
 - Realistic synaptic placement based on neuron morphology
 """
 
+import warnings
 from typing import Optional, Tuple, Union, Dict, List, Callable
 
 import brainunit as u
@@ -572,11 +573,23 @@ class MorphologyDistance(MultiCompartmentConnectivity):
             pre_num = int(np.prod(pre_size))
         else:
             pre_num = pre_size
+        if len(pre_pos_val) != pre_num:
+            warnings.warn(
+                f'Pre positions length {len(pre_pos_val)} does not match pre_size {pre_num}. Using min value.',
+                UserWarning,
+            )
+            pre_num = len(pre_pos_val)
 
         if isinstance(post_size, tuple):
             post_num = int(np.prod(post_size))
         else:
             post_num = post_size
+        if len(post_pos_val) != post_num:
+            warnings.warn(
+                f'Post positions length {len(post_pos_val)} does not match post_size {post_num}. Using min value.',
+                UserWarning,
+            )
+            post_num = len(post_pos_val)
 
         all_pre_indices = []
         all_post_indices = []
@@ -860,16 +873,22 @@ class AxonalProjection(MultiCompartmentConnectivity):
         if self.topographic_map is not None and pre_positions is not None and post_positions is not None:
             # Use custom topographic mapping
             probs = np.zeros((pre_num, post_num))
+            # Extract mantissa values for topographic map function
+            pre_pos_vals = pre_positions.mantissa if hasattr(pre_positions, 'mantissa') else pre_positions
+            post_pos_vals = post_positions.mantissa if hasattr(post_positions, 'mantissa') else post_positions
             for i in range(pre_num):
                 for j in range(post_num):
-                    probs[i, j] = self.topographic_map(pre_positions[i], post_positions[j])
+                    probs[i, j] = self.topographic_map(pre_pos_vals[i], post_pos_vals[j])
         else:
             # Use uniform probability
             probs = np.full((pre_num, post_num), self.connection_prob)
 
         # Modify based on arborization pattern
         if self.arborization_pattern == 'clustered' and pre_positions is not None and post_positions is not None:
-            distances = cdist(pre_positions, post_positions)
+            # Extract mantissa values for distance calculation
+            pre_pos_vals = pre_positions.mantissa if hasattr(pre_positions, 'mantissa') else pre_positions
+            post_pos_vals = post_positions.mantissa if hasattr(post_positions, 'mantissa') else post_positions
+            distances = cdist(pre_pos_vals, post_pos_vals)
             spatial_factor = np.exp(-distances ** 2 / 10000)
             probs = probs * spatial_factor
 
@@ -1538,7 +1557,7 @@ class ActivityDependentSynapses(MultiCompartmentConnectivity):
     ) -> ConnectionResult:
         """Generate activity-dependent connections."""
         result = self.base_pattern.generate(
-            pre_size=pre_positions,
+            pre_size=pre_size,
             post_size=post_size,
             pre_positions=pre_positions,
             post_positions=post_positions,
@@ -1614,7 +1633,7 @@ class CustomCompartment(MultiCompartmentConnectivity):
         return ConnectionResult(
             np.array(pre_indices, dtype=np.int64),
             np.array(post_indices, dtype=np.int64),
-            weights=np.array(weights) if weights is not None else None,
+            weights=u.math.array(weights) if weights is not None else None,
             delays=delays,
             model_type='multi_compartment',
             pre_size=kwargs['pre_size'],

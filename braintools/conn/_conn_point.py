@@ -201,7 +201,6 @@ class Random(PointNeuronConnectivity):
                     pre_indices.append(i)
                     post_indices.append(j)
 
-        positions = (pre_positions, post_positions) if pre_positions is not None else None
         n_connections = len(pre_indices)
         if n_connections == 0:
             return ConnectionResult(
@@ -209,7 +208,8 @@ class Random(PointNeuronConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get("pre_positions"), post_positions=kwargs.get("post_positions"),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point'
             )
 
@@ -244,8 +244,8 @@ class Random(PointNeuronConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
-            pre_positions=kwargs.get("pre_positions"),
-            post_positions=kwargs.get("post_positions"),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             model_type='point',
             metadata={
                 'pattern': 'random',
@@ -976,7 +976,7 @@ class Custom(PointNeuronConnectivity):
         return ConnectionResult(
             np.array(pre_indices, dtype=np.int64),
             np.array(post_indices, dtype=np.int64),
-            weights=np.array(weights) if weights is not None else None,
+            weights=u.math.array(weights) if weights is not None else None,
             delays=delays,
             pre_size=pre_size,
             post_size=post_size,

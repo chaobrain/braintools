@@ -203,6 +203,11 @@ class PopulationCoupling(PopulationRateConnectivity):
                 # Use time constants as delays
                 tau_values = self.time_constants.magnitude
                 tau_unit = self.time_constants.unit
+            elif isinstance(self.time_constants, (list, tuple)) and len(self.time_constants) > 0 and hasattr(
+                self.time_constants[0], 'mantissa'):
+                # Handle list of quantities with units
+                tau_values = [tc.mantissa if hasattr(tc, 'mantissa') else tc for tc in self.time_constants]
+                tau_unit = self.time_constants[0].unit if hasattr(self.time_constants[0], 'unit') else u.ms
             else:
                 tau_values = self.time_constants
                 tau_unit = u.ms
@@ -319,23 +324,11 @@ class MeanField(PopulationRateConnectivity):
             post_num = post_size
 
         # Generate connections based on connectivity fraction
-        if self.connectivity_fraction < 1.0:
-            # Sparse connectivity - vectorized
-            n_total_connections = pre_num * post_num
-            n_actual_connections = int(n_total_connections * self.connectivity_fraction)
-
-            random_matrix = self.rng.random((pre_num, post_num))
-            threshold = np.sort(random_matrix.flatten())[n_actual_connections - 1]
-            connection_mask = random_matrix <= threshold
-            pre_indices, post_indices = np.where(connection_mask)
-        else:
-            # Dense connectivity - vectorized
-            pre_indices, post_indices = np.meshgrid(np.arange(pre_num), np.arange(post_num), indexing='ij')
-            pre_indices = pre_indices.flatten()
-            post_indices = post_indices.flatten()
+        connection_mask = self.rng.random((pre_num, post_num)) <= self.connectivity_fraction
+        pre_indices, post_indices = np.where(connection_mask)
 
         # Calculate weights based on normalization
-        weight_base = self.field_strength
+        weight_base, wunit = u.split_mantissa_unit(self.field_strength)
         if self.normalization == 'source':
             weight_base = weight_base / pre_num
         elif self.normalization == 'target':
@@ -353,6 +346,7 @@ class MeanField(PopulationRateConnectivity):
                               post_positions[post_indices].reshape(-1, post_positions.shape[1]))
             distance_factors = self.distance_dependence(distances.diagonal())
             weights = weights * distance_factors
+        weights = u.maybe_decimal(weights * wunit)
 
         if len(pre_indices) == 0:
             return ConnectionResult(
@@ -855,10 +849,10 @@ class FeedforwardInhibition(PopulationRateConnectivity):
         **kwargs
     ) -> ConnectionResult:
         """Generate feedforward inhibition connections."""
-        coupling_matrix = np.array([
-            [self.exc_to_exc, self.exc_to_inh],
-            [0, 0],
-        ])
+        coupling_matrix = np.array(
+            [[self.exc_to_exc, self.exc_to_inh],
+             [0, 0]]
+        )
 
         return PopulationCoupling(
             coupling_matrix,

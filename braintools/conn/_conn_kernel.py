@@ -465,11 +465,6 @@ class GaborKernel(PointNeuronConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gabor kernel connectivity")
 
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
-
         if isinstance(post_size, tuple):
             post_num = int(np.prod(post_size))
         else:
@@ -529,12 +524,24 @@ class GaborKernel(PointNeuronConnectivity):
                     post_indices.append(post_idx)
                     gabor_weights.append(gabor_val)
 
+        metadata = {
+            'pattern': 'gabor_kernel',
+            'sigma': self.sigma,
+            'frequency': self.frequency,
+            'theta': self.theta,
+            'phase': self.phase
+        }
+
         if len(pre_indices) == 0:
             return ConnectionResult(
-                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
-                pre_size=pre_size, post_size=post_size,
-                pre_positions=pre_positions, post_positions=post_positions,
-                model_type='point'
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+                model_type='point',
+                metadata=metadata,
             )
 
         pre_indices = np.array(pre_indices, dtype=np.int64)
@@ -544,9 +551,14 @@ class GaborKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.weight_init,
+            self.rng,
+            n_connections,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         # Multiply by Gabor weights
@@ -566,9 +578,14 @@ class GaborKernel(PointNeuronConnectivity):
             weights = gabor_weights
 
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.delay_init,
+            self.rng,
+            n_connections,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -581,13 +598,7 @@ class GaborKernel(PointNeuronConnectivity):
             model_type='point',
             pre_positions=pre_positions,
             post_positions=post_positions,
-            metadata={
-                'pattern': 'gabor_kernel',
-                'sigma': self.sigma,
-                'frequency': self.frequency,
-                'theta': self.theta,
-                'phase': self.phase
-            }
+            metadata=metadata,
         )
 
 
