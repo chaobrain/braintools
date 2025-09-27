@@ -14,73 +14,158 @@
 # ==============================================================================
 
 """
-Composable Connectivity Module for Synaptic Network Generation.
+Modular Connectivity System for Neural Network Generation.
 
-This module provides a powerful composable system for building complex synaptic
-connectivity patterns between neuron populations. The system is inspired by the
-composable input generation system and allows users to:
+This module provides a comprehensive, modular system for building connectivity
+patterns across different types of neural models. The system is designed with
+complete decoupling between model types to ensure clean, specialized implementations.
 
-- Combine connectivity patterns using arithmetic operations (+, -, *, /)
-- Apply transformations and constraints (scaling, filtering, degree limits)
-- Build hierarchical and modular network structures
-- Use probabilistic and deterministic connectivity rules
-- Integrate spatial and temporal connectivity parameters
+**Supported Model Types:**
+- **Point Neurons**: Single-compartment integrate-and-fire models
+- **Population Rate Models**: Mean-field population dynamics
+- **Multi-Compartment Models**: Detailed morphological neuron models
 
-Key Features:
-- **Composable Operations**: Combine patterns with +, -, *, / operators
-- **Spatial Connectivity**: Distance-dependent and position-aware patterns
-- **Biological Constraints**: Dale's principle, degree limits, plasticity rules
-- **Modular Architecture**: Build complex networks from simple components
-- **Extensible Design**: Easy to add custom connectivity patterns
-- **Efficient Implementation**: Sparse representation and caching
+**Key Features:**
+- **Model-Specific Modules**: Dedicated implementations for each neuron type
+- **Unified Interface**: Common API across all model types via connect() function
+- **Biological Realism**: Realistic parameters and constraints for each model type
+- **Spatial Awareness**: Position-dependent connectivity with proper units
+- **Composable Patterns**: Combine and transform connectivity patterns
+- **Extensible Design**: Easy to add custom patterns for any model type
 
-Basic Usage:
------------
+**Quick Start:**
+
+.. code-block:: python
+
+    import brainunit as u
+    from braintools.conn import connect
+
+    # Point neuron random connectivity
+    result = connect(
+        pattern='Random',
+        model_type='point',
+        pre_size=1000,
+        post_size=1000,
+        prob=0.1
+    )
+
+    # Population rate E-I dynamics
+    result = connect(
+        pattern='ExcitatoryInhibitory',
+        model_type='population_rate',
+        pre_size=2,
+        post_size=2,
+        exc_self_coupling=0.5,
+        inh_to_exc_coupling=-1.2
+    )
+
+    # Multi-compartment axon-to-dendrite connectivity
+    result = connect(
+        pattern='AxonToDendrite',
+        model_type='multi_compartment',
+        pre_size=100,
+        post_size=100,
+        connection_prob=0.1
+    )
+
+**Model-Specific Usage:**
+
+Point Neuron Connectivity:
 
 .. code-block:: python
 
     import numpy as np
-    from braintools.conn import Random, DistanceDependent
+    import brainunit as u
+    from braintools.conn import point
 
-    # Simple random connectivity
-    random_conn = Random(prob=0.1, seed=42)
-    result = random_conn(pre_size=100, post_size=100)
+    # Realistic synaptic connectivity with proper units
+    ampa_conn = point.Random(
+        prob=0.05,
+        weight='lognormal',
+        weight_params={'mean': 1.0 * u.nS, 'sigma': 0.5},
+        delay='normal',
+        delay_params={'mean': 1.5 * u.ms, 'std': 0.3 * u.ms}
+    )
 
-    # Distance-dependent connectivity
-    positions = np.random.uniform(0, 1000, (100, 2))
-    distance_conn = DistanceDependent(sigma=100.0, decay='gaussian')
-    result = distance_conn(100, 100, positions, positions)
+    # Spatial connectivity
+    positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+    spatial_conn = point.DistanceDependent(
+        sigma=100 * u.um,
+        decay='gaussian',
+        max_prob=0.3
+    )
+    result = spatial_conn(500, 500, positions, positions)
 
-    # Combine patterns
-    local = Random(prob=0.3) * DistanceDependent(sigma=50.0)
-    long_range = Random(prob=0.01).filter_distance(min_dist=200.0)
-    complex_conn = local + long_range
+    # E-I network with Dale's principle
+    ei_network = point.ExcitatoryInhibitory(
+        exc_ratio=0.8,
+        exc_prob=0.1,
+        inh_prob=0.2,
+        exc_weight=1.0 * u.nS,
+        inh_weight=-0.8 * u.nS
+    )
 
-Advanced Usage:
---------------
+Population Rate Model Connectivity:
 
 .. code-block:: python
 
-    from braintools.conn import SmallWorld, Modular, AllToAll
+    from braintools.conn import population
 
-    # Small-world network
-    sw = SmallWorld(k=6, p=0.3)
+    # Explicit coupling matrix
+    coupling_matrix = np.array([
+        [0.5, 0.8],   # Excitatory -> [E, I]
+        [-1.2, -0.3]  # Inhibitory -> [E, I]
+    ])
+    pop_coupling = population.PopulationCoupling(coupling_matrix)
 
-    # Modular network
-    within_module = Random(prob=0.4)
-    between_module = Random(prob=0.05)
-    modular = Modular([50, 50, 50], within_module, between_module)
+    # Hierarchical visual processing
+    visual_hierarchy = population.HierarchicalPopulations(
+        hierarchy_levels=[4, 2, 1],  # V1, V2, IT
+        feedforward_strength=[0.6, 0.8],
+        feedback_strength=[0.1, 0.2],
+        lateral_strength=0.05
+    )
 
-    # Hierarchical cortical network
-    local_circuits = DistanceDependent(sigma=100.0, max_prob=0.3)
-    long_range = Random(prob=0.02).filter_distance(min_dist=500.0)
-    feedback = Random(prob=0.08).constrain_inhibitory(ratio=0.2)
+    # Wilson-Cowan dynamics
+    wc_network = population.WilsonCowanNetwork(
+        w_ee=1.25, w_ei=1.0,
+        w_ie=-1.0, w_ii=-0.75,
+        tau_e=10 * u.ms, tau_i=20 * u.ms
+    )
 
-    cortical_network = (
-        local_circuits +                           # Local connections
-        long_range.scale_weights(0.5) +           # Weak long-range
-        feedback.scale_weights(-0.8)              # Inhibitory feedback
-    ).limit_degrees(max_in=100, max_out=50)       # Biological constraints
+Multi-Compartment Model Connectivity:
+
+.. code-block:: python
+
+    from braintools.conn import compartment
+
+    # Axon-to-dendrite synapses
+    axon_dend = compartment.AxonToDendrite(
+        connection_prob=0.1,
+        weight_distribution='lognormal',
+        weight_params={'mean': 2.0 * u.nS, 'sigma': 0.5}
+    )
+
+    # Specific compartment targeting
+    soma_targeting = compartment.CompartmentSpecific(
+        compartment_mapping={
+            compartment.AXON: compartment.SOMA,
+            compartment.BASAL_DENDRITE: compartment.SOMA
+        },
+        connection_prob=0.15
+    )
+
+    # Morphology-aware connectivity
+    morph_conn = compartment.MorphologyDistance(
+        sigma=50 * u.um,
+        decay_function='gaussian',
+        compartment_mapping={
+            compartment.AXON: [
+                compartment.BASAL_DENDRITE,
+                compartment.APICAL_DENDRITE
+            ]
+        }
+    )
 
 Constraint Application:
 ----------------------
@@ -139,17 +224,41 @@ Custom Patterns:
 
 Available Patterns:
 ------------------
+
+**Basic Patterns:**
 - **Random**: Random connectivity with fixed probability
-- **DistanceDependent**: Spatial connectivity with various decay functions
-- **SmallWorld**: Watts-Strogatz small-world networks
-- **Regular**: Regular patterns (ring, grid, lattice)
 - **AllToAll**: Fully connected networks
 - **OneToOne**: Direct one-to-one mappings
+- **Custom**: User-defined connectivity patterns
+
+**Spatial Patterns:**
+- **DistanceDependent**: Spatial connectivity with various decay functions
 - **Gaussian**: Gaussian-weighted connectivity
+- **Regular**: Regular patterns (ring, grid, lattice)
+- **CompartmentDistanceDependent**: Distance-dependent connectivity between compartments
+- **DendriticTree**: Dendritic tree connectivity patterns
+- **AxonalProjection**: Axonal projection patterns
+
+**Topological Patterns:**
+- **SmallWorld**: Watts-Strogatz small-world networks
 - **ScaleFree**: Barabási-Albert scale-free networks
 - **Modular**: Multi-module networks
 - **Hierarchical**: Multi-scale hierarchical networks
-- **Custom**: User-defined connectivity patterns
+
+**Multi-Compartment Patterns:**
+- **CompartmentSpecific**: Target specific compartments
+- **SomaToDendrite**: Soma-to-dendrite connections
+- **AxonToSoma**: Axon-to-soma connections
+- **DendriteToSoma**: Dendrite-to-soma connections
+- **MultiCompartmentRandom**: Random with compartment-specific probabilities
+
+**Population Rate Patterns:**
+- **PopulationCoupling**: Direct population-to-population coupling
+- **MeanField**: Mean-field connectivity approximations
+- **HierarchicalPopulations**: Multi-level population hierarchies
+- **ExcitatoryInhibitory**: Standard E-I network patterns
+- **FeedforwardInhibition**: Feedforward inhibition patterns
+- **RecurrentAmplification**: Recurrent amplification networks
 
 Operations and Transformations:
 ------------------------------
@@ -160,31 +269,37 @@ Operations and Transformations:
 - **Transformations**: .add_noise(), .add_plasticity(), .apply_transform()
 """
 
-from ._composable_base import *
-from ._composable_base import __all__ as base_all
-from ._patterns_basic import *
-from ._patterns_basic import __all__ as patterns_basic_all
-from ._patterns_kernel import *
-from ._patterns_kernel import __all__ as patterns_kernel_all
-from ._patterns_spatial import *
-from ._patterns_spatial import __all__ as patterns_spatial_all
-from ._patterns_topological import *
-from ._patterns_topological import __all__ as patterns_topological_all
+# Import base classes and unified interface
+from ._base import *
+from ._interface import *
 
-# Combine all exports (composable + legacy)
-__all__ = (
-    base_all +
-    patterns_basic_all +
-    patterns_spatial_all +
-    patterns_topological_all +
-    patterns_kernel_all
-)
+# Import model-specific modules
+from . import _point
+from . import _population
+from . import _compartment
+from ._initialization import *
+from ._initialization import __all__ as init_all
 
-# Clean up namespace
-del (
-    base_all,
-    patterns_basic_all,
-    patterns_spatial_all,
-    patterns_topological_all,
-    patterns_kernel_all,
-)
+# Main exports - unified interface is primary
+__all__ = [
+    # Universal interface
+    'connect',
+    'random_connectivity',
+    'distance_connectivity',
+    'structured_connectivity',
+    'get_available_patterns',
+    'validate_connectivity',
+    'convert_connectivity',
+
+    # Base classes
+    'ConnectionResult',
+    'BaseConnectivity',
+
+    # Model-specific modules
+    '_point.py',
+    '_population.py',
+    '_compartment.py',
+]
+__all__ = __all__ + init_all
+del init_all
+
