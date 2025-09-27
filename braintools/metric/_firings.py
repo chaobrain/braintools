@@ -745,16 +745,18 @@ def spike_time_tiling_coefficient(
         
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Create correlated spike trains
-    >>> spikes = jnp.zeros((1000, 3))
-    >>> # Add some synchronized spikes
-    >>> sync_times = [100, 300, 500, 700]
-    >>> for t in sync_times:
-    >>>     spikes = spikes.at[t:t+3, :].set(1)
-    >>> sttc = braintools.metric.spike_time_tiling_coefficient(spikes)
-    >>> print(f"STTC matrix:\\n{sttc}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Create correlated spike trains
+        >>> spikes = jnp.zeros((1000, 3))
+        >>> # Add some synchronized spikes
+        >>> sync_times = [100, 300, 500, 700]
+        >>> for t in sync_times:
+        >>>     spikes = spikes.at[t:t+3, :].set(1)
+        >>> sttc = braintools.metric.spike_time_tiling_coefficient(spikes)
+        >>> print(f"STTC matrix:\\n{sttc}")
     
     References
     ----------
@@ -870,14 +872,16 @@ def correlation_index(
         
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Create correlated spike trains
-    >>> spikes = (jnp.random.random((1000, 10)) < 0.1).astype(float)
-    >>> # Add some correlation by copying spikes between neurons
-    >>> spikes = spikes.at[:, 1].set(spikes[:, 0] * 0.7 + spikes[:, 1] * 0.3)
-    >>> ci = braintools.metric.correlation_index(spikes, window_size=50.0)
-    >>> print(f"Correlation index: {ci:.3f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Create correlated spike trains
+        >>> spikes = (jnp.random.random((1000, 10)) < 0.1).astype(float)
+        >>> # Add some correlation by copying spikes between neurons
+        >>> spikes = spikes.at[:, 1].set(spikes[:, 0] * 0.7 + spikes[:, 1] * 0.3)
+        >>> ci = braintools.metric.correlation_index(spikes, window_size=50.0)
+        >>> print(f"Correlation index: {ci:.3f}")
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
     spikes = jnp.asarray(spike_matrix)

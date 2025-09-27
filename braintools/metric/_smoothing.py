@@ -95,52 +95,62 @@ def smooth_labels(
     --------
     Basic label smoothing for 3-class classification:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # One-hot labels for 2 samples, 3 classes
-    >>> labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    >>> smoothed = braintools.metric.smooth_labels(labels, alpha=0.1)
-    >>> print("Original:")
-    >>> print(labels)
-    >>> print("Smoothed:")
-    >>> print(smoothed)
-    [[0.93333334 0.03333333 0.03333333]
-     [0.03333333 0.93333334 0.03333333]]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # One-hot labels for 2 samples, 3 classes
+        >>> labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        >>> smoothed = braintools.metric.smooth_labels(labels, alpha=0.1)
+        >>> print("Original:")
+        >>> print(labels)
+        >>> print("Smoothed:")
+        >>> print(smoothed)
+        [[0.93333334 0.03333333 0.03333333]
+         [0.03333333 0.93333334 0.03333333]]
 
     Effect of different smoothing parameters:
 
-    >>> single_label = jnp.array([[1.0, 0.0, 0.0]])
-    >>> # Light smoothing
-    >>> light = braintools.metric.smooth_labels(single_label, alpha=0.05)
-    >>> print(f"Light smoothing (α=0.05): {light[0]}")
-    >>> # Moderate smoothing  
-    >>> moderate = braintools.metric.smooth_labels(single_label, alpha=0.1)
-    >>> print(f"Moderate smoothing (α=0.1): {moderate[0]}")
-    >>> # Heavy smoothing
-    >>> heavy = braintools.metric.smooth_labels(single_label, alpha=0.5)
-    >>> print(f"Heavy smoothing (α=0.5): {heavy[0]}")
+    .. code-block:: python
+
+        >>> single_label = jnp.array([[1.0, 0.0, 0.0]])
+        >>> # Light smoothing
+        >>> light = braintools.metric.smooth_labels(single_label, alpha=0.05)
+        >>> print(f"Light smoothing (α=0.05): {light[0]}")
+        >>> # Moderate smoothing
+        >>> moderate = braintools.metric.smooth_labels(single_label, alpha=0.1)
+        >>> print(f"Moderate smoothing (α=0.1): {moderate[0]}")
+        >>> # Heavy smoothing
+        >>> heavy = braintools.metric.smooth_labels(single_label, alpha=0.5)
+        >>> print(f"Heavy smoothing (α=0.5): {heavy[0]}")
 
     Batch processing with different numbers of classes:
 
-    >>> # 5-class problem
-    >>> labels_5class = jnp.eye(5)  # Identity matrix as one-hot labels
-    >>> smoothed_5class = braintools.metric.smooth_labels(labels_5class, alpha=0.1)
-    >>> print(f"5-class smoothed shape: {smoothed_5class.shape}")
-    >>> print(f"Row sum (should be ~1.0): {jnp.sum(smoothed_5class[0]):.6f}")
+    .. code-block:: python
+
+        >>> # 5-class problem
+        >>> labels_5class = jnp.eye(5)  # Identity matrix as one-hot labels
+        >>> smoothed_5class = braintools.metric.smooth_labels(labels_5class, alpha=0.1)
+        >>> print(f"5-class smoothed shape: {smoothed_5class.shape}")
+        >>> print(f"Row sum (should be ~1.0): {jnp.sum(smoothed_5class[0]):.6f}")
 
     Integration with cross-entropy loss:
 
-    >>> # Typical usage in training loop
-    >>> logits = jnp.array([[2.0, 1.0, 0.5]])  # Model predictions
-    >>> hard_labels = jnp.array([[1.0, 0.0, 0.0]])
-    >>> smooth_labels_result = braintools.metric.smooth_labels(hard_labels, alpha=0.1)
-    >>> # Use smooth_labels_result with cross-entropy loss function
+    .. code-block:: python
+
+        >>> # Typical usage in training loop
+        >>> logits = jnp.array([[2.0, 1.0, 0.5]])  # Model predictions
+        >>> hard_labels = jnp.array([[1.0, 0.0, 0.0]])
+        >>> smooth_labels_result = braintools.metric.smooth_labels(hard_labels, alpha=0.1)
+        >>> # Use smooth_labels_result with cross-entropy loss function
 
     Verify probability distribution properties:
 
-    >>> smoothed = braintools.metric.smooth_labels(jnp.eye(4), alpha=0.2)
-    >>> print(f"All rows sum to 1: {jnp.allclose(jnp.sum(smoothed, axis=1), 1.0)}")
-    >>> print(f"All values non-negative: {jnp.all(smoothed >= 0)}")
+    .. code-block:: python
+
+        >>> smoothed = braintools.metric.smooth_labels(jnp.eye(4), alpha=0.2)
+        >>> print(f"All rows sum to 1: {jnp.allclose(jnp.sum(smoothed, axis=1), 1.0)}")
+        >>> print(f"All values non-negative: {jnp.all(smoothed >= 0)}")
 
     See Also
     --------

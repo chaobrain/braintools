@@ -94,13 +94,15 @@ def sigmoid_binary_cross_entropy(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> logits = jnp.array([1.0, -1.0, 0.0])
-    >>> labels = jnp.array([1.0, 0.0, 1.0])
-    >>> loss = braintools.metric.sigmoid_binary_cross_entropy(logits, labels)
-    >>> print(loss)
-    [0.31326166 0.31326166 0.6931472 ]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> logits = jnp.array([1.0, -1.0, 0.0])
+        >>> labels = jnp.array([1.0, 0.0, 1.0])
+        >>> loss = braintools.metric.sigmoid_binary_cross_entropy(logits, labels)
+        >>> print(loss)
+        [0.31326166 0.31326166 0.6931472 ]
 
     References
     ----------
@@ -144,13 +146,15 @@ def hinge_loss(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> predictions = jnp.array([1.0, -0.5, 2.0])
-    >>> targets = jnp.array([1, -1, 1])
-    >>> loss = braintools.metric.hinge_loss(predictions, targets)
-    >>> print(loss)
-    [0.  1.5 0. ]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> predictions = jnp.array([1.0, -0.5, 2.0])
+        >>> targets = jnp.array([1, -1, 1])
+        >>> loss = braintools.metric.hinge_loss(predictions, targets)
+        >>> print(loss)
+        [0.  1.5 0. ]
     """
     return jnp.maximum(0, 1 - predictor_outputs * targets)
 
@@ -184,13 +188,15 @@ def perceptron_loss(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> predictions = jnp.array([1.0, -0.5, 2.0])
-    >>> targets = jnp.array([1, -1, 1])
-    >>> loss = braintools.metric.perceptron_loss(predictions, targets)
-    >>> print(loss)
-    [0.  0.  0. ]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> predictions = jnp.array([1.0, -0.5, 2.0])
+        >>> targets = jnp.array([1, -1, 1])
+        >>> loss = braintools.metric.perceptron_loss(predictions, targets)
+        >>> print(loss)
+        [0.  0.  0. ]
 
     References
     ----------
@@ -232,13 +238,15 @@ def softmax_cross_entropy(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> logits = jnp.array([[2.0, 1.0, 0.1]])
-    >>> labels = jnp.array([[1.0, 0.0, 0.0]])
-    >>> loss = braintools.metric.softmax_cross_entropy(logits, labels)
-    >>> print(loss)
-    [0.4170299]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> logits = jnp.array([[2.0, 1.0, 0.1]])
+        >>> labels = jnp.array([[1.0, 0.0, 0.0]])
+        >>> loss = braintools.metric.softmax_cross_entropy(logits, labels)
+        >>> print(loss)
+        [0.4170299]
 
     References
     ----------
@@ -280,13 +288,15 @@ def softmax_cross_entropy_with_integer_labels(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> logits = jnp.array([[2.0, 1.0, 0.1]])
-    >>> labels = jnp.array([0])  # Class 0
-    >>> loss = braintools.metric.softmax_cross_entropy_with_integer_labels(logits, labels)
-    >>> print(loss)
-    [0.4170299]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> logits = jnp.array([[2.0, 1.0, 0.1]])
+        >>> labels = jnp.array([0])  # Class 0
+        >>> loss = braintools.metric.softmax_cross_entropy_with_integer_labels(logits, labels)
+        >>> print(loss)
+        [0.4170299]
 
     References
     ----------
@@ -346,14 +356,16 @@ def multiclass_hinge_loss(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Scores for 3 classes, 2 samples
-    >>> scores = jnp.array([[1.0, 2.0, 0.5], [0.8, 0.3, 1.2]])
-    >>> labels = jnp.array([1, 2])  # Correct classes
-    >>> loss = braintools.metric.multiclass_hinge_loss(scores, labels)
-    >>> print(loss)
-    [0.  0. ]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Scores for 3 classes, 2 samples
+        >>> scores = jnp.array([[1.0, 2.0, 0.5], [0.8, 0.3, 1.2]])
+        >>> labels = jnp.array([1, 2])  # Correct classes
+        >>> loss = braintools.metric.multiclass_hinge_loss(scores, labels)
+        >>> print(loss)
+        [0.  0. ]
 
     References
     ----------
@@ -404,14 +416,16 @@ def multiclass_perceptron_loss(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Scores for 3 classes, 2 samples
-    >>> scores = jnp.array([[1.0, 2.0, 0.5], [0.8, 0.3, 1.2]])
-    >>> labels = jnp.array([1, 2])  # Correct classes
-    >>> loss = braintools.metric.multiclass_perceptron_loss(scores, labels)
-    >>> print(loss)
-    [0.  0. ]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Scores for 3 classes, 2 samples
+        >>> scores = jnp.array([[1.0, 2.0, 0.5], [0.8, 0.3, 1.2]])
+        >>> labels = jnp.array([1, 2])  # Correct classes
+        >>> loss = braintools.metric.multiclass_perceptron_loss(scores, labels)
+        >>> print(loss)
+        [0.  0. ]
 
     References
     ----------
@@ -474,12 +488,14 @@ def poly_loss_cross_entropy(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> logits = jnp.array([[2.0, 1.0, 0.1]])
-    >>> labels = jnp.array([[1.0, 0.0, 0.0]])
-    >>> loss = braintools.metric.poly_loss_cross_entropy(logits, labels, epsilon=2.0)
-    >>> print(f"PolyLoss: {loss[0]:.4f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> logits = jnp.array([[2.0, 1.0, 0.1]])
+        >>> labels = jnp.array([[1.0, 0.0, 0.0]])
+        >>> loss = braintools.metric.poly_loss_cross_entropy(logits, labels, epsilon=2.0)
+        >>> print(f"PolyLoss: {loss[0]:.4f}")
 
     Notes
     -----
@@ -536,13 +552,15 @@ def kl_divergence(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Target and predicted distributions
-    >>> targets = jnp.array([[0.7, 0.2, 0.1]])
-    >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
-    >>> kl_div = braintools.metric.kl_divergence(log_preds, targets)
-    >>> print(f"KL divergence: {kl_div[0]:.4f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Target and predicted distributions
+        >>> targets = jnp.array([[0.7, 0.2, 0.1]])
+        >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
+        >>> kl_div = braintools.metric.kl_divergence(log_preds, targets)
+        >>> print(f"KL divergence: {kl_div[0]:.4f}")
 
     Notes
     -----
@@ -596,13 +614,15 @@ def kl_divergence_with_log_targets(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Both distributions in log-space
-    >>> log_targets = jnp.log(jnp.array([[0.7, 0.2, 0.1]]))
-    >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
-    >>> kl_div = braintools.metric.kl_divergence_with_log_targets(log_preds, log_targets)
-    >>> print(f"KL divergence: {kl_div[0]:.4f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Both distributions in log-space
+        >>> log_targets = jnp.log(jnp.array([[0.7, 0.2, 0.1]]))
+        >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
+        >>> kl_div = braintools.metric.kl_divergence_with_log_targets(log_preds, log_targets)
+        >>> print(f"KL divergence: {kl_div[0]:.4f}")
 
     Notes
     -----
@@ -651,12 +671,14 @@ def convex_kl_divergence(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> targets = jnp.array([[0.7, 0.2, 0.1]])
-    >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
-    >>> conv_kl = braintools.metric.convex_kl_divergence(log_preds, targets)
-    >>> print(f"Convex KL divergence: {conv_kl[0]:.4f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> targets = jnp.array([[0.7, 0.2, 0.1]])
+        >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
+        >>> conv_kl = braintools.metric.convex_kl_divergence(log_preds, targets)
+        >>> print(f"Convex KL divergence: {conv_kl[0]:.4f}")
 
     Notes
     -----
@@ -734,17 +756,19 @@ def ctc_loss_with_forward_probs(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Example with batch_size=1, time=4, classes=3, labels=2
-    >>> logits = jnp.random.normal(size=(1, 4, 3))
-    >>> logit_pad = jnp.zeros((1, 4))
-    >>> labels = jnp.array([[1, 2]])
-    >>> label_pad = jnp.zeros((1, 2))
-    >>> loss, alpha_blank, alpha_label = braintools.metric.ctc_loss_with_forward_probs(
-    ...     logits, logit_pad, labels, label_pad, blank_id=0
-    ... )
-    >>> print(f"CTC loss: {loss[0]:.4f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Example with batch_size=1, time=4, classes=3, labels=2
+        >>> logits = jnp.random.normal(size=(1, 4, 3))
+        >>> logit_pad = jnp.zeros((1, 4))
+        >>> labels = jnp.array([[1, 2]])
+        >>> label_pad = jnp.zeros((1, 2))
+        >>> loss, alpha_blank, alpha_label = braintools.metric.ctc_loss_with_forward_probs(
+        ...     logits, logit_pad, labels, label_pad, blank_id=0
+        ... )
+        >>> print(f"CTC loss: {loss[0]:.4f}")
 
     Notes
     -----
@@ -868,16 +892,18 @@ def ctc_loss(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Setup for speech recognition task
-    >>> batch_size, time_steps, vocab_size = 2, 10, 30
-    >>> logits = jnp.random.normal(size=(batch_size, time_steps, vocab_size))
-    >>> logit_pad = jnp.zeros((batch_size, time_steps))
-    >>> labels = jnp.array([[1, 2, 3], [4, 5, 0]])  # Different length sequences
-    >>> label_pad = jnp.array([[0, 0, 0], [0, 0, 1]])  # Last label is padded
-    >>> loss = braintools.metric.ctc_loss(logits, logit_pad, labels, label_pad)
-    >>> print(f"Average CTC loss: {jnp.mean(loss):.4f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Setup for speech recognition task
+        >>> batch_size, time_steps, vocab_size = 2, 10, 30
+        >>> logits = jnp.random.normal(size=(batch_size, time_steps, vocab_size))
+        >>> logit_pad = jnp.zeros((batch_size, time_steps))
+        >>> labels = jnp.array([[1, 2, 3], [4, 5, 0]])  # Different length sequences
+        >>> label_pad = jnp.array([[0, 0, 0], [0, 0, 1]])  # Last label is padded
+        >>> loss = braintools.metric.ctc_loss(logits, logit_pad, labels, label_pad)
+        >>> print(f"Average CTC loss: {jnp.mean(loss):.4f}")
 
     Notes
     -----
@@ -949,16 +975,18 @@ def sigmoid_focal_loss(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Imbalanced binary classification
-    >>> logits = jnp.array([2.0, -1.0, 0.5, -2.0])
-    >>> labels = jnp.array([1.0, 0.0, 1.0, 0.0])
-    >>> # Standard focal loss
-    >>> loss = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=0.25, gamma=2.0)
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Imbalanced binary classification
+        >>> logits = jnp.array([2.0, -1.0, 0.5, -2.0])
+        >>> labels = jnp.array([1.0, 0.0, 1.0, 0.0])
+        >>> # Standard focal loss
+        >>> loss = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=0.25, gamma=2.0)
         >>> print(f"Focal loss: {loss}")
-    >>> # Compare with unweighted version
-    >>> loss_unweighted = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=None, gamma=2.0)
+        >>> # Compare with unweighted version
+        >>> loss_unweighted = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=None, gamma=2.0)
 
     Notes
     -----
@@ -1033,19 +1061,21 @@ def nll_loss(input, target):
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Single sample example
-    >>> log_probs = jnp.log(jnp.array([0.1, 0.7, 0.2]))
-    >>> target = 1  # Correct class is index 1
-    >>> loss = braintools.metric.nll_loss(log_probs, target)
-    >>> print(f"NLL loss: {loss:.4f}")
-    
-    >>> # Batch example
-    >>> log_probs_batch = jnp.log(jnp.array([[0.1, 0.7, 0.2], [0.3, 0.3, 0.4]]))
-    >>> targets_batch = jnp.array([1, 2])
-    >>> losses = braintools.metric.nll_loss(log_probs_batch, targets_batch)
-    >>> print(f"Batch losses: {losses}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Single sample example
+        >>> log_probs = jnp.log(jnp.array([0.1, 0.7, 0.2]))
+        >>> target = 1  # Correct class is index 1
+        >>> loss = braintools.metric.nll_loss(log_probs, target)
+        >>> print(f"NLL loss: {loss:.4f}")
+
+        >>> # Batch example
+        >>> log_probs_batch = jnp.log(jnp.array([[0.1, 0.7, 0.2], [0.3, 0.3, 0.4]]))
+        >>> targets_batch = jnp.array([1, 2])
+        >>> losses = braintools.metric.nll_loss(log_probs_batch, targets_batch)
+        >>> print(f"Batch losses: {losses}")
 
     Notes
     -----

@@ -96,25 +96,31 @@ def safe_norm(x: brainstate.typing.ArrayLike,
     --------
     Basic usage with vector norms:
 
-    >>> import jax.numpy as jnp
-    >>> x = jnp.array([0.0, 0.0, 0.0])  # Zero vector
-    >>> norm = safe_norm(x, min_norm=1e-8)
-    >>> print(norm)  # Returns 1e-8 instead of 0.0
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        x = jnp.array([0.0, 0.0, 0.0])  # Zero vector
+        norm = safe_norm(x, min_norm=1e-8)
+        print(norm)  # Returns 1e-8 instead of 0.0
 
     Compare with regular norm:
 
-    >>> regular_norm = jnp.linalg.norm(x)
-    >>> print(regular_norm)  # Returns 0.0
-    >>> safe_result = safe_norm(x, min_norm=0.1)
-    >>> print(safe_result)  # Returns 0.1
+    .. code-block:: python
+
+        regular_norm = jnp.linalg.norm(x)
+        print(regular_norm)  # Returns 0.0
+        safe_result = safe_norm(x, min_norm=0.1)
+        print(safe_result)  # Returns 0.1
 
     Matrix norms with axis specification:
 
-    >>> X = jnp.array([[1.0, 2.0], [3.0, 4.0]])
-    >>> # Frobenius norm of entire matrix
-    >>> fro_norm = safe_norm(X, min_norm=1.0, ord='fro')
-    >>> # L2 norm along rows
-    >>> row_norms = safe_norm(X, min_norm=0.1, axis=1)
+    .. code-block:: python
+
+        X = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        # Frobenius norm of entire matrix
+        fro_norm = safe_norm(X, min_norm=1.0, ord='fro')
+        # L2 norm along rows
+        row_norms = safe_norm(X, min_norm=0.1, axis=1)
 
     See Also
     --------
@@ -194,32 +200,40 @@ def squared_error(
     --------
     Basic element-wise squared error:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> predictions = jnp.array([1.0, 2.0, 3.0])
-    >>> targets = jnp.array([1.1, 1.9, 3.2])
-    >>> errors = braintools.metric.squared_error(predictions, targets)
-    >>> print(errors)  # [0.01, 0.01, 0.04]
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools
+        predictions = jnp.array([1.0, 2.0, 3.0])
+        targets = jnp.array([1.1, 1.9, 3.2])
+        errors = braintools.metric.squared_error(predictions, targets)
+        print(errors)  # [0.01, 0.01, 0.04]
 
     Mean Squared Error:
 
-    >>> mse = braintools.metric.squared_error(predictions, targets, reduction='mean')
-    >>> print(f"MSE: {mse:.4f}")
+    .. code-block:: python
+
+        mse = braintools.metric.squared_error(predictions, targets, reduction='mean')
+        print(f"MSE: {mse:.4f}")
 
     Squared error with missing targets (assuming zero targets):
 
-    >>> pred_only = jnp.array([0.5, -0.3, 0.8])
-    >>> sq_magnitude = braintools.metric.squared_error(pred_only)
-    >>> print(sq_magnitude)  # [0.25, 0.09, 0.64]
+    .. code-block:: python
+
+        pred_only = jnp.array([0.5, -0.3, 0.8])
+        sq_magnitude = braintools.metric.squared_error(pred_only)
+        print(sq_magnitude)  # [0.25, 0.09, 0.64]
 
     Batch processing with axis reduction:
 
-    >>> batch_pred = jnp.array([[1.0, 2.0], [3.0, 4.0]])
-    >>> batch_targets = jnp.array([[1.1, 1.9], [2.8, 4.2]])
-    >>> # MSE per sample
-    >>> per_sample_mse = braintools.metric.squared_error(batch_pred, batch_targets,
-    ...                                          axis=1, reduction='mean')
-    >>> print(per_sample_mse)
+    .. code-block:: python
+
+        batch_pred = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        batch_targets = jnp.array([[1.1, 1.9], [2.8, 4.2]])
+        # MSE per sample
+        per_sample_mse = braintools.metric.squared_error(batch_pred, batch_targets,
+                                                 axis=1, reduction='mean')
+        print(per_sample_mse)
 
     See Also
     --------
@@ -309,34 +323,42 @@ def absolute_error(
     --------
     Basic element-wise absolute error:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> predictions = jnp.array([1.0, 2.0, 3.0])
-    >>> targets = jnp.array([1.1, 1.9, 3.2])
-    >>> errors = braintools.metric.absolute_error(predictions, targets, reduction='none')
-    >>> print(errors)  # [0.1, 0.1, 0.2]
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools
+        predictions = jnp.array([1.0, 2.0, 3.0])
+        targets = jnp.array([1.1, 1.9, 3.2])
+        errors = braintools.metric.absolute_error(predictions, targets, reduction='none')
+        print(errors)  # [0.1, 0.1, 0.2]
 
     Mean Absolute Error (default):
 
-    >>> mae = braintools.metric.absolute_error(predictions, targets)
-    >>> print(f"MAE: {mae:.4f}")  # MAE: 0.1333
+    .. code-block:: python
+
+        mae = braintools.metric.absolute_error(predictions, targets)
+        print(f"MAE: {mae:.4f}")  # MAE: 0.1333
 
     Compare robustness to outliers with squared error:
 
-    >>> # Data with outlier
-    >>> pred_outlier = jnp.array([1.0, 2.0, 10.0])  # 10.0 is outlier
-    >>> target_clean = jnp.array([1.1, 1.9, 3.0])
-    >>> mae = braintools.metric.absolute_error(pred_outlier, target_clean)
-    >>> mse = braintools.metric.squared_error(pred_outlier, target_clean, reduction='mean')
-    >>> print(f"MAE: {mae:.3f}, MSE: {mse:.3f}")  # MAE less affected by outlier
+    .. code-block:: python
+
+        # Data with outlier
+        pred_outlier = jnp.array([1.0, 2.0, 10.0])  # 10.0 is outlier
+        target_clean = jnp.array([1.1, 1.9, 3.0])
+        mae = braintools.metric.absolute_error(pred_outlier, target_clean)
+        mse = braintools.metric.squared_error(pred_outlier, target_clean, reduction='mean')
+        print(f"MAE: {mae:.3f}, MSE: {mse:.3f}")  # MAE less affected by outlier
 
     Batch processing with axis reduction:
 
-    >>> batch_pred = jnp.array([[1.0, 2.0], [3.0, 4.0]])
-    >>> batch_targets = jnp.array([[1.1, 1.9], [2.8, 4.2]])
-    >>> # MAE per sample
-    >>> per_sample_mae = braintools.metric.absolute_error(batch_pred, batch_targets, axis=1)
-    >>> print(per_sample_mae)
+    .. code-block:: python
+
+        batch_pred = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        batch_targets = jnp.array([[1.1, 1.9], [2.8, 4.2]])
+        # MAE per sample
+        per_sample_mae = braintools.metric.absolute_error(batch_pred, batch_targets, axis=1)
+        print(per_sample_mae)
 
     See Also
     --------
@@ -401,14 +423,16 @@ class L1Loss:
         - Output: scalar. If :attr:`reduction` is ``'none'``, then
           :math:`(*)`, same shape as the input.
 
-    Examples::
+    Examples:
 
-        >>> import brainstate as brainstate
-        >>> loss = nn.L1Loss()
-        >>> input = brainstate.random.randn(3, 5)
-        >>> target = brainstate.random.randn(3, 5)
-        >>> output = loss(input, target)
-        >>> output.backward()
+    .. code-block:: python
+
+        import brainstate
+        loss = nn.L1Loss()
+        input = brainstate.random.randn(3, 5)
+        target = brainstate.random.randn(3, 5)
+        output = loss(input, target)
+        output.backward()
     """
 
     def __init__(self, reduction: str = 'mean') -> None:
@@ -588,36 +612,44 @@ def huber_loss(
     --------
     Basic Huber loss computation:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> predictions = jnp.array([1.0, 2.0, 5.0])
-    >>> targets = jnp.array([1.1, 1.9, 3.0])  # Last prediction is outlier
-    >>> loss = braintools.metric.huber_loss(predictions, targets)
-    >>> print(loss)
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools
+        predictions = jnp.array([1.0, 2.0, 5.0])
+        targets = jnp.array([1.1, 1.9, 3.0])  # Last prediction is outlier
+        loss = braintools.metric.huber_loss(predictions, targets)
+        print(loss)
 
     Compare different delta values:
 
-    >>> # Small delta (more L1-like, robust)
-    >>> loss_small = braintools.metric.huber_loss(predictions, targets, delta=0.5)
-    >>> # Large delta (more L2-like, smooth)  
-    >>> loss_large = braintools.metric.huber_loss(predictions, targets, delta=2.0)
-    >>> print(f"Small delta: {loss_small}")
-    >>> print(f"Large delta: {loss_large}")
+    .. code-block:: python
+
+        # Small delta (more L1-like, robust)
+        loss_small = braintools.metric.huber_loss(predictions, targets, delta=0.5)
+        # Large delta (more L2-like, smooth)
+        loss_large = braintools.metric.huber_loss(predictions, targets, delta=2.0)
+        print(f"Small delta: {loss_small}")
+        print(f"Large delta: {loss_large}")
 
     Visualize the transition regions:
 
-    >>> errors = jnp.linspace(-3, 3, 100)
-    >>> # Targets of zero to compute loss vs. error magnitude
-    >>> huber_vals = braintools.metric.huber_loss(errors, jnp.zeros_like(errors), delta=1.0)
-    >>> l1_vals = braintools.metric.absolute_error(errors, jnp.zeros_like(errors), reduction='none')
-    >>> l2_vals = braintools.metric.squared_error(errors, jnp.zeros_like(errors), reduction='none')
+    .. code-block:: python
+
+        errors = jnp.linspace(-3, 3, 100)
+        # Targets of zero to compute loss vs. error magnitude
+        huber_vals = braintools.metric.huber_loss(errors, jnp.zeros_like(errors), delta=1.0)
+        l1_vals = braintools.metric.absolute_error(errors, jnp.zeros_like(errors), reduction='none')
+        l2_vals = braintools.metric.squared_error(errors, jnp.zeros_like(errors), reduction='none')
 
     Gradient clipping interpretation:
 
-    >>> # For small errors, gradient is proportional to error (L2-like)
-    >>> small_error = jnp.array([0.5])
-    >>> # For large errors, gradient is constant (L1-like, clipped)
-    >>> large_error = jnp.array([2.0])
+    .. code-block:: python
+
+        # For small errors, gradient is proportional to error (L2-like)
+        small_error = jnp.array([0.5])
+        # For large errors, gradient is constant (L1-like, clipped)
+        large_error = jnp.array([2.0])
 
     See Also
     --------
@@ -737,35 +769,43 @@ def cosine_similarity(
     --------
     Basic cosine similarity:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Two 3D vectors
-    >>> pred = jnp.array([1.0, 2.0, 3.0])
-    >>> target = jnp.array([2.0, 4.0, 6.0])  # Same direction, different magnitude
-    >>> similarity = braintools.metric.cosine_similarity(pred, target)
-    >>> print(f"Similarity: {similarity:.4f}")  # Should be close to 1.0
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools
+        # Two 3D vectors
+        pred = jnp.array([1.0, 2.0, 3.0])
+        target = jnp.array([2.0, 4.0, 6.0])  # Same direction, different magnitude
+        similarity = braintools.metric.cosine_similarity(pred, target)
+        print(f"Similarity: {similarity:.4f}")  # Should be close to 1.0
 
     Batch computation:
 
-    >>> # Batch of vector pairs
-    >>> pred_batch = jnp.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
-    >>> target_batch = jnp.array([[0.0, 1.0], [1.0, 0.0], [1.0, -1.0]])
-    >>> similarities = braintools.metric.cosine_similarity(pred_batch, target_batch)
-    >>> print(similarities)  # [0.0, 0.0, 0.0] (all orthogonal pairs)
+    .. code-block:: python
+
+        # Batch of vector pairs
+        pred_batch = jnp.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+        target_batch = jnp.array([[0.0, 1.0], [1.0, 0.0], [1.0, -1.0]])
+        similarities = braintools.metric.cosine_similarity(pred_batch, target_batch)
+        print(similarities)  # [0.0, 0.0, 0.0] (all orthogonal pairs)
 
     Handling zero vectors:
 
-    >>> zero_vec = jnp.array([0.0, 0.0, 0.0])
-    >>> normal_vec = jnp.array([1.0, 2.0, 3.0])
-    >>> # Without epsilon, might cause numerical issues
-    >>> sim_safe = braintools.metric.cosine_similarity(zero_vec, normal_vec, epsilon=1e-8)
+    .. code-block:: python
+
+        zero_vec = jnp.array([0.0, 0.0, 0.0])
+        normal_vec = jnp.array([1.0, 2.0, 3.0])
+        # Without epsilon, might cause numerical issues
+        sim_safe = braintools.metric.cosine_similarity(zero_vec, normal_vec, epsilon=1e-8)
 
     Measuring text similarity (conceptual):
 
-    >>> # Document embeddings (simplified)
-    >>> doc1_embedding = jnp.array([0.8, 0.1, 0.3, 0.2])
-    >>> doc2_embedding = jnp.array([0.7, 0.2, 0.4, 0.1])  
-    >>> text_similarity = braintools.metric.cosine_similarity(doc1_embedding, doc2_embedding)
+    .. code-block:: python
+
+        # Document embeddings (simplified)
+        doc1_embedding = jnp.array([0.8, 0.1, 0.3, 0.2])
+        doc2_embedding = jnp.array([0.7, 0.2, 0.4, 0.1])
+        text_similarity = braintools.metric.cosine_similarity(doc1_embedding, doc2_embedding)
 
     See Also
     --------
