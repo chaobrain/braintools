@@ -1,9 +1,49 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "braintools"
+description = "Modeling tools for brain simulation."
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+    { name = "BrainTools Developers", email = "chao.brain@qq.com" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Libraries"
+]
+keywords = [
+    "brain dynamics programming",
+    "brain simulation",
+    "brain-inspired computing"
+]
+dynamic = ["version", "dependencies", "optional-dependencies"]
+
+[project.urls]
+homepage = "https://github.com/chaobrain/braintools"
+repository = "https://github.com/chaobrain/braintools"
+"Bug Tracker" = "https://github.com/chaobrain/braintools/issues"
+Documentation = "https://braintools.readthedocs.io/"
 
 [tool.setuptools.packages.find]
+include = ["braintools*"]
 exclude = [
     "docs*",
     "tests*",
@@ -11,59 +51,15 @@ exclude = [
     "examples*",
     "build*",
     "dist*",
-    "braintools.egg-info*",
-    "braintools/__pycache__*",
-    "braintools/__init__.py"
+    "braintools.egg-info*"
 ]
 
+[tool.setuptools.dynamic]
+version = { attr = "braintools.__version__" }
+dependencies = { file = ["requirements.txt"] }
 
-[tool.distutils.bdist_wheel]
-universal = true
-
-
-[project]
-name = "braintools"
-description = "Modeling tools for brain simulation."
-readme = 'README.md'
-license = { text = 'Apache-2.0 license' }
-requires-python = '>=3.10'
-authors = [{ name = 'BrainTools Developers', email = 'chao.brain@qq.com' }]
-classifiers = [
-    'Natural Language :: English',
-    'Operating System :: OS Independent',
-    'Development Status :: 4 - Beta',
-    'Intended Audience :: Developers',
-    'Intended Audience :: Science/Research',
-    'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.10',
-    'Programming Language :: Python :: 3.11',
-    'Programming Language :: Python :: 3.12',
-    'Programming Language :: Python :: 3.13',
-    'License :: OSI Approved :: Apache Software License',
-    'Programming Language :: Python',
-    'Topic :: Scientific/Engineering :: Bio-Informatics',
-    'Topic :: Scientific/Engineering :: Mathematics',
-    'Topic :: Scientific/Engineering :: Artificial Intelligence',
-    'Topic :: Software Development :: Libraries',
-]
-
-
-keywords = ["brain dynamics programming", "brain simulation", "brain-inspired computing"]
-
-dependencies = [
-    'numpy',
-    'brainstate>=0.1.0',
-    'brainunit>=0.0.8',
-    'typing_extensions',
-]
-
-dynamic = ['version']
-
-[project.urls]
-homepage = 'http://github.com/chaobrain/braintools'
-repository = 'http://github.com/chaobrain/braintools'
-
-[project.optional-dependencies]
-testing = [
-    'pytest',
-]
+[tool.setuptools.dynamic.optional-dependencies]
+testing = { file = ["requirements-testing.txt"] }
+cpu = { file = ["requirements-cpu.txt"] }
+cuda12 = { file = ["requirements-cuda12.txt"] }
+tpu = { file = ["requirements-tpu.txt"] }

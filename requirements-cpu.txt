@@ -1,0 +1,7 @@
+jax[cpu]
+brainstate[cpu]
+brainunit[cpu]
+matplotlib
+nevergrad
+scipy
+msgpack

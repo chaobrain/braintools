@@ -1,0 +1,7 @@
+jax[cuda12]
+brainstate[cuda12]
+brainunit[cuda12]
+matplotlib
+nevergrad
+scipy
+msgpack
