@@ -20,7 +20,7 @@ This module provides delay initialization strategies for synaptic connections.
 All classes inherit from the DelayInit base class.
 """
 
-from typing import Optional
+from typing import Optional, Union
 
 import brainunit as u
 import numpy as np
@@ -33,6 +33,8 @@ __all__ = [
     'UniformDelay',
     'NormalDelay',
     'GammaDelay',
+    'DistanceProportionalDelay',
+    'DistanceModulatedDelay',
 ]
 
 
@@ -226,3 +228,134 @@ class GammaDelay(DelayInit):
 
     def __repr__(self):
         return f'GammaDelay(shape={self.shape}, scale={self.scale})'
+
+
+class DistanceProportionalDelay(DelayInit):
+    """
+    Distance-proportional delay initialization.
+
+    Generates delays proportional to distance: delay = base_delay + distance / velocity.
+    Models axonal conduction delays.
+
+    Parameters
+    ----------
+    base_delay : Quantity
+        Minimum delay at zero distance (synaptic delay).
+    velocity : Quantity
+        Conduction velocity (e.g., 0.5 m/s for unmyelinated, 5-10 m/s for myelinated).
+    max_delay : Quantity, optional
+        Maximum delay cap (default: no limit).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        import brainunit as u
+        from braintools.conn import DistanceProportionalDelay
+
+        init = DistanceProportionalDelay(
+            base_delay=0.5 * u.ms,
+            velocity=1.0 * u.meter / u.second,
+            max_delay=10.0 * u.ms
+        )
+
+        rng = np.random.default_rng(0)
+        distances = np.array([0, 100, 500, 1000]) * u.um
+        delays = init(rng, 4, distances=distances)
+    """
+
+    def __init__(
+        self,
+        base_delay: u.Quantity,
+        velocity: u.Quantity,
+        max_delay: Optional[u.Quantity] = None
+    ):
+        self.base_delay = base_delay
+        self.velocity = velocity
+        self.max_delay = max_delay
+
+    def __call__(self, rng, size, distances: Optional[u.Quantity] = None, **kwargs):
+        if distances is None:
+            return u.math.full(size, self.base_delay)
+
+        base_val, time_unit = u.split_mantissa_unit(self.base_delay)
+
+        velocity_in_units = self.velocity.to(distances.unit / time_unit)
+        conduction_delays = distances / velocity_in_units
+
+        total_delays = self.base_delay + conduction_delays
+
+        if self.max_delay is not None:
+            total_delays = u.math.minimum(total_delays, self.max_delay)
+
+        return total_delays
+
+    def __repr__(self):
+        return f'DistanceProportionalDelay(base_delay={self.base_delay}, velocity={self.velocity}, max_delay={self.max_delay})'
+
+
+class DistanceModulatedDelay(DelayInit):
+    """
+    Delay distribution modulated by distance.
+
+    Generates delays from a base distribution and then adds distance-dependent
+    component or modulates based on distance.
+
+    Parameters
+    ----------
+    base_dist : DelayInit
+        Base delay distribution (e.g., NormalDelay for synaptic variability).
+    distance_factor : Quantity
+        Factor for distance contribution (e.g., 0.01 ms/um).
+    mode : str
+        How to combine base and distance: 'add' or 'multiply'.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        import brainunit as u
+        from braintools.conn import DistanceModulatedDelay, NormalDelay
+
+        init = DistanceModulatedDelay(
+            base_dist=NormalDelay(1.0 * u.ms, 0.2 * u.ms),
+            distance_factor=0.005 * u.ms / u.um,
+            mode='add'
+        )
+
+        rng = np.random.default_rng(0)
+        distances = np.linspace(0, 500, 100) * u.um
+        delays = init(rng, 100, distances=distances)
+    """
+
+    def __init__(
+        self,
+        base_dist: DelayInit,
+        distance_factor: u.Quantity,
+        mode: str = 'add'
+    ):
+        self.base_dist = base_dist
+        self.distance_factor = distance_factor
+        if mode not in ['add', 'multiply']:
+            raise ValueError(f"mode must be 'add' or 'multiply', got {mode}")
+        self.mode = mode
+
+    def __call__(self, rng, size, distances: Optional[u.Quantity] = None, **kwargs):
+        base_delays = self.base_dist(rng, size, **kwargs)
+
+        if distances is None:
+            return base_delays
+
+        if self.mode == 'add':
+            distance_contribution = distances * self.distance_factor
+            return base_delays + distance_contribution
+        else:
+            factor_val, factor_unit = u.split_mantissa_unit(self.distance_factor)
+            dist_val = distances.to(factor_unit).mantissa
+            modulation = 1.0 + dist_val * factor_val
+            return base_delays * modulation
+
+    def __repr__(self):
+        return f'DistanceModulatedDelay(base_dist={self.base_dist}, distance_factor={self.distance_factor}, mode={self.mode})'

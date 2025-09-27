@@ -20,7 +20,7 @@ This module provides weight initialization strategies for synaptic connections.
 All classes inherit from the WeightInit base class.
 """
 
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 
 import brainunit as u
 import numpy as np
@@ -43,6 +43,7 @@ __all__ = [
     'ConditionalWeight',
     'ScaledWeight',
     'ClippedWeight',
+    'DistanceModulatedWeight',
 ]
 
 
@@ -736,3 +737,100 @@ class ClippedWeight(WeightInit):
 
     def __repr__(self):
         return f'ClippedWeight(base_dist={self.base_dist}, min_val={self.min_val}, max_val={self.max_val})'
+
+
+class DistanceModulatedWeight(WeightInit):
+    """
+    Weight distribution modulated by distance.
+
+    Generates weights from a base distribution and then modulates them based on
+    distance using a specified function (e.g., exponential decay, gaussian).
+
+    Parameters
+    ----------
+    base_dist : WeightInit
+        Base weight distribution.
+    distance_profile : callable or str
+        Distance modulation function. Can be:
+        - 'exponential': exp(-d / sigma)
+        - 'gaussian': exp(-d^2 / (2 * sigma^2))
+        - 'linear': max(0, 1 - d / sigma)
+        - callable: custom function f(distances, sigma)
+    sigma : Quantity
+        Characteristic distance scale.
+    min_weight : Quantity, optional
+        Minimum weight floor (default: 0).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        import brainunit as u
+        from braintools.conn import DistanceModulatedWeight, NormalWeight
+
+        init = DistanceModulatedWeight(
+            base_dist=NormalWeight(1.0 * u.nS, 0.2 * u.nS),
+            distance_profile='exponential',
+            sigma=100.0 * u.um,
+            min_weight=0.01 * u.nS
+        )
+
+        rng = np.random.default_rng(0)
+        distances = np.linspace(0, 300, 100) * u.um
+        weights = init(rng, 100, distances=distances)
+    """
+
+    def __init__(
+        self,
+        base_dist: WeightInit,
+        distance_profile: Union[str, callable],
+        sigma: u.Quantity,
+        min_weight: Optional[u.Quantity] = None
+    ):
+        self.base_dist = base_dist
+        self.sigma = sigma
+        self.min_weight = min_weight
+
+        if isinstance(distance_profile, str):
+            if distance_profile == 'exponential':
+                self.profile_func = lambda d, s: np.exp(-d / s)
+            elif distance_profile == 'gaussian':
+                self.profile_func = lambda d, s: np.exp(-d ** 2 / (2 * s ** 2))
+            elif distance_profile == 'linear':
+                self.profile_func = lambda d, s: np.maximum(0, 1 - d / s)
+            else:
+                raise ValueError(f"Unknown distance profile: {distance_profile}. Use 'exponential', 'gaussian', 'linear', or a callable.")
+        elif callable(distance_profile):
+            self.profile_func = distance_profile
+        else:
+            raise TypeError("distance_profile must be a string or callable")
+
+    def __call__(self, rng, size, distances: Optional[u.Quantity] = None, **kwargs):
+        base_weights = self.base_dist(rng, size, **kwargs)
+
+        if distances is None:
+            return base_weights
+
+        sigma_val, dist_unit = u.split_mantissa_unit(self.sigma)
+        dist_vals = distances.to(dist_unit).mantissa
+
+        modulation = self.profile_func(dist_vals, sigma_val)
+
+        if isinstance(base_weights, u.Quantity):
+            weight_vals, weight_unit = u.split_mantissa_unit(base_weights)
+            modulated = weight_vals * modulation
+
+            if self.min_weight is not None:
+                min_val = u.Quantity(self.min_weight).to(weight_unit).mantissa
+                modulated = np.maximum(modulated, min_val)
+
+            return u.maybe_decimal(modulated * weight_unit)
+        else:
+            modulated = base_weights * modulation
+            if self.min_weight is not None:
+                modulated = np.maximum(modulated, self.min_weight)
+            return modulated
+
+    def __repr__(self):
+        return f'DistanceModulatedWeight(base_dist={self.base_dist}, sigma={self.sigma}, min_weight={self.min_weight})'
