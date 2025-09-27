@@ -17,6 +17,8 @@ from typing import Any, Dict
 
 import numpy as np
 
+from .._misc import set_module_as
+
 sio = None
 
 __all__ = [
@@ -24,6 +26,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.file')
 def load_matfile(
     filename: str,
     header_info: bool = True,

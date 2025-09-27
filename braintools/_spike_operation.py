@@ -36,17 +36,38 @@ def spike_bitwise_or(x, y):
     The OR operation is implemented using the formula: x + y - x * y,
     which is equivalent to the OR operation for binary values.
 
-    Args:
-        x (Tensor): The first input spike tensor.
-        y (Tensor): The second input spike tensor.
+    Parameters
+    ----------
+    x : array_like
+        The first input spike tensor.
+    y : array_like
+        The second input spike tensor.
 
-    Returns:
-        Tensor: The result of the bitwise OR operation applied to the input tensors.
-               The output tensor has the same shape as the input tensors.
+    Returns
+    -------
+    array_like
+        The result of the bitwise OR operation applied to the input tensors.
+        The output tensor has the same shape as the input tensors.
 
-    Note:
-        This operation assumes that the input tensors contain binary (0 or 1) values.
-        For non-binary inputs, the behavior may not correspond to a true bitwise OR.
+    Notes
+    -----
+    This operation assumes that the input tensors contain binary (0 or 1) values.
+    For non-binary inputs, the behavior may not correspond to a true bitwise OR.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools as bt
+
+        # Create binary spike tensors
+        x = jnp.array([0, 1, 0, 1])
+        y = jnp.array([0, 0, 1, 1])
+
+        # Perform OR operation
+        result = bt.spike_bitwise_or(x, y)
+        # result: [0, 1, 1, 1]
     """
     return x + y - x * y
 
@@ -59,17 +80,38 @@ def spike_bitwise_and(x, y):
     This function computes the AND operation between two spike tensors.
     The AND operation is equivalent to element-wise multiplication for binary values.
 
-    Args:
-        x (Tensor): The first input spike tensor.
-        y (Tensor): The second input spike tensor.
+    Parameters
+    ----------
+    x : array_like
+        The first input spike tensor.
+    y : array_like
+        The second input spike tensor.
 
-    Returns:
-        Tensor: The result of the bitwise AND operation applied to the input tensors.
-               The output tensor has the same shape as the input tensors.
+    Returns
+    -------
+    array_like
+        The result of the bitwise AND operation applied to the input tensors.
+        The output tensor has the same shape as the input tensors.
 
-    Note:
-        This operation is implemented using element-wise multiplication (x * y),
-        which is equivalent to the AND operation for binary values.
+    Notes
+    -----
+    This operation is implemented using element-wise multiplication (x * y),
+    which is equivalent to the AND operation for binary values.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools as bt
+
+        # Create binary spike tensors
+        x = jnp.array([0, 1, 0, 1])
+        y = jnp.array([0, 0, 1, 1])
+
+        # Perform AND operation
+        result = bt.spike_bitwise_and(x, y)
+        # result: [0, 0, 0, 1]
     """
     return x * y
 
@@ -82,17 +124,38 @@ def spike_bitwise_iand(x, y):
     This function computes the Inverse AND (IAND) operation between two spike tensors.
     IAND is defined as (NOT x) AND y.
 
-    Args:
-        x (Tensor): The first input spike tensor.
-        y (Tensor): The second input spike tensor.
+    Parameters
+    ----------
+    x : array_like
+        The first input spike tensor.
+    y : array_like
+        The second input spike tensor.
 
-    Returns:
-        Tensor: The result of the bitwise IAND operation applied to the input tensors.
-               The output tensor has the same shape as the input tensors.
+    Returns
+    -------
+    array_like
+        The result of the bitwise IAND operation applied to the input tensors.
+        The output tensor has the same shape as the input tensors.
 
-    Note:
-        This operation is implemented using the formula: (1 - x) * y,
-        which is equivalent to the IAND operation for binary values.
+    Notes
+    -----
+    This operation is implemented using the formula: (1 - x) * y,
+    which is equivalent to the IAND operation for binary values.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools as bt
+
+        # Create binary spike tensors
+        x = jnp.array([0, 1, 0, 1])
+        y = jnp.array([0, 0, 1, 1])
+
+        # Perform IAND operation: (NOT x) AND y
+        result = bt.spike_bitwise_iand(x, y)
+        # result: [0, 0, 1, 0]
     """
     return (1 - x) * y
 
@@ -105,16 +168,35 @@ def spike_bitwise_not(x):
     This function computes the NOT operation on a spike tensor.
     The NOT operation inverts the binary values in the tensor.
 
-    Args:
-        x (Tensor): The input spike tensor.
+    Parameters
+    ----------
+    x : array_like
+        The input spike tensor.
 
-    Returns:
-        Tensor: The result of the bitwise NOT operation applied to the input tensor.
-               The output tensor has the same shape as the input tensor.
+    Returns
+    -------
+    array_like
+        The result of the bitwise NOT operation applied to the input tensor.
+        The output tensor has the same shape as the input tensor.
 
-    Note:
-        This operation is implemented using the formula: 1 - x,
-        which is equivalent to the NOT operation for binary values.
+    Notes
+    -----
+    This operation is implemented using the formula: 1 - x,
+    which is equivalent to the NOT operation for binary values.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools as bt
+
+        # Create binary spike tensor
+        x = jnp.array([0, 1, 0, 1])
+
+        # Perform NOT operation
+        result = bt.spike_bitwise_not(x)
+        # result: [1, 0, 1, 0]
     """
     return 1 - x
 
@@ -127,17 +209,38 @@ def spike_bitwise_xor(x, y):
     This function computes the XOR operation between two spike tensors.
     XOR is defined as (x OR y) AND NOT (x AND y).
 
-    Args:
-        x (Tensor): The first input spike tensor.
-        y (Tensor): The second input spike tensor.
+    Parameters
+    ----------
+    x : array_like
+        The first input spike tensor.
+    y : array_like
+        The second input spike tensor.
 
-    Returns:
-        Tensor: The result of the bitwise XOR operation applied to the input tensors.
-               The output tensor has the same shape as the input tensors.
+    Returns
+    -------
+    array_like
+        The result of the bitwise XOR operation applied to the input tensors.
+        The output tensor has the same shape as the input tensors.
 
-    Note:
-        This operation is implemented using the formula: x + y - 2 * x * y,
-        which is equivalent to the XOR operation for binary values.
+    Notes
+    -----
+    This operation is implemented using the formula: x + y - 2 * x * y,
+    which is equivalent to the XOR operation for binary values.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools as bt
+
+        # Create binary spike tensors
+        x = jnp.array([0, 1, 0, 1])
+        y = jnp.array([0, 0, 1, 1])
+
+        # Perform XOR operation
+        result = bt.spike_bitwise_xor(x, y)
+        # result: [0, 1, 1, 0]
     """
     return x + y - 2 * x * y
 
@@ -150,17 +253,38 @@ def spike_bitwise_ixor(x, y):
     This function computes the Inverse XOR (IXOR) operation between two spike tensors.
     IXOR is defined as (x AND NOT y) OR (NOT x AND y).
 
-    Args:
-        x (Tensor): The first input spike tensor.
-        y (Tensor): The second input spike tensor.
+    Parameters
+    ----------
+    x : array_like
+        The first input spike tensor.
+    y : array_like
+        The second input spike tensor.
 
-    Returns:
-        Tensor: The result of the bitwise IXOR operation applied to the input tensors.
-               The output tensor has the same shape as the input tensors.
+    Returns
+    -------
+    array_like
+        The result of the bitwise IXOR operation applied to the input tensors.
+        The output tensor has the same shape as the input tensors.
 
-    Note:
-        This operation is implemented using the formula: x * (1 - y) + (1 - x) * y,
-        which is equivalent to the IXOR operation for binary values.
+    Notes
+    -----
+    This operation is implemented using the formula: x * (1 - y) + (1 - x) * y,
+    which is equivalent to the IXOR operation for binary values.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools as bt
+
+        # Create binary spike tensors
+        x = jnp.array([0, 1, 0, 1])
+        y = jnp.array([0, 0, 1, 1])
+
+        # Perform IXOR operation
+        result = bt.spike_bitwise_ixor(x, y)
+        # result: [0, 1, 1, 0] (same as XOR in this case)
     """
     return x * (1 - y) + (1 - x) * y
 
@@ -170,34 +294,58 @@ def spike_bitwise(x, y, op: str):
     r"""
     Perform bitwise operations on spike tensors.
 
-    This function applies various bitwise operations on spike tensors based on the specified operation.
-    It supports 'or', 'and', 'iand', 'xor', and 'ixor' operations.
+    This function applies various bitwise operations on spike tensors based on the
+    specified operation. It supports 'or', 'and', 'iand', 'xor', and 'ixor' operations.
 
-    Args:
-        x (Tensor): The first input spike tensor.
-        y (Tensor): The second input spike tensor.
-        op (str): A string indicating the bitwise operation to perform.
-            Supported operations are 'or', 'and', 'iand', 'xor', and 'ixor'.
+    Parameters
+    ----------
+    x : array_like
+        The first input spike tensor.
+    y : array_like
+        The second input spike tensor.
+    op : {'or', 'and', 'iand', 'xor', 'ixor'}
+        A string indicating the bitwise operation to perform.
 
-    Returns:
-        Tensor: The result of the bitwise operation applied to the input tensors.
+    Returns
+    -------
+    array_like
+        The result of the bitwise operation applied to the input tensors.
 
-    Raises:
-        NotImplementedError: If an unsupported bitwise operation is specified.
+    Raises
+    ------
+    NotImplementedError
+        If an unsupported bitwise operation is specified.
 
-    Note:
-        The function uses the following mathematical expressions for different operations:
+    Notes
+    -----
+    The function uses the following mathematical expressions for different operations:
 
-        .. math::
+    .. math::
 
-           \begin{array}{ccc}
-            \hline \text { Mode } & \text { Expression for } \mathrm{g}(\mathrm{x}, \mathrm{y}) & \text { Code for } \mathrm{g}(\mathrm{x}, \mathrm{y}) \\
-            \hline \text { ADD } & x+y & x+y \\
-            \text { AND } & x \cap y & x \cdot y \\
-            \text { IAND } & (\neg x) \cap y & (1-x) \cdot y \\
-            \text { OR } & x \cup y & (x+y)-(x \cdot y) \\
-            \hline
-            \end{array}
+       \begin{array}{ccc}
+        \hline \text { Mode } & \text { Expression for } \mathrm{g}(\mathrm{x}, \mathrm{y}) & \text { Code for } \mathrm{g}(\mathrm{x}, \mathrm{y}) \\
+        \hline \text { ADD } & x+y & x+y \\
+        \text { AND } & x \cap y & x \cdot y \\
+        \text { IAND } & (\neg x) \cap y & (1-x) \cdot y \\
+        \text { OR } & x \cup y & (x+y)-(x \cdot y) \\
+        \hline
+        \end{array}
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import jax.numpy as jnp
+        import braintools as bt
+
+        # Create binary spike tensors
+        x = jnp.array([0, 1, 0, 1])
+        y = jnp.array([0, 0, 1, 1])
+
+        # Perform various operations
+        or_result = bt.spike_bitwise(x, y, 'or')    # [0, 1, 1, 1]
+        and_result = bt.spike_bitwise(x, y, 'and')  # [0, 0, 0, 1]
+        xor_result = bt.spike_bitwise(x, y, 'xor')  # [0, 1, 1, 0]
     """
     if op == 'or':
         return spike_bitwise_or(x, y)
