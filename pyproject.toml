@@ -8,6 +8,7 @@ description = "Modeling tools for brain simulation."
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
+dynamic = ["version"]
 authors = [
     { name = "BrainTools Developers", email = "chao.brain@qq.com" }
 ]
@@ -34,7 +35,45 @@ keywords = [
     "brain simulation",
     "brain-inspired computing"
 ]
-dynamic = ["version", "dependencies", "optional-dependencies"]
+dependencies = [
+    "numpy>=1.15",
+    "brainstate>=0.1.0",
+    "brainunit>=0.0.8",
+    "typing_extensions"
+]
+
+[project.optional-dependencies]
+testing = [
+    "pytest",
+    "absl-py"
+]
+cpu = [
+    "jax[cpu]",
+    "brainstate",
+    "brainunit",
+    "matplotlib",
+    "nevergrad",
+    "scipy",
+    "msgpack"
+]
+cuda12 = [
+    "jax[cuda12]",
+    "brainstate",
+    "brainunit",
+    "matplotlib",
+    "nevergrad",
+    "scipy",
+    "msgpack"
+]
+tpu = [
+    "jax[tpu]",
+    "brainstate",
+    "brainunit",
+    "matplotlib",
+    "nevergrad",
+    "scipy",
+    "msgpack"
+]
 
 [project.urls]
 homepage = "https://github.com/chaobrain/braintools"
@@ -56,10 +95,3 @@ exclude = [
 
 [tool.setuptools.dynamic]
 version = { attr = "braintools.__version__" }
-dependencies = { file = ["requirements.txt"] }
-
-[tool.setuptools.dynamic.optional-dependencies]
-testing = { file = ["requirements-testing.txt"] }
-cpu = { file = ["requirements-cpu.txt"] }
-cuda12 = { file = ["requirements-cuda12.txt"] }
-tpu = { file = ["requirements-tpu.txt"] }
