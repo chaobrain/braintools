@@ -1,6 +1,6 @@
 jax[cpu]
-brainstate[cpu]
-brainunit[cpu]
+brainstate
+brainunit
 matplotlib
 nevergrad
 scipy

@@ -1,6 +1,6 @@
 jax[tpu]
-brainstate[tpu]
-brainunit[tpu]
+brainstate
+brainunit
 matplotlib
 nevergrad
 scipy
