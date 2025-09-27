@@ -193,6 +193,7 @@ Weight initialization
    HeNormalWeight
    LeCunUniformWeight
    LeCunNormalWeight
+   DistanceModulatedWeight
 
 Delay initialization
 ~~~~~~~~~~~~~~~~~~~~~
@@ -207,6 +208,8 @@ Delay initialization
    UniformDelay
    NormalDelay
    GammaDelay
+   DistanceProportionalDelay
+   DistanceModulatedDelay
 
 Distance profiles
 ~~~~~~~~~~~~~~~~~
