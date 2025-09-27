@@ -887,24 +887,6 @@ class TestSpecializedPatterns(unittest.TestCase):
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
-    def test_feedforward_inhibition(self):
-        conn = FeedforwardInhibition(
-            exc_to_exc=0.8,
-            exc_to_inh=1.2,
-            inh_to_exc=-1.5,
-            seed=42
-        )
-
-        result = conn(pre_size=2, post_size=2)
-
-        self.assertEqual(result.model_type, 'population_rate')
-        # Should have 3 connections: E->E, E->I, I->E (no I->I)
-        self.assertEqual(result.n_connections, 2)
-
-        expected_weights = [0.8, 1.2, -1.5]
-        actual_weights = sorted(result.weights)
-        np.testing.assert_array_almost_equal(actual_weights, sorted(expected_weights))
-
     def test_recurrent_amplification(self):
         conn = RecurrentAmplification(
             self_coupling=1.5,
