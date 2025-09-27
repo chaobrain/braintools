@@ -21,6 +21,7 @@ import numpy as np
 import scipy.stats as stats
 
 from braintools.tree import as_numpy
+from braintools._misc import set_module_as
 
 __all__ = [
     'correlation_matrix',
@@ -38,6 +39,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.visualize')
 def correlation_matrix(
     data: np.ndarray,
     labels: Optional[List[str]] = None,
@@ -137,6 +139,7 @@ def correlation_matrix(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def distribution_plot(
     data: Union[np.ndarray, List[np.ndarray]],
     labels: Optional[List[str]] = None,
@@ -241,6 +244,7 @@ def distribution_plot(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def qq_plot(
     data: np.ndarray,
     distribution: str = 'norm',
@@ -322,6 +326,7 @@ def qq_plot(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def box_plot(
     data: Union[np.ndarray, List[np.ndarray]],
     labels: Optional[List[str]] = None,
@@ -399,6 +404,7 @@ def box_plot(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def violin_plot(
     data: Union[np.ndarray, List[np.ndarray]],
     labels: Optional[List[str]] = None,
@@ -477,6 +483,7 @@ def violin_plot(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def scatter_matrix(
     data: np.ndarray,
     labels: Optional[List[str]] = None,
@@ -589,6 +596,7 @@ def scatter_matrix(
         return fig
 
 
+@set_module_as('braintools.visualize')
 def regression_plot(
     x: np.ndarray,
     y: np.ndarray,
@@ -686,6 +694,7 @@ def regression_plot(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def residual_plot(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -746,6 +755,7 @@ def residual_plot(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def confusion_matrix(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -842,6 +852,7 @@ def confusion_matrix(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def roc_curve(
     y_true: np.ndarray,
     y_scores: np.ndarray,
@@ -920,6 +931,7 @@ def roc_curve(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def precision_recall_curve(
     y_true: np.ndarray,
     y_scores: np.ndarray,
@@ -1005,6 +1017,7 @@ def precision_recall_curve(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def learning_curve(
     train_sizes: np.ndarray,
     train_scores: np.ndarray,

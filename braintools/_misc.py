@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-from typing import Callable, Any, Union, Sequence
+from typing import Callable, Any, Union, Sequence, Optional
 
 import brainstate
 import brainunit as u
@@ -35,3 +35,11 @@ def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
 
 def randn_like(y):
     return brainstate.random.randn(*u.math.shape(y))
+
+
+Initializer = Union[brainstate.typing.ArrayLike, Callable]
+InitializerOrNot = Optional[Union[brainstate.typing.ArrayLike, Callable]]
+
+
+def init(fn: Callable, rng, size):
+    return brainstate.init.param(lambda shape: fn(rng, shape), size)

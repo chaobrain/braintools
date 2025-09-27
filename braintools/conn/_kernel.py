@@ -14,521 +14,1165 @@
 # ==============================================================================
 
 """
-Kernel-based and convolutional connectivity patterns.
+Kernel-based connectivity patterns for point neurons with spatial positions.
 
-Includes:
-- Convolutional kernels
-- Gabor connectivity
-- Difference of Gaussians (DoG)
-- Mexican hat connectivity
-- Custom kernel connectivity
+These patterns apply convolution-like kernels to spatially arranged point neurons,
+creating connections based on spatial relationships weighted by kernel functions.
+Useful for implementing center-surround receptive fields, orientation selectivity,
+and other spatially-structured connectivity patterns in spiking neural networks.
 """
 
-from typing import Optional, Tuple, Union, Callable
+from typing import Optional, Union, Callable, Dict
 
+import brainunit as u
 import numpy as np
+from scipy.spatial.distance import cdist
 
-from braintools._misc import set_module_as
+from ._base import PointNeuronConnectivity, ConnectionResult
+from ._common import init_call
+from ._initialization import Initialization
 
 __all__ = [
-    'conv_kernel',
-    'gaussian_kernel',
-    'gabor_kernel',
-    'dog_kernel',
-    'mexican_hat',
-    'sobel_kernel',
-    'laplacian_kernel',
-    'custom_kernel',
+    'ConvKernel',
+    'GaussianKernel',
+    'GaborKernel',
+    'DoGKernel',
+    'MexicanHat',
+    'SobelKernel',
+    'LaplacianKernel',
+    'CustomKernel'
 ]
 
 
-@set_module_as('braintools.conn')
-def conv_kernel(
-    input_shape: Tuple[int, ...],
-    kernel: np.ndarray,
-    stride: Union[int, Tuple[int, ...]] = 1,
-    padding: Union[str, int] = 'valid',
-    dilation: int = 1,
-    threshold: float = 0.0,
-    seed: Optional[int] = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create convolutional connectivity using a kernel.
-    
+class ConvKernel(PointNeuronConnectivity):
+    """Convolutional kernel connectivity for spatially arranged point neurons.
+
+    Applies a 2D convolution kernel to neuron positions, creating connections
+    where the kernel weight exceeds a threshold. This allows implementing
+    receptive field structures in spiking neural networks.
+
     Parameters
     ----------
-    input_shape : tuple of int
-        Shape of input layer (height, width) or (depth, height, width).
     kernel : np.ndarray
-        Convolution kernel.
-    stride : int or tuple
-        Stride for convolution.
-    padding : str or int
-        Padding mode ('valid', 'same') or padding size.
-    dilation : int
-        Dilation factor for kernel.
+        2D convolution kernel array.
+    kernel_size : float or Quantity
+        Physical size of the kernel in position units.
     threshold : float
-        Connection threshold (only create connections where kernel > threshold).
-    seed : int, optional
-        Random seed for probabilistic connections.
-        
-    Returns
-    -------
-    pre_indices : np.ndarray
-        Source neuron indices.
-    post_indices : np.ndarray
-        Target neuron indices.
+        Connection threshold - only kernel values above this create connections.
+    weight : Initialization, optional
+        Weight initialization (kernel values are multiplied by this).
+    delay : Initialization, optional
+        Delay initialization.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> # Create 5x5 Gaussian-like kernel
+        >>> kernel = np.array([
+        ...     [0.04, 0.12, 0.18, 0.12, 0.04],
+        ...     [0.12, 0.37, 0.56, 0.37, 0.12],
+        ...     [0.18, 0.56, 1.00, 0.56, 0.18],
+        ...     [0.12, 0.37, 0.56, 0.37, 0.12],
+        ...     [0.04, 0.12, 0.18, 0.12, 0.04]
+        ... ])
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> conn = ConvKernel(
+        ...     kernel=kernel,
+        ...     kernel_size=100 * u.um,
+        ...     threshold=0.1,
+        ...     weight=1.0 * u.nS
+        ... )
+        >>> result = conn.generate(
+        ...     pre_size=500, post_size=500,
+        ...     pre_positions=positions, post_positions=positions
+        ... )
     """
-    rng = np.random if seed is None else np.random.RandomState(seed)
 
-    # Handle different input dimensions
-    if len(input_shape) == 1:
-        # 1D case
-        w = input_shape[0]
-        h = 1
-        d = 1
-        input_shape = (1, 1, w)
-        kernel = kernel.reshape(1, 1, -1)
-    elif len(input_shape) == 2:
-        h, w = input_shape
-        d = 1
-        input_shape = (1, h, w)
-        kernel = kernel.reshape(1, *kernel.shape)
-    elif len(input_shape) == 3:
-        d, h, w = input_shape
-    else:
-        raise ValueError(f"Unsupported input shape: {input_shape}")
+    def __init__(
+        self,
+        kernel: np.ndarray,
+        kernel_size: Union[float, u.Quantity],
+        threshold: float = 0.0,
+        weight: Optional[Initialization] = None,
+        delay: Optional[Initialization] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.kernel = np.asarray(kernel)
+        if self.kernel.ndim != 2:
+            raise ValueError("Kernel must be 2D array")
+        self.kernel_size = kernel_size
+        self.threshold = threshold
+        self.weight_init = weight
+        self.delay_init = delay
 
-    kernel_shape = kernel.shape
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate convolutional kernel connections."""
+        pre_size = kwargs['pre_size']
+        post_size = kwargs['post_size']
+        pre_positions = kwargs.get('pre_positions')
+        post_positions = kwargs.get('post_positions')
 
-    # Handle stride
-    if isinstance(stride, int):
-        stride = (stride,) * len(input_shape)
+        if pre_positions is None or post_positions is None:
+            raise ValueError("Positions required for kernel connectivity")
 
-    # Calculate output shape
-    if padding == 'same':
-        out_shape = input_shape
-        pad = tuple((k - 1) // 2 for k in kernel_shape)
-    elif padding == 'valid':
-        out_shape = tuple((i - k) // s + 1
-                          for i, k, s in zip(input_shape, kernel_shape, stride))
-        pad = (0, 0, 0)
-    else:
-        pad = (padding,) * len(input_shape) if isinstance(padding, int) else padding
-        out_shape = tuple((i + 2 * p - k) // s + 1
-                          for i, k, p, s in zip(input_shape, kernel_shape, pad, stride))
+        if isinstance(pre_size, tuple):
+            pre_num = int(np.prod(pre_size))
+        else:
+            pre_num = pre_size
 
-    pre_list = []
-    post_list = []
+        if isinstance(post_size, tuple):
+            post_num = int(np.prod(post_size))
+        else:
+            post_num = post_size
 
-    # Create connections based on kernel
-    out_idx = 0
-    for out_d in range(out_shape[0]):
-        for out_h in range(out_shape[1]):
-            for out_w in range(out_shape[2]):
-                # Calculate receptive field
-                for kd in range(kernel_shape[0]):
-                    for kh in range(kernel_shape[1]):
-                        for kw in range(kernel_shape[2]):
-                            # Input position
-                            in_d = out_d * stride[0] + kd * dilation - pad[0]
-                            in_h = out_h * stride[1] + kh * dilation - pad[1]
-                            in_w = out_w * stride[2] + kw * dilation - pad[2]
+        # Extract position values and units
+        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
+        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
 
-                            # Check bounds
-                            if (0 <= in_d < d and 0 <= in_h < h and 0 <= in_w < w):
-                                weight = kernel[kd, kh, kw]
+        # Get kernel size in position units
+        if isinstance(self.kernel_size, u.Quantity):
+            kernel_size_val = u.Quantity(self.kernel_size).to(pos_unit).mantissa
+        else:
+            kernel_size_val = self.kernel_size
 
-                                if abs(weight) > threshold:
-                                    # Convert to linear indices
-                                    in_idx = in_d * h * w + in_h * w + in_w
+        # Kernel grid coordinates (centered at 0)
+        kh, kw = self.kernel.shape
+        kernel_y = np.linspace(-kernel_size_val / 2, kernel_size_val / 2, kh)
+        kernel_x = np.linspace(-kernel_size_val / 2, kernel_size_val / 2, kw)
+        kernel_grid_y, kernel_grid_x = np.meshgrid(kernel_y, kernel_x, indexing='ij')
 
-                                    # Probabilistic connection based on weight
-                                    if rng.random() < abs(weight):
-                                        pre_list.append(in_idx)
-                                        post_list.append(out_idx)
+        pre_indices = []
+        post_indices = []
+        kernel_weights = []
 
-                out_idx += 1
+        # For each post neuron, check if pre neurons fall within kernel support
+        for post_idx in range(post_num):
+            post_pos = post_pos_val[post_idx]
 
-    return np.array(pre_list), np.array(post_list)
+            # Calculate relative positions of pre neurons to this post neuron
+            rel_positions = pre_pos_val - post_pos  # Shape: (pre_num, 2)
+
+            # Find pre neurons within kernel support
+            in_range_x = np.abs(rel_positions[:, 0]) <= kernel_size_val / 2
+            in_range_y = np.abs(rel_positions[:, 1]) <= kernel_size_val / 2
+            in_range = in_range_x & in_range_y
+            candidate_pre = np.where(in_range)[0]
+
+            for pre_idx in candidate_pre:
+                rel_x, rel_y = rel_positions[pre_idx]
+
+                # Find nearest kernel position
+                ki = np.argmin(np.abs(kernel_grid_y[:, 0] - rel_y))
+                kj = np.argmin(np.abs(kernel_grid_x[0, :] - rel_x))
+
+                kernel_val = self.kernel[ki, kj]
+
+                if kernel_val > self.threshold:
+                    pre_indices.append(pre_idx)
+                    post_indices.append(post_idx)
+                    kernel_weights.append(kernel_val)
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
+                pre_size=pre_size, post_size=post_size,
+                pre_positions=pre_positions, post_positions=post_positions,
+                model_type='point'
+            )
+
+        pre_indices = np.array(pre_indices, dtype=np.int64)
+        post_indices = np.array(post_indices, dtype=np.int64)
+        kernel_weights = np.array(kernel_weights)
+        n_connections = len(pre_indices)
+
+        # Generate base weights
+        weights = init_call(
+            self.weight_init, self.rng, n_connections,
+            param_type='weight', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        # Multiply by kernel weights
+        if weights is not None:
+            weights_vals, weights_unit = u.split_mantissa_unit(weights)
+            if u.math.isscalar(weights_vals):
+                weights_vals = np.full(n_connections, weights_vals)
+            else:
+                weights_vals = np.asarray(weights_vals)
+
+            final_weights = weights_vals * kernel_weights
+            if weights_unit is not None:
+                weights = u.maybe_decimal(final_weights * weights_unit)
+            else:
+                weights = final_weights
+        else:
+            weights = kernel_weights
+
+        delays = init_call(
+            self.delay_init, self.rng, n_connections,
+            param_type='delay', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        return ConnectionResult(
+            pre_indices, post_indices,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            metadata={'pattern': 'conv_kernel', 'kernel_shape': self.kernel.shape, 'kernel_size': self.kernel_size}
+        )
 
 
-@set_module_as('braintools.conn')
-def gaussian_kernel(
-    input_shape: Tuple[int, ...],
-    sigma: float,
-    kernel_size: Optional[int] = None,
-    stride: int = 1,
-    normalize: bool = True,
-    seed: Optional[int] = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create connectivity using Gaussian kernel.
-    
+class GaussianKernel(PointNeuronConnectivity):
+    """Gaussian kernel connectivity for center-surround receptive fields.
+
+    Creates connections weighted by a 2D Gaussian function of distance,
+    useful for implementing smooth spatial receptive fields.
+
     Parameters
     ----------
-    input_shape : tuple of int
-        Shape of input layer.
-    sigma : float
+    sigma : float or Quantity
         Standard deviation of Gaussian.
-    kernel_size : int, optional
-        Size of kernel (default: 4*sigma + 1).
-    stride : int
-        Stride for convolution.
+    max_distance : float or Quantity, optional
+        Maximum distance for connections (default: 3*sigma).
     normalize : bool
-        Whether to normalize the kernel.
-    seed : int, optional
-        Random seed.
-        
-    Returns
-    -------
-    pre_indices : np.ndarray
-        Source neuron indices.
-    post_indices : np.ndarray
-        Target neuron indices.
+        Whether to normalize the Gaussian (default: True).
+    weight : Initialization, optional
+        Weight initialization (Gaussian is multiplied by this).
+    delay : Initialization, optional
+        Delay initialization.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> gauss = GaussianKernel(
+        ...     sigma=50 * u.um,
+        ...     max_distance=150 * u.um,
+        ...     weight=2.0 * u.nS
+        ... )
+        >>> result = gauss.generate(
+        ...     pre_size=500, post_size=500,
+        ...     pre_positions=positions, post_positions=positions
+        ... )
     """
-    if kernel_size is None:
-        kernel_size = int(4 * sigma) + 1
 
-    # Create Gaussian kernel
-    if len(input_shape) == 1:
-        # 1D Gaussian
-        x = np.arange(kernel_size) - kernel_size // 2
-        kernel = np.exp(-(x ** 2) / (2 * sigma ** 2))
-    elif len(input_shape) == 2:
-        # 2D Gaussian
-        x = np.arange(kernel_size) - kernel_size // 2
-        y = np.arange(kernel_size) - kernel_size // 2
-        xx, yy = np.meshgrid(x, y)
-        kernel = np.exp(-(xx ** 2 + yy ** 2) / (2 * sigma ** 2))
-    else:
-        # 3D Gaussian
-        x = np.arange(kernel_size) - kernel_size // 2
-        y = np.arange(kernel_size) - kernel_size // 2
-        z = np.arange(kernel_size) - kernel_size // 2
-        xx, yy, zz = np.meshgrid(x, y, z)
-        kernel = np.exp(-(xx ** 2 + yy ** 2 + zz ** 2) / (2 * sigma ** 2))
+    def __init__(
+        self,
+        sigma: Union[float, u.Quantity],
+        max_distance: Optional[Union[float, u.Quantity]] = None,
+        normalize: bool = True,
+        weight: Optional[Initialization] = None,
+        delay: Optional[Initialization] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.sigma = sigma
+        self.max_distance = max_distance
+        self.normalize = normalize
+        self.weight_init = weight
+        self.delay_init = delay
 
-    if normalize:
-        kernel = kernel / kernel.sum()
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate Gaussian kernel connections."""
+        pre_size = kwargs['pre_size']
+        post_size = kwargs['post_size']
+        pre_positions = kwargs.get('pre_positions')
+        post_positions = kwargs.get('post_positions')
 
-    return conv_kernel(input_shape, kernel, stride, 'same', seed=seed)
+        if pre_positions is None or post_positions is None:
+            raise ValueError("Positions required for Gaussian kernel connectivity")
+
+        if isinstance(pre_size, tuple):
+            pre_num = int(np.prod(pre_size))
+        else:
+            pre_num = pre_size
+
+        if isinstance(post_size, tuple):
+            post_num = int(np.prod(post_size))
+        else:
+            post_num = post_size
+
+        # Calculate distances
+        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
+        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+        distances = cdist(pre_pos_val, post_pos_val)
+
+        # Get sigma and max_distance in position units
+        if isinstance(self.sigma, u.Quantity):
+            sigma_val = u.Quantity(self.sigma).to(pos_unit).mantissa
+        else:
+            sigma_val = self.sigma
+
+        if self.max_distance is not None:
+            if isinstance(self.max_distance, u.Quantity):
+                max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
+            else:
+                max_dist_val = self.max_distance
+        else:
+            max_dist_val = 3 * sigma_val
+
+        # Calculate Gaussian weights
+        gaussian_weights = np.exp(-distances ** 2 / (2 * sigma_val ** 2))
+
+        if self.normalize:
+            gaussian_weights /= (2 * np.pi * sigma_val ** 2)
+
+        # Apply distance threshold
+        connection_mask = distances <= max_dist_val
+        gaussian_weights = gaussian_weights * connection_mask
+
+        # Get connections above threshold
+        pre_indices, post_indices = np.where(gaussian_weights > 1e-6)
+        gaussian_weights = gaussian_weights[pre_indices, post_indices]
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
+                pre_size=pre_size, post_size=post_size,
+                pre_positions=pre_positions, post_positions=post_positions,
+                model_type='point'
+            )
+
+        n_connections = len(pre_indices)
+
+        # Generate base weights
+        weights = init_call(
+            self.weight_init, self.rng, n_connections,
+            param_type='weight', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        # Multiply by Gaussian weights
+        if weights is not None:
+            weights_vals, weights_unit = u.split_mantissa_unit(weights)
+            if u.math.isscalar(weights_vals):
+                weights_vals = np.full(n_connections, weights_vals)
+            else:
+                weights_vals = np.asarray(weights_vals)
+
+            final_weights = weights_vals * gaussian_weights
+            if weights_unit is not None:
+                weights = u.maybe_decimal(final_weights * weights_unit)
+            else:
+                weights = final_weights
+        else:
+            weights = gaussian_weights
+
+        delays = init_call(
+            self.delay_init,
+            self.rng,
+            n_connections,
+            param_type='delay',
+            pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions
+        )
+
+        return ConnectionResult(
+            pre_indices, post_indices,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            metadata={
+                'pattern': 'gaussian_kernel',
+                'sigma': self.sigma,
+                'max_distance': self.max_distance
+            }
+        )
 
 
-@set_module_as('braintools.conn')
-def gabor_kernel(
-    input_shape: Tuple[int, int],
-    frequency: float = 0.1,
-    theta: float = 0,
-    sigma: float = 1.0,
-    phase: float = 0,
-    kernel_size: Optional[int] = None,
-    stride: int = 1,
-    seed: Optional[int] = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create connectivity using Gabor kernel.
-    
+class GaborKernel(PointNeuronConnectivity):
+    """Gabor kernel connectivity for orientation-selective receptive fields.
+
+    Implements Gabor filters in spatial connectivity, useful for creating
+    orientation-selective neurons similar to V1 simple cells.
+
     Parameters
     ----------
-    input_shape : tuple of int
-        Shape of input layer (height, width).
+    sigma : float or Quantity
+        Standard deviation of Gaussian envelope.
     frequency : float
-        Frequency of sinusoidal component.
+        Frequency of sinusoidal component (cycles per unit distance).
     theta : float
         Orientation angle in radians.
-    sigma : float
-        Standard deviation of Gaussian envelope.
     phase : float
-        Phase offset.
-    kernel_size : int, optional
-        Size of kernel.
-    stride : int
-        Stride for convolution.
-    seed : int, optional
-        Random seed.
-        
-    Returns
-    -------
-    pre_indices : np.ndarray
-        Source neuron indices.
-    post_indices : np.ndarray
-        Target neuron indices.
+        Phase offset in radians (default: 0).
+    max_distance : float or Quantity, optional
+        Maximum distance for connections (default: 3*sigma).
+    weight : Initialization, optional
+        Weight initialization (Gabor values are multiplied by this).
+    delay : Initialization, optional
+        Delay initialization.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> gabor = GaborKernel(
+        ...     sigma=50 * u.um,
+        ...     frequency=0.02,  # 1 cycle per 50 um
+        ...     theta=np.pi / 4,  # 45 degrees
+        ...     weight=1.0 * u.nS
+        ... )
+        >>> result = gabor.generate(
+        ...     pre_size=500, post_size=500,
+        ...     pre_positions=positions, post_positions=positions
+        ... )
     """
-    if kernel_size is None:
-        kernel_size = int(4 * sigma) + 1
 
-    # Create Gabor kernel
-    x = np.arange(kernel_size) - kernel_size // 2
-    y = np.arange(kernel_size) - kernel_size // 2
-    xx, yy = np.meshgrid(x, y)
+    def __init__(
+        self,
+        sigma: Union[float, u.Quantity],
+        frequency: float,
+        theta: float,
+        phase: float = 0.0,
+        max_distance: Optional[Union[float, u.Quantity]] = None,
+        weight: Optional[Initialization] = None,
+        delay: Optional[Initialization] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.sigma = sigma
+        self.frequency = frequency
+        self.theta = theta
+        self.phase = phase
+        self.max_distance = max_distance
+        self.weight_init = weight
+        self.delay_init = delay
 
-    # Rotate coordinates
-    x_theta = xx * np.cos(theta) + yy * np.sin(theta)
-    y_theta = -xx * np.sin(theta) + yy * np.cos(theta)
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate Gabor kernel connections."""
+        pre_size = kwargs['pre_size']
+        post_size = kwargs['post_size']
+        pre_positions = kwargs.get('pre_positions')
+        post_positions = kwargs.get('post_positions')
 
-    # Gabor function
-    gaussian = np.exp(-(x_theta ** 2 + y_theta ** 2) / (2 * sigma ** 2))
-    sinusoid = np.cos(2 * np.pi * frequency * x_theta + phase)
-    kernel = gaussian * sinusoid
+        if pre_positions is None or post_positions is None:
+            raise ValueError("Positions required for Gabor kernel connectivity")
 
-    return conv_kernel(input_shape, kernel, stride, 'same', seed=seed)
+        if isinstance(pre_size, tuple):
+            pre_num = int(np.prod(pre_size))
+        else:
+            pre_num = pre_size
+
+        if isinstance(post_size, tuple):
+            post_num = int(np.prod(post_size))
+        else:
+            post_num = post_size
+
+        # Extract position values
+        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
+        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+
+        # Get sigma and max_distance in position units
+        if isinstance(self.sigma, u.Quantity):
+            sigma_val = u.Quantity(self.sigma).to(pos_unit).mantissa
+        else:
+            sigma_val = self.sigma
+
+        if self.max_distance is not None:
+            if isinstance(self.max_distance, u.Quantity):
+                max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
+            else:
+                max_dist_val = self.max_distance
+        else:
+            max_dist_val = 3 * sigma_val
+
+        pre_indices = []
+        post_indices = []
+        gabor_weights = []
+
+        cos_theta = np.cos(self.theta)
+        sin_theta = np.sin(self.theta)
+
+        # For each post neuron
+        for post_idx in range(post_num):
+            post_pos = post_pos_val[post_idx]
+
+            # Relative positions
+            rel_pos = pre_pos_val - post_pos
+            distances = np.sqrt(np.sum(rel_pos ** 2, axis=1))
+
+            # Filter by max distance
+            in_range = distances <= max_dist_val
+            candidate_pre = np.where(in_range)[0]
+
+            for pre_idx in candidate_pre:
+                dx, dy = rel_pos[pre_idx]
+
+                # Rotate coordinates
+                x_rot = dx * cos_theta + dy * sin_theta
+                y_rot = -dx * sin_theta + dy * cos_theta
+
+                # Calculate Gabor function
+                gaussian = np.exp(-(x_rot ** 2 + y_rot ** 2) / (2 * sigma_val ** 2))
+                sinusoid = np.cos(2 * np.pi * self.frequency * x_rot + self.phase)
+                gabor_val = gaussian * sinusoid
+
+                if np.abs(gabor_val) > 1e-3:
+                    pre_indices.append(pre_idx)
+                    post_indices.append(post_idx)
+                    gabor_weights.append(gabor_val)
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
+                pre_size=pre_size, post_size=post_size,
+                pre_positions=pre_positions, post_positions=post_positions,
+                model_type='point'
+            )
+
+        pre_indices = np.array(pre_indices, dtype=np.int64)
+        post_indices = np.array(post_indices, dtype=np.int64)
+        gabor_weights = np.array(gabor_weights)
+        n_connections = len(pre_indices)
+
+        # Generate base weights
+        weights = init_call(
+            self.weight_init, self.rng, n_connections,
+            param_type='weight', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        # Multiply by Gabor weights
+        if weights is not None:
+            weights_vals, weights_unit = u.split_mantissa_unit(weights)
+            if u.math.isscalar(weights_vals):
+                weights_vals = np.full(n_connections, weights_vals)
+            else:
+                weights_vals = np.asarray(weights_vals)
+
+            final_weights = weights_vals * gabor_weights
+            if weights_unit is not None:
+                weights = u.maybe_decimal(final_weights * weights_unit)
+            else:
+                weights = final_weights
+        else:
+            weights = gabor_weights
+
+        delays = init_call(
+            self.delay_init, self.rng, n_connections,
+            param_type='delay', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        return ConnectionResult(
+            pre_indices, post_indices,
+            pre_size=pre_size, post_size=post_size,
+            weights=weights, delays=delays,
+            pre_positions=pre_positions, post_positions=post_positions,
+            metadata={
+                'pattern': 'gabor_kernel',
+                'sigma': self.sigma,
+                'frequency': self.frequency,
+                'theta': self.theta,
+                'phase': self.phase
+            }
+        )
 
 
-@set_module_as('braintools.conn')
-def dog_kernel(
-    input_shape: Tuple[int, ...],
-    sigma1: float = 1.0,
-    sigma2: float = 2.0,
-    kernel_size: Optional[int] = None,
-    stride: int = 1,
-    seed: Optional[int] = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create connectivity using Difference of Gaussians (DoG) kernel.
-    
+class DoGKernel(PointNeuronConnectivity):
+    """Difference of Gaussians (DoG) kernel for center-surround receptive fields.
+
+    Implements DoG filters commonly found in retinal ganglion cells and LGN neurons,
+    with excitatory center and inhibitory surround (or vice versa).
+
     Parameters
     ----------
-    input_shape : tuple of int
-        Shape of input layer.
-    sigma1 : float
-        Standard deviation of first (center) Gaussian.
-    sigma2 : float
-        Standard deviation of second (surround) Gaussian.
-    kernel_size : int, optional
-        Size of kernel.
-    stride : int
-        Stride for convolution.
-    seed : int, optional
-        Random seed.
-        
-    Returns
-    -------
-    pre_indices : np.ndarray
-        Source neuron indices.
-    post_indices : np.ndarray
-        Target neuron indices.
+    sigma_center : float or Quantity
+        Standard deviation of center Gaussian.
+    sigma_surround : float or Quantity
+        Standard deviation of surround Gaussian.
+    amplitude_center : float
+        Amplitude of center Gaussian (default: 1.0).
+    amplitude_surround : float
+        Amplitude of surround Gaussian (default: 0.8).
+    max_distance : float or Quantity, optional
+        Maximum distance for connections (default: 3*sigma_surround).
+    weight : Initialization, optional
+        Weight initialization (DoG values are multiplied by this).
+    delay : Initialization, optional
+        Delay initialization.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> dog = DoGKernel(
+        ...     sigma_center=30 * u.um,
+        ...     sigma_surround=60 * u.um,
+        ...     amplitude_center=1.0,
+        ...     amplitude_surround=0.8,
+        ...     weight=1.0 * u.nS
+        ... )
+        >>> result = dog.generate(
+        ...     pre_size=500, post_size=500,
+        ...     pre_positions=positions, post_positions=positions
+        ... )
     """
-    if kernel_size is None:
-        kernel_size = int(4 * max(sigma1, sigma2)) + 1
 
-    if len(input_shape) == 2:
-        # 2D DoG
-        x = np.arange(kernel_size) - kernel_size // 2
-        y = np.arange(kernel_size) - kernel_size // 2
-        xx, yy = np.meshgrid(x, y)
-        r2 = xx ** 2 + yy ** 2
+    def __init__(
+        self,
+        sigma_center: Union[float, u.Quantity],
+        sigma_surround: Union[float, u.Quantity],
+        amplitude_center: float = 1.0,
+        amplitude_surround: float = 0.8,
+        max_distance: Optional[Union[float, u.Quantity]] = None,
+        weight: Optional[Initialization] = None,
+        delay: Optional[Initialization] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.sigma_center = sigma_center
+        self.sigma_surround = sigma_surround
+        self.amplitude_center = amplitude_center
+        self.amplitude_surround = amplitude_surround
+        self.max_distance = max_distance
+        self.weight_init = weight
+        self.delay_init = delay
 
-        g1 = np.exp(-r2 / (2 * sigma1 ** 2)) / (2 * np.pi * sigma1 ** 2)
-        g2 = np.exp(-r2 / (2 * sigma2 ** 2)) / (2 * np.pi * sigma2 ** 2)
-    else:
-        # 3D DoG
-        x = np.arange(kernel_size) - kernel_size // 2
-        y = np.arange(kernel_size) - kernel_size // 2
-        z = np.arange(kernel_size) - kernel_size // 2
-        xx, yy, zz = np.meshgrid(x, y, z)
-        r2 = xx ** 2 + yy ** 2 + zz ** 2
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate DoG kernel connections."""
+        pre_size = kwargs['pre_size']
+        post_size = kwargs['post_size']
+        pre_positions = kwargs.get('pre_positions')
+        post_positions = kwargs.get('post_positions')
 
-        g1 = np.exp(-r2 / (2 * sigma1 ** 2)) / ((2 * np.pi) ** (3 / 2) * sigma1 ** 3)
-        g2 = np.exp(-r2 / (2 * sigma2 ** 2)) / ((2 * np.pi) ** (3 / 2) * sigma2 ** 3)
+        if pre_positions is None or post_positions is None:
+            raise ValueError("Positions required for DoG kernel connectivity")
 
-    kernel = g1 - g2
+        if isinstance(pre_size, tuple):
+            pre_num = int(np.prod(pre_size))
+        else:
+            pre_num = pre_size
 
-    return conv_kernel(input_shape, kernel, stride, 'same', seed=seed)
+        if isinstance(post_size, tuple):
+            post_num = int(np.prod(post_size))
+        else:
+            post_num = post_size
+
+        # Calculate distances
+        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
+        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+        distances = cdist(pre_pos_val, post_pos_val)
+
+        # Get sigma values in position units
+        if isinstance(self.sigma_center, u.Quantity):
+            sigma_c_val = u.Quantity(self.sigma_center).to(pos_unit).mantissa
+        else:
+            sigma_c_val = self.sigma_center
+
+        if isinstance(self.sigma_surround, u.Quantity):
+            sigma_s_val = u.Quantity(self.sigma_surround).to(pos_unit).mantissa
+        else:
+            sigma_s_val = self.sigma_surround
+
+        if self.max_distance is not None:
+            if isinstance(self.max_distance, u.Quantity):
+                max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
+            else:
+                max_dist_val = self.max_distance
+        else:
+            max_dist_val = 3 * sigma_s_val
+
+        # Calculate DoG weights
+        center_gauss = self.amplitude_center * np.exp(-distances ** 2 / (2 * sigma_c_val ** 2))
+        surround_gauss = self.amplitude_surround * np.exp(-distances ** 2 / (2 * sigma_s_val ** 2))
+        dog_weights = center_gauss - surround_gauss
+
+        # Apply distance threshold
+        connection_mask = distances <= max_dist_val
+        dog_weights = dog_weights * connection_mask
+
+        # Get connections above threshold
+        pre_indices, post_indices = np.where(np.abs(dog_weights) > 1e-4)
+        dog_weights = dog_weights[pre_indices, post_indices]
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
+                pre_size=pre_size, post_size=post_size,
+                pre_positions=pre_positions, post_positions=post_positions,
+                model_type='point'
+            )
+
+        n_connections = len(pre_indices)
+
+        # Generate base weights
+        weights = init_call(
+            self.weight_init, self.rng, n_connections,
+            param_type='weight', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        # Multiply by DoG weights
+        if weights is not None:
+            weights_vals, weights_unit = u.split_mantissa_unit(weights)
+            if u.math.isscalar(weights_vals):
+                weights_vals = np.full(n_connections, weights_vals)
+            else:
+                weights_vals = np.asarray(weights_vals)
+
+            final_weights = weights_vals * dog_weights
+            if weights_unit is not None:
+                weights = u.maybe_decimal(final_weights * weights_unit)
+            else:
+                weights = final_weights
+        else:
+            weights = dog_weights
+
+        delays = init_call(
+            self.delay_init, self.rng, n_connections,
+            param_type='delay', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        return ConnectionResult(
+            pre_indices, post_indices,
+            pre_size=pre_size, post_size=post_size,
+            weights=weights, delays=delays,
+            pre_positions=pre_positions, post_positions=post_positions,
+            metadata={
+                'pattern': 'dog_kernel',
+                'sigma_center': self.sigma_center,
+                'sigma_surround': self.sigma_surround
+            }
+        )
 
 
-@set_module_as('braintools.conn')
-def mexican_hat(
-    input_shape: Tuple[int, ...],
-    sigma: float = 1.0,
-    kernel_size: Optional[int] = None,
-    stride: int = 1,
-    seed: Optional[int] = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create connectivity using Mexican hat (Laplacian of Gaussian) kernel.
-    
+class MexicanHat(DoGKernel):
+    """Mexican hat (Laplacian of Gaussian) connectivity pattern.
+
+    A special case of DoG with specific amplitude ratios to approximate
+    the Laplacian of Gaussian. Creates strong lateral inhibition patterns.
+
     Parameters
     ----------
-    input_shape : tuple of int
-        Shape of input layer.
-    sigma : float
-        Standard deviation of Gaussian.
-    kernel_size : int, optional
-        Size of kernel.
-    stride : int
-        Stride for convolution.
-    seed : int, optional
-        Random seed.
-        
-    Returns
-    -------
-    pre_indices : np.ndarray
-        Source neuron indices.
-    post_indices : np.ndarray
-        Target neuron indices.
+    sigma : float or Quantity
+        Standard deviation of the Gaussian (surround sigma will be sqrt(2)*sigma).
+    max_distance : float or Quantity, optional
+        Maximum distance for connections (default: 4*sigma).
+    weight : Initialization, optional
+        Weight initialization.
+    delay : Initialization, optional
+        Delay initialization.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> mexican = MexicanHat(
+        ...     sigma=40 * u.um,
+        ...     weight=1.0 * u.nS
+        ... )
+        >>> result = mexican.generate(
+        ...     pre_size=500, post_size=500,
+        ...     pre_positions=positions, post_positions=positions
+        ... )
     """
-    if kernel_size is None:
-        kernel_size = int(6 * sigma) + 1
 
-    if len(input_shape) == 2:
-        # 2D Mexican hat
-        x = np.arange(kernel_size) - kernel_size // 2
-        y = np.arange(kernel_size) - kernel_size // 2
-        xx, yy = np.meshgrid(x, y)
-        r2 = xx ** 2 + yy ** 2
+    def __init__(
+        self,
+        sigma: Union[float, u.Quantity],
+        max_distance: Optional[Union[float, u.Quantity]] = None,
+        weight: Optional[Initialization] = None,
+        delay: Optional[Initialization] = None,
+        **kwargs
+    ):
+        # Mexican hat is DoG with sigma_surround = sqrt(2) * sigma_center
+        # and amplitude_center = 2, amplitude_surround = 1
+        if isinstance(sigma, u.Quantity):
+            sigma_surround = sigma * np.sqrt(2)
+        else:
+            sigma_surround = sigma * np.sqrt(2)
 
-        kernel = (1 - r2 / (2 * sigma ** 2)) * np.exp(-r2 / (2 * sigma ** 2))
-    else:
-        # 3D Mexican hat
-        x = np.arange(kernel_size) - kernel_size // 2
-        y = np.arange(kernel_size) - kernel_size // 2
-        z = np.arange(kernel_size) - kernel_size // 2
-        xx, yy, zz = np.meshgrid(x, y, z)
-        r2 = xx ** 2 + yy ** 2 + zz ** 2
+        if max_distance is None:
+            if isinstance(sigma, u.Quantity):
+                max_distance = 4 * sigma
+            else:
+                max_distance = 4 * sigma
 
-        kernel = (1 - r2 / (2 * sigma ** 2)) * np.exp(-r2 / (2 * sigma ** 2))
+        super().__init__(
+            sigma_center=sigma,
+            sigma_surround=sigma_surround,
+            amplitude_center=2.0,
+            amplitude_surround=1.0,
+            max_distance=max_distance,
+            weight=weight,
+            delay=delay,
+            **kwargs
+        )
 
-    return conv_kernel(input_shape, kernel, stride, 'same', seed=seed)
 
+class SobelKernel(PointNeuronConnectivity):
+    """Sobel edge detection kernel for orientation-selective connectivity.
 
-@set_module_as('braintools.conn')
-def sobel_kernel(
-    input_shape: Tuple[int, int],
-    direction: str = 'both',
-    stride: int = 1,
-    seed: Optional[int] = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create connectivity using Sobel edge detection kernel.
-    
+    Implements Sobel operators for detecting edges at specific orientations,
+    useful for implementing orientation-selective connectivity patterns.
+
     Parameters
     ----------
-    input_shape : tuple of int
-        Shape of input layer (height, width).
     direction : str
         Direction of edge detection ('horizontal', 'vertical', 'both').
-    stride : int
-        Stride for convolution.
-    seed : int, optional
-        Random seed.
-        
-    Returns
-    -------
-    pre_indices : np.ndarray
-        Source neuron indices.
-    post_indices : np.ndarray
-        Target neuron indices.
+    kernel_size : float or Quantity
+        Physical size of the 3x3 kernel in position units.
+    weight : Initialization, optional
+        Weight initialization (Sobel values are multiplied by this).
+    delay : Initialization, optional
+        Delay initialization.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> sobel = SobelKernel(
+        ...     direction='horizontal',
+        ...     kernel_size=60 * u.um,
+        ...     weight=1.0 * u.nS
+        ... )
+        >>> result = sobel.generate(
+        ...     pre_size=500, post_size=500,
+        ...     pre_positions=positions, post_positions=positions
+        ... )
     """
-    # Sobel kernels
-    sobel_x = np.array([[-1, 0, 1],
-                        [-2, 0, 2],
-                        [-1, 0, 1]]) / 8.0
 
-    sobel_y = np.array([[-1, -2, -1],
-                        [0, 0, 0],
-                        [1, 2, 1]]) / 8.0
+    def __init__(
+        self,
+        direction: str = 'horizontal',
+        kernel_size: Union[float, u.Quantity] = 1.0,
+        weight: Optional[Initialization] = None,
+        delay: Optional[Initialization] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.direction = direction
+        self.kernel_size = kernel_size
+        self.weight_init = weight
+        self.delay_init = delay
 
-    if direction == 'horizontal':
-        kernel = sobel_x
-    elif direction == 'vertical':
-        kernel = sobel_y
-    else:  # both
-        kernel = np.sqrt(sobel_x ** 2 + sobel_y ** 2)
+        # Define Sobel kernels
+        if direction == 'horizontal':
+            self.kernel = np.array([
+                [-1, -2, -1],
+                [0, 0, 0],
+                [1, 2, 1]
+            ], dtype=np.float32)
+        elif direction == 'vertical':
+            self.kernel = np.array([
+                [-1, 0, 1],
+                [-2, 0, 2],
+                [-1, 0, 1]
+            ], dtype=np.float32)
+        elif direction == 'both':
+            # Use magnitude of both directions
+            self.kernel_h = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)
+            self.kernel_v = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+            self.kernel = None  # Will compute both
+        else:
+            raise ValueError(f"Unknown direction: {direction}")
 
-    return conv_kernel(input_shape, kernel, stride, 'same', seed=seed)
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate Sobel kernel connections."""
+        # Delegate to ConvKernel
+        if self.kernel is not None:
+            conv = ConvKernel(
+                kernel=self.kernel,
+                kernel_size=self.kernel_size,
+                threshold=0.1,
+                weight=self.weight_init,
+                delay=self.delay_init,
+                seed=self.seed
+            )
+            result = conv.generate(**kwargs)
+            result.metadata['pattern'] = 'sobel_kernel'
+            result.metadata['direction'] = self.direction
+            return result
+        else:
+            # Both directions - compute magnitude
+            conv_h = ConvKernel(
+                kernel=self.kernel_h,
+                kernel_size=self.kernel_size,
+                threshold=0.1,
+                weight=self.weight_init,
+                delay=self.delay_init,
+                seed=self.seed
+            )
+            conv_v = ConvKernel(
+                kernel=self.kernel_v,
+                kernel_size=self.kernel_size,
+                threshold=0.1,
+                weight=self.weight_init,
+                delay=self.delay_init,
+                seed=self.seed + 1 if self.seed is not None else None
+            )
+            # Union of both
+            from ._base import CompositeConnectivity
+            composite = CompositeConnectivity(conv_h, conv_v, 'union')
+            result = composite.generate(**kwargs)
+            result.metadata['pattern'] = 'sobel_kernel'
+            result.metadata['direction'] = 'both'
+            return result
 
 
-@set_module_as('braintools.conn')
-def laplacian_kernel(
-    input_shape: Tuple[int, ...],
-    kernel_type: str = '4-connected',
-    stride: int = 1,
-    seed: Optional[int] = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create connectivity using Laplacian kernel.
-    
+class LaplacianKernel(PointNeuronConnectivity):
+    """Laplacian kernel for edge detection connectivity.
+
+    Implements Laplacian operators for detecting discontinuities and edges,
+    useful for lateral inhibition and edge enhancement.
+
     Parameters
     ----------
-    input_shape : tuple of int
-        Shape of input layer.
     kernel_type : str
-        Type of Laplacian ('4-connected', '8-connected', 'gaussian').
-    stride : int
-        Stride for convolution.
-    seed : int, optional
-        Random seed.
-        
-    Returns
-    -------
-    pre_indices : np.ndarray
-        Source neuron indices.
-    post_indices : np.ndarray
-        Target neuron indices.
+        Type of Laplacian ('4-connected', '8-connected').
+    kernel_size : float or Quantity
+        Physical size of the kernel in position units.
+    weight : Initialization, optional
+        Weight initialization (Laplacian values are multiplied by this).
+    delay : Initialization, optional
+        Delay initialization.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> laplacian = LaplacianKernel(
+        ...     kernel_type='4-connected',
+        ...     kernel_size=60 * u.um,
+        ...     weight=1.0 * u.nS
+        ... )
+        >>> result = laplacian.generate(
+        ...     pre_size=500, post_size=500,
+        ...     pre_positions=positions, post_positions=positions
+        ... )
     """
-    if len(input_shape) == 2:
+
+    def __init__(
+        self,
+        kernel_type: str = '4-connected',
+        kernel_size: Union[float, u.Quantity] = 1.0,
+        weight: Optional[Initialization] = None,
+        delay: Optional[Initialization] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.kernel_type = kernel_type
+        self.kernel_size = kernel_size
+        self.weight_init = weight
+        self.delay_init = delay
+
+        # Define Laplacian kernels
         if kernel_type == '4-connected':
-            kernel = np.array([[0, -1, 0],
-                               [-1, 4, -1],
-                               [0, -1, 0]]) / 4.0
+            self.kernel = np.array([
+                [0, 1, 0],
+                [1, -4, 1],
+                [0, 1, 0]
+            ], dtype=np.float32)
         elif kernel_type == '8-connected':
-            kernel = np.array([[-1, -1, -1],
-                               [-1, 8, -1],
-                               [-1, -1, -1]]) / 8.0
-        else:  # gaussian
-            return mexican_hat(input_shape, sigma=1.0, stride=stride, seed=seed)
-    else:
-        # 3D Laplacian
-        kernel = np.zeros((3, 3, 3))
-        kernel[1, 1, 1] = 6
-        kernel[0, 1, 1] = -1
-        kernel[2, 1, 1] = -1
-        kernel[1, 0, 1] = -1
-        kernel[1, 2, 1] = -1
-        kernel[1, 1, 0] = -1
-        kernel[1, 1, 2] = -1
-        kernel = kernel / 6.0
+            self.kernel = np.array([
+                [1, 1, 1],
+                [1, -8, 1],
+                [1, 1, 1]
+            ], dtype=np.float32)
+        else:
+            raise ValueError(f"Unknown kernel_type: {kernel_type}")
 
-    return conv_kernel(input_shape, kernel, stride, 'same', seed=seed)
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate Laplacian kernel connections."""
+        # Delegate to ConvKernel
+        conv = ConvKernel(
+            kernel=self.kernel,
+            kernel_size=self.kernel_size,
+            threshold=0.1,
+            weight=self.weight_init,
+            delay=self.delay_init,
+            seed=self.seed
+        )
+        result = conv.generate(**kwargs)
+        result.metadata['pattern'] = 'laplacian_kernel'
+        result.metadata['kernel_type'] = self.kernel_type
+        return result
 
 
-@set_module_as('braintools.conn')
-def custom_kernel(
-    input_shape: Tuple[int, ...],
-    kernel_func: Callable,
-    kernel_size: int,
-    stride: int = 1,
-    seed: Optional[int] = None,
-    **kwargs
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create connectivity using custom kernel function.
-    
+class CustomKernel(PointNeuronConnectivity):
+    """Custom kernel connectivity using user-defined kernel function.
+
+    Allows implementing arbitrary spatial kernel functions for connectivity.
+
     Parameters
     ----------
-    input_shape : tuple of int
-        Shape of input layer.
     kernel_func : callable
-        Function that takes coordinates and returns kernel values.
-    kernel_size : int
-        Size of kernel.
-    stride : int
-        Stride for convolution.
-    seed : int, optional
-        Random seed.
-    **kwargs
-        Additional arguments passed to kernel_func.
-        
-    Returns
-    -------
-    pre_indices : np.ndarray
-        Source neuron indices.
-    post_indices : np.ndarray
-        Target neuron indices.
-    """
-    if len(input_shape) == 2:
-        x = np.arange(kernel_size) - kernel_size // 2
-        y = np.arange(kernel_size) - kernel_size // 2
-        xx, yy = np.meshgrid(x, y)
-        kernel = kernel_func(xx, yy, **kwargs)
-    else:
-        x = np.arange(kernel_size) - kernel_size // 2
-        y = np.arange(kernel_size) - kernel_size // 2
-        z = np.arange(kernel_size) - kernel_size // 2
-        xx, yy, zz = np.meshgrid(x, y, z)
-        kernel = kernel_func(xx, yy, zz, **kwargs)
+        Function that takes (x, y) coordinates and returns kernel value.
+        Should accept arrays and return array of same shape.
+    kernel_size : float or Quantity
+        Physical size of the kernel support in position units.
+    threshold : float
+        Connection threshold (default: 0.0).
+    weight : Initialization, optional
+        Weight initialization (kernel values are multiplied by this).
+    delay : Initialization, optional
+        Delay initialization.
 
-    return conv_kernel(input_shape, kernel, stride, 'same', seed=seed)
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> def my_kernel(x, y):
+        ...     # Custom kernel function
+        ...     r = np.sqrt(x**2 + y**2)
+        ...     return np.exp(-r/50) * np.cos(r/10)
+        >>>
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> custom = CustomKernel(
+        ...     kernel_func=my_kernel,
+        ...     kernel_size=200 * u.um,
+        ...     threshold=0.1,
+        ...     weight=1.0 * u.nS
+        ... )
+        >>> result = custom.generate(
+        ...     pre_size=500, post_size=500,
+        ...     pre_positions=positions, post_positions=positions
+        ... )
+    """
+
+    def __init__(
+        self,
+        kernel_func: Callable,
+        kernel_size: Union[float, u.Quantity],
+        threshold: float = 0.0,
+        weight: Optional[Initialization] = None,
+        delay: Optional[Initialization] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.kernel_func = kernel_func
+        self.kernel_size = kernel_size
+        self.threshold = threshold
+        self.weight_init = weight
+        self.delay_init = delay
+
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate custom kernel connections."""
+        pre_size = kwargs['pre_size']
+        post_size = kwargs['post_size']
+        pre_positions = kwargs.get('pre_positions')
+        post_positions = kwargs.get('post_positions')
+
+        if pre_positions is None or post_positions is None:
+            raise ValueError("Positions required for custom kernel connectivity")
+
+        if isinstance(pre_size, tuple):
+            pre_num = int(np.prod(pre_size))
+        else:
+            pre_num = pre_size
+
+        if isinstance(post_size, tuple):
+            post_num = int(np.prod(post_size))
+        else:
+            post_num = post_size
+
+        # Extract position values
+        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
+        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+
+        # Get kernel size in position units
+        if isinstance(self.kernel_size, u.Quantity):
+            kernel_size_val = u.Quantity(self.kernel_size).to(pos_unit).mantissa
+        else:
+            kernel_size_val = self.kernel_size
+
+        pre_indices = []
+        post_indices = []
+        kernel_weights = []
+
+        # For each post neuron
+        for post_idx in range(post_num):
+            post_pos = post_pos_val[post_idx]
+
+            # Relative positions
+            rel_pos = pre_pos_val - post_pos
+            distances = np.sqrt(np.sum(rel_pos ** 2, axis=1))
+
+            # Filter by kernel size
+            in_range = distances <= kernel_size_val / 2
+            candidate_pre = np.where(in_range)[0]
+
+            if len(candidate_pre) > 0:
+                rel_x = rel_pos[candidate_pre, 0]
+                rel_y = rel_pos[candidate_pre, 1]
+
+                # Evaluate kernel function
+                kernel_vals = self.kernel_func(rel_x, rel_y)
+
+                # Apply threshold
+                above_threshold = np.abs(kernel_vals) > self.threshold
+                valid_pre = candidate_pre[above_threshold]
+                valid_weights = kernel_vals[above_threshold]
+
+                pre_indices.extend(valid_pre)
+                post_indices.extend([post_idx] * len(valid_pre))
+                kernel_weights.extend(valid_weights)
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
+                pre_size=pre_size, post_size=post_size,
+                pre_positions=pre_positions, post_positions=post_positions,
+                model_type='point'
+            )
+
+        pre_indices = np.array(pre_indices, dtype=np.int64)
+        post_indices = np.array(post_indices, dtype=np.int64)
+        kernel_weights = np.array(kernel_weights)
+        n_connections = len(pre_indices)
+
+        # Generate base weights
+        weights = init_call(
+            self.weight_init, self.rng, n_connections,
+            param_type='weight', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        # Multiply by kernel weights
+        if weights is not None:
+            weights_vals, weights_unit = u.split_mantissa_unit(weights)
+            if u.math.isscalar(weights_vals):
+                weights_vals = np.full(n_connections, weights_vals)
+            else:
+                weights_vals = np.asarray(weights_vals)
+
+            final_weights = weights_vals * kernel_weights
+            if weights_unit is not None:
+                weights = u.maybe_decimal(final_weights * weights_unit)
+            else:
+                weights = final_weights
+        else:
+            weights = kernel_weights
+
+        delays = init_call(
+            self.delay_init, self.rng, n_connections,
+            param_type='delay', pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+
+        return ConnectionResult(
+            pre_indices, post_indices,
+            pre_size=pre_size, post_size=post_size,
+            weights=weights, delays=delays,
+            pre_positions=pre_positions, post_positions=post_positions,
+            metadata={'pattern': 'custom_kernel', 'kernel_size': self.kernel_size}
+        )

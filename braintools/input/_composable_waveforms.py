@@ -196,7 +196,7 @@ class Sinusoidal(Input):
         self.t_end = t_end
         self.bias = bias
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the sinusoidal input using the functional API."""
         return functional.sinusoidal(
             amplitude=self.amplitude,
@@ -372,7 +372,7 @@ class Square(Input):
         self.t_start = t_start
         self.t_end = t_end
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the square wave using the functional API."""
         return functional.square(
             amplitude=self.amplitude,
@@ -542,7 +542,7 @@ class Triangular(Input):
         self.t_end = t_end
         self.bias = bias
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the triangular wave using the functional API."""
         return functional.triangular(
             amplitude=self.amplitude,
@@ -720,7 +720,7 @@ class Sawtooth(Input):
         self.t_end = t_end
         self.bias = bias
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the sawtooth wave using the functional API."""
         return functional.sawtooth(
             amplitude=self.amplitude,
@@ -932,7 +932,7 @@ class Chirp(Input):
         self.method = method
         self.bias = bias
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the chirp signal using the functional API."""
         return functional.chirp(
             amplitude=self.amplitude,
@@ -1132,7 +1132,7 @@ class NoisySinusoidal(Input):
         self.t_end = t_end
         self.seed = seed
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the noisy sinusoidal using the functional API."""
         return functional.noisy_sinusoidal(
             amplitude=self.amplitude,

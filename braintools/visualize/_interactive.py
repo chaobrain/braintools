@@ -18,6 +18,7 @@ from typing import Optional, Union, Tuple, List
 import numpy as np
 
 from ..tree import as_numpy
+from braintools._misc import set_module_as
 
 # Try to import plotly
 try:
@@ -45,12 +46,14 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.visualize')
 def _check_plotly():
     """Check if plotly is available."""
     if not PLOTLY_AVAILABLE:
         raise ImportError("Plotly is required for interactive plots. Install with: pip install plotly")
 
 
+@set_module_as('braintools.visualize')
 def interactive_spike_raster(
     spike_times: Union[np.ndarray, List],
     neuron_ids: Optional[Union[np.ndarray, List]] = None,
@@ -164,6 +167,7 @@ def interactive_spike_raster(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def interactive_line_plot(
     x: np.ndarray,
     y: Union[np.ndarray, List[np.ndarray]],
@@ -241,6 +245,7 @@ def interactive_line_plot(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def interactive_heatmap(
     data: np.ndarray,
     x_labels: Optional[List[str]] = None,
@@ -298,6 +303,7 @@ def interactive_heatmap(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def interactive_3d_scatter(
     x: np.ndarray,
     y: np.ndarray,
@@ -378,6 +384,7 @@ def interactive_3d_scatter(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def interactive_network(
     adjacency: np.ndarray,
     positions: Optional[np.ndarray] = None,
@@ -488,6 +495,7 @@ def interactive_network(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def interactive_histogram(
     data: Union[np.ndarray, List[np.ndarray]],
     labels: Optional[List[str]] = None,
@@ -565,6 +573,7 @@ def interactive_histogram(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def interactive_surface(
     z: np.ndarray,
     x: Optional[np.ndarray] = None,
@@ -631,6 +640,7 @@ def interactive_surface(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def interactive_correlation_matrix(
     data: np.ndarray,
     labels: Optional[List[str]] = None,
@@ -700,6 +710,7 @@ def interactive_correlation_matrix(
     return fig
 
 
+@set_module_as('braintools.visualize')
 def dashboard_neural_activity(
     spike_times: Union[np.ndarray, List],
     neuron_ids: Optional[Union[np.ndarray, List]] = None,

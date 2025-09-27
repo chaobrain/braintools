@@ -233,3 +233,4 @@ cython_debug/
 /docs/animations/
 /docs/.claude/
 /neuronconnect/
+/conn_old/

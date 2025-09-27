@@ -21,6 +21,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from braintools.tree import as_numpy
+from braintools._misc import set_module_as
 
 __all__ = [
     'neural_network_3d',
@@ -34,6 +35,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.visualize')
 def neural_network_3d(
     layer_sizes: List[int],
     weights: Optional[List[np.ndarray]] = None,
@@ -149,6 +151,7 @@ def neural_network_3d(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def brain_surface_3d(
     vertices: np.ndarray,
     faces: np.ndarray,
@@ -227,6 +230,7 @@ def brain_surface_3d(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def connectivity_3d(
     source_positions: np.ndarray,
     target_positions: np.ndarray,
@@ -338,6 +342,7 @@ def connectivity_3d(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def trajectory_3d(
     trajectory: np.ndarray,
     time_colors: bool = True,
@@ -409,6 +414,7 @@ def trajectory_3d(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def volume_rendering(
     volume: np.ndarray,
     threshold: Optional[float] = None,
@@ -471,6 +477,7 @@ def volume_rendering(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def electrode_array_3d(
     electrode_positions: np.ndarray,
     signals: Optional[np.ndarray] = None,
@@ -549,6 +556,7 @@ def electrode_array_3d(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def dendrite_tree_3d(
     segments: List[Tuple[np.ndarray, np.ndarray]],
     diameters: Optional[List[float]] = None,
@@ -619,6 +627,7 @@ def dendrite_tree_3d(
     return ax
 
 
+@set_module_as('braintools.visualize')
 def phase_space_3d(
     x: np.ndarray,
     y: np.ndarray,

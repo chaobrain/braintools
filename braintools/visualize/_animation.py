@@ -25,12 +25,14 @@ from matplotlib.artist import Artist
 from matplotlib.figure import Figure
 
 from braintools.tree import as_numpy
+from braintools._misc import set_module_as
 
 __all__ = [
     'animator',
 ]
 
 
+@set_module_as('braintools.visualize')
 def animator(
     data,
     fig,
@@ -104,6 +106,7 @@ def animator(
 
 
 class Camera:
+    __module__ = 'braintools.visualize'
     """Make animations easier."""
 
     def __init__(self, figure: Figure) -> None:

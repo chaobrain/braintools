@@ -21,12 +21,14 @@ from typing import Union
 
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+from braintools._misc import set_module_as
 
 __all__ = [
     'get_figure',
 ]
 
 
+@set_module_as('braintools.visualize')
 def get_figure(
     row_num: int,
     col_num: int,

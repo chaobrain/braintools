@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: BrainTools Discussions
+    url: https://github.com/chaobrain/braintools/discussions
+    about: Ask questions or share ideas that are not bugs or feature requests.
+  - name: Security reports
+    url: mailto:security@braintools.dev
+    about: Please email us directly for security issues.
