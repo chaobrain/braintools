@@ -44,6 +44,13 @@ dependencies = [
 
 [project.optional-dependencies]
 testing = [
+    "jax",
+    "brainstate",
+    "brainunit",
+    "matplotlib",
+    "nevergrad",
+    "scipy",
+    "msgpack",
     "pytest",
     "absl-py"
 ]

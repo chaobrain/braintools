@@ -1,5 +1,6 @@
 -r requirements.txt
 nevergrad
+matplotlib
 
 # test requirements
 pytest
