@@ -42,6 +42,11 @@ from ._init_delay import DelayInit
 from ._init_weight import WeightInit
 
 __all__ = [
+    'SOMA',
+    'BASAL_DENDRITE',
+    'APICAL_DENDRITE',
+    'AXON',
+
     # Basic compartment patterns
     'CompartmentSpecific',
     'RandomCompartment',

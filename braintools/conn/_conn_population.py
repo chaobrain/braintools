@@ -48,7 +48,7 @@ __all__ = [
     'RandomPopulations',
 
     # Population-specific patterns
-    'ExcitatoryInhibitory',
+    # 'ExcitatoryInhibitory',
     'FeedforwardInhibition',
     'RecurrentAmplification',
     'CompetitiveNetwork',
