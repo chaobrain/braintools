@@ -915,7 +915,10 @@ def roc_curve(
     fpr = np.array(fpr)
 
     # Calculate AUC
-    auc = np.trapz(tpr, fpr)
+    if np.__version__ < '2.0.0':
+        auc = np.trapz(tpr, fpr)
+    else:
+        auc = np.trapezoid(tpr, fpr)
 
     # Plot ROC curve
     ax.plot(fpr, tpr, color=color, linewidth=2, label=f'AUC = {auc:.3f}', **kwargs)
@@ -996,7 +999,10 @@ def precision_recall_curve(
     recall = np.array(recall)
 
     # Calculate average precision
-    ap = np.trapz(precision, recall)
+    if np.__version__ < '2.0.0':
+        ap = np.trapz(precision, recall)
+    else:
+        ap = np.trapezoid(precision, recall)
 
     # Plot PR curve
     ax.plot(recall, precision, color=color, linewidth=2,
