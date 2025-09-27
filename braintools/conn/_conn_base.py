@@ -31,7 +31,7 @@ import numpy as np
 
 __all__ = [
     'ConnectionResult',
-    'BaseConnectivity',
+    'Connectivity',
     'PointNeuronConnectivity',
     'PopulationRateConnectivity',
     'MultiCompartmentConnectivity'
@@ -211,7 +211,7 @@ class ConnectionResult:
         return distances
 
 
-class BaseConnectivity(ABC):
+class Connectivity(ABC):
     """Abstract base class for all connectivity patterns.
 
     This provides the common interface and shared functionality across
@@ -285,23 +285,23 @@ class BaseConnectivity(ABC):
     # Arithmetic operations for composability
     def __add__(self, other):
         """Union of connectivity patterns."""
-        if isinstance(other, BaseConnectivity):
+        if isinstance(other, Connectivity):
             return CompositeConnectivity(self, other, 'union')
-        raise TypeError("Can only add BaseConnectivity objects")
+        raise TypeError("Can only add Connectivity objects")
 
     def __mul__(self, other):
         """Intersection or scaling of connectivity patterns."""
-        if isinstance(other, BaseConnectivity):
+        if isinstance(other, Connectivity):
             return CompositeConnectivity(self, other, 'intersection')
         elif isinstance(other, (int, float)):
             return ScaledConnectivity(self, weight_factor=other)
-        raise TypeError("Can multiply by BaseConnectivity object or scalar")
+        raise TypeError("Can multiply by Connectivity object or scalar")
 
     def __sub__(self, other):
         """Difference of connectivity patterns."""
-        if isinstance(other, BaseConnectivity):
+        if isinstance(other, Connectivity):
             return CompositeConnectivity(self, other, 'difference')
-        raise TypeError("Can only subtract BaseConnectivity objects")
+        raise TypeError("Can only subtract Connectivity objects")
 
     def weight_scale(self, factor: float):
         """Scale connection weights by a factor."""
@@ -312,7 +312,7 @@ class BaseConnectivity(ABC):
         return ScaledConnectivity(self, delay_factor=factor)
 
 
-class PointNeuronConnectivity(BaseConnectivity):
+class PointNeuronConnectivity(Connectivity):
     """Base class for point neuron connectivity patterns.
 
     Point neurons are single-compartment models where each connection
@@ -331,7 +331,7 @@ class PointNeuronConnectivity(BaseConnectivity):
         pass
 
 
-class PopulationRateConnectivity(BaseConnectivity):
+class PopulationRateConnectivity(Connectivity):
     """Base class for population rate model connectivity patterns.
 
     Population rate models represent the average firing rate of neuron populations.
@@ -350,7 +350,7 @@ class PopulationRateConnectivity(BaseConnectivity):
         pass
 
 
-class MultiCompartmentConnectivity(BaseConnectivity):
+class MultiCompartmentConnectivity(Connectivity):
     """Base class for multi-compartment neuron connectivity patterns.
 
     Multi-compartment models have detailed morphology with multiple compartments
@@ -370,13 +370,13 @@ class MultiCompartmentConnectivity(BaseConnectivity):
 
 
 # Composite connectivity for combining patterns
-class CompositeConnectivity(BaseConnectivity):
+class CompositeConnectivity(Connectivity):
     """Composite connectivity created by combining patterns."""
 
     def __init__(
         self,
-        conn1: BaseConnectivity,
-        conn2: BaseConnectivity,
+        conn1: Connectivity,
+        conn2: Connectivity,
         operator: str
     ):
         assert conn1.pre_size == conn2.pre_size, f"Pre sizes must match, got {conn1.pre_size} vs {conn2.pre_size}"
@@ -961,12 +961,12 @@ class CompositeConnectivity(BaseConnectivity):
         )
 
 
-class ScaledConnectivity(BaseConnectivity):
+class ScaledConnectivity(Connectivity):
     """Connectivity with scaled weights or delays."""
 
     def __init__(
         self,
-        base_connectivity: BaseConnectivity,
+        base_connectivity: Connectivity,
         weight_factor: float = None,
         delay_factor: float = None
     ):

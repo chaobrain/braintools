@@ -18,7 +18,7 @@ Comprehensive tests for base connectivity classes.
 
 This test suite covers:
 - ConnectionResult class functionality
-- BaseConnectivity abstract class behavior
+- Connectivity abstract class behavior
 - CompositeConnectivity operations (union, intersection, difference)
 - ScaledConnectivity operations
 - Utility functions
@@ -31,7 +31,7 @@ import numpy as np
 
 from braintools.conn._conn_base import (
     ConnectionResult,
-    BaseConnectivity,
+    Connectivity,
     PointNeuronConnectivity,
     PopulationRateConnectivity,
     MultiCompartmentConnectivity,
@@ -409,8 +409,8 @@ class TestConnectionResult(unittest.TestCase):
         self.assertEqual(conn.custom_field, 'custom_value')
 
 
-class MockConnectivity(BaseConnectivity):
-    """Mock connectivity class for testing BaseConnectivity."""
+class MockConnectivity(Connectivity):
+    """Mock connectivity class for testing Connectivity."""
 
     def __init__(self, pre_size=None, post_size=None, seed=None,
                  connections_data=None):
@@ -440,7 +440,7 @@ class MockConnectivity(BaseConnectivity):
 
 class TestBaseConnectivity(unittest.TestCase):
     """
-    Test BaseConnectivity abstract class.
+    Test Connectivity abstract class.
 
     Examples
     --------
@@ -448,10 +448,10 @@ class TestBaseConnectivity(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_base import BaseConnectivity
+        from braintools.conn._conn_base import Connectivity
 
         # Create a custom connectivity class
-        class CustomConnectivity(BaseConnectivity):
+        class CustomConnectivity(Connectivity):
             def generate(self, pre_size, post_size, **kwargs):
                 # Simple all-to-all connectivity
                 pre_indices = []
@@ -557,10 +557,10 @@ class TestCompositeConnectivity(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_base import BaseConnectivity, CompositeConnectivity
+        from braintools.conn._conn_base import Connectivity, CompositeConnectivity
 
         # Create two simple connectivity patterns
-        class Pattern1(BaseConnectivity):
+        class Pattern1(Connectivity):
             def generate(self, pre_size, post_size, **kwargs):
                 return ConnectionResult(
                     pre_indices=np.array([0, 1]),
@@ -570,7 +570,7 @@ class TestCompositeConnectivity(unittest.TestCase):
                     weights=np.array([0.1, 0.2]) * u.nS
                 )
 
-        class Pattern2(BaseConnectivity):
+        class Pattern2(Connectivity):
             def generate(self, pre_size, post_size, **kwargs):
                 return ConnectionResult(
                     pre_indices=np.array([1, 2]),
@@ -835,7 +835,7 @@ class TestArithmeticOperations(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_base import BaseConnectivity
+        from braintools.conn._conn_base import Connectivity
 
         # Create two connectivity patterns
         conn1 = MockConnectivity(pre_size=3, post_size=3)

@@ -121,10 +121,11 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 
     apis/changelog.md
     apis/braintools.rst
+    apis/conn.rst
     apis/file.rst
-    apis/quad.rst
+    apis/input.rst
     apis/metric.rst
     apis/optim.rst
-    apis/input.rst
-    apis/tree.rst
+    apis/quad.rst
     apis/visualize.rst
+    apis/tree.rst
