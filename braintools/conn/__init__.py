@@ -160,26 +160,31 @@ Operations and Transformations:
 - **Transformations**: .add_noise(), .add_plasticity(), .apply_transform()
 """
 
-from ._complex import *
-from ._complex import __all__ as _complex_all
-from ._distance import *
-from ._distance import __all__ as _distance_all
-from ._hierarchical import *
-from ._hierarchical import __all__ as _hierarchical_all
-from ._io import *
-from ._io import __all__ as _io_all
-from ._kernel import *
-from ._kernel import __all__ as _kernel_all
-from ._random import *
-from ._random import __all__ as _random_all
-from ._regular import *
-from ._regular import __all__ as _regular_all
-from ._statistical import *
-from ._statistical import __all__ as _statistical_all
+from ._composable_base import *
+from ._composable_base import __all__ as base_all
+from ._patterns_basic import *
+from ._patterns_basic import __all__ as patterns_basic_all
+from ._patterns_kernel import *
+from ._patterns_kernel import __all__ as patterns_kernel_all
+from ._patterns_spatial import *
+from ._patterns_spatial import __all__ as patterns_spatial_all
+from ._patterns_topological import *
+from ._patterns_topological import __all__ as patterns_topological_all
 
-__all__ = _random_all + _distance_all + _regular_all + _statistical_all + _complex_all
-__all__ = __all__ + _hierarchical_all + _kernel_all + _io_all
+# Combine all exports (composable + legacy)
+__all__ = (
+    base_all +
+    patterns_basic_all +
+    patterns_spatial_all +
+    patterns_topological_all +
+    patterns_kernel_all
+)
 
 # Clean up namespace
-del (_random_all, _distance_all, _regular_all, _statistical_all,
-     _complex_all, _hierarchical_all, _kernel_all, _io_all)
+del (
+    base_all,
+    patterns_basic_all,
+    patterns_spatial_all,
+    patterns_topological_all,
+    patterns_kernel_all,
+)
