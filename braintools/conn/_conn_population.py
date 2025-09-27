@@ -33,11 +33,12 @@ from typing import Optional, Tuple, Union, Dict, List, Callable
 
 import brainunit as u
 import numpy as np
+from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._base import PopulationRateConnectivity, ConnectionResult
-from ._initialization import Initialization, Initializer
-from ._common import init_call
+from ._conn_base import PopulationRateConnectivity, ConnectionResult
+from ._init_base import init_call
+from ._init_weight import WeightInit
 
 __all__ = [
     # Basic population patterns
@@ -47,7 +48,7 @@ __all__ = [
     'RandomPopulations',
 
     # Population-specific patterns
-    'ExcitatoryInhibitory',
+    # 'ExcitatoryInhibitory',
     'FeedforwardInhibition',
     'RecurrentAmplification',
     'CompetitiveNetwork',
@@ -111,10 +112,10 @@ class PopulationCoupling(PopulationRateConnectivity):
     .. code-block:: python
 
         >>> coupling_dict = {
-        ...     ('exc', 'exc'): 0.5 * u.dimensionless,
-        ...     ('exc', 'inh'): 0.8 * u.dimensionless,
-        ...     ('inh', 'exc'): -1.2 * u.dimensionless,
-        ...     ('inh', 'inh'): -0.3 * u.dimensionless
+        ...     ('exc', 'exc'): 0.5,
+        ...     ('exc', 'inh'): 0.8,
+        ...     ('inh', 'exc'): -1.2,
+        ...     ('inh', 'inh'): -0.3
         ... }
         >>> conn = PopulationCoupling(coupling_dict)
 
@@ -146,10 +147,12 @@ class PopulationCoupling(PopulationRateConnectivity):
         self.coupling_type = coupling_type
         self.time_constants = time_constants
 
-    def generate(self,
-                 pre_size: Union[int, Tuple[int, ...]],
-                 post_size: Union[int, Tuple[int, ...]],
-                 **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        **kwargs
+    ) -> ConnectionResult:
         """Generate population coupling connections."""
         if isinstance(pre_size, tuple):
             pre_num = int(np.prod(pre_size))
@@ -200,6 +203,11 @@ class PopulationCoupling(PopulationRateConnectivity):
                 # Use time constants as delays
                 tau_values = self.time_constants.magnitude
                 tau_unit = self.time_constants.unit
+            elif isinstance(self.time_constants, (list, tuple)) and len(self.time_constants) > 0 and hasattr(
+                self.time_constants[0], 'mantissa'):
+                # Handle list of quantities with units
+                tau_values = [tc.mantissa if hasattr(tc, 'mantissa') else tc for tc in self.time_constants]
+                tau_unit = self.time_constants[0].unit if hasattr(self.time_constants[0], 'unit') else u.ms
             else:
                 tau_values = self.time_constants
                 tau_unit = u.ms
@@ -216,6 +224,8 @@ class PopulationCoupling(PopulationRateConnectivity):
             delays=delays,
             pre_size=pre_size,
             post_size=post_size,
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             model_type='population_rate',
             metadata={
                 'pattern': 'population_coupling',
@@ -252,7 +262,7 @@ class MeanField(PopulationRateConnectivity):
 
         >>> import brainunit as u
         >>> mf = MeanField(
-        ...     field_strength=0.1 * u.dimensionless,
+        ...     field_strength=0.1,
         ...     normalization='sqrt'
         ... )
         >>> result = mf(pre_size=10, post_size=5)
@@ -314,23 +324,11 @@ class MeanField(PopulationRateConnectivity):
             post_num = post_size
 
         # Generate connections based on connectivity fraction
-        if self.connectivity_fraction < 1.0:
-            # Sparse connectivity - vectorized
-            n_total_connections = pre_num * post_num
-            n_actual_connections = int(n_total_connections * self.connectivity_fraction)
-
-            random_matrix = self.rng.random((pre_num, post_num))
-            threshold = np.sort(random_matrix.flatten())[n_actual_connections - 1]
-            connection_mask = random_matrix <= threshold
-            pre_indices, post_indices = np.where(connection_mask)
-        else:
-            # Dense connectivity - vectorized
-            pre_indices, post_indices = np.meshgrid(np.arange(pre_num), np.arange(post_num), indexing='ij')
-            pre_indices = pre_indices.flatten()
-            post_indices = post_indices.flatten()
+        connection_mask = self.rng.random((pre_num, post_num)) <= self.connectivity_fraction
+        pre_indices, post_indices = np.where(connection_mask)
 
         # Calculate weights based on normalization
-        weight_base = self.field_strength
+        weight_base, wunit = u.split_mantissa_unit(self.field_strength)
         if self.normalization == 'source':
             weight_base = weight_base / pre_num
         elif self.normalization == 'target':
@@ -345,9 +343,10 @@ class MeanField(PopulationRateConnectivity):
         # Apply distance dependence if provided
         if self.distance_dependence is not None and pre_positions is not None and post_positions is not None:
             distances = cdist(pre_positions[pre_indices].reshape(-1, pre_positions.shape[1]),
-                            post_positions[post_indices].reshape(-1, post_positions.shape[1]))
+                              post_positions[post_indices].reshape(-1, post_positions.shape[1]))
             distance_factors = self.distance_dependence(distances.diagonal())
             weights = weights * distance_factors
+        weights = u.maybe_decimal(weights * wunit)
 
         if len(pre_indices) == 0:
             return ConnectionResult(
@@ -618,6 +617,8 @@ class HierarchicalPopulations(PopulationRateConnectivity):
             weights=np.array(weights),
             pre_size=kwargs.get('pre_size', total_pops),
             post_size=kwargs.get('post_size', total_pops),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             model_type='population_rate',
             metadata={
                 'pattern': 'hierarchical_populations',
@@ -701,7 +702,7 @@ class AllToAllPopulations(PopulationRateConnectivity):
         Weight initialization for all connections.
     """
 
-    def __init__(self, weight: Optional[Initializer] = None, **kwargs):
+    def __init__(self, weight: Optional[Union[ArrayLike, WeightInit]] = None, **kwargs):
         super().__init__(**kwargs)
         self.weight_init = weight
 
@@ -756,7 +757,7 @@ class RandomPopulations(PopulationRateConnectivity):
         Weight initialization.
     """
 
-    def __init__(self, prob: float = 0.5, weight: Optional[Initializer] = None, **kwargs):
+    def __init__(self, prob: float = 0.5, weight: Optional[Union[ArrayLike, WeightInit]] = None, **kwargs):
         super().__init__(**kwargs)
         self.prob = prob
         self.weight_init = weight
@@ -848,10 +849,10 @@ class FeedforwardInhibition(PopulationRateConnectivity):
         **kwargs
     ) -> ConnectionResult:
         """Generate feedforward inhibition connections."""
-        coupling_matrix = np.array([
-            [self.exc_to_exc, self.exc_to_inh],
-            [0, 0],
-        ])
+        coupling_matrix = np.array(
+            [[self.exc_to_exc, self.exc_to_inh],
+             [0, 0]]
+        )
 
         return PopulationCoupling(
             coupling_matrix,
@@ -1058,7 +1059,7 @@ class PopulationDistance(PopulationRateConnectivity):
         self,
         sigma: Union[float, u.Quantity],
         decay_function: str = 'gaussian',
-        weight: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1200,6 +1201,10 @@ class CustomPopulation(PopulationRateConnectivity):
         return ConnectionResult(
             np.array(pre_indices, dtype=np.int64),
             np.array(post_indices, dtype=np.int64),
+            pre_size=kwargs['pre_size'],
+            post_size=kwargs['post_size'],
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions'),
             weights=np.array(weights),
             model_type='population_rate',
             metadata={'pattern': 'custom_population'}

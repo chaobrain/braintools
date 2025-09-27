@@ -28,17 +28,25 @@ Key Features:
 - Realistic synaptic placement based on neuron morphology
 """
 
+import warnings
 from typing import Optional, Tuple, Union, Dict, List, Callable
 
 import brainunit as u
 import numpy as np
+from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._base import MultiCompartmentConnectivity, ConnectionResult
-from ._initialization import Initialization, Initializer
-from ._common import init_call
+from ._conn_base import MultiCompartmentConnectivity, ConnectionResult
+from ._init_base import init_call
+from ._init_delay import DelayInit
+from ._init_weight import WeightInit
 
 __all__ = [
+    'SOMA',
+    'BASAL_DENDRITE',
+    'APICAL_DENDRITE',
+    'AXON',
+
     # Basic compartment patterns
     'CompartmentSpecific',
     'RandomCompartment',
@@ -164,8 +172,8 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         self,
         compartment_mapping: Dict[Union[int, str], Union[int, str, List[Union[int, str]]]],
         connection_prob: Union[float, Dict] = 0.1,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         morphology_info: Optional[Dict] = None,
         **kwargs
     ):
@@ -513,8 +521,8 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         decay_function: str = 'gaussian',
         compartment_mapping: Dict = None,
         morphology_positions: Optional[Dict] = None,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -570,11 +578,23 @@ class MorphologyDistance(MultiCompartmentConnectivity):
             pre_num = int(np.prod(pre_size))
         else:
             pre_num = pre_size
+        if len(pre_pos_val) != pre_num:
+            warnings.warn(
+                f'Pre positions length {len(pre_pos_val)} does not match pre_size {pre_num}. Using min value.',
+                UserWarning,
+            )
+            pre_num = len(pre_pos_val)
 
         if isinstance(post_size, tuple):
             post_num = int(np.prod(post_size))
         else:
             post_num = post_size
+        if len(post_pos_val) != post_num:
+            warnings.warn(
+                f'Post positions length {len(post_pos_val)} does not match post_size {post_num}. Using min value.',
+                UserWarning,
+            )
+            post_num = len(post_pos_val)
 
         all_pre_indices = []
         all_post_indices = []
@@ -679,8 +699,8 @@ class DendriticTree(MultiCompartmentConnectivity):
         tree_structure: Dict,
         branch_targeting: Dict,
         distance_dependence: bool = True,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -823,8 +843,8 @@ class AxonalProjection(MultiCompartmentConnectivity):
         topographic_map: Optional[Callable] = None,
         arborization_pattern: str = 'diffuse',
         connection_prob: float = 0.05,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -858,16 +878,22 @@ class AxonalProjection(MultiCompartmentConnectivity):
         if self.topographic_map is not None and pre_positions is not None and post_positions is not None:
             # Use custom topographic mapping
             probs = np.zeros((pre_num, post_num))
+            # Extract mantissa values for topographic map function
+            pre_pos_vals = pre_positions.mantissa if hasattr(pre_positions, 'mantissa') else pre_positions
+            post_pos_vals = post_positions.mantissa if hasattr(post_positions, 'mantissa') else post_positions
             for i in range(pre_num):
                 for j in range(post_num):
-                    probs[i, j] = self.topographic_map(pre_positions[i], post_positions[j])
+                    probs[i, j] = self.topographic_map(pre_pos_vals[i], post_pos_vals[j])
         else:
             # Use uniform probability
             probs = np.full((pre_num, post_num), self.connection_prob)
 
         # Modify based on arborization pattern
         if self.arborization_pattern == 'clustered' and pre_positions is not None and post_positions is not None:
-            distances = cdist(pre_positions, post_positions)
+            # Extract mantissa values for distance calculation
+            pre_pos_vals = pre_positions.mantissa if hasattr(pre_positions, 'mantissa') else pre_positions
+            post_pos_vals = post_positions.mantissa if hasattr(post_positions, 'mantissa') else post_positions
+            distances = cdist(pre_pos_vals, post_pos_vals)
             spatial_factor = np.exp(-distances ** 2 / 10000)
             probs = probs * spatial_factor
 
@@ -958,8 +984,8 @@ class BranchSpecific(MultiCompartmentConnectivity):
         self,
         branch_indices: List[int] = None,
         connection_prob: float = 0.3,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1024,8 +1050,8 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         self,
         cluster_size: int = 5,
         n_clusters: int = 10,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1137,8 +1163,8 @@ class AxonalBranching(MultiCompartmentConnectivity):
         self,
         branches_per_axon: int = 5,
         branch_spread: float = 100.0,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1247,8 +1273,8 @@ class AxonalArborization(MultiCompartmentConnectivity):
         self,
         arborization_radius: Union[float, u.Quantity] = 150.0,
         density: float = 0.3,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1359,8 +1385,8 @@ class TopographicProjection(MultiCompartmentConnectivity):
     def __init__(
         self,
         topographic_map: Callable,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1408,8 +1434,8 @@ class SynapticPlacement(MultiCompartmentConnectivity):
         self,
         placement_rule: str = 'uniform',
         compartment_preferences: Optional[Dict[int, float]] = None,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1471,8 +1497,8 @@ class SynapticClustering(MultiCompartmentConnectivity):
         self,
         cluster_size: int = 5,
         n_clusters_per_neuron: int = 10,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
+        weight: Optional[Union[ArrayLike, WeightInit]] = None,
+        delay: Optional[Union[ArrayLike, DelayInit]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1535,7 +1561,13 @@ class ActivityDependentSynapses(MultiCompartmentConnectivity):
         **kwargs
     ) -> ConnectionResult:
         """Generate activity-dependent connections."""
-        result = self.base_pattern.generate(pre_size, post_size, pre_positions, post_positions, **kwargs)
+        result = self.base_pattern.generate(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
 
         result.metadata.update({
             'plasticity_type': self.plasticity_type,
@@ -1606,7 +1638,7 @@ class CustomCompartment(MultiCompartmentConnectivity):
         return ConnectionResult(
             np.array(pre_indices, dtype=np.int64),
             np.array(post_indices, dtype=np.int64),
-            weights=np.array(weights) if weights is not None else None,
+            weights=u.math.array(weights) if weights is not None else None,
             delays=delays,
             model_type='multi_compartment',
             pre_size=kwargs['pre_size'],

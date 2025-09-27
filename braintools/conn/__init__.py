@@ -269,37 +269,24 @@ Operations and Transformations:
 - **Transformations**: .add_noise(), .add_plasticity(), .apply_transform()
 """
 
-# Import base classes and unified interface
-from ._base import *
-from ._interface import *
+from ._conn_base import *
+from ._conn_base import __all__ as base_all
+from ._conn_compartment import *
+from ._conn_compartment import __all__ as comp_all
+from ._conn_kernel import *
+from ._conn_kernel import __all__ as kernel_all
+from ._conn_point import *
+from ._conn_point import __all__ as point_all
+from ._conn_population import *
+from ._conn_population import __all__ as pop_all
+from ._init_base import *
+from ._init_base import __all__ as init_all
+from ._init_delay import *
+from ._init_delay import __all__ as delay_all
+from ._init_distance import *
+from ._init_distance import __all__ as distance_all
+from ._init_weight import *
+from ._init_weight import __all__ as weight_all
 
-# Import model-specific modules
-from . import _point
-from . import _population
-from . import _compartment
-from ._initialization import *
-from ._initialization import __all__ as init_all
-
-# Main exports - unified interface is primary
-__all__ = [
-    # Universal interface
-    'connect',
-    'random_connectivity',
-    'distance_connectivity',
-    'structured_connectivity',
-    'get_available_patterns',
-    'validate_connectivity',
-    'convert_connectivity',
-
-    # Base classes
-    'ConnectionResult',
-    'BaseConnectivity',
-
-    # Model-specific modules
-    '_point.py',
-    '_population.py',
-    '_compartment.py',
-]
-__all__ = __all__ + init_all
-del init_all
-
+__all__ = base_all + comp_all + init_all + weight_all + delay_all + distance_all + kernel_all + point_all + pop_all
+del init_all, weight_all, delay_all, distance_all, base_all, comp_all, kernel_all, point_all, pop_all

@@ -1,62 +1,23 @@
 ``braintools`` documentation
 ============================
 
-`braintools <https://github.com/chaobrain/braintools>`_ implements the common toolboxes for brain simulation.
+`braintools <https://github.com/chaobrain/braintools>`_ implements a modern toolbox for brain simulation and analysis.
 
 
 Overview
 ^^^^^^^^
 
-``braintools`` is a lightweight, JAX‑friendly toolbox that collects practical
-utilities used throughout computational neuroscience workflows:
+``braintools`` is a lightweight, JAX-friendly collection of utilities used across computational neuroscience workflows:
 
-- Metric functions for model training and evaluation (classification,
-  regression, ranking, correlation/connectivity, LFP helpers)
-- Numerical integration utilities for ODE/SDE/DDE one‑step steppers (under
-  :mod:`braintools.quad`), designed for PyTrees and functional APIs
-- Input generators and small optimization helpers to quickly prototype and test
-  models
-- And more to come...
+- Composable synaptic connectivity builders (:mod:`braintools.conn`) with point, compartment, and population abstractions
+- Rich visualization helpers (:mod:`braintools.visualize`) covering static plots, interactive dashboards, and animation utilities
+- Metric functions for model training and evaluation (classification, regression, ranking, correlation, LFP helpers)
+- Numerical integration utilities for ODE/SDE/DDE one-step steppers (:mod:`braintools.quad`) designed for PyTrees and functional APIs
+- Input generators, optimization helpers, and reusable data-structure utilities
+- And more ...
 
-The project favors a simple, well‑typed functional style that plays nicely with
-jit/vmap and works out‑of‑the‑box with `brainstate <https://brainstate.readthedocs.io/>`_
-and `brainunit <https://brainunit.readthedocs.io/>`_.
-
-
-Quickstart
-^^^^^^^^^^
-
-Classification loss with integer labels::
-
-  import jax.numpy as jnp
-  import braintools
-
-  logits = jnp.array([[2.0, 1.0, 0.1]])
-  labels = jnp.array([0])
-  loss = braintools.metric.softmax_cross_entropy_with_integer_labels(logits, labels)
-
-Compute functional connectivity and its dynamics::
-
-  # activities: (time, channels)
-  activities = jnp.random.normal(size=(200, 10))
-  fc  = braintools.metric.functional_connectivity(activities)
-  fcd = braintools.metric.functional_connectivity_dynamics(activities, window_size=30, step_size=5)
-
-Advance an ODE with RK4::
-
-  def f(y, t):
-      return -y  # dy/dt = -y
-
-  y, t = jnp.array(1.0), 0.0
-  y_next = braintools.quad.ode_rk4_step(f, y, t)
-
-
-Design Principles
-^^^^^^^^^^^^^^^^^
-
-- JAX‑friendly: pure functions, PyTree support, compatible with jit/vmap
-- Minimal surface area: small, focused helpers you can compose
-- Practical defaults: sensible numerical behavior with clear docstrings
+The project favors a simple, well-typed functional style that works seamlessly with `brainstate <https://brainstate.readthedocs.io/>`_,
+`brainunit <https://brainunit.readthedocs.io/>`_, and just-in-time compilation (``jit``/``vmap``).
 
 
 Installation
@@ -71,7 +32,7 @@ Installation
           pip install -U braintools[cpu]
 
 
-    .. tab-item:: GPU (CUDA 12.0)
+    .. tab-item:: GPU (CUDA 12.x)
 
        .. code-block:: bash
 
@@ -86,32 +47,27 @@ Installation
 
 ----
 
-
 See also the ecosystem
 ^^^^^^^^^^^^^^^^^^^^^^
 
-
-BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling.readthedocs.io/>`_.
-
-
+BrainTools is part of our `brain simulation ecosystem <https://brainmodeling.readthedocs.io/>`_.
 
 
 ----
-
-
 
 .. toctree::
     :hidden:
     :maxdepth: 2
     :caption: Tutorials
 
-    toc_visualization.md
+    toc_conn.md
+    toc_file.md
     toc_input.md
+    toc_metric_function.md
     toc_optimization.md
     toc_integration.md
-    toc_metric_function.md
+    toc_visualization.md
     toc_spike_encoding.md
-    toc_file.md
 
 
 .. toctree::
@@ -121,10 +77,11 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 
     apis/changelog.md
     apis/braintools.rst
+    apis/conn.rst
     apis/file.rst
-    apis/quad.rst
+    apis/input.rst
     apis/metric.rst
     apis/optim.rst
-    apis/input.rst
-    apis/tree.rst
+    apis/quad.rst
     apis/visualize.rst
+    apis/tree.rst
