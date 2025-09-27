@@ -1,23 +1,53 @@
 # Security Policy
 
-## Reporting a bug in BrainTools
+## Supported Versions
 
-Report security bugs in BrainTools via [Github Issue](https://github.com/chaobrain/braintools/issues).
+We provide security fixes for the most recent minor release. Older releases may
+receive fixes on a best-effort basis when patches are low risk.
 
-Normally your report will be acknowledged within 5 days, and you'll receive a more detailed response 
-to your report within 10 days indicating the next steps in handling your submission. These timelines 
-may extend when our triage volunteers are away on holiday, particularly at the end of the year.
-
-After the initial reply to your report, the security team will endeavor to keep you informed of the 
-progress being made towards a fix and full announcement, and may ask for additional information or 
-guidance surrounding the reported issue.
-
-## Reporting a bug in a third party module
-
-Security bugs in third party modules should be reported to their respective maintainers.
+| Version     | Supported          |
+|-------------|--------------------|
+| `main`      | Always              |
+| Latest tag  | Yes                 |
+| Older tags  | No, please upgrade |
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in this project, please report it to us as soon as possible. 
-We appreciate your efforts and responsible disclosure and will make every effort to acknowledge your 
-contributions.
+Please email `security@braintools.dev` (or `chao.brain@qq.com` if the security mailbox is unavailable) with the subject line `SECURITY` and a
+description of the issue. Include the following details when possible:
+
+- Affected versions and environment information
+- Steps to reproduce or proof-of-concept code
+- Expected impact and any suggested mitigations
+
+If encrypted communication is required, request our PGP key in the initial
+message. We currently acknowledge reports within **5 business days** and aim to
+provide a remediation plan within **10 business days**.
+
+Avoid opening public GitHub issues for security concerns until we have
+coordinated a fix and disclosure timeline.
+
+## Coordinated Disclosure
+
+We follow a coordinated disclosure model:
+
+1. Validate the report and reproduce the issue.
+2. Develop and test a fix, preparing regression tests when practical.
+3. Share a release plan with the reporter, including the public disclosure date.
+4. Publish the fix and changelog. Optionally credit reporters who request it.
+
+We may ask reporters to test candidate patches or confirm the resolution before
+public release.
+
+## Third-Party Dependencies
+
+If the vulnerability originates in a third-party project that BrainTools uses,
+we will forward the report to the appropriate maintainers and coordinate follow
+up where possible. Please mention any upstream components involved in your
+report.
+
+## Additional Help
+
+For non-security questions or bug reports, file an issue on GitHub or contact
+us via conduct@braintools.dev. Responsible disclosure keeps the community safe
+and is greatly appreciated.

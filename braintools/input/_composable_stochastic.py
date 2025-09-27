@@ -179,7 +179,7 @@ class WienerProcess(Input):
         self.sigma = sigma
         self.seed = seed
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the Wiener process using the functional API.
 
         Returns
@@ -390,7 +390,7 @@ class OUProcess(Input):
         self.t_end = t_end
         self.seed = seed
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the OU process using the functional API.
 
         Returns
@@ -595,7 +595,7 @@ class Poisson(Input):
         self.amplitude = amplitude
         self.seed = seed
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the Poisson input using the functional API.
 
         Returns

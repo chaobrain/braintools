@@ -164,7 +164,7 @@ class Section(Input):
         self.values = values
         self.durations = durations
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the section input array."""
         # Use the functional API
         return section(self.values, self.durations, return_length=False)
@@ -293,7 +293,7 @@ class Constant(Input):
 
         self.I_and_duration = I_and_duration
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the constant input array."""
         # Use the functional API - it returns (current, duration) tuple
         current, _ = constant(self.I_and_duration)
@@ -436,7 +436,7 @@ class Step(Input):
         self.amplitudes = amplitudes
         self.step_times = step_times
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the step input array."""
         return step(
             self.amplitudes,
@@ -614,7 +614,7 @@ class Ramp(Input):
         self.t_start = t_start
         self.t_end = t_end
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the ramp input array."""
         # Use the functional API
         return ramp(

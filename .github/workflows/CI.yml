@@ -1,113 +1,63 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
-
-name: Continuous Integration
+name: CI
 
 on:
   push:
     branches:
-      - '**'        # matches every branch
+      - main
+      - develop
+      - 'release/**'
   pull_request:
     branches:
-      - '**'        # matches every branch
-
+      - main
+      - develop
+  workflow_call:
 
 permissions:
-  contents: read  # to fetch code
-  actions: write  # to cancel previous workflows
+  contents: read
 
-# This is what will cancel the workflow
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-
 jobs:
-  test_linux:
-    runs-on: ubuntu-latest
+#  lint:
+#    name: Lint
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: actions/setup-python@v5
+#        with:
+#          python-version: '3.12'
+#          cache: pip
+#      - name: Install pre-commit
+#        run: |
+#          python -m pip install --upgrade pip
+#          pip install pre-commit
+#      - name: Run pre-commit
+#        run: pre-commit run --all-files --show-diff-on-failure --color always
+
+  tests:
+    name: Tests (${{ matrix.os }} / py${{ matrix.python }})
+#    needs: lint
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ "3.10",  "3.13" ]
-
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.10', '3.13']
     steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.12.1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          access_token: ${{ github.token }}
-      - uses: actions/checkout@v5
-      - name: Print concurrency group
-        run: echo '${{ github.workflow }}-${{ github.ref }}'
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python }}
+          cache: pip
       - name: Install dependencies
         run: |
-          python -m pip cache purge
-          python -m pip install --upgrade pip setuptools  --no-cache-dir
-          python -m pip install -r requirements-dev.txt  --no-cache-dir
-          pip install . --no-cache-dir
-      - name: Test with pytest
-        run: |
-          pytest braintools/
-
-
-  test_macos:
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [ "3.10",  "3.13" ]
-
-    steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.12.1
-        with:
-          access_token: ${{ github.token }}
-      - uses: actions/checkout@v5
-      - name: Print concurrency group
-        run: echo '${{ github.workflow }}-${{ github.ref }}'
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          python -m pip cache purge
-          python -m pip install --upgrade pip setuptools --no-cache-dir
-          python -m pip install -r requirements-dev.txt  --no-cache-dir
-          pip install .
-      - name: Test with pytest
-        run: |
-          pytest braintools/
-
-
-  test_windows:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [ "3.10",  "3.13" ]
-
-    steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.12.1
-        with:
-          access_token: ${{ github.token }}
-      - uses: actions/checkout@v5
-      - name: Print concurrency group
-        run: echo '${{ github.workflow }}-${{ github.ref }}'
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          python -m pip cache purge
-          python -m pip install --upgrade pip setuptools --no-cache-dir
-          python -m pip install -r requirements-dev.txt  --no-cache-dir
-          pip install .  --no-cache-dir
-      - name: Test with pytest
-        run: |
-          pytest braintools/ -p no:faulthandler
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[testing]"
+      - name: Run pytest (POSIX)
+        if: runner.os != 'Windows'
+        run: pytest --maxfail=1 --disable-warnings
+      - name: Run pytest (Windows)
+        if: runner.os == 'Windows'
+        run: pytest --maxfail=1 --disable-warnings -p no:faulthandler

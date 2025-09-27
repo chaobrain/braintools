@@ -250,10 +250,10 @@ class Input:
             >>> arr3 = ramp(recompute=True)
         """
         if self._cached_array is None or recompute:
-            self._cached_array = self._generate()
+            self._cached_array = self.generate()
         return self._cached_array
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the input current array. 
         
         Must be implemented by subclasses.
@@ -754,7 +754,7 @@ class Composite(Input):
         self.input2 = input2
         self.operator = operator
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the composite input."""
         arr1 = self.input1()
         arr2 = self.input2()
@@ -814,7 +814,7 @@ class ConstantValue(Input):
         super().__init__(duration)
         self.value = value
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate constant array."""
         return u.math.ones(self.n_steps, dtype=brainstate.environ.dftype()) * self.value
 
@@ -855,7 +855,7 @@ class Sequential(Input):
         super().__init__(duration)
         self.inputs = inputs
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the sequential input."""
         arrs = [inp() for inp in self.inputs]
         return u.math.concatenate(arrs)
@@ -908,7 +908,7 @@ class TimeShifted(Input):
         self.input_obj = input_obj
         self.time_shift = time_shift
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the shifted input."""
         arr = self.input_obj()
         shift_steps = int(self.time_shift / self.dt)
@@ -980,7 +980,7 @@ class Clipped(Input):
         self.min_val = min_val
         self.max_val = max_val
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the clipped input."""
         arr = self.input_obj()
         if self.min_val is not None:
@@ -1046,7 +1046,7 @@ class Smoothed(Input):
         self.input_obj = input_obj
         self.tau = tau
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the smoothed input."""
         arr, arr_unit = u.split_mantissa_unit(self.input_obj())
         alpha = self.dt / self.tau
@@ -1110,7 +1110,7 @@ class Repeated(Input):
         self.input_obj = input_obj
         self.n_times = n_times
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the repeated input."""
         arr = self.input_obj()
         return u.math.tile(arr, self.n_times)
@@ -1167,7 +1167,7 @@ class Transformed(Input):
         self.input_obj = input_obj
         self.func = func
 
-    def _generate(self) -> brainstate.typing.ArrayLike:
+    def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the transformed input."""
         arr = self.input_obj()
         return self.func(arr)
