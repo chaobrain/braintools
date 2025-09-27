@@ -9,18 +9,6 @@ across different types of neural models. The system provides specialized
 implementations for point neurons, population rate models, and multi-compartment
 models with a unified API.
 
-Unified Interface
------------------
-
-High-level function for creating connectivity patterns across all model types.
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   connect
-
 
 Base Classes and Results
 ------------------------
@@ -234,19 +222,4 @@ Distance profiles
    PowerLawProfile
    LinearProfile
    StepProfile
-
-
-Utility Functions
------------------
-
-Helper functions for working with connectivity patterns.
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   weight2csr
-   delay2csr
-   compute_csr
 

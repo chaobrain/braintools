@@ -287,8 +287,6 @@ from ._init_distance import *
 from ._init_distance import __all__ as distance_all
 from ._init_weight import *
 from ._init_weight import __all__ as weight_all
-from ._interface import *
-from ._interface import __all__ as interface_all
 
-__all__ = base_all + comp_all + init_all + weight_all + delay_all + distance_all + interface_all + kernel_all + point_all + pop_all
-del init_all, weight_all, delay_all, distance_all, base_all, comp_all, interface_all, kernel_all, point_all, pop_all
+__all__ = base_all + comp_all + init_all + weight_all + delay_all + distance_all + kernel_all + point_all + pop_all
+del init_all, weight_all, delay_all, distance_all, base_all, comp_all, kernel_all, point_all, pop_all
