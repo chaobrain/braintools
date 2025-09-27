@@ -107,13 +107,11 @@ class Transform(ABC):
     
     Examples
     --------
-    .. code-block:: python
-
-        class SquareTransform(Transform):
-            def forward(self, x):
-                return x**2
-            def inverse(self, y):
-                return jnp.sqrt(y)
+    >>> class SquareTransform(Transform):
+    ...     def forward(self, x):
+    ...         return x**2
+    ...     def inverse(self, y):
+    ...         return jnp.sqrt(y)
     """
     __module__ = 'braintools'
 
@@ -244,21 +242,17 @@ class SigmoidTransform(Transform):
     
     Examples
     --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Map to probability range [0, 1]
-        transform = SigmoidTransform(0.0, 1.0)
-        x = jnp.array([-2.0, 0.0, 2.0])
-        y = transform.forward(x)
-        # y ≈ [0.12, 0.5, 0.88]
-
-        # Map to correlation range [-1, 1]
-        transform = SigmoidTransform(-1.0, 1.0)
-        x = jnp.array([0.0])
-        y = transform.forward(x)
-        # y ≈ [0.0]
+    >>> # Map to probability range [0, 1]
+    >>> transform = SigmoidTransform(0.0, 1.0)
+    >>> x = jnp.array([-2.0, 0.0, 2.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [0.12, 0.5, 0.88]
+    
+    >>> # Map to correlation range [-1, 1] 
+    >>> transform = SigmoidTransform(-1.0, 1.0)
+    >>> x = jnp.array([0.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [0.0]
     """
     __module__ = 'braintools'
 
@@ -369,21 +363,17 @@ class SoftplusTransform(Transform):
     
     Examples
     --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Map to positive reals [0, ∞)
-        transform = SoftplusTransform(0.0)
-        x = jnp.array([-5.0, 0.0, 5.0])
-        y = transform.forward(x)
-        # y ≈ [0.007, 0.693, 5.007]
-
-        # Map to interval [2, ∞) for positive-definite parameters
-        transform = SoftplusTransform(2.0)
-        x = jnp.array([0.0])
-        y = transform.forward(x)
-        # y ≈ [2.693]
+    >>> # Map to positive reals [0, ∞)
+    >>> transform = SoftplusTransform(0.0)
+    >>> x = jnp.array([-5.0, 0.0, 5.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [0.007, 0.693, 5.007]
+    
+    >>> # Map to interval [2, ∞) for positive-definite parameters
+    >>> transform = SoftplusTransform(2.0)
+    >>> x = jnp.array([0.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [2.693]
     """
     __module__ = 'braintools'
 
@@ -488,21 +478,17 @@ class NegSoftplusTransform(SoftplusTransform):
     
     Examples
     --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Map to negative reals (-∞, 0]
-        transform = NegSoftplusTransform(0.0)
-        x = jnp.array([-5.0, 0.0, 5.0])
-        y = transform.forward(x)
-        # y ≈ [-5.007, -0.693, -0.007]
-
-        # Map to interval (-∞, -2] for negative-definite parameters
-        transform = NegSoftplusTransform(-2.0)
-        x = jnp.array([0.0])
-        y = transform.forward(x)
-        # y ≈ [-2.693]
+    >>> # Map to negative reals (-∞, 0]
+    >>> transform = NegSoftplusTransform(0.0)
+    >>> x = jnp.array([-5.0, 0.0, 5.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [-5.007, -0.693, -0.007]
+    
+    >>> # Map to interval (-∞, -2] for negative-definite parameters
+    >>> transform = NegSoftplusTransform(-2.0)
+    >>> x = jnp.array([0.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [-2.693]
     """
     __module__ = 'braintools'
 
@@ -706,22 +692,18 @@ class AffineTransform(Transform):
     
     Examples
     --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Standardization transform (z-score)
-        mu, sigma = 5.0, 2.0
-        transform = AffineTransform(1/sigma, -mu/sigma)
-        x = jnp.array([3.0, 5.0, 7.0])
-        z = transform.forward(x)
-        # z ≈ [-1.0, 0.0, 1.0]
-
-        # Temperature conversion: Celsius to Fahrenheit
-        transform = AffineTransform(9/5, 32)
-        celsius = jnp.array([0.0, 100.0])
-        fahrenheit = transform.forward(celsius)
-        # fahrenheit ≈ [32.0, 212.0]
+    >>> # Standardization transform (z-score)
+    >>> mu, sigma = 5.0, 2.0
+    >>> transform = AffineTransform(1/sigma, -mu/sigma)
+    >>> x = jnp.array([3.0, 5.0, 7.0])
+    >>> z = transform.forward(x)
+    >>> # z ≈ [-1.0, 0.0, 1.0]
+    
+    >>> # Temperature conversion: Celsius to Fahrenheit
+    >>> transform = AffineTransform(9/5, 32)
+    >>> celsius = jnp.array([0.0, 100.0])
+    >>> fahrenheit = transform.forward(celsius)
+    >>> # fahrenheit ≈ [32.0, 212.0]
     """
     __module__ = 'braintools'
 
@@ -821,17 +803,15 @@ class ChainTransform(Transform):
     
     Examples
     --------
-    .. code-block:: python
-
-        # Transform to (0, 1) then scale to (a, b)
-        sigmoid = SigmoidTransform(0, 1)
-        affine = AffineTransform(scale=b-a, shift=a)
-        chain = ChainTransform(sigmoid, affine)
-
-        # Standardize then apply softplus
-        standardize = AffineTransform(1/sigma, -mu/sigma)
-        softplus = SoftplusTransform(0)
-        chain = ChainTransform(standardize, softplus)
+    >>> # Transform to (0, 1) then scale to (a, b)
+    >>> sigmoid = SigmoidTransform(0, 1)
+    >>> affine = AffineTransform(scale=b-a, shift=a)
+    >>> chain = ChainTransform(sigmoid, affine)
+    
+    >>> # Standardize then apply softplus
+    >>> standardize = AffineTransform(1/sigma, -mu/sigma)
+    >>> softplus = SoftplusTransform(0)
+    >>> chain = ChainTransform(standardize, softplus)
     """
     __module__ = 'braintools'
 
@@ -952,23 +932,19 @@ class MaskedTransform(Transform):
     
     Examples
     --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Transform only positive indices to be positive
-        mask = jnp.array([False, True, False, True])
-        softplus = SoftplusTransform(0)
-        masked_transform = MaskedTransform(mask, softplus)
-        x = jnp.array([-1.0, -1.0, 2.0, 2.0])
-        y = masked_transform.forward(x)
-        # y ≈ [-1.0, 0.31, 2.0, 2.13] (only indices 1,3 transformed)
-
-        # Transform correlation parameters but not mean parameters
-        n_params = 5
-        corr_mask = jnp.arange(n_params) >= 3  # Last 2 are correlations
-        sigmoid = SigmoidTransform(-1, 1)
-        transform = MaskedTransform(corr_mask, sigmoid)
+    >>> # Transform only positive indices to be positive
+    >>> mask = jnp.array([False, True, False, True])
+    >>> softplus = SoftplusTransform(0)
+    >>> masked_transform = MaskedTransform(mask, softplus)
+    >>> x = jnp.array([-1.0, -1.0, 2.0, 2.0])
+    >>> y = masked_transform.forward(x)
+    >>> # y ≈ [-1.0, 0.31, 2.0, 2.13] (only indices 1,3 transformed)
+    
+    >>> # Transform correlation parameters but not mean parameters
+    >>> n_params = 5
+    >>> corr_mask = jnp.arange(n_params) >= 3  # Last 2 are correlations
+    >>> sigmoid = SigmoidTransform(-1, 1)
+    >>> transform = MaskedTransform(corr_mask, sigmoid)
     """
     __module__ = 'braintools'
 
@@ -1095,36 +1071,26 @@ class CustomTransform(Transform):
     
     Examples
     --------
-    .. code-block:: python
-
-        import jax.numpy as jnp
-
-        # Square transformation (for positive inputs only)
-        def square_forward(x):
-            return x ** 2
-
-        def square_inverse(y):
-            return jnp.sqrt(y)
-
-        square_transform = CustomTransform(square_forward, square_inverse)
-
-        # Log-normal transformation
-        def lognorm_forward(x):
-            return jnp.exp(x)
-
-        def lognorm_inverse(y):
-            return jnp.log(y)
-
-        lognorm = CustomTransform(lognorm_forward, lognorm_inverse)
-
-        # Box-Cox transformation (lambda=0.5)
-        def boxcox_forward(x):
-            return 2 * (jnp.sqrt(x + 1) - 1)
-
-        def boxcox_inverse(y):
-            return ((y / 2) + 1) ** 2 - 1
-
-        boxcox = CustomTransform(boxcox_forward, boxcox_inverse)
+    >>> # Square transformation (for positive inputs only)
+    >>> def square_forward(x):
+    ...     return x ** 2
+    >>> def square_inverse(y):
+    ...     return jnp.sqrt(y)
+    >>> square_transform = CustomTransform(square_forward, square_inverse)
+    
+    >>> # Log-normal transformation
+    >>> def lognorm_forward(x):
+    ...     return jnp.exp(x)
+    >>> def lognorm_inverse(y):
+    ...     return jnp.log(y)
+    >>> lognorm = CustomTransform(lognorm_forward, lognorm_inverse)
+    
+    >>> # Box-Cox transformation (lambda=0.5)
+    >>> def boxcox_forward(x):
+    ...     return 2 * (jnp.sqrt(x + 1) - 1)
+    >>> def boxcox_inverse(y):
+    ...     return ((y / 2) + 1) ** 2 - 1
+    >>> boxcox = CustomTransform(boxcox_forward, boxcox_inverse)
     """
     __module__ = 'braintools'
 
