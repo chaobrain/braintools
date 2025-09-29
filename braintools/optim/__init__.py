@@ -16,8 +16,8 @@
 
 from ._base import *
 from ._base import __all__ as base_all
-from ._lr_scheduler import *
-from ._lr_scheduler import __all__ as lr_scheduler_all
+from ._optax_lr_scheduler import *
+from ._optax_lr_scheduler import __all__ as lr_scheduler_all
 from ._nevergrad_optimizer import *
 from ._nevergrad_optimizer import __all__ as ng_optim_all
 from ._optax_optimizer import *
