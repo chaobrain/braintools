@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from typing import Hashable, Dict, Optional, Union, Callable, Any, List, Tuple
 
-import jax.numpy as jnp
 import optax
 from brainstate import LongTermState, State, StateDictManager
 from brainstate.typing import PyTree
@@ -202,7 +201,9 @@ class OptaxOptimizer(Optimizer):
 
         for k, v in params.items():
             if not isinstance(v, State):
-                raise TypeError(f"All params values must be brainstate.State, got {type(v)} for key {k}")
+                raise TypeError(
+                    f"All params values must be brainstate.State, got {type(v)} for key {k}"
+                )
 
         group = {
             'params': params,
@@ -227,7 +228,9 @@ class OptaxOptimizer(Optimizer):
         # Validate that all values are State objects
         for k, v in param_states.items():
             if not isinstance(v, State):
-                raise TypeError(f"All param_states values must be brainstate.State, got {type(v)} for key {k}")
+                raise TypeError(
+                    f"All param_states values must be brainstate.State, got {type(v)} for key {k}"
+                )
 
         # Update the param_states pytree (StateDictManager handles State objects)
         self.param_states.update(param_states)
@@ -396,8 +399,13 @@ class SGD(OptaxOptimizer):
 
         tx = optax.chain(*transforms) if transforms else optax.sgd(lr)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.momentum = momentum
         self.nesterov = nesterov
 
@@ -435,8 +443,13 @@ class Adam(OptaxOptimizer):
 
         tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
         self.amsgrad = amsgrad
@@ -465,8 +478,13 @@ class AdamW(OptaxOptimizer):
             transforms.append(tx)
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
 
@@ -501,8 +519,13 @@ class Adagrad(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.lr_decay = lr_decay
         self.initial_accumulator_value = initial_accumulator_value
         self.eps = eps
@@ -537,8 +560,13 @@ class Adadelta(OptaxOptimizer):
 
         tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.rho = rho
         self.eps = eps
 
@@ -576,8 +604,13 @@ class RMSprop(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.alpha = alpha
         self.eps = eps
         self.momentum = momentum
@@ -609,8 +642,13 @@ class Adamax(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
 
@@ -647,8 +685,13 @@ class Nadam(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
         self.momentum_decay = momentum_decay
@@ -679,8 +722,13 @@ class RAdam(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
 
@@ -708,8 +756,13 @@ class Lamb(OptaxOptimizer):
             transforms.append(tx)
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
 
@@ -743,8 +796,13 @@ class Lars(OptaxOptimizer):
             transforms.append(tx)
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.momentum = momentum
         self.trust_coefficient = trust_coefficient
         self.eps = eps
@@ -776,8 +834,13 @@ class Lookahead(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.k = k
         self.alpha = alpha
 
@@ -807,8 +870,13 @@ class Yogi(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
 
@@ -873,8 +941,12 @@ class Rprop(OptaxOptimizer):
             transforms.append(tx)
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.etas = etas
         self.step_sizes = step_sizes
 
@@ -913,8 +985,13 @@ class Adafactor(OptaxOptimizer):
             transforms.append(tx)
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr or 1e-3, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr or 1e-3,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.eps = eps
         self.clip_threshold = clip_threshold
         self.decay_rate = decay_rate
@@ -947,8 +1024,13 @@ class AdaBelief(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
 
@@ -975,8 +1057,13 @@ class Lion(OptaxOptimizer):
             transforms.append(tx)
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
 
 
@@ -1005,8 +1092,13 @@ class SM3(OptaxOptimizer):
                 transforms.append(optax.add_decayed_weights(weight_decay))
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.momentum = momentum
         self.eps = eps
 
@@ -1034,8 +1126,13 @@ class Novograd(OptaxOptimizer):
             transforms.append(tx)
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.betas = betas
         self.eps = eps
 
@@ -1061,6 +1158,10 @@ class Fromage(OptaxOptimizer):
             transforms.append(tx)
             tx = optax.chain(*transforms)
 
-        super().__init__(tx=tx, lr=lr,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        super().__init__(
+            tx=tx,
+            lr=lr,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
         self.momentum = momentum
