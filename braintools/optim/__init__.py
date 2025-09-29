@@ -16,14 +16,16 @@
 
 from ._base import *
 from ._base import __all__ as base_all
-from ._optax_lr_scheduler import *
-from ._optax_lr_scheduler import __all__ as lr_scheduler_all
 from ._nevergrad_optimizer import *
 from ._nevergrad_optimizer import __all__ as ng_optim_all
+from ._optax_lr_scheduler import *
+from ._optax_lr_scheduler import __all__ as lr_scheduler_all
 from ._optax_optimizer import *
 from ._optax_optimizer import __all__ as optax_all
 from ._scipy_optimizer import *
 from ._scipy_optimizer import __all__ as scipy_optimizer_all
+from ._state_uniquifier import *
+from ._state_uniquifier import __all__ as state_uniquifier_all
 
-__all__ = ng_optim_all + base_all + scipy_optimizer_all + optax_all + lr_scheduler_all
-del base_all, ng_optim_all, scipy_optimizer_all, optax_all, lr_scheduler_all
+__all__ = ng_optim_all + base_all + scipy_optimizer_all + optax_all + lr_scheduler_all + state_uniquifier_all
+del base_all, ng_optim_all, scipy_optimizer_all, optax_all, lr_scheduler_all, state_uniquifier_all

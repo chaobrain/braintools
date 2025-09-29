@@ -16,7 +16,7 @@
 
 from typing import Dict, Hashable
 
-from brainstate._state import State, StateDictManager
+from brainstate import State
 from brainstate.graph import Node
 from brainstate.typing import PyTree
 
@@ -28,18 +28,7 @@ __all__ = [
 class Optimizer(Node):
     """
     Base Optimizer Class.
-
-    Attributes:
-    -----------
-    param_states: StateDictManager
-        The state dict manager for trainable weights.
-
     """
-
-    param_states: StateDictManager
-
-    def __init__(self):
-        self.param_states = StateDictManager()
 
     def register_trainable_weights(self, param_states: Dict[Hashable, State]):
         """

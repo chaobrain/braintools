@@ -23,11 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from brainstate._compatible_import import safe_zip, unzip2
-
-try:
-    from scipy.optimize import minimize
-except (ImportError, ModuleNotFoundError):
-    minimize = None
+from scipy.optimize import minimize
 
 __all__ = [
     'ScipyOptimizer',
@@ -374,9 +370,6 @@ class ScipyOptimizer:
         callback=None,
         options=None,
     ):
-        if minimize is None:
-            raise ImportError("Scipy is not installed. Please install it using 'pip install scipy'.")
-
         if bounds is None:
             raise ValueError("'bounds' must be provided as a dict or a sequence of (min, max) pairs.")
 

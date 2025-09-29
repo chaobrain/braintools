@@ -15,13 +15,15 @@
 
 from __future__ import annotations
 
-from typing import Hashable, Dict, Optional, Union, Callable, Any, List, Tuple
+from typing import Dict, Optional, Union, Callable, Any, List, Tuple
 
+import jax.tree
 import optax
-from brainstate import LongTermState, State, StateDictManager
+from brainstate import LongTermState, State
 from brainstate.typing import PyTree
 
 from ._base import Optimizer
+from ._state_uniquifier import UniqueStateManager
 
 MaskOrFn = Optional[Union[Any, Callable]]
 
@@ -100,12 +102,13 @@ class OptaxOptimizer(Optimizer):
       param_groups: List of parameter groups with their own hyperparameters.
     """
 
-    param_states: StateDictManager  # Container for PyTree of brainstate.State objects
+    param_states: UniqueStateManager  # Container for PyTree of brainstate.State objects
     opt_state: Optional[LongTermState]
     step_count: LongTermState
     _base_lr: float
     _current_lr: float
     param_groups: List[Dict[str, Any]]
+    param_groups_opt_states: List[LongTermState]
     _schedulers: List['LRScheduler']
 
     def __init__(
@@ -131,6 +134,7 @@ class OptaxOptimizer(Optimizer):
         # param_states is already initialized in parent class as StateDictManager
         # which will hold our pytree of State objects
 
+        self.param_states = UniqueStateManager()
         self._base_lr = lr
         self._current_lr = lr
         self.weight_decay = weight_decay
@@ -138,6 +142,7 @@ class OptaxOptimizer(Optimizer):
         self.grad_clip_value = grad_clip_value
         self.step_count = LongTermState(0)
         self.param_groups = []
+        self.param_groups_opt_states = []  # Changed to list
         self._schedulers = []
 
         if tx is not None:
@@ -188,63 +193,78 @@ class OptaxOptimizer(Optimizer):
                     self.tx.updates[i] = optax.scale(-self._current_lr)
                     break
 
-    def add_param_group(self, params: Dict[Hashable, State], **kwargs):
-        """Add a parameter group with specific hyperparameters.
+    def _get_leaf_value(self, v):
+        if not isinstance(v, State):
+            raise TypeError(
+                f"All params values must be brainstate.State, got {type(v)}"
+            )
+        return v.value
+
+    def add_param_group(self, params: PyTree[State], **kwargs):
+        """
+        Add a parameter group with specific hyperparameters.
 
         Args:
             params: A pytree (dict) of brainstate.State objects.
             **kwargs: Additional hyperparameters for this group.
         """
         # Validate that params is a dict of State objects
-        if not isinstance(params, dict):
-            raise TypeError(f"params must be a dict, got {type(params)}")
+        jax.tree.map(self._get_leaf_value, params, is_leaf=lambda x: isinstance(x, State))
 
-        for k, v in params.items():
-            if not isinstance(v, State):
-                raise TypeError(
-                    f"All params values must be brainstate.State, got {type(v)} for key {k}"
-                )
+        # Create UniqueStateManager for this group
+        manager = UniqueStateManager()
+        manager.merge_with(params)
+        param_values = manager.to_dict_value()
 
         group = {
-            'params': params,
+            'params': manager.to_dict(),
             'lr': kwargs.get('lr', self._base_lr),
             'weight_decay': kwargs.get('weight_decay', self.weight_decay),
         }
         group.update(kwargs)
         self.param_groups.append(group)
 
-    def register_trainable_weights(
-        self,
-        param_states: Dict[Hashable, State]
-    ):
+        # Initialize optimizer state for this param group if needed
+        group_lr = group['lr']
+        group_weight_decay = group['weight_decay']
+
+        # Create group-specific transformation
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_adam())  # Use default Adam scaling
+        if group_weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(group_weight_decay))
+        transforms.append(optax.scale(-group_lr))
+        group_tx = optax.chain(*transforms)
+
+        # Initialize and store the optimizer state for this group
+        group_opt_state = LongTermState(group_tx.init(param_values))
+        self.param_groups_opt_states.append(group_opt_state)
+
+    def register_trainable_weights(self, param_states: PyTree[State]):
         """Register trainable weights and initialize optimizer state.
 
         Args:
             param_states: A pytree (dict) of brainstate.State objects representing parameters.
         """
-        if not isinstance(param_states, dict):
-            raise TypeError(f"param_states must be a dict, got {type(param_states)}")
-
-        # Validate that all values are State objects
-        for k, v in param_states.items():
-            if not isinstance(v, State):
-                raise TypeError(
-                    f"All param_states values must be brainstate.State, got {type(v)} for key {k}"
-                )
+        jax.tree.map(self._get_leaf_value, param_states, is_leaf=lambda x: isinstance(x, State))
 
         # Update the param_states pytree (StateDictManager handles State objects)
-        self.param_states.update(param_states)
-        self.param_states.unique_()
+        self.param_states.merge_with(param_states)
 
         # Initialize optimizer state using values from State objects
-        param_values = {k: v.value for k, v in self.param_states.items()}
+        param_values = self.param_states.to_pytree_value()
         self.opt_state = LongTermState(self.tx.init(param_values))
 
-        # Create default parameter group if none exist
+        # Create a default param group with all registered parameters
+        # This maintains compatibility with PyTorch-like behavior
         if not self.param_groups:
             self.param_groups = [
                 {
-                    'params': list(self.param_states.keys()),
+                    'params': self.param_states.to_pytree(),
                     'lr': self._base_lr,
                     'weight_decay': self.weight_decay,
                 }
@@ -252,11 +272,11 @@ class OptaxOptimizer(Optimizer):
 
         return self
 
-    def update(self, grads: Dict[Hashable, PyTree]):
+    def update(self, grads: PyTree):
         """Update the model states with gradients (backward compatibility)."""
         return self.step(grads)
 
-    def step(self, grads: Optional[Dict[Hashable, PyTree]] = None, closure: Optional[Callable] = None):
+    def step(self, grads: Optional[Dict[str, Any]] = None, closure: Optional[Callable] = None):
         """
         Perform a single optimization step.
 
@@ -281,27 +301,74 @@ class OptaxOptimizer(Optimizer):
             # This would require additional implementation
             raise NotImplementedError("Automatic gradient computation from closure not yet implemented.")
 
-        # Filter gradients for registered parameters and extract State values
-        filtered_grads = {}
-        param_values = {}
-        for k in self.param_states.keys():
-            if k in grads:
-                filtered_grads[k] = grads[k]
-            # Extract the value from the State object
-            param_values[k] = self.param_states[k].value
+        # Only use param_groups logic if multiple groups have been configured
+        # (more than just the single default group)
+        if self.param_groups and len(self.param_groups) > 1:
+            # Process each parameter group separately with its own hyperparameters
+            all_updates = {}
 
-        # Apply gradient transformations
-        updates, new_opt_state = self.tx.update(filtered_grads, self.opt_state.value, param_values)
-        new_params = optax.apply_updates(param_values, updates)
+            for group_idx, group in enumerate(self.param_groups):
+                group_params = group['params']
+                assert isinstance(group_params, dict)
+                group_lr = group.get('lr', self._current_lr)
+                group_weight_decay = group.get('weight_decay', self.weight_decay)
 
-        # Update parameters in the State objects
-        for k in self.param_states.keys():
-            if k in new_params:
-                # Update the value in the State object
-                self.param_states[k].value = new_params[k]
+                # Extract gradients and values for this group
+                group_grads = {grads[k] for k in group_params.keys()}
+                group_param_values = {k: v.value for k, v in group_params.items()}
 
-        # Update optimizer state
-        self.opt_state.value = new_opt_state
+                # Create a custom transformation for this group
+                transforms = []
+                if self.grad_clip_norm is not None:
+                    transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+                if self.grad_clip_value is not None:
+                    transforms.append(optax.clip(self.grad_clip_value))
+                transforms.append(optax.scale_by_adam())  # Use default Adam scaling
+                if group_weight_decay > 0:
+                    transforms.append(optax.add_decayed_weights(group_weight_decay))
+                transforms.append(optax.scale(-group_lr))
+                group_tx = optax.chain(*transforms)
+
+                # Use pre-initialized group optimizer state
+                if group_idx < len(self.param_groups_opt_states):
+                    # Apply group-specific transformation
+                    updates, new_group_opt_state = group_tx.update(
+                        group_grads,
+                        self.param_groups_opt_states[group_idx].value,
+                        group_param_values
+                    )
+                    self.param_groups_opt_states[group_idx].value = new_group_opt_state
+                else:
+                    raise ValueError(
+                        f'Optimizer state for parameter group index '
+                        f'{group_idx} not initialized.'
+                    )
+
+            # Apply all updates to parameters
+            params = self.param_states.to_dict()
+            param_values = self.param_states.to_dict_value()
+            new_params = optax.apply_updates(param_values, all_updates)
+
+            # Update parameters in the State objects
+            for k in params.keys():
+                if k in new_params:
+                    params[k].value = new_params[k]
+        else:
+            # Original implementation for backward compatibility
+            param_states = self.param_states.to_dict()
+            param_values = self.param_states.to_dict_value()
+            filtered_grads = {grads[k] for k in param_values.keys() if k in grads}
+
+            # Apply gradient transformations
+            updates, new_opt_state = self.tx.update(filtered_grads, self.opt_state.value, param_values)
+            new_params = optax.apply_updates(param_values, updates)
+
+            # Update parameters in the State objects
+            for k in param_values.keys():
+                param_states[k].value = new_params[k]
+
+            # Update optimizer state
+            self.opt_state.value = new_opt_state
 
         # Increment step counter
         self.step_count.value += 1
@@ -325,6 +392,10 @@ class OptaxOptimizer(Optimizer):
         if self.opt_state is not None:
             state_dict['opt_state'] = self.opt_state.value
 
+        # Save param group optimizer states
+        if self.param_groups_opt_states:
+            state_dict['param_groups_opt_states'] = [s.value for s in self.param_groups_opt_states]
+
         return state_dict
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
@@ -344,6 +415,10 @@ class OptaxOptimizer(Optimizer):
                 self.opt_state = LongTermState(state_dict['opt_state'])
             else:
                 self.opt_state.value = state_dict['opt_state']
+
+        # Load param group optimizer states
+        if 'param_groups_opt_states' in state_dict:
+            self.param_groups_opt_states = [LongTermState(s) for s in state_dict['param_groups_opt_states']]
 
     def zero_grad(self):
         """Zero out gradients (placeholder for PyTorch compatibility).

@@ -86,6 +86,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 
         self.assertIsNotNone(optimizer.opt_state)
         self.assertEqual(len(optimizer.param_states), len(param_states))
+        # A default param_group should be created
         self.assertEqual(len(optimizer.param_groups), 1)
 
     def test_step_updates_parameters(self):
