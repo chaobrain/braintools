@@ -22,6 +22,7 @@ import optax
 from brainstate import LongTermState, State
 from brainstate.typing import PyTree
 
+from braintools.file._msg_checkpoint import msgpack_from_state_dict
 from ._base import Optimizer
 from ._state_uniquifier import UniqueStateManager
 
@@ -106,7 +107,7 @@ class OptaxOptimizer(Optimizer):
     opt_state: Optional[LongTermState]
     step_count: LongTermState
     _base_lr: float
-    _current_lr: float
+    _current_lr: LongTermState
     param_groups: List[Dict[str, Any]]
     param_groups_opt_states: List[LongTermState]
     _schedulers: List['LRScheduler']
@@ -136,7 +137,7 @@ class OptaxOptimizer(Optimizer):
 
         self.param_states = UniqueStateManager()
         self._base_lr = lr
-        self._current_lr = lr
+        self._current_lr = LongTermState(lr)
         self.weight_decay = weight_decay
         self.grad_clip_norm = grad_clip_norm
         self.grad_clip_value = grad_clip_value
@@ -169,29 +170,23 @@ class OptaxOptimizer(Optimizer):
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
 
-        transforms.append(optax.scale(-self._current_lr))
+        # Use a schedule function that reads from the State
+        def lr_schedule(count):
+            return -self._current_lr.value
+
+        transforms.append(optax.scale_by_schedule(lr_schedule))
 
         return optax.chain(*transforms)
 
     @property
     def lr(self):
         """Get current learning rate."""
-        return self._current_lr
+        return self._current_lr.value
 
     @lr.setter
     def lr(self, value: float):
         """Set learning rate (will be used by schedulers)."""
-        self._current_lr = value
-        self._update_lr_in_tx()
-
-    def _update_lr_in_tx(self):
-        """Update learning rate in the transformation chain."""
-        if hasattr(self, 'tx') and hasattr(self.tx, 'updates'):
-            # For chained transformations, update the scale
-            for i, update in enumerate(self.tx.updates):
-                if isinstance(update, optax.ScaleState):
-                    self.tx.updates[i] = optax.scale(-self._current_lr)
-                    break
+        self._current_lr.value = value
 
     def _get_leaf_value(self, v):
         if not isinstance(v, State):
@@ -215,17 +210,17 @@ class OptaxOptimizer(Optimizer):
         manager = UniqueStateManager()
         manager.merge_with(params)
         param_values = manager.to_dict_value()
+        group_lr_state = LongTermState(kwargs.get('lr', self._base_lr))
 
         group = {
             'params': manager.to_dict(),
-            'lr': kwargs.get('lr', self._base_lr),
+            'lr': group_lr_state,
             'weight_decay': kwargs.get('weight_decay', self.weight_decay),
         }
         group.update(kwargs)
         self.param_groups.append(group)
 
         # Initialize optimizer state for this param group if needed
-        group_lr = group['lr']
         group_weight_decay = group['weight_decay']
 
         # Create group-specific transformation
@@ -237,8 +232,16 @@ class OptaxOptimizer(Optimizer):
         transforms.append(optax.scale_by_adam())  # Use default Adam scaling
         if group_weight_decay > 0:
             transforms.append(optax.add_decayed_weights(group_weight_decay))
-        transforms.append(optax.scale(-group_lr))
+
+        # Use a schedule function that reads from the group's LR State
+        def group_lr_schedule(count):
+            return -group_lr_state.value
+
+        transforms.append(optax.scale_by_schedule(group_lr_schedule))
         group_tx = optax.chain(*transforms)
+
+        # Store the transformation for this group
+        group['tx'] = group_tx
 
         # Initialize and store the optimizer state for this group
         group_opt_state = LongTermState(group_tx.init(param_values))
@@ -272,7 +275,7 @@ class OptaxOptimizer(Optimizer):
 
         return self
 
-    def update(self, grads: PyTree):
+    def update(self, grads: Dict[str, Any]):
         """Update the model states with gradients (backward compatibility)."""
         return self.step(grads)
 
@@ -304,49 +307,98 @@ class OptaxOptimizer(Optimizer):
         # Only use param_groups logic if multiple groups have been configured
         # (more than just the single default group)
         if self.param_groups and len(self.param_groups) > 1:
+
             # Process each parameter group separately with its own hyperparameters
             all_updates = {}
+            processed_params = set()
 
-            for group_idx, group in enumerate(self.param_groups):
+            # First, handle the default group (index 0) which uses the main optimizer state
+            if self.param_groups:
+                default_group = self.param_groups[0]
+                default_params = default_group['params']
+                assert isinstance(default_params, dict)
+
+                # Extract gradients and values for default group
+                default_grads = {k: grads[k] for k in default_params.keys() if k in grads}
+                default_param_values = {k: v.value for k, v in default_params.items()}
+
+                if default_grads:
+                    # Use the main optimizer state for the default group
+                    updates, new_opt_state = self.tx.update(default_grads, self.opt_state.value, default_param_values)
+                    self.opt_state.value = new_opt_state
+                    all_updates.update(updates)
+                    processed_params.update(default_params.keys())
+
+            # Then handle additional parameter groups with custom hyperparameters
+            for group_idx in range(1, len(self.param_groups)):
+                group = self.param_groups[group_idx]
                 group_params = group['params']
                 assert isinstance(group_params, dict)
-                group_lr = group.get('lr', self._current_lr)
-                group_weight_decay = group.get('weight_decay', self.weight_decay)
 
-                # Extract gradients and values for this group
-                group_grads = {grads[k] for k in group_params.keys()}
+                # Extract gradients and values for this group (fix: create dict not set)
+                group_grads = {k: grads[k] for k in group_params.keys() if k in grads}
                 group_param_values = {k: v.value for k, v in group_params.items()}
 
-                # Create a custom transformation for this group
-                transforms = []
-                if self.grad_clip_norm is not None:
-                    transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
-                if self.grad_clip_value is not None:
-                    transforms.append(optax.clip(self.grad_clip_value))
-                transforms.append(optax.scale_by_adam())  # Use default Adam scaling
-                if group_weight_decay > 0:
-                    transforms.append(optax.add_decayed_weights(group_weight_decay))
-                transforms.append(optax.scale(-group_lr))
-                group_tx = optax.chain(*transforms)
+                # Skip this group if no gradients are provided for its parameters
+                if not group_grads:
+                    continue
 
-                # Use pre-initialized group optimizer state
-                if group_idx < len(self.param_groups_opt_states):
+                # Use the pre-stored transformation for this group
+                if 'tx' in group:
+                    group_tx = group['tx']
+                else:
+                    # Fallback: create transformation if not stored (for backward compatibility)
+                    group_lr = group.get('lr', self._current_lr.value)
+                    group_weight_decay = group.get('weight_decay', self.weight_decay)
+
+                    transforms = []
+                    if self.grad_clip_norm is not None:
+                        transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+                    if self.grad_clip_value is not None:
+                        transforms.append(optax.clip(self.grad_clip_value))
+                    transforms.append(optax.scale_by_adam())
+                    if group_weight_decay > 0:
+                        transforms.append(optax.add_decayed_weights(group_weight_decay))
+                    transforms.append(optax.scale(-group_lr))
+                    group_tx = optax.chain(*transforms)
+
+                # Use pre-initialized group optimizer state (group_idx - 1 because we skip default group)
+                opt_state_idx = group_idx - 1
+                if opt_state_idx < len(self.param_groups_opt_states):
                     # Apply group-specific transformation
                     updates, new_group_opt_state = group_tx.update(
                         group_grads,
-                        self.param_groups_opt_states[group_idx].value,
+                        self.param_groups_opt_states[opt_state_idx].value,
                         group_param_values
                     )
-                    self.param_groups_opt_states[group_idx].value = new_group_opt_state
+                    self.param_groups_opt_states[opt_state_idx].value = new_group_opt_state
+
+                    # Accumulate updates
+                    all_updates.update(updates)
+                    processed_params.update(group_params.keys())
                 else:
                     raise ValueError(
                         f'Optimizer state for parameter group index '
                         f'{group_idx} not initialized.'
                     )
 
-            # Apply all updates to parameters
+            # Handle any remaining parameters not in any param_group
             params = self.param_states.to_dict()
             param_values = self.param_states.to_dict_value()
+            unprocessed_params = set(params.keys()) - processed_params
+
+            if unprocessed_params:
+                # Get gradients for unprocessed parameters
+                unprocessed_grads = {k: grads[k] for k in unprocessed_params if k in grads}
+                unprocessed_values = {k: param_values[k] for k in unprocessed_params}
+
+                if unprocessed_grads:
+                    # Use main optimizer for unprocessed parameters
+                    updates, new_opt_state = self.tx.update(unprocessed_grads, self.opt_state.value, unprocessed_values)
+                    self.opt_state.value = new_opt_state
+                    all_updates.update(updates)
+
+            # Apply all accumulated updates to parameters
             new_params = optax.apply_updates(param_values, all_updates)
 
             # Update parameters in the State objects
@@ -357,7 +409,8 @@ class OptaxOptimizer(Optimizer):
             # Original implementation for backward compatibility
             param_states = self.param_states.to_dict()
             param_values = self.param_states.to_dict_value()
-            filtered_grads = {grads[k] for k in param_values.keys() if k in grads}
+            # Fix: create dict not set
+            filtered_grads = {k: grads[k] for k in param_values.keys() if k in grads}
 
             # Apply gradient transformations
             updates, new_opt_state = self.tx.update(filtered_grads, self.opt_state.value, param_values)
@@ -365,7 +418,8 @@ class OptaxOptimizer(Optimizer):
 
             # Update parameters in the State objects
             for k in param_values.keys():
-                param_states[k].value = new_params[k]
+                if k in new_params:
+                    param_states[k].value = new_params[k]
 
             # Update optimizer state
             self.opt_state.value = new_opt_state
@@ -382,20 +436,20 @@ class OptaxOptimizer(Optimizer):
         Returns:
           Dictionary containing optimizer state, step count, and hyperparameters.
         """
+        # Prepare param_groups for serialization
+        serializable_groups = []
+        for group in self.param_groups:
+            group_dict = {k: v for k, v in group.items() if k not in ('tx',)}
+            serializable_groups.append(group_dict)
+
         state_dict = {
             'step_count': self.step_count.value,
-            'lr': self._current_lr,
+            'lr': self.lr,
             'base_lr': self._base_lr,
-            'param_groups': self.param_groups,
+            'param_groups': serializable_groups,
+            'param_groups_opt_states': [s.value for s in self.param_groups_opt_states],
+            'opt_state': self.opt_state.value
         }
-
-        if self.opt_state is not None:
-            state_dict['opt_state'] = self.opt_state.value
-
-        # Save param group optimizer states
-        if self.param_groups_opt_states:
-            state_dict['param_groups_opt_states'] = [s.value for s in self.param_groups_opt_states]
-
         return state_dict
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
@@ -406,9 +460,14 @@ class OptaxOptimizer(Optimizer):
           state_dict: Dictionary containing optimizer state.
         """
         self.step_count.value = state_dict['step_count']
-        self._current_lr = state_dict['lr']
+        self.lr = state_dict['lr']
         self._base_lr = state_dict['base_lr']
-        self.param_groups = state_dict['param_groups']
+
+        # Load param_groups and restore lr_state for groups that have it
+        self.param_groups = msgpack_from_state_dict(
+            self.param_groups,
+            state_dict['param_groups']
+        )
 
         if 'opt_state' in state_dict:
             if self.opt_state is None:
@@ -418,15 +477,11 @@ class OptaxOptimizer(Optimizer):
 
         # Load param group optimizer states
         if 'param_groups_opt_states' in state_dict:
-            self.param_groups_opt_states = [LongTermState(s) for s in state_dict['param_groups_opt_states']]
-
-    def zero_grad(self):
-        """Zero out gradients (placeholder for PyTorch compatibility).
-
-        Note: In JAX, gradients are computed functionally and don't need to be zeroed.
-        This method exists for API compatibility with PyTorch.
-        """
-        pass
+            for i, s in enumerate(state_dict['param_groups_opt_states']):
+                if i < len(self.param_groups_opt_states):
+                    self.param_groups_opt_states[i].value = s
+                else:
+                    self.param_groups_opt_states.append(LongTermState(s))
 
     def add_scheduler(self, scheduler: 'LRScheduler'):
         """Add a learning rate scheduler."""
@@ -436,7 +491,7 @@ class OptaxOptimizer(Optimizer):
         """Get last computed learning rates from schedulers."""
         if self._schedulers:
             return self._schedulers[-1].get_last_lr()
-        return [self._current_lr]
+        return [self.lr]
 
 
 # Optimizer implementations
