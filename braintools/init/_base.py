@@ -110,55 +110,55 @@ class Initialization(ABC):
 
     def __add__(self, other):
         """Add two initializations or add a scalar/quantity."""
-        return _AddInit(self, other)
+        return AddInit(self, other)
 
     def __radd__(self, other):
         """Right addition."""
-        return _AddInit(other, self)
+        return AddInit(other, self)
 
     def __sub__(self, other):
         """Subtract two initializations or subtract a scalar/quantity."""
-        return _SubInit(self, other)
+        return SubInit(self, other)
 
     def __rsub__(self, other):
         """Right subtraction."""
-        return _SubInit(other, self)
+        return SubInit(other, self)
 
     def __mul__(self, other):
         """Multiply two initializations or multiply by a scalar."""
-        return _MulInit(self, other)
+        return MulInit(self, other)
 
     def __rmul__(self, other):
         """Right multiplication."""
-        return _MulInit(other, self)
+        return MulInit(other, self)
 
     def __truediv__(self, other):
         """Divide two initializations or divide by a scalar."""
-        return _DivInit(self, other)
+        return DivInit(self, other)
 
     def __rtruediv__(self, other):
         """Right division."""
-        return _DivInit(other, self)
+        return DivInit(other, self)
 
     def __or__(self, other):
         """Pipe operator for functional composition."""
-        return _PipeInit(self, other)
+        return PipeInit(self, other)
 
     def clip(self, min_val=None, max_val=None):
         """Clip values to a specified range."""
-        return _ClipInit(self, min_val, max_val)
+        return ClipInit(self, min_val, max_val)
 
     def add(self, value):
         """Add a constant value."""
-        return _AddInit(self, value)
+        return AddInit(self, value)
 
     def multiply(self, value):
         """Multiply by a constant value."""
-        return _MulInit(self, value)
+        return MulInit(self, value)
 
     def apply(self, func):
         """Apply an arbitrary function to the output."""
-        return _ApplyInit(self, func)
+        return ApplyInit(self, func)
 
 
 # =============================================================================
@@ -237,7 +237,7 @@ def init_call(init: Optional[Initialization], rng: np.random.Generator, n: int, 
 # Composition Classes (Internal)
 # =============================================================================
 
-class _BinaryOpInit(Initialization):
+class BinaryOpInit(Initialization):
     """Base class for binary operations on initializations."""
 
     def __init__(self, left, right):
@@ -256,7 +256,7 @@ class _BinaryOpInit(Initialization):
             raise TypeError(f"Operand must be Initialization, scalar, or array. Got {type(obj)}")
 
 
-class _AddInit(_BinaryOpInit):
+class AddInit(BinaryOpInit):
     """Addition of two initializations."""
 
     def __call__(self, rng, size, **kwargs):
@@ -268,7 +268,7 @@ class _AddInit(_BinaryOpInit):
         return f"({self.left} + {self.right})"
 
 
-class _SubInit(_BinaryOpInit):
+class SubInit(BinaryOpInit):
     """Subtraction of two initializations."""
 
     def __call__(self, rng, size, **kwargs):
@@ -280,7 +280,7 @@ class _SubInit(_BinaryOpInit):
         return f"({self.left} - {self.right})"
 
 
-class _MulInit(_BinaryOpInit):
+class MulInit(BinaryOpInit):
     """Multiplication of two initializations."""
 
     def __call__(self, rng, size, **kwargs):
@@ -292,7 +292,7 @@ class _MulInit(_BinaryOpInit):
         return f"({self.left} * {self.right})"
 
 
-class _DivInit(_BinaryOpInit):
+class DivInit(BinaryOpInit):
     """Division of two initializations."""
 
     def __call__(self, rng, size, **kwargs):
@@ -304,7 +304,7 @@ class _DivInit(_BinaryOpInit):
         return f"({self.left} / {self.right})"
 
 
-class _ClipInit(Initialization):
+class ClipInit(Initialization):
     """Clip values to a range."""
 
     def __init__(self, base, min_val, max_val):
@@ -335,7 +335,7 @@ class _ClipInit(Initialization):
         return f"{self.base}.clip({self.min_val}, {self.max_val})"
 
 
-class _ApplyInit(Initialization):
+class ApplyInit(Initialization):
     """Apply arbitrary function to initialization output."""
 
     def __init__(self, base, func):
@@ -350,7 +350,7 @@ class _ApplyInit(Initialization):
         return f"{self.base}.apply({self.func})"
 
 
-class _PipeInit(Initialization):
+class PipeInit(Initialization):
     """Pipe/compose two initializations or functions."""
 
     def __init__(self, base, func):

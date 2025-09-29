@@ -25,7 +25,7 @@ from typing import Optional, Union, Callable
 import brainunit as u
 import numpy as np
 
-from ._init_base import Initialization
+from ._base import Initialization
 
 __all__ = [
     'WeightInit',

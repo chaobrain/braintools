@@ -30,7 +30,7 @@ import unittest
 import brainunit as u
 import numpy as np
 
-from braintools.conn._conn_compartment import (
+from braintools.conn._compartment import (
     # Constants
     SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON, COMPARTMENT_NAMES,
 

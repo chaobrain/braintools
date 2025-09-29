@@ -29,7 +29,7 @@ import unittest
 import brainunit as u
 import numpy as np
 
-from braintools.conn._conn_point import (
+from braintools.conn._point import (
     Random,
     AllToAll,
     OneToOne,

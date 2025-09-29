@@ -17,6 +17,7 @@
 __version__ = "0.0.13"
 __version_info__ = (0, 0, 13)
 
+from . import init
 from . import conn
 from . import file
 from . import input
@@ -32,7 +33,7 @@ from ._spike_operation import __all__ as operation_all
 from ._transform import *
 from ._transform import __all__ as transform_all
 
-__all__ = ['conn', 'input', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad']
+__all__ = ['conn', 'input', 'init', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad']
 __all__ = __all__ + encoder_all + transform_all + operation_all
 
 del encoder_all, transform_all, operation_all

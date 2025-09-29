@@ -36,11 +36,11 @@ import numpy as np
 from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._conn_base import PointNeuronConnectivity, ConnectionResult
-from ._init_base import init_call
-from ._init_delay import DelayInit
-from ._init_distance import DistanceProfile
-from ._init_weight import WeightInit
+from ._base import PointNeuronConnectivity, ConnectionResult
+from braintools.init._base import init_call
+from braintools.init._delay import DelayInit
+from braintools.init._distance import DistanceProfile
+from braintools.init._weight import WeightInit
 
 __all__ = [
     # Basic connectivity patterns
@@ -111,7 +111,7 @@ class Random(PointNeuronConnectivity):
 
         >>> import brainunit as u
         >>> from braintools.conn import Random
-        >>> from braintools.conn import ConstantInit, ConstantDelayInit
+        >>> from braintools.init import ConstantInit, ConstantDelayInit
         >>>
         >>> # With weights and delays
         >>> conn = Random(
@@ -134,7 +134,7 @@ class Random(PointNeuronConnectivity):
 
     .. code-block:: python
 
-        >>> from braintools.conn import LogNormalInit, NormalDelayInit
+        >>> from braintools.init import LogNormalInit, NormalDelayInit
         >>>
         >>> # AMPA-like excitatory synapses
         >>> ampa_conn = Random(
@@ -147,7 +147,7 @@ class Random(PointNeuronConnectivity):
 
     .. code-block:: python
 
-        >>> from braintools.conn import NormalInit, ConstantDelayInit
+        >>> from braintools.init import NormalInit, ConstantDelayInit
         >>>
         >>> # GABA-like inhibitory synapses
         >>> gaba_conn = Random(
@@ -275,7 +275,7 @@ class AllToAll(PointNeuronConnectivity):
     --------
     .. code-block:: python
 
-        >>> from braintools.conn import ConstantInit, ConstantDelayInit
+        >>> from braintools.init import ConstantInit, ConstantDelayInit
         >>> all_to_all = AllToAll(
         ...     weight=ConstantInit(0.5 * u.nS),
         ...     delay=ConstantDelayInit(1.0 * u.ms)
@@ -480,7 +480,7 @@ class DistanceDependent(PointNeuronConnectivity):
 
         >>> import brainunit as u
         >>> import numpy as np
-        >>> from braintools.conn import (
+        >>> from braintools.init import (
         ...     GaussianProfileInit, ExponentialDecayInit, ConstantDelayInit
         ... )
         >>>

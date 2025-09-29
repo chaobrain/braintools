@@ -32,7 +32,7 @@ import unittest
 import brainunit as u
 import numpy as np
 
-from braintools.conn._conn_kernel import (
+from braintools.conn._kernel import (
     ConvKernel,
     GaussianKernel,
     GaborKernel,

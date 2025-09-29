@@ -29,10 +29,10 @@ import numpy as np
 from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._conn_base import PointNeuronConnectivity, ConnectionResult
-from ._init_base import init_call
-from ._init_delay import DelayInit
-from ._init_weight import WeightInit
+from ._base import PointNeuronConnectivity, ConnectionResult
+from braintools.init._base import init_call
+from braintools.init._delay import DelayInit
+from braintools.init._weight import WeightInit
 
 __all__ = [
     'ConvKernel',
@@ -943,7 +943,7 @@ class SobelKernel(PointNeuronConnectivity):
                 seed=self.seed + 1 if self.seed is not None else None
             )
             # Union of both
-            from ._conn_base import CompositeConnectivity
+            from ._base import CompositeConnectivity
             composite = CompositeConnectivity(conv_h, conv_v, 'union')
             result = composite.generate(**kwargs)
             result.metadata['pattern'] = 'sobel_kernel'

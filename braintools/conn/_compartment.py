@@ -36,10 +36,10 @@ import numpy as np
 from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._conn_base import MultiCompartmentConnectivity, ConnectionResult
-from ._init_base import init_call
-from ._init_delay import DelayInit
-from ._init_weight import WeightInit
+from ._base import MultiCompartmentConnectivity, ConnectionResult
+from braintools.init._base import init_call
+from braintools.init._delay import DelayInit
+from braintools.init._weight import WeightInit
 
 __all__ = [
     'SOMA',
