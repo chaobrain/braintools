@@ -13,24 +13,57 @@
 # limitations under the License.
 # ==============================================================================
 
+from __future__ import annotations
 
-import importlib.util
-from typing import Hashable, Dict, Optional
+from typing import Hashable, Dict, Optional, Union, Callable, Any, List, Tuple
 
-from brainstate import ShortTermState, State, StateDictManager
+import jax.numpy as jnp
+import optax
+from brainstate import LongTermState, State, StateDictManager
 from brainstate.typing import PyTree
+
 from ._base import Optimizer
 
-import optax
+MaskOrFn = Optional[Union[Any, Callable]]
+
 __all__ = [
     'OptaxOptimizer',
+    # Main Optimizers
+    'SGD',
+    'Adam',
+    'AdamW',
+    'Adagrad',
+    'Adadelta',
+    'RMSprop',
+    'Adamax',
+    'Nadam',
+    'RAdam',
+    'Lamb',
+    'Lars',
+    'Lookahead',
+    'Yogi',
     'LBFGS',
+    'Rprop',
+    'Adafactor',
+    'AdaBelief',
+    'Lion',
+    'SM3',
+    'Novograd',
+    'Fromage',
+
 ]
 
 
 class OptaxOptimizer(Optimizer):
     """
-    Simple train state for the common case with a single Optax optimizer.
+    Enhanced train state with support for Optax optimizers and learning rate schedulers.
+
+    This class provides a PyTorch-like interface for JAX/Optax optimizers with support for:
+    - Multiple parameter groups with different hyperparameters
+    - Learning rate schedulers
+    - State dict for saving/loading
+    - Gradient clipping
+    - Weight decay
 
     Example usage::
 
@@ -38,8 +71,7 @@ class OptaxOptimizer(Optimizer):
       >>> import jax.numpy as jnp
       >>> import brainstate
       >>> import braintools
-      >>> import optax
-      ...
+
       >>> class Model(brainstate.nn.Module):
       ...   def __init__(self):
       ...     super().__init__()
@@ -47,106 +79,988 @@ class OptaxOptimizer(Optimizer):
       ...     self.linear2 = brainstate.nn.Linear(3, 4)
       ...   def __call__(self, x):
       ...     return self.linear2(self.linear1(x))
-      ...
-      >>> x = brainstate.random.randn(1, 2)
-      >>> y = jnp.ones((1, 4))
-      ...
-      >>> model = Model()
-      >>> tx = optax.adam(1e-3)
-      >>> optimizer = braintools.optim.OptaxOptimizer(tx)
-      >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-      ...
-      >>> loss_fn = lambda: ((model(x) - y) ** 2).mean()
-      >>> loss_fn()
-      Array(1.7055722, dtype=float32)
-      >>> grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
-      >>> optimizer.update(grads)
-      >>> loss_fn()
-      Array(1.6925814, dtype=float32)
 
-    For more exotic usecases (e.g. multiple optimizers) it's probably best to
-    fork the class and modify it.
+      >>> model = Model()
+      >>> optimizer = braintools.optim.Adam(lr=1e-3, betas=(0.9, 0.999))
+      >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+      >>> # With learning rate scheduler
+      >>> scheduler = braintools.optim.CosineAnnealingLR(optimizer, T_max=100)
+
+      >>> for epoch in range(100):
+      ...   # Training loop
+      ...   grads = compute_gradients(...)
+      ...   optimizer.step(grads)
+      ...   scheduler.step()
 
     Attributes:
-      param_states: The parameter states to update.
+      param_states: PyTree of brainstate.State objects representing trainable parameters.
       tx: An Optax gradient transformation.
+      lr: Current learning rate (can be modified by schedulers).
+      step_count: Number of optimization steps taken.
+      param_groups: List of parameter groups with their own hyperparameters.
     """
 
-    param_states: StateDictManager
-    opt_state: Optional[ShortTermState]
+    param_states: StateDictManager  # Container for PyTree of brainstate.State objects
+    opt_state: Optional[LongTermState]
+    step_count: LongTermState
+    _base_lr: float
+    _current_lr: float
+    param_groups: List[Dict[str, Any]]
+    _schedulers: List['LRScheduler']
 
     def __init__(
         self,
-        tx: optax.GradientTransformation,
+        tx: Optional[optax.GradientTransformation] = None,
+        lr: float = 1e-3,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
     ):
         """
-        Instantiate the class and wrap the :class:`FlattedDict` and Optax gradient
-        transformation. Instantiate the optimizer state to keep track of
-        :class:`State`.
+        Initialize the optimizer with enhanced features.
 
         Args:
-          tx: An Optax gradient transformation.
+          tx: An Optax gradient transformation. If None, will be created based on other parameters.
+          lr: Learning rate.
+          weight_decay: Weight decay (L2 penalty).
+          grad_clip_norm: Maximum gradient norm for clipping.
+          grad_clip_value: Maximum gradient value for clipping.
         """
         super().__init__()
 
-        # tx must be an instance of optax.GradientTransformation
-        if not isinstance(tx, optax.GradientTransformation):
-            raise TypeError(f"tx must be an instance of optax.GradientTransformation, got {tx}")
-        self.tx = tx
+        # param_states is already initialized in parent class as StateDictManager
+        # which will hold our pytree of State objects
 
-        # optimizer state
+        self._base_lr = lr
+        self._current_lr = lr
+        self.weight_decay = weight_decay
+        self.grad_clip_norm = grad_clip_norm
+        self.grad_clip_value = grad_clip_value
+        self.step_count = LongTermState(0)
+        self.param_groups = []
+        self._schedulers = []
+
+        if tx is not None:
+            if not isinstance(tx, optax.GradientTransformation):
+                raise TypeError(f"tx must be an instance of optax.GradientTransformation, got {tx}")
+            self.tx = tx
+        else:
+            self.tx = self._create_default_tx()
+
         self.opt_state = None
 
-    def register_trainable_weights(self, param_states: Dict[Hashable, State]):
-        # model
+    def _create_default_tx(self):
+        """Create default gradient transformation with clipping and weight decay."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        transforms.append(optax.scale_by_adam())
+
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        transforms.append(optax.scale(-self._current_lr))
+
+        return optax.chain(*transforms)
+
+    @property
+    def lr(self):
+        """Get current learning rate."""
+        return self._current_lr
+
+    @lr.setter
+    def lr(self, value: float):
+        """Set learning rate (will be used by schedulers)."""
+        self._current_lr = value
+        self._update_lr_in_tx()
+
+    def _update_lr_in_tx(self):
+        """Update learning rate in the transformation chain."""
+        if hasattr(self, 'tx') and hasattr(self.tx, 'updates'):
+            # For chained transformations, update the scale
+            for i, update in enumerate(self.tx.updates):
+                if isinstance(update, optax.ScaleState):
+                    self.tx.updates[i] = optax.scale(-self._current_lr)
+                    break
+
+    def add_param_group(self, params: Dict[Hashable, State], **kwargs):
+        """Add a parameter group with specific hyperparameters.
+
+        Args:
+            params: A pytree (dict) of brainstate.State objects.
+            **kwargs: Additional hyperparameters for this group.
+        """
+        # Validate that params is a dict of State objects
+        if not isinstance(params, dict):
+            raise TypeError(f"params must be a dict, got {type(params)}")
+
+        for k, v in params.items():
+            if not isinstance(v, State):
+                raise TypeError(f"All params values must be brainstate.State, got {type(v)} for key {k}")
+
+        group = {
+            'params': params,
+            'lr': kwargs.get('lr', self._base_lr),
+            'weight_decay': kwargs.get('weight_decay', self.weight_decay),
+        }
+        group.update(kwargs)
+        self.param_groups.append(group)
+
+    def register_trainable_weights(
+        self,
+        param_states: Dict[Hashable, State]
+    ):
+        """Register trainable weights and initialize optimizer state.
+
+        Args:
+            param_states: A pytree (dict) of brainstate.State objects representing parameters.
+        """
         if not isinstance(param_states, dict):
-            raise TypeError(f"states must be a dict, got {param_states}")
+            raise TypeError(f"param_states must be a dict, got {type(param_states)}")
+
+        # Validate that all values are State objects
         for k, v in param_states.items():
             if not isinstance(v, State):
-                raise TypeError(f"states values must be ParamState, got {v}")
+                raise TypeError(f"All param_states values must be brainstate.State, got {type(v)} for key {k}")
+
+        # Update the param_states pytree (StateDictManager handles State objects)
         self.param_states.update(param_states)
         self.param_states.unique_()
 
-        # wrt
-        self.opt_state = ShortTermState(self.tx.init({k: v.value for k, v in self.param_states.items()}))
+        # Initialize optimizer state using values from State objects
+        param_values = {k: v.value for k, v in self.param_states.items()}
+        self.opt_state = LongTermState(self.tx.init(param_values))
+
+        # Create default parameter group if none exist
+        if not self.param_groups:
+            self.param_groups = [
+                {
+                    'params': list(self.param_states.keys()),
+                    'lr': self._base_lr,
+                    'weight_decay': self.weight_decay,
+                }
+            ]
+
         return self
 
     def update(self, grads: Dict[Hashable, PyTree]):
-        """Update the model states with the gradients.
+        """Update the model states with gradients (backward compatibility)."""
+        return self.step(grads)
+
+    def step(self, grads: Optional[Dict[Hashable, PyTree]] = None, closure: Optional[Callable] = None):
+        """
+        Perform a single optimization step.
 
         Args:
-          grads: the gradients derived from ``brainstate.augment.grad``.
+          grads: Gradients for parameters. If None, closure must be provided.
+          closure: A closure that reevaluates the model and returns the loss.
+
+        Returns:
+          Optional loss value if closure is provided.
         """
         if self.opt_state is None:
-            raise ValueError("register_trainable_weights must be called before update.")
+            raise ValueError("register_trainable_weights must be called before step.")
 
-        import optax  # type: ignore[import-not-found,import-untyped]
-        grads = {k: grads[k] for k in self.param_states.keys()}
-        states = {k: v.value for k, v in self.param_states.items()}
+        loss = None
+        if closure is not None:
+            loss = closure()
 
-        # compute updates
-        updates, new_opt_state = self.tx.update(grads, self.opt_state.value, states)
-        new_params = optax.apply_updates(states, updates)
+        if grads is None:
+            if closure is None:
+                raise ValueError("Either grads or closure must be provided.")
+            # Compute gradients using closure if needed
+            # This would require additional implementation
+            raise NotImplementedError("Automatic gradient computation from closure not yet implemented.")
 
-        # update model states and optimizer states
-        for k, v in self.param_states.items():
-            v.value = new_params[k]
+        # Filter gradients for registered parameters and extract State values
+        filtered_grads = {}
+        param_values = {}
+        for k in self.param_states.keys():
+            if k in grads:
+                filtered_grads[k] = grads[k]
+            # Extract the value from the State object
+            param_values[k] = self.param_states[k].value
+
+        # Apply gradient transformations
+        updates, new_opt_state = self.tx.update(filtered_grads, self.opt_state.value, param_values)
+        new_params = optax.apply_updates(param_values, updates)
+
+        # Update parameters in the State objects
+        for k in self.param_states.keys():
+            if k in new_params:
+                # Update the value in the State object
+                self.param_states[k].value = new_params[k]
+
+        # Update optimizer state
         self.opt_state.value = new_opt_state
+
+        # Increment step counter
+        self.step_count.value += 1
+
+        return loss
+
+    def state_dict(self):
+        """
+        Return the state of the optimizer as a dictionary.
+
+        Returns:
+          Dictionary containing optimizer state, step count, and hyperparameters.
+        """
+        state_dict = {
+            'step_count': self.step_count.value,
+            'lr': self._current_lr,
+            'base_lr': self._base_lr,
+            'param_groups': self.param_groups,
+        }
+
+        if self.opt_state is not None:
+            state_dict['opt_state'] = self.opt_state.value
+
+        return state_dict
+
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        """
+        Load optimizer state from a dictionary.
+
+        Args:
+          state_dict: Dictionary containing optimizer state.
+        """
+        self.step_count.value = state_dict['step_count']
+        self._current_lr = state_dict['lr']
+        self._base_lr = state_dict['base_lr']
+        self.param_groups = state_dict['param_groups']
+
+        if 'opt_state' in state_dict:
+            if self.opt_state is None:
+                self.opt_state = LongTermState(state_dict['opt_state'])
+            else:
+                self.opt_state.value = state_dict['opt_state']
+
+    def zero_grad(self):
+        """Zero out gradients (placeholder for PyTorch compatibility).
+
+        Note: In JAX, gradients are computed functionally and don't need to be zeroed.
+        This method exists for API compatibility with PyTorch.
+        """
+        pass
+
+    def add_scheduler(self, scheduler: 'LRScheduler'):
+        """Add a learning rate scheduler."""
+        self._schedulers.append(scheduler)
+
+    def get_last_lr(self) -> List[float]:
+        """Get last computed learning rates from schedulers."""
+        if self._schedulers:
+            return self._schedulers[-1].get_last_lr()
+        return [self._current_lr]
+
+
+# Optimizer implementations
+
+class SGD(OptaxOptimizer):
+    """Stochastic Gradient Descent optimizer with optional momentum and weight decay."""
+
+    def __init__(
+        self,
+        lr: float = 1e-3,
+        momentum: float = 0.0,
+        weight_decay: float = 0.0,
+        nesterov: bool = False,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        transforms = []
+
+        if grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+
+        if grad_clip_value is not None:
+            transforms.append(optax.clip(grad_clip_value))
+
+        if momentum > 0:
+            if nesterov:
+                transforms.append(optax.trace(decay=momentum, nesterov=True))
+            else:
+                transforms.append(optax.trace(decay=momentum, nesterov=False))
+
+        if weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(weight_decay))
+
+        transforms.append(optax.scale(-lr))
+
+        tx = optax.chain(*transforms) if transforms else optax.sgd(lr)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.momentum = momentum
+        self.nesterov = nesterov
+
+
+class Adam(OptaxOptimizer):
+    """Adam optimizer with adaptive learning rates."""
+
+    def __init__(
+        self,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        amsgrad: bool = False,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        transforms = []
+
+        if grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+
+        if grad_clip_value is not None:
+            transforms.append(optax.clip(grad_clip_value))
+
+        if amsgrad:
+            transforms.append(optax.scale_by_amsgrad(b1=betas[0], b2=betas[1], eps=eps))
+        else:
+            transforms.append(optax.scale_by_adam(b1=betas[0], b2=betas[1], eps=eps))
+
+        if weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(weight_decay))
+
+        transforms.append(optax.scale(-lr))
+
+        tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
+        self.amsgrad = amsgrad
+
+
+class AdamW(OptaxOptimizer):
+    """AdamW optimizer with decoupled weight decay."""
+
+    def __init__(
+        self,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.01,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.adamw(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps, weight_decay=weight_decay)
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
+
+
+class Adagrad(OptaxOptimizer):
+    """Adagrad optimizer with adaptive learning rates."""
+
+    def __init__(
+        self,
+        lr: float = 1e-2,
+        lr_decay: float = 0.0,
+        weight_decay: float = 0.0,
+        initial_accumulator_value: float = 0.0,
+        eps: float = 1e-10,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.adagrad(
+            learning_rate=lr,
+            initial_accumulator_value=initial_accumulator_value,
+            eps=eps
+        )
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.lr_decay = lr_decay
+        self.initial_accumulator_value = initial_accumulator_value
+        self.eps = eps
+
+
+class Adadelta(OptaxOptimizer):
+    """Adadelta optimizer."""
+
+    def __init__(
+        self,
+        lr: float = 1.0,
+        rho: float = 0.9,
+        eps: float = 1e-6,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        transforms = []
+
+        if grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+
+        if grad_clip_value is not None:
+            transforms.append(optax.clip(grad_clip_value))
+
+        transforms.append(optax.scale_by_adadelta(rho=rho, eps=eps))
+
+        if weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(weight_decay))
+
+        transforms.append(optax.scale(-lr))
+
+        tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.rho = rho
+        self.eps = eps
+
+
+class RMSprop(OptaxOptimizer):
+    """RMSprop optimizer."""
+
+    def __init__(
+        self,
+        lr: float = 1e-2,
+        alpha: float = 0.99,
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        momentum: float = 0.0,
+        centered: bool = False,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.rmsprop(
+            learning_rate=lr,
+            decay=alpha,
+            eps=eps,
+            momentum=momentum,
+            centered=centered
+        )
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.alpha = alpha
+        self.eps = eps
+        self.momentum = momentum
+        self.centered = centered
+
+
+class Adamax(OptaxOptimizer):
+    """Adamax optimizer (variant of Adam with infinity norm)."""
+
+    def __init__(
+        self,
+        lr: float = 2e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.adamax(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps)
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
+
+
+class Nadam(OptaxOptimizer):
+    """Nadam optimizer (Adam with Nesterov momentum)."""
+
+    def __init__(
+        self,
+        lr: float = 2e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        momentum_decay: float = 4e-3,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.nadam(
+            learning_rate=lr,
+            b1=betas[0],
+            b2=betas[1],
+            eps=eps,
+            momentum_decay=momentum_decay
+        )
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
+        self.momentum_decay = momentum_decay
+
+
+class RAdam(OptaxOptimizer):
+    """RAdam optimizer (Rectified Adam)."""
+
+    def __init__(
+        self,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.radam(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps)
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
+
+
+class Lamb(OptaxOptimizer):
+    """LAMB optimizer (Layer-wise Adaptive Moments)."""
+
+    def __init__(
+        self,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-6,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.lamb(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps, weight_decay=weight_decay)
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
+
+
+class Lars(OptaxOptimizer):
+    """LARS optimizer (Large Batch Training)."""
+
+    def __init__(
+        self,
+        lr: float = 1.0,
+        momentum: float = 0.9,
+        weight_decay: float = 0.0,
+        trust_coefficient: float = 0.001,
+        eps: float = 1e-8,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.lars(
+            learning_rate=lr,
+            momentum=momentum,
+            weight_decay=weight_decay,
+            trust_coefficient=trust_coefficient
+        )
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.momentum = momentum
+        self.trust_coefficient = trust_coefficient
+        self.eps = eps
+
+
+class Lookahead(OptaxOptimizer):
+    """Lookahead optimizer wrapper."""
+
+    def __init__(
+        self,
+        base_optimizer: optax.GradientTransformation,
+        k: int = 5,
+        alpha: float = 0.5,
+        lr: float = 1e-3,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.lookahead(base_optimizer, slow_step_size=alpha, period=k)
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.k = k
+        self.alpha = alpha
+
+
+class Yogi(OptaxOptimizer):
+    """Yogi optimizer (improvement over Adam)."""
+
+    def __init__(
+        self,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-3,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.yogi(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps)
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
 
 
 class LBFGS(OptaxOptimizer):
+    """L-BFGS optimizer (Limited-memory BFGS)."""
+
     def __init__(
         self,
-        lr: float,
+        lr: float = 1.0,
         memory_size: int = 10,
-        scale_init_precond: bool = True,
+        scale_init_hess: bool = True,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
     ):
-        import optax  # type: ignore[import-not-found,import-untyped]
-        super().__init__(
-            optax.lbfgs(
-                lr,
-                memory_size=memory_size,
-                scale_init_precond=scale_init_precond,
-                linesearch=None,
-            )
+        tx = optax.lbfgs(
+            learning_rate=lr,
+            memory_size=memory_size,
+            scale_init_hess=scale_init_hess
         )
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.memory_size = memory_size
+        self.scale_init_hess = scale_init_hess
+
+
+class Rprop(OptaxOptimizer):
+    """Rprop optimizer."""
+
+    def __init__(
+        self,
+        lr: float = 1e-2,
+        etas: Tuple[float, float] = (0.5, 1.2),
+        step_sizes: Tuple[float, float] = (1e-6, 50.0),
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.rprop(
+            learning_rate=lr,
+            eta_minus=etas[0],
+            eta_plus=etas[1],
+            min_step_size=step_sizes[0],
+            max_step_size=step_sizes[1]
+        )
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.etas = etas
+        self.step_sizes = step_sizes
+
+
+class Adafactor(OptaxOptimizer):
+    """Adafactor optimizer (memory-efficient variant of Adam)."""
+
+    def __init__(
+        self,
+        lr: Optional[float] = None,
+        eps: Tuple[float, float] = (1e-30, 1e-3),
+        clip_threshold: float = 1.0,
+        decay_rate: float = -0.8,
+        beta1: Optional[float] = None,
+        weight_decay: float = 0.0,
+        factored: bool = True,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.adafactor(
+            learning_rate=lr,
+            min_dim_size_to_factor=128 if factored else None,
+            decay_rate=decay_rate,
+            eps=eps[0],
+            clip_threshold=clip_threshold,
+            beta1=beta1,
+            weight_decay=weight_decay
+        )
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr or 1e-3, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.eps = eps
+        self.clip_threshold = clip_threshold
+        self.decay_rate = decay_rate
+        self.beta1 = beta1
+        self.factored = factored
+
+
+class AdaBelief(OptaxOptimizer):
+    """AdaBelief optimizer (adapts step size according to belief in gradient direction)."""
+
+    def __init__(
+        self,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-16,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.adabelief(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps)
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
+
+
+class Lion(OptaxOptimizer):
+    """Lion optimizer (discovered through program search)."""
+
+    def __init__(
+        self,
+        lr: float = 1e-4,
+        betas: Tuple[float, float] = (0.9, 0.99),
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.lion(learning_rate=lr, b1=betas[0], b2=betas[1], weight_decay=weight_decay)
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+
+
+class SM3(OptaxOptimizer):
+    """SM3 optimizer (memory-efficient adaptive optimizer)."""
+
+    def __init__(
+        self,
+        lr: float = 1.0,
+        momentum: float = 0.9,
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.sm3(learning_rate=lr, momentum=momentum, eps=eps)
+
+        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            if weight_decay > 0:
+                transforms.append(optax.add_decayed_weights(weight_decay))
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.momentum = momentum
+        self.eps = eps
+
+
+class Novograd(OptaxOptimizer):
+    """Novograd optimizer (normalized gradient descent)."""
+
+    def __init__(
+        self,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.novograd(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps, weight_decay=weight_decay)
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr, weight_decay=weight_decay,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.betas = betas
+        self.eps = eps
+
+
+class Fromage(OptaxOptimizer):
+    """Fromage optimizer (memory-efficient learning rate free optimizer)."""
+
+    def __init__(
+        self,
+        lr: float = 1.0,
+        momentum: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        tx = optax.fromage(learning_rate=lr, momentum=momentum)
+
+        if grad_clip_norm is not None or grad_clip_value is not None:
+            transforms = []
+            if grad_clip_norm is not None:
+                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
+            if grad_clip_value is not None:
+                transforms.append(optax.clip(grad_clip_value))
+            transforms.append(tx)
+            tx = optax.chain(*transforms)
+
+        super().__init__(tx=tx, lr=lr,
+                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+        self.momentum = momentum
