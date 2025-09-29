@@ -52,34 +52,35 @@ testing = [
     "scipy",
     "msgpack",
     "pytest",
-    "absl-py"
+    "absl-py",
+    "typing_extensions",
 ]
 cpu = [
     "jax[cpu]",
     "brainstate",
     "brainunit",
     "matplotlib",
-    "nevergrad",
     "scipy",
-    "msgpack"
+    "msgpack",
+    "typing_extensions",
 ]
 cuda12 = [
     "jax[cuda12]",
     "brainstate",
     "brainunit",
     "matplotlib",
-    "nevergrad",
     "scipy",
-    "msgpack"
+    "msgpack",
+    "typing_extensions",
 ]
 tpu = [
     "jax[tpu]",
     "brainstate",
     "brainunit",
     "matplotlib",
-    "nevergrad",
     "scipy",
-    "msgpack"
+    "msgpack",
+    "typing_extensions",
 ]
 
 [project.urls]
