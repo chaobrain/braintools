@@ -21,8 +21,6 @@ import jax
 import numpy as np
 from brainstate._compatible_import import safe_zip
 
-from ._base import Optimizer
-
 try:
     import nevergrad as ng
 except (ImportError, ModuleNotFoundError):
@@ -60,7 +58,7 @@ def concat_parameters(*parameters):
     return final_parameters
 
 
-class NevergradOptimizer(Optimizer):
+class NevergradOptimizer:
     """
     Ask/tell optimizer wrapper around Nevergrad with batched evaluation support.
 

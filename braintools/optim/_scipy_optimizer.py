@@ -24,8 +24,6 @@ import jax.numpy as jnp
 import numpy as np
 from brainstate._compatible_import import safe_zip, unzip2
 
-from ._base import Optimizer
-
 try:
     from scipy.optimize import minimize
 except (ImportError, ModuleNotFoundError):
@@ -301,7 +299,7 @@ def scipy_minimize_with_jax(
     return results
 
 
-class ScipyOptimizer(Optimizer):
+class ScipyOptimizer:
     """
     SciPy-based optimizer with dict/sequence bounds compatible with Nevergrad.
 
