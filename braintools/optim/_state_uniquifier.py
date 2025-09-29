@@ -58,13 +58,15 @@ class UniqueStateManager:
         >>> recovered = manager.to_pytree()
     """
 
-    def __init__(self):
+    def __init__(self, pytree: PyTree[State] = None):
         """Initialize the UniqueStateManager."""
         self.flattened_states: List[Tuple[Any, State]] = []
         self.seen_ids: Set[int] = set()
         self.pytree_structure = None
         self.unique_paths: List[Any] = []
         self.unique_states: List[State] = []
+        if pytree is not None:
+            self.make_unique(pytree)
 
     def make_unique(self, pytree: PyTree[State]) -> PyTree[State]:
         """
