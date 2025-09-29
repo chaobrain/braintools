@@ -19,7 +19,7 @@ from typing import Dict, Optional, Union, Callable, Any, List, Tuple
 
 import jax.tree
 import optax
-from brainstate import LongTermState, State
+from brainstate import LongTermState, State, maybe_state
 from brainstate.typing import PyTree
 
 from braintools.file._msg_checkpoint import msgpack_from_state_dict
@@ -115,7 +115,7 @@ class OptaxOptimizer(Optimizer):
     def __init__(
         self,
         tx: Optional[optax.GradientTransformation] = None,
-        lr: float = 1e-3,
+        lr: Union[float, 'LRScheduler'] = 1e-3,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
@@ -125,7 +125,7 @@ class OptaxOptimizer(Optimizer):
 
         Args:
           tx: An Optax gradient transformation. If None, will be created based on other parameters.
-          lr: Learning rate.
+          lr: Learning rate (float) or LRScheduler instance.
           weight_decay: Weight decay (L2 penalty).
           grad_clip_norm: Maximum gradient norm for clipping.
           grad_clip_value: Maximum gradient value for clipping.
@@ -136,8 +136,19 @@ class OptaxOptimizer(Optimizer):
         # which will hold our pytree of State objects
 
         self.param_states = UniqueStateManager()
-        self._base_lr = lr
-        self._current_lr = LongTermState(lr)
+
+        # Handle lr as either float or scheduler
+        from ._optax_lr_scheduler import LRScheduler
+        if isinstance(lr, LRScheduler):
+            self._lr_scheduler = lr
+            self._base_lr = lr.base_lrs[0] if lr.base_lrs else 1e-3
+            self._current_lr = LongTermState(self._base_lr)
+            lr.attach_optimizer(self)
+        else:
+            self._lr_scheduler = None
+            self._base_lr = lr
+            self._current_lr = LongTermState(lr)
+
         self.weight_decay = weight_decay
         self.grad_clip_norm = grad_clip_norm
         self.grad_clip_value = grad_clip_value
@@ -170,11 +181,16 @@ class OptaxOptimizer(Optimizer):
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
 
-        # Use a schedule function that reads from the State
-        def lr_schedule(count):
-            return -self._current_lr.value
+        # Use a schedule function that reads from the State or scheduler
+        if self._lr_scheduler is not None:
+            # Use the scheduler's __call__ method
+            transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        else:
+            # Use a simple function that reads from the State
+            def lr_schedule(count):
+                return -self.lr
 
-        transforms.append(optax.scale_by_schedule(lr_schedule))
+            transforms.append(optax.scale_by_schedule(lr_schedule))
 
         return optax.chain(*transforms)
 
@@ -348,7 +364,7 @@ class OptaxOptimizer(Optimizer):
                     group_tx = group['tx']
                 else:
                     # Fallback: create transformation if not stored (for backward compatibility)
-                    group_lr = group.get('lr', self._current_lr.value)
+                    group_lr = maybe_state(group.get('lr', self.lr))
                     group_weight_decay = group.get('weight_decay', self.weight_decay)
 
                     transforms = []
@@ -460,7 +476,7 @@ class OptaxOptimizer(Optimizer):
           state_dict: Dictionary containing optimizer state.
         """
         self.step_count.value = state_dict['step_count']
-        self.lr = state_dict['lr']
+        self.lr = msgpack_from_state_dict(self.lr, state_dict['lr'])
         self._base_lr = state_dict['base_lr']
 
         # Load param_groups and restore lr_state for groups that have it
@@ -545,7 +561,7 @@ class Adam(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-3,
+        lr: Union[float, 'LRScheduler'] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
         weight_decay: float = 0.0,
@@ -553,36 +569,50 @@ class Adam(OptaxOptimizer):
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        transforms = []
+        # Store Adam-specific parameters
+        self.betas = betas
+        self.eps = eps
+        self.amsgrad = amsgrad
 
-        if grad_clip_norm is not None:
-            transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-
-        if grad_clip_value is not None:
-            transforms.append(optax.clip(grad_clip_value))
-
-        if amsgrad:
-            transforms.append(optax.scale_by_amsgrad(b1=betas[0], b2=betas[1], eps=eps))
-        else:
-            transforms.append(optax.scale_by_adam(b1=betas[0], b2=betas[1], eps=eps))
-
-        if weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(weight_decay))
-
-        transforms.append(optax.scale(-lr))
-
-        tx = optax.chain(*transforms)
-
+        # Don't build tx here, let the base class handle it
         super().__init__(
-            tx=tx,
+            tx=None,  # Will be created by base class
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
-        self.amsgrad = amsgrad
+
+    def _create_default_tx(self):
+        """Create Adam-specific gradient transformation."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        if self.amsgrad:
+            transforms.append(optax.scale_by_amsgrad(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        else:
+            transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Use a schedule function that reads from the State or scheduler
+        if hasattr(self, '_lr_scheduler') and self._lr_scheduler is not None:
+            # Use the scheduler's __call__ method
+            transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        else:
+            # Use a simple function that reads from the State
+            def lr_schedule(count):
+                return -self.lr
+
+            transforms.append(optax.scale_by_schedule(lr_schedule))
+
+        return optax.chain(*transforms)
 
 
 class AdamW(OptaxOptimizer):

@@ -15,7 +15,7 @@
 
 # -*- coding: utf-8 -*-
 
-from typing import Dict, Optional, Union, Callable, Any, List
+from typing import Dict, Optional, Union, Callable, Any, List, Sequence
 
 import jax.numpy as jnp
 from brainstate import LongTermState
@@ -49,28 +49,52 @@ __all__ = [
 # ============================================================================
 
 class LRScheduler:
-    """Base class for learning rate schedulers."""
+    """Base class for learning rate schedulers.
 
-    def __init__(self, optimizer: OptaxOptimizer, last_epoch: int = -1):
+    Can be used either standalone (passed to optimizer at initialization)
+    or attached to an optimizer later.
+    """
+
+    def __init__(self, base_lr: Union[float, List[float]] = 1e-3, last_epoch: int = -1):
         """
         Initialize the scheduler.
 
         Args:
-          optimizer: The optimizer to schedule.
+          base_lr: Base learning rate(s). Can be a float or list of floats for multiple param groups.
           last_epoch: The index of the last epoch.
         """
-        if not isinstance(optimizer, OptaxOptimizer):
-            raise TypeError(f"optimizer must be an OptaxOptimizer, got {type(optimizer)}")
+        self.optimizer = None  # Will be set when attached to optimizer
+        self.last_epoch = LongTermState(last_epoch)
+
+        # Support both single lr and multiple lrs for param groups
+        if isinstance(base_lr, (list, tuple)):
+            self.base_lrs = list(base_lr)
+        else:
+            self.base_lrs = [base_lr]
+
+        # Current learning rates
+        self._current_lrs = LongTermState(list(self.base_lrs))
+
+        # Initialize learning rates
+        if last_epoch == -1:
+            self.step()
+
+    def attach_optimizer(self, optimizer: 'OptaxOptimizer'):
+        """Attach this scheduler to an optimizer."""
+        from ._optax_optimizer import OptaxOptimizer
+        if not isinstance(OptaxOptimizer):
+            raise TypeError(f"optimizer must be an Optaxgot {type(optimizer)}")
 
         self.optimizer = optimizer
-        self.last_epoch = LongTermState(last_epoch)
-        self.base_lrs = [group.get('lr', optimizer._base_lr) for group in optimizer.param_groups]
 
-        if last_epoch == -1:
-            for group, lr in zip(self.optimizer.param_groups, self.base_lrs):
-                group['lr'] = lr
-
-        self.step()
+        # If optimizer has param groups, ensure we have enough base_lrs
+        if len(optimizer.param_groups) > len(self.base_lrs):
+            # Extend base_lrs with the last value
+            last_lr = self.base_lrs[-1] if self.base_lrs else optimizer._base_lr
+            self.base_lrs.extend([last_lr] * (len(optimizer.param_groups) - len(self.base_lrs)))
+            self._current_lrs.value.extend(
+                [last_lr] * (len(optimizer.param_groups) - len(self._current_lrs.value))
+            )
 
     def get_lr(self):
         """Calculate learning rate."""
@@ -87,23 +111,39 @@ class LRScheduler:
         if not isinstance(values, (list, tuple)):
             values = [values]
 
-        for param_group, lr in zip(self.optimizer.param_groups, values):
-            param_group['lr'] = lr
+        self._current_lrs.value = list(values)
 
-        # Update the main optimizer lr
-        self.optimizer.lr = values[0]
+        # If attached to update its learning rates
+        if self.optimizer is not None:
+            for param_group, lr in zip(self.optimizer.param_groups, values):
+                if isinstance(param_group.get('lr'), LongTermState):
+                    param_group['lr'].value = lr
+                else:
+                    param_group['lr'] = lr
+
+            # Update the main optimizer lr
+            self.optimizer.lr = values[0]
+
+    def __call__(self, count):
+        """Make scheduler callable for use with optax.scale_by_schedule.
+
+        This allows the scheduler to be passed directly to the optimizer.
+        """
+        return -self._current_lrs.value[0] if self._current_lrs.value else -1e-3
 
     def state_dict(self):
         """Return scheduler state as dictionary."""
         return {
             'last_epoch': self.last_epoch.value,
             'base_lrs': self.base_lrs,
+            '_current_lrs': self._current_lrs.value,
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
         """Load scheduler state from dictionary."""
         self.last_epoch.value = state_dict['last_epoch']
         self.base_lrs = state_dict['base_lrs']
+        self._current_lrs.value = state_dict.get('_current_lrs', list(self.base_lrs))
 
 
 # ============================================================================
@@ -115,14 +155,14 @@ class StepLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
-        step_size: int,
+        base_lr: Union[float, List[float]] = 1e-3,
+        step_size: int = 30,
         gamma: float = 0.1,
         last_epoch: int = -1,
     ):
         self.step_size = step_size
         self.gamma = gamma
-        super().__init__(optimizer, last_epoch)
+        super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
         return [
@@ -136,14 +176,14 @@ class MultiStepLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
-        milestones: List[int],
+        base_lr: Union[float, List[float]] = 1e-3,
+        milestones: Sequence[int] = (30, 60, 90),
         gamma: float = 0.1,
         last_epoch: int = -1,
     ):
         self.milestones = sorted(milestones)
         self.gamma = gamma
-        super().__init__(optimizer, last_epoch)
+        super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
         factor = 1.0
@@ -160,12 +200,11 @@ class ExponentialLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         gamma: float,
         last_epoch: int = -1,
     ):
         self.gamma = gamma
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         return [base_lr * self.gamma ** self.last_epoch.value
@@ -177,14 +216,13 @@ class CosineAnnealingLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         T_max: int,
         eta_min: float = 0,
         last_epoch: int = -1,
     ):
         self.T_max = T_max
         self.eta_min = eta_min
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         if self.last_epoch.value == 0:
@@ -205,14 +243,13 @@ class PolynomialLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         total_iters: int = 5,
         power: float = 1.0,
         last_epoch: int = -1,
     ):
         self.total_iters = total_iters
         self.power = power
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         decay_factor = ((1 - min(self.last_epoch.value, self.total_iters) / self.total_iters)
@@ -225,14 +262,13 @@ class WarmupScheduler(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         warmup_epochs: int,
         warmup_start_lr: float = 0.0,
         last_epoch: int = -1,
     ):
         self.warmup_epochs = warmup_epochs
         self.warmup_start_lr = warmup_start_lr
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         if self.last_epoch.value < self.warmup_epochs:
@@ -283,7 +319,7 @@ class CyclicLR(LRScheduler):
         self.scale_fn = scale_fn
         self.scale_mode = scale_mode
 
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         cycle = jnp.floor(1 + self.last_epoch.value / (self.step_size_up + self.step_size_down))
@@ -356,7 +392,7 @@ class OneCycleLR(LRScheduler):
         self.base_lrs = [max_lr / div_factor for max_lr in self.max_lrs]
         self.min_lrs = [max_lr / final_div_factor for max_lr in self.max_lrs]
 
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         step_num = self.last_epoch.value + 1
@@ -484,7 +520,6 @@ class LinearLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         start_factor: float = 1.0 / 3,
         end_factor: float = 1.0,
         total_iters: int = 5,
@@ -493,7 +528,7 @@ class LinearLR(LRScheduler):
         self.start_factor = start_factor
         self.end_factor = end_factor
         self.total_iters = total_iters
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         if self.last_epoch.value == 0:
@@ -511,14 +546,13 @@ class ConstantLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         factor: float = 1.0 / 3,
         total_iters: int = 5,
         last_epoch: int = -1,
     ):
         self.factor = factor
         self.total_iters = total_iters
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         if self.last_epoch < self.total_iters:
@@ -620,7 +654,6 @@ class CosineAnnealingWarmRestarts(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         T_0: int,
         T_mult: int = 1,
         eta_min: float = 0,
@@ -631,7 +664,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         self.eta_min = eta_min
         self.T_cur = 0
         self.T_i = T_0
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         return [self.eta_min + (base_lr - self.eta_min) *
@@ -661,7 +694,6 @@ class WarmupCosineSchedule(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         warmup_steps: int,
         total_steps: int,
         warmup_start_lr: float = 0.0,
@@ -672,7 +704,7 @@ class WarmupCosineSchedule(LRScheduler):
         self.total_steps = total_steps
         self.warmup_start_lr = warmup_start_lr
         self.eta_min = eta_min
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         if self.last_epoch.value < self.warmup_steps:
@@ -694,7 +726,6 @@ class PiecewiseConstantSchedule(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
         boundaries: List[int],
         values: List[float],
         last_epoch: int = -1,
@@ -704,7 +735,7 @@ class PiecewiseConstantSchedule(LRScheduler):
 
         self.boundaries = boundaries
         self.values = values
-        super().__init__(optimizer, last_epoch)
+        super().__init__(last_epoch)
 
     def get_lr(self):
         for i, boundary in enumerate(self.boundaries):
