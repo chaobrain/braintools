@@ -455,13 +455,12 @@ class OptaxOptimizer(Optimizer):
         # Prepare param_groups for serialization
         serializable_groups = dict()
         for i, group in enumerate(self.param_groups):
-            group_dict = {
-                k: jax.tree.map(
-                    lambda x: (x.value if isinstance(x, State) else x), v,
-                    is_leaf=lambda x: isinstance(x, State)
-                )
-                for k, v in group.items() if k not in ('tx',)
-            }
+            group_dict = jax.tree.map(
+                lambda x: (x.value if isinstance(x, State) else x),
+                group,
+                is_leaf=lambda x: isinstance(x, State)
+            )
+            group_dict.pop('tx', None)
             serializable_groups[str(i)] = group_dict
 
         state_dict = {
