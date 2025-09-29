@@ -24,6 +24,7 @@ from brainstate.typing import PyTree
 
 from braintools.file._msg_checkpoint import msgpack_from_state_dict
 from ._base import Optimizer
+from ._optax_lr_scheduler import LRScheduler
 from ._state_uniquifier import UniqueStateManager
 
 MaskOrFn = Optional[Union[Any, Callable]]
@@ -110,12 +111,12 @@ class OptaxOptimizer(Optimizer):
     _current_lr: LongTermState
     param_groups: List[Dict[str, Any]]
     param_groups_opt_states: List[LongTermState]
-    _schedulers: List['LRScheduler']
+    _schedulers: List[LRScheduler]
 
     def __init__(
         self,
         tx: Optional[optax.GradientTransformation] = None,
-        lr: Union[float, 'LRScheduler'] = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
@@ -138,7 +139,6 @@ class OptaxOptimizer(Optimizer):
         self.param_states = UniqueStateManager()
 
         # Handle lr as either float or scheduler
-        from ._optax_lr_scheduler import LRScheduler
         if isinstance(lr, LRScheduler):
             self._lr_scheduler = lr
             self._base_lr = lr.base_lrs[0] if lr.base_lrs else 1e-3
@@ -453,17 +453,26 @@ class OptaxOptimizer(Optimizer):
           Dictionary containing optimizer state, step count, and hyperparameters.
         """
         # Prepare param_groups for serialization
-        serializable_groups = []
-        for group in self.param_groups:
-            group_dict = {k: v for k, v in group.items() if k not in ('tx',)}
-            serializable_groups.append(group_dict)
+        serializable_groups = dict()
+        for i, group in enumerate(self.param_groups):
+            group_dict = {
+                k: jax.tree.map(
+                    lambda x: (x.value if isinstance(x, State) else x), v,
+                    is_leaf=lambda x: isinstance(x, State)
+                )
+                for k, v in group.items() if k not in ('tx',)
+            }
+            serializable_groups[str(i)] = group_dict
 
         state_dict = {
             'step_count': self.step_count.value,
             'lr': self.lr,
             'base_lr': self._base_lr,
             'param_groups': serializable_groups,
-            'param_groups_opt_states': [s.value for s in self.param_groups_opt_states],
+            'param_groups_opt_states': {
+                str(i): s.value
+                for i, s in enumerate(self.param_groups_opt_states)
+            },
             'opt_state': self.opt_state.value
         }
         return state_dict
@@ -499,7 +508,7 @@ class OptaxOptimizer(Optimizer):
                 else:
                     self.param_groups_opt_states.append(LongTermState(s))
 
-    def add_scheduler(self, scheduler: 'LRScheduler'):
+    def add_scheduler(self, scheduler: LRScheduler):
         """Add a learning rate scheduler."""
         self._schedulers.append(scheduler)
 
@@ -561,7 +570,7 @@ class Adam(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: Union[float, 'LRScheduler'] = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
         weight_decay: float = 0.0,

@@ -20,7 +20,7 @@ from typing import Dict, Optional, Union, Callable, Any, List, Sequence
 import jax.numpy as jnp
 from brainstate import LongTermState
 
-from ._optax_optimizer import OptaxOptimizer
+
 
 __all__ = [
     # Learning Rate Schedulers
@@ -82,7 +82,7 @@ class LRScheduler:
     def attach_optimizer(self, optimizer: 'OptaxOptimizer'):
         """Attach this scheduler to an optimizer."""
         from ._optax_optimizer import OptaxOptimizer
-        if not isinstance(OptaxOptimizer):
+        if not isinstance(optimizer, OptaxOptimizer):
             raise TypeError(f"optimizer must be an Optaxgot {type(optimizer)}")
 
         self.optimizer = optimizer
@@ -285,7 +285,7 @@ class CyclicLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
+        optimizer: 'OptaxOptimizer',
         base_lr: Union[float, List[float]],
         max_lr: Union[float, List[float]],
         step_size_up: int = 2000,
@@ -355,7 +355,7 @@ class OneCycleLR(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
+        optimizer: 'OptaxOptimizer',
         max_lr: Union[float, List[float]],
         total_steps: Optional[int] = None,
         epochs: Optional[int] = None,
@@ -426,7 +426,7 @@ class ReduceLROnPlateau(LRScheduler):
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
+        optimizer: 'OptaxOptimizer',
         mode: str = 'min',
         factor: float = 0.1,
         patience: int = 10,
@@ -590,7 +590,7 @@ class SequentialLR:
 
     def __init__(
         self,
-        optimizer: OptaxOptimizer,
+        optimizer: 'OptaxOptimizer',
         schedulers: List[LRScheduler],
         milestones: List[int],
         last_epoch: int = -1,
