@@ -5,6 +5,6 @@ Optimization guides highlight practical solvers for tuning models and experiment
 ```{toctree}
 :maxdepth: 1
 
-nevergrad_optimizer.ipynb
-scipy_optimizer.ipynb
+optim_tutorial_01_nevergrad_optimizer.ipynb
+optim_tutorial_02_scipy_optimizer.ipynb
 ```
