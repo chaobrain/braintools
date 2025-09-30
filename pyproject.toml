@@ -39,7 +39,8 @@ dependencies = [
     "numpy>=1.15",
     "brainstate>=0.1.0",
     "brainunit>=0.0.8",
-    "typing_extensions"
+    "typing_extensions",
+    "optax",
 ]
 
 [project.optional-dependencies]
@@ -51,6 +52,7 @@ testing = [
     "nevergrad",
     "scipy",
     "msgpack",
+    "optax",
     "pytest",
     "absl-py",
     "typing_extensions",
@@ -62,6 +64,7 @@ cpu = [
     "matplotlib",
     "scipy",
     "msgpack",
+    "optax",
     "typing_extensions",
 ]
 cuda12 = [
@@ -71,6 +74,7 @@ cuda12 = [
     "matplotlib",
     "scipy",
     "msgpack",
+    "optax",
     "typing_extensions",
 ]
 cuda13 = [
@@ -80,6 +84,7 @@ cuda13 = [
     "matplotlib",
     "scipy",
     "msgpack",
+    "optax",
     "typing_extensions",
 ]
 tpu = [
@@ -89,6 +94,7 @@ tpu = [
     "matplotlib",
     "scipy",
     "msgpack",
+    "optax",
     "typing_extensions",
 ]
 
