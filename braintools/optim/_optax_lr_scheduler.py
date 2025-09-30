@@ -15,6 +15,8 @@
 
 # -*- coding: utf-8 -*-
 
+from __future__ import annotations
+
 from typing import Dict, Optional, Union, Callable, Any, List, Sequence
 
 import jax.numpy as jnp
@@ -348,7 +350,7 @@ class CyclicLR(LRScheduler):
                 else:
                     scale = self.scale_fn(self.last_epoch.value)
 
-            lr = base_lr + base_height * scale * max(0, 1 - x)
+            lr = base_lr + base_height * scale * jnp.maximum(0, 1 - x)
             lrs.append(lr)
 
         return lrs

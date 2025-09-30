@@ -18,7 +18,6 @@ from typing import Set, Tuple, Any, List, Dict
 import jax.tree
 from brainstate import State
 from brainstate.typing import PyTree
-from jax.tree_util import DictKey
 
 __all__ = [
     'UniqueStateManager',
@@ -109,7 +108,11 @@ class UniqueStateManager:
         else:
             return {}
 
-    def _reconstruct_pytree(self, paths: List[Any], leaves: List[State]) -> PyTree[State]:
+    def _reconstruct_pytree(
+        self,
+        paths: List[Any],
+        leaves: List[State]
+    ) -> PyTree[State]:
         """
         Reconstruct a PyTree from paths and leaves.
 
@@ -265,7 +268,11 @@ class UniqueStateManager:
                 return state
         return None
 
-    def update_state(self, target_path: Any, new_state: State) -> bool:
+    def update_state(
+        self,
+        target_path: Any,
+        new_state: State
+    ) -> bool:
         """
         Update a State object at a specific path.
 
