@@ -94,8 +94,8 @@ class LRScheduler:
             self.base_lrs.extend(
                 [last_lr] * (len(optimizer.param_groups) - len(self.base_lrs))
             )
-            self._current_lrs.value.extend(
-                [last_lr] * (len(optimizer.param_groups) - len(self._current_lrs.value))
+            self.current_lrs.value.extend(
+                [last_lr] * (len(optimizer.param_groups) - len(self.current_lrs.value))
             )
 
     def get_lr(self):
@@ -113,7 +113,7 @@ class LRScheduler:
         if not isinstance(values, (list, tuple)):
             values = [values]
 
-        self._current_lrs.value = list(values)
+        self.current_lrs.value = list(values)
 
         # If attached to update its learning rates
         if self.optimizer is not None:
@@ -135,21 +135,21 @@ class LRScheduler:
 
         This allows the scheduler to be passed directly to the optimizer.
         """
-        return -self._current_lrs.value[0] if self._current_lrs.value else -1e-3
+        return -self.current_lrs.value[0] if len(self.current_lrs.value) else -1e-3
 
     def state_dict(self):
         """Return scheduler state as dictionary."""
         return {
             'last_epoch': self.last_epoch.value,
             'base_lrs': self.base_lrs,
-            '_current_lrs': self._current_lrs.value,
+            'current_lrs': self.current_lrs.value,
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
         """Load scheduler state from dictionary."""
         self.last_epoch.value = state_dict['last_epoch']
         self.base_lrs = state_dict['base_lrs']
-        self._current_lrs.value = state_dict.get('_current_lrs', list(self.base_lrs))
+        self.current_lrs.value = state_dict.get('current_lrs', list(self.base_lrs))
 
 
 # ============================================================================
@@ -535,14 +535,13 @@ class MultiStepLR(LRScheduler):
         gamma: float = 0.1,
         last_epoch: int = 0,
     ):
-        self.milestones = sorted(milestones)
+        self.milestones = jnp.array(sorted(milestones))
         self.gamma = gamma
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
         # Count how many milestones have been reached (JIT-compatible)
-        milestones_array = jnp.array(self.milestones)
-        count = jnp.sum(self.last_epoch.value >= milestones_array)
+        count = jnp.sum(self.last_epoch.value >= self.milestones)
         factor = jnp.power(self.gamma, count)
         return [base_lr * factor for base_lr in self.base_lrs]
 
@@ -1264,7 +1263,7 @@ class PolynomialLR(LRScheduler):
         ...     )
         ...     lrs = []
         ...     for _ in range(total_iters):
-        ...         lrs.append(scheduler._current_lrs.value[0])
+        ...         lrs.append(scheduler.current_lrs.value[0])
         ...         scheduler.step()
         ...     plt.plot(lrs, label=f'power={power}')
         >>>
@@ -2061,7 +2060,7 @@ class ReduceLROnPlateau(LRScheduler):
         eps: float = 1e-8,
         last_epoch: int = 0,
     ):
-        super().__init__(last_epoch=last_epoch)
+        super().__init__(base_lr=base_lr, last_epoch=last_epoch)
         if factor >= 1.0:
             raise ValueError("Factor should be < 1.0")
 
@@ -2079,9 +2078,9 @@ class ReduceLROnPlateau(LRScheduler):
         else:
             self.min_lrs = [min_lr]
 
-        self.cooldown_counter = 0
-        self.best = None
-        self.num_bad_epochs = 0
+        self.cooldown_counter = LongTermState(0)
+        self.best = LongTermState(jnp.inf if self.mode == 'min' else -jnp.inf)
+        self.num_bad_epochs = LongTermState(0)
         self.mode_worse = float('inf') if mode == 'min' else -float('inf')
 
     def step(self, metrics: float, epoch: Optional[int] = None):
@@ -2096,22 +2095,20 @@ class ReduceLROnPlateau(LRScheduler):
             epoch = self.last_epoch.value + 1
         self.last_epoch.value = epoch
 
-        if self.cooldown_counter > 0:
-            self.cooldown_counter -= 1
+        if self.cooldown_counter.value > 0:
+            self.cooldown_counter.value -= 1
             return
 
-        if self.best is None:
-            self.best = metrics
-        elif self._is_better(metrics, self.best):
-            self.best = metrics
-            self.num_bad_epochs = 0
+        if self._is_better(metrics, self.best.value):
+            self.best.value = metrics
+            self.num_bad_epochs.value = 0
         else:
-            self.num_bad_epochs += 1
+            self.num_bad_epochs.value += 1
 
-        if self.num_bad_epochs > self.patience:
+        if self.num_bad_epochs.value > self.patience:
             self._reduce_lr()
-            self.cooldown_counter = self.cooldown
-            self.num_bad_epochs = 0
+            self.cooldown_counter.value = self.cooldown
+            self.num_bad_epochs.value = 0
 
     def _is_better(self, a, b):
         if self.mode == 'min':
@@ -2126,28 +2123,38 @@ class ReduceLROnPlateau(LRScheduler):
                 return a > b + self.threshold
 
     def _reduce_lr(self):
-        # Reduce current learning rates
-        new_lrs = []
-        for i, current_lr in enumerate(self._current_lrs.value):
-            new_lr = jnp.maximum(
-                current_lr * self.factor,
-                self.min_lrs[i] if i < len(self.min_lrs) else self.min_lrs[0]
-            )
-            new_lrs.append(new_lr)
+        # Reduce current learning rates using JAX operations
+        current_lrs_array = jnp.array(self.current_lrs.value)
 
-        self._current_lrs.value = new_lrs
+        # Create min_lrs array with proper broadcasting
+        min_lrs_array = jnp.array(self.min_lrs)
+        if len(min_lrs_array) == 1:
+            min_lrs_array = jnp.full_like(current_lrs_array, min_lrs_array[0])
+        elif len(min_lrs_array) < len(current_lrs_array):
+            # Pad with the last value
+            padding = jnp.full((len(current_lrs_array) - len(min_lrs_array),), min_lrs_array[-1])
+            min_lrs_array = jnp.concatenate([min_lrs_array, padding])
+
+        # Compute new learning rates
+        new_lrs_array = jnp.maximum(
+            current_lrs_array * self.factor,
+            min_lrs_array
+        )
+
+        # Convert back to list for storage
+        self.current_lrs.value = list(new_lrs_array)
 
         # Update optimizer if attached
         if self.optimizer is not None:
             for i, param_group in enumerate(self.optimizer.param_groups):
-                if i < len(new_lrs):
-                    param_group['lr'] = new_lrs[i]
+                if i < len(new_lrs_array):
+                    param_group['lr'] = new_lrs_array[i]
             # Update the main optimizer lr
-            self.optimizer.current_lr = new_lrs[0]
+            self.optimizer.current_lr = new_lrs_array[0]
 
     def get_lr(self):
         # Return current learning rates
-        return list(self._current_lrs.value)
+        return list(self.current_lrs.value)
 
 
 class LinearLR(LRScheduler):
