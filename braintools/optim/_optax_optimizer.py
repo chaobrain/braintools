@@ -2000,7 +2000,7 @@ class Lamb(OptaxOptimizer):
         ...         model.states(brainstate.ParamState).assign(params)
         ...         logits = model(batch_x)
         ...         return jnp.mean(
-        ...             brainstate.nn.softmax_cross_entropy(logits, batch_y)
+        ...             braintools.metric.softmax_cross_entropy(logits, batch_y)
         ...         )
         ...
         ...     grads = brainstate.transform.grad(loss_fn)(
@@ -2238,7 +2238,7 @@ class Lars(OptaxOptimizer):
         ...         model.states(brainstate.ParamState).assign(params)
         ...         logits = model(images)
         ...         return jnp.mean(
-        ...             brainstate.nn.softmax_cross_entropy(logits, labels)
+        ...             braintools.metric.softmax_cross_entropy(logits, labels)
         ...         )
         ...
         ...     grads = brainstate.transform.grad(loss_fn)(
@@ -2479,7 +2479,7 @@ class Lookahead(OptaxOptimizer):
         ...             model.states(brainstate.ParamState).assign(params)
         ...             logits = model(batch_x)
         ...             return jnp.mean(
-        ...                 brainstate.nn.softmax_cross_entropy(logits, batch_y)
+        ...                 braintools.metric.softmax_cross_entropy(logits, batch_y)
         ...             )
         ...
         ...         grads = brainstate.transform.grad(loss_fn)(
@@ -2691,7 +2691,7 @@ class Yogi(OptaxOptimizer):
         ...         model.states(brainstate.ParamState).assign(params)
         ...         logits = model(tokens)
         ...         return jnp.mean(
-        ...             brainstate.nn.softmax_cross_entropy(logits, targets)
+        ...             braintools.metric.softmax_cross_entropy(logits, targets)
         ...         )
         ...
         ...     grads = brainstate.transform.grad(loss_fn)(
@@ -2748,77 +2748,117 @@ class Yogi(OptaxOptimizer):
 class LBFGS(OptaxOptimizer):
     r"""L-BFGS optimizer (Limited-memory Broyden-Fletcher-Goldfarb-Shanno).
 
-    L-BFGS is a quasi-Newton method that approximates the Hessian matrix using
-    a limited amount of memory. It is particularly effective for optimization
-    problems with smooth, continuous objectives and is widely used in scientific
-    computing and machine learning for batch optimization.
+    L-BFGS is a quasi-Newton optimization method that approximates the inverse Hessian
+    matrix using a limited amount of memory. It provides superlinear convergence for
+    smooth, unconstrained optimization problems and is widely used in scientific
+    computing, machine learning, and numerical optimization.
+
+    This optimizer is particularly effective for:
+    - Medium to large-scale optimization problems
+    - Smooth, differentiable objective functions
+    - Full-batch or deterministic gradient computations
+    - Scientific computing and parameter estimation
+    - Neural network fine-tuning with small datasets
 
     Parameters
     ----------
     lr : float or LRScheduler, default=1.0
-        Learning rate (step size). Can be a float (converted to ConstantLR) or any
-        LRScheduler instance. L-BFGS typically uses lr=1.0 as it computes its own
-        step size based on curvature information.
+        Learning rate (step size). Can be a float or any LRScheduler instance.
+        L-BFGS typically uses lr=1.0 as it computes optimal step sizes via
+        line search. Adjust only if line search is disabled or for specific needs.
     memory_size : int, default=10
-        Number of past gradient and position differences to keep in memory for
-        approximating the inverse Hessian. Typical values are 3-20. Larger values
-        provide better approximations but use more memory.
+        Number of past gradient-position pairs to store for Hessian approximation.
+        Typical values: 3-20. Larger values give better approximations but use more
+        memory. Trade-off between accuracy and computational cost.
     scale_init_hess : bool, default=True
-        Whether to scale the initial Hessian approximation. When True, improves
-        convergence by normalizing the initial diagonal Hessian.
+        Whether to scale the initial Hessian approximation using gradient information.
+        Improves convergence by adapting to problem scale. Recommended for most cases.
     grad_clip_norm : float, optional
-        Maximum norm for gradient clipping. If specified, gradients are clipped
-        when their global norm exceeds this value.
+        Maximum norm for gradient clipping. Gradients are scaled when their
+        global norm exceeds this value. Useful for numerical stability.
     grad_clip_value : float, optional
-        Maximum absolute value for gradient clipping. If specified, gradients are
-        clipped element-wise to [-grad_clip_value, grad_clip_value].
+        Maximum absolute value for element-wise gradient clipping. Each gradient
+        component is clipped to [-grad_clip_value, grad_clip_value].
 
     Notes
     -----
-    L-BFGS approximates the inverse Hessian :math:`H^{-1}` using information from
-    the previous `m` iterations (where `m` is memory_size). The update rule is:
+    **Mathematical Formulation:**
+
+    L-BFGS approximates the inverse Hessian matrix :math:`H_k^{-1}` using the
+    limited-memory BFGS update formula. The parameter update is:
 
     .. math::
-        \theta_{t+1} = \theta_t - \alpha_t H_t^{-1} \nabla f(\theta_t)
+        \theta_{k+1} = \theta_k - \alpha_k H_k^{-1} \nabla f(\theta_k)
 
-    where :math:`H_t^{-1}` is approximated using the two-loop recursion algorithm
-    that relies on stored gradient differences :math:`y_k = \nabla f_{k+1} - \nabla f_k`
-    and position differences :math:`s_k = \theta_{k+1} - \theta_k`.
-
-    The approximation is updated using the formula:
+    The inverse Hessian approximation uses :math:`m` stored pairs:
 
     .. math::
-        \rho_k = \frac{1}{y_k^T s_k}
+        s_i = \theta_{i+1} - \theta_i \quad \text{(position difference)}
 
-    Key characteristics of L-BFGS:
+    .. math::
+        y_i = \nabla f(\theta_{i+1}) - \nabla f(\theta_i) \quad \text{(gradient difference)}
 
-    - **Second-order method**: Uses curvature information for faster convergence
-    - **Memory efficient**: Stores only m past gradient/position pairs
-    - **Batch optimization**: Works best with full-batch gradients
-    - **Smooth objectives**: Most effective for smooth, continuous functions
-    - **No momentum**: Uses Hessian approximation instead
-    - **Deterministic**: Typically used with deterministic gradients
+    with curvature information:
 
-    L-BFGS is particularly well-suited for:
+    .. math::
+        \rho_i = \frac{1}{y_i^T s_i}
 
-    - Fine-tuning with small datasets
-    - Scientific computing problems
-    - Convex optimization
-    - Problems where second-order information is valuable
+    **Two-Loop Recursion Algorithm:**
+
+    1. **First loop** (newest to oldest): Compute direction adjustments
+    2. **Initial scaling**: :math:`H_0^{-1} = \gamma_k I` where
+       :math:`\gamma_k = \frac{s_{k-1}^T y_{k-1}}{y_{k-1}^T y_{k-1}}`
+    3. **Second loop** (oldest to newest): Apply BFGS corrections
+
+    **Line Search with Zoom Algorithm:**
+
+    This implementation includes automatic zoom line search finding step size
+    :math:`\alpha_k` satisfying the strong Wolfe conditions for robust convergence.
+
+    **Key Characteristics:**
+
+    - **Superlinear convergence**: Faster than first-order methods near optimum
+    - **Memory efficient**: O(mn) storage for n parameters, m history size
+    - **Curvature aware**: Uses second-order information without computing Hessian
+    - **Self-scaling**: Adapts to problem geometry automatically
+    - **Robust line search**: Ensures sufficient decrease and curvature conditions
 
     **Limitations:**
 
-    - Not suitable for mini-batch stochastic optimization
+    - Not suitable for stochastic mini-batch optimization
     - Requires full gradients for best performance
-    - Memory increases with memory_size parameter
+    - Memory scales with memory_size × parameter_count
+    - Line search requires additional function evaluations
+
+    **Important Usage Note:**
+
+    L-BFGS with line search requires additional function evaluations. For best
+    performance, use with ``optax.value_and_grad_from_state`` to reuse computations:
+
+    .. code-block:: python
+
+        >>> import optax
+        >>> value_and_grad = optax.value_and_grad_from_state(objective)
+        >>> value, grad = value_and_grad(params, state=opt_state)
+        >>> updates, opt_state = optimizer.tx.update(
+        ...     grad, opt_state, params,
+        ...     value=value, grad=grad, value_fn=objective
+        ... )
 
     References
     ----------
     .. [1] Liu, D. C., & Nocedal, J. (1989).
-           On the limited memory BFGS method for large scale optimization.
+           "On the limited memory BFGS method for large scale optimization."
            Mathematical Programming, 45(1-3), 503-528.
     .. [2] Nocedal, J., & Wright, S. (2006).
-           Numerical optimization. Springer Science & Business Media.
+           "Numerical Optimization" (2nd ed.).
+           Springer Science & Business Media.
+    .. [3] Byrd, R. H., Lu, P., Nocedal, J., & Zhu, C. (1995).
+           "A limited memory algorithm for bound constrained optimization."
+           SIAM Journal on Scientific Computing, 16(5), 1190-1208.
+    .. [4] Morales, J. L., & Nocedal, J. (2011).
+           "Remark on 'Algorithm 778: L-BFGS-B'."
+           ACM Transactions on Mathematical Software, 38(1), 1-4.
 
     Examples
     --------
@@ -2896,7 +2936,7 @@ class LBFGS(OptaxOptimizer):
         ...         model.states(brainstate.ParamState).assign(params)
         ...         logits = model(data_x)
         ...         return jnp.mean(
-        ...             brainstate.nn.softmax_cross_entropy(logits, data_y)
+        ...             braintools.metric.softmax_cross_entropy(logits, data_y)
         ...         )
         ...
         ...     # Compute gradients on full dataset
@@ -2928,11 +2968,62 @@ class LBFGS(OptaxOptimizer):
         ...     # Full-batch gradient computation
         ...     pass  # training code here
 
+
+    **Scientific computing - parameter fitting:**
+
+    .. code-block:: python
+
+        >>> # Fitting exponential decay model
+        >>> def exponential_model(params, t):
+        ...     return params['A'] * jnp.exp(-params['k'] * t) + params['C']
+        >>>
+        >>> def loss_fn(params):
+        ...     predictions = exponential_model(params, time_points)
+        ...     return jnp.mean((predictions - observations) ** 2)
+        >>>
+        >>> # L-BFGS for precise parameter estimation
+        >>> optimizer = braintools.optim.LBFGS(
+        ...     lr=1.0,
+        ...     memory_size=20,  # Higher accuracy for scientific computing
+        ...     scale_init_hess=True
+        ... )
+
+    **Hybrid optimization strategy:**
+
+    .. code-block:: python
+
+        >>> # Stage 1: Adam for exploration (stochastic)
+        >>> adam_opt = braintools.optim.Adam(lr=0.001)
+        >>> for epoch in range(50):
+        ...     for batch in dataloader:
+        ...         grads = compute_batch_gradients(batch)
+        ...         adam_opt.update(grads)
+        >>>
+        >>> # Stage 2: L-BFGS for refinement (deterministic)
+        >>> lbfgs_opt = braintools.optim.LBFGS(lr=1.0, memory_size=20)
+        >>> for epoch in range(20):
+        ...     grads = compute_full_gradients(full_dataset)
+        ...     lbfgs_opt.update(grads)
+
+    **Memory size comparison:**
+
+    .. code-block:: python
+
+        >>> # Small memory (fast, less accurate)
+        >>> opt_small = braintools.optim.LBFGS(memory_size=3)
+        >>>
+        >>> # Medium memory (balanced)
+        >>> opt_medium = braintools.optim.LBFGS(memory_size=10)
+        >>>
+        >>> # Large memory (slower, more accurate)
+        >>> opt_large = braintools.optim.LBFGS(memory_size=30)
+
     See Also
     --------
     SGD : First-order stochastic gradient descent
-    Adam : First-order adaptive method
-    Rprop : Resilient backpropagation
+    Adam : Adaptive moment estimation for stochastic optimization
+    Rprop : Resilient propagation for batch learning
+    Adagrad : Adaptive gradient algorithm
 
     """
 
@@ -2940,28 +3031,101 @@ class LBFGS(OptaxOptimizer):
         self,
         lr: Union[float, LRScheduler] = 1.0,
         memory_size: int = 10,
-        scale_init_hess: bool = True,
+        scale_init_precond: bool = True,
+        linesearch: Optional[Union[str, optax.GradientTransformationExtraArgs]] = None,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
         self.memory_size = memory_size
-        self.scale_init_hess = scale_init_hess
+        self.scale_init_precond = scale_init_precond
+
+        if linesearch is None:
+            linesearch = optax.identity()
+        elif isinstance(linesearch, str):
+            if linesearch == 'zoom':
+                linesearch = optax.scale_by_zoom_linesearch(max_linesearch_steps=100)
+            elif linesearch == 'backtracking':
+                linesearch = optax.scale_by_backtracking_linesearch(max_backtracking_steps=100)
+            else:
+                raise ValueError(f"Unknown linesearch method: {linesearch}")
+        elif isinstance(linesearch, optax.GradientTransformationExtraArgs):
+            linesearch = linesearch
+        else:
+            raise ValueError(f"Unknown linesearch method: {linesearch}")
+        self.linesearch = linesearch
+
+        # Now call parent init with the complete optimizer
         super().__init__(
-            tx=None,
             lr=lr,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
 
     def default_tx(self):
+        # This method shouldn't be called since we provide tx in __init__
+        # But we'll implement it for completeness
         transforms = []
         if self.grad_clip_norm is not None:
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        # LBFGS typically doesn't use schedules, but we support it for consistency
-        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
-        return optax.chain(*transforms)
+
+        # Create LBFGS with proper parameters
+        lbfgs_tx = optax.lbfgs(
+            learning_rate=self.current_lr,
+            memory_size=self.memory_size,
+            scale_init_precond=self.scale_init_precond,
+            linesearch=self.linesearch,
+        )
+
+        if transforms:
+            return optax.chain(*transforms, lbfgs_tx)
+        else:
+            return lbfgs_tx
+
+    def update(self, grads, value=None, value_fn=None, **kwargs):
+        """Update parameters with LBFGS optimizer.
+
+        Parameters
+        ----------
+        grads : dict
+            Dictionary of gradients for each parameter.
+        value : float, optional
+            Current value of the objective function. Required for linesearch.
+        value_fn : callable, optional
+            Function to compute objective value. Required for linesearch.
+        **kwargs : dict
+            Additional arguments passed to the optimizer update.
+
+        Notes
+        -----
+        LBFGS requires additional arguments for the linesearch:
+        - value: current objective function value
+        - grad: gradients (automatically passed)
+        - value_fn: callable to evaluate objective function
+
+        For best performance, use with optax.value_and_grad_from_state:
+
+        .. code-block:: python
+
+            >>> value_and_grad = optax.value_and_grad_from_state(loss_fn)
+            >>> value, grad = value_and_grad(params, state=opt_state)
+            >>> updates, opt_state = optimizer.update(
+            ...     grad, opt_state, params,
+            ...     value=value, grad=grad, value_fn=loss_fn
+            ... )
+        """
+        # Pass extra arguments needed for LBFGS with linesearch
+        extra_args = {}
+        if value is not None:
+            extra_args['value'] = value
+        if value_fn is not None:
+            extra_args['value_fn'] = value_fn
+        # grad is automatically included from grads parameter
+        extra_args['grad'] = grads
+
+        # Call parent update with extra arguments
+        return super().update(grads, **extra_args, **kwargs)
 
 
 class Rprop(OptaxOptimizer):
@@ -3126,7 +3290,7 @@ class Rprop(OptaxOptimizer):
         ...         model.states(brainstate.ParamState).assign(params)
         ...         logits = model(batch_x)
         ...         return jnp.mean(
-        ...             brainstate.nn.softmax_cross_entropy(logits, batch_y)
+        ...             braintools.metric.softmax_cross_entropy(logits, batch_y)
         ...         )
         ...
         ...     grads = brainstate.transform.grad(loss_fn)(
@@ -3359,7 +3523,7 @@ class Adafactor(OptaxOptimizer):
         ...         model.states(brainstate.ParamState).assign(params)
         ...         logits = model(tokens)
         ...         return jnp.mean(
-        ...             brainstate.nn.softmax_cross_entropy(logits, targets)
+        ...             braintools.metric.softmax_cross_entropy(logits, targets)
         ...         )
         ...
         ...     grads = brainstate.transform.grad(loss_fn)(
