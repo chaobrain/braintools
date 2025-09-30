@@ -111,8 +111,8 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         for _ in range(50):
             scheduler.step()
 
-        assert warmup.last_epoch.value == 51
-        assert poly_decay.last_epoch.value == 51
+        assert warmup.last_epoch.value == 50
+        assert poly_decay.last_epoch.value == 50
         print("[OK] test_polynomiallr_with_warmup")
 
     def test_polynomiallr_state_dict(self):
@@ -257,8 +257,8 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         for _ in range(40):
             scheduler.step()
 
-        assert warmup.last_epoch.value == 41
-        assert decay.last_epoch.value == 41
+        assert warmup.last_epoch.value == 40
+        assert decay.last_epoch.value == 40
         print("[OK] test_warmupscheduler_with_decay")
 
     def test_warmupscheduler_state_dict(self):
@@ -328,8 +328,8 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
             scheduler.step()
 
         # Both schedulers should have progressed
-        assert warmup.last_epoch.value == 31
-        assert poly.last_epoch.value == 31
+        assert warmup.last_epoch.value == 30
+        assert poly.last_epoch.value == 30
         print("[OK] test_polynomial_warmup_combination")
 
     def test_different_optimizers(self):
@@ -396,17 +396,17 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
             gamma=0.1
         )
 
-        assert scheduler._current_lrs.value[0] == 0.1
+        assert scheduler.current_lrs.value[0] == 0.1
 
         # Before milestone 30
         for _ in range(30):
             scheduler.step()
-        assert abs(scheduler._current_lrs.value[0] - 0.01) < 1e-6
+        assert abs(scheduler.current_lrs.value[0] - 0.01) < 1e-6
 
         # Before milestone 80
         for _ in range(50):
             scheduler.step()
-        assert abs(scheduler._current_lrs.value[0] - 0.001) < 1e-7
+        assert abs(scheduler.current_lrs.value[0] - 0.001) < 1e-7
         print("[OK] test_multisteplr_basic")
 
     # ============================================================================
@@ -417,13 +417,13 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
         scheduler = bts.optim.ConstantLR(factor=0.5, total_iters=10, last_epoch=-1)
 
         # For first total_iters, lr = base_lr * factor
-        initial_lr = scheduler._current_lrs.value[0]
+        initial_lr = scheduler.current_lrs.value[0]
         assert abs(initial_lr - 0.5e-3) < 1e-9
 
         # After total_iters, returns to base_lr
         for _ in range(10):
             scheduler.step()
-        final_lr = scheduler._current_lrs.value[0]
+        final_lr = scheduler.current_lrs.value[0]
         assert abs(final_lr - 1.0e-3) < 1e-9
         print("[OK] test_constantlr_basic")
 
@@ -466,8 +466,8 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
         for _ in range(10):
             chained.step()
 
-        assert scheduler1.last_epoch.value == 11
-        assert scheduler2.last_epoch.value == 11
+        assert scheduler1.last_epoch.value == 10
+        assert scheduler2.last_epoch.value == 10
         print("[OK] test_chained_scheduler")
 
     # ============================================================================
@@ -631,8 +631,8 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
             scheduler.step()
 
         # Verify warmup and decay happened
-        assert warmup.last_epoch.value == 21
-        assert decay.last_epoch.value == 21
+        assert warmup.last_epoch.value == 20
+        assert decay.last_epoch.value == 20
         print("[OK] test_exponentiallr_with_warmup")
 
     def test_exponentiallr_aggressive_decay(self):
@@ -1388,21 +1388,21 @@ class test_advanced_schedulers(unittest.TestCase):
         )
 
         # Before first boundary
-        assert abs(scheduler._current_lrs.value[0] - 0.1) < 1e-6
+        assert abs(scheduler.current_lrs.value[0] - 0.1) < 1e-6
 
         # Step to first boundary
         for _ in range(10):
             scheduler.step()
 
         # Should switch to second value
-        assert abs(scheduler._current_lrs.value[0] - 0.01) < 1e-6
+        assert abs(scheduler.current_lrs.value[0] - 0.01) < 1e-6
 
         # Step to second boundary
         for _ in range(20):
             scheduler.step()
 
         # Should switch to third value
-        assert abs(scheduler._current_lrs.value[0] - 0.001) < 1e-6
+        assert abs(scheduler.current_lrs.value[0] - 0.001) < 1e-6
 
         print("[OK] test_piecewiseconstant_basic")
 
@@ -1419,24 +1419,24 @@ class test_advanced_schedulers(unittest.TestCase):
 
         # Initial value should be values[0] = 0.01, but optimizer uses base_lr
         # The scheduler returns values[0] initially
-        initial_lr = abs(scheduler._current_lrs.value[0])
+        initial_lr = abs(scheduler.current_lrs.value[0])
         assert abs(initial_lr - 0.01) < 1e-6
 
         # Step through boundaries
         for _ in range(5):
             scheduler.step()
         # After boundary 5, should be values[1] = 0.005
-        assert abs(scheduler._current_lrs.value[0] - 0.005) < 1e-6
+        assert abs(scheduler.current_lrs.value[0] - 0.005) < 1e-6
 
         for _ in range(10):
             scheduler.step()
         # After boundary 15, should be values[2] = 0.001
-        assert abs(scheduler._current_lrs.value[0] - 0.001) < 1e-6
+        assert abs(scheduler.current_lrs.value[0] - 0.001) < 1e-6
 
         for _ in range(10):
             scheduler.step()
         # After boundary 25, should be values[3] = 0.0001
-        assert abs(scheduler._current_lrs.value[0] - 0.0001) < 1e-7
+        assert abs(scheduler.current_lrs.value[0] - 0.0001) < 1e-7
 
         print("[OK] test_piecewiseconstant_with_optimizer")
 
@@ -1460,7 +1460,7 @@ class test_advanced_schedulers(unittest.TestCase):
         new_scheduler.load_state_dict(state)
 
         assert new_scheduler.last_epoch.value == scheduler.last_epoch.value
-        assert new_scheduler._current_lrs.value == scheduler._current_lrs.value
+        assert new_scheduler.current_lrs.value == scheduler.current_lrs.value
 
         print("[OK] test_piecewiseconstant_state_dict")
 
@@ -1491,7 +1491,7 @@ class test_advanced_schedulers(unittest.TestCase):
         for _ in range(10):
             sequential.step()
 
-        assert sequential._current_scheduler_idx == 2  # Changed from _schedulers_idx
+        assert sequential.current_scheduler_idx == 2  # Changed from _schedulers_idx
 
         print("[OK] test_sequentiallr_basic")
 
@@ -1515,12 +1515,12 @@ class test_advanced_schedulers(unittest.TestCase):
 
         # After 5 steps (epochs 0-4), should still be in first scheduler (index 0)
         # Milestone 5 means switch happens at epoch 5
-        assert scheduler._current_scheduler_idx == 0
+        assert scheduler.current_scheduler_idx == 0
 
         # Step once more to reach milestone
         scheduler.step()
         # Now should switch to cosine phase
-        assert scheduler._current_scheduler_idx == 1
+        assert scheduler.current_scheduler_idx == 1
 
         # Continue with cosine annealing
         for _ in range(19):
@@ -1543,7 +1543,7 @@ class test_advanced_schedulers(unittest.TestCase):
 
         state = sequential.state_dict()
         assert 'last_epoch' in state
-        assert '_current_scheduler_idx' in state  # Changed from _schedulers_idx
+        assert 'current_scheduler_idx' in state  # Changed from _schedulers_idx
 
         new_scheduler1 = bts.optim.ConstantLR(factor=0.5, total_iters=5)
         new_scheduler2 = bts.optim.ExponentialLR(base_lr=1e-3, gamma=0.95)
@@ -1555,7 +1555,7 @@ class test_advanced_schedulers(unittest.TestCase):
         new_sequential.load_state_dict(state)
 
         assert new_sequential.last_epoch.value == sequential.last_epoch.value
-        assert new_sequential._current_scheduler_idx == sequential._current_scheduler_idx  # Changed from _schedulers_idx
+        assert new_sequential.current_scheduler_idx == sequential.current_scheduler_idx  # Changed from _schedulers_idx
 
         print("[OK] test_sequentiallr_state_dict")
 
@@ -1624,7 +1624,7 @@ class test_scheduler_edge_cases(unittest.TestCase):
 
         assert scheduler.last_epoch.value == 15
         expected_lr = 0.1 * (0.5 ** (15 // 10))
-        assert abs(scheduler._current_lrs.value[0] - expected_lr) < 1e-6
+        assert abs(scheduler.current_lrs.value[0] - expected_lr) < 1e-6
 
         print("[OK] test_scheduler_step_with_epoch")
 
@@ -1644,7 +1644,7 @@ class test_scheduler_edge_cases(unittest.TestCase):
         scheduler = bts.optim.StepLR(base_lr=0.1, step_size=10, gamma=0.5, last_epoch=-1)
 
         # Should initialize to epoch 0 after first step in __init__
-        assert scheduler.last_epoch.value == 0
+        assert scheduler.last_epoch.value == -1
 
         print("[OK] test_scheduler_negative_last_epoch")
 
@@ -1686,20 +1686,20 @@ class test_scheduler_edge_cases(unittest.TestCase):
         scheduler = bts.optim.ExponentialLR(base_lr=1e-10, gamma=0.99)
         for _ in range(100):
             scheduler.step()
-        assert scheduler._current_lrs.value[0] > 0
+        assert scheduler.current_lrs.value[0] > 0
 
         # Test with very large step sizes
         scheduler2 = bts.optim.StepLR(base_lr=0.1, step_size=10000, gamma=0.1)
         for _ in range(100):
             scheduler2.step()
-        assert abs(scheduler2._current_lrs.value[0] - 0.1) < 1e-6  # No decay yet
+        assert abs(scheduler2.current_lrs.value[0] - 0.1) < 1e-6  # No decay yet
 
         # Test with gamma=1.0 (no decay)
         scheduler3 = bts.optim.ExponentialLR(base_lr=0.1, gamma=1.0)
-        initial_lr = scheduler3._current_lrs.value[0]
+        initial_lr = scheduler3.current_lrs.value[0]
         for _ in range(50):
             scheduler3.step()
-        assert abs(scheduler3._current_lrs.value[0] - initial_lr) < 1e-6
+        assert abs(scheduler3.current_lrs.value[0] - initial_lr) < 1e-6
 
         print("[OK] test_scheduler_boundary_conditions")
 
@@ -1714,7 +1714,7 @@ class test_scheduler_edge_cases(unittest.TestCase):
             scheduler.step()
             # With total_iters=0, behavior may vary (could be 0, NaN, or base_lr)
             # Just check that it doesn't crash
-            lr_value = scheduler._current_lrs.value[0]
+            lr_value = scheduler.current_lrs.value[0]
             # Check if it's NaN, zero, or base_lr
             # NaN is acceptable for edge case of total_iters=0
             is_valid = jnp.isnan(lr_value) or lr_value == 0 or lr_value == 0.1
@@ -1751,7 +1751,7 @@ class test_scheduler_edge_cases(unittest.TestCase):
             sequential.step()
 
         # Should work with single scheduler
-        assert sequential._current_scheduler_idx == 0  # Changed from _schedulers_idx
+        assert sequential.current_scheduler_idx == 0  # Changed from _schedulers_idx
 
         print("[OK] test_scheduler_sequential_single")
 

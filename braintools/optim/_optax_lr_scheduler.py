@@ -55,7 +55,7 @@ class LRScheduler:
     or attached to an optimizer later.
     """
 
-    def __init__(self, base_lr: Union[float, List[float]] = 1e-3, last_epoch: int = -1):
+    def __init__(self, base_lr: Union[float, List[float]] = 1e-3, last_epoch: int = 0):
         """
         Initialize the scheduler.
 
@@ -74,6 +74,10 @@ class LRScheduler:
 
         # Current learning rates
         self._current_lrs = LongTermState(list(self.base_lrs))
+
+    @property
+    def current_lrs(self):
+        return self._current_lrs
 
     def attach_optimizer(self, optimizer: 'OptaxOptimizer'):
         """Attach this scheduler to an optimizer."""
@@ -331,7 +335,7 @@ class StepLR(LRScheduler):
         base_lr: Union[float, List[float]] = 1e-3,
         step_size: int = 30,
         gamma: float = 0.1,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.step_size = step_size
         self.gamma = gamma
@@ -529,7 +533,7 @@ class MultiStepLR(LRScheduler):
         base_lr: Union[float, List[float]] = 1e-3,
         milestones: Sequence[int] = (30, 60, 90),
         gamma: float = 0.1,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.milestones = sorted(milestones)
         self.gamma = gamma
@@ -741,7 +745,7 @@ class ExponentialLR(LRScheduler):
         self,
         base_lr: Union[float, List[float]] = 1e-3,
         gamma: float = 0.95,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.gamma = gamma
         super().__init__(base_lr, last_epoch)
@@ -1015,7 +1019,7 @@ class CosineAnnealingLR(LRScheduler):
         base_lr: Union[float, List[float]] = 1e-3,
         T_max: int = 50,
         eta_min: float = 0,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.T_max = T_max
         self.eta_min = eta_min
@@ -1292,7 +1296,7 @@ class PolynomialLR(LRScheduler):
         base_lr: Union[float, List[float]] = 1e-3,
         total_iters: int = 5,
         power: float = 1.0,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.total_iters = total_iters
         self.power = power
@@ -1581,7 +1585,7 @@ class WarmupScheduler(LRScheduler):
         base_lr: Union[float, List[float]] = 1e-3,
         warmup_epochs: int = 5,
         warmup_start_lr: float = 0.0,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.warmup_epochs = warmup_epochs
         self.warmup_start_lr = warmup_start_lr
@@ -1609,7 +1613,7 @@ class CyclicLR(LRScheduler):
         gamma: float = 1.0,
         scale_fn: Optional[Callable] = None,
         scale_mode: str = 'cycle',
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         # Store max_lr separately as it's not part of base class
         if isinstance(max_lr, list):
@@ -1669,7 +1673,7 @@ class OneCycleLR(LRScheduler):
         anneal_strategy: str = 'cos',
         div_factor: float = 25.0,
         final_div_factor: float = 1e4,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         if total_steps is None and epochs is None and steps_per_epoch is None:
             raise ValueError("You must define either total_steps or both epochs and steps_per_epoch")
@@ -2055,7 +2059,7 @@ class ReduceLROnPlateau(LRScheduler):
         cooldown: int = 0,
         min_lr: Union[float, List[float]] = 0,
         eps: float = 1e-8,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         super().__init__(last_epoch=last_epoch)
         if factor >= 1.0:
@@ -2328,7 +2332,7 @@ class LinearLR(LRScheduler):
         start_factor: float = 1.0 / 3,
         end_factor: float = 1.0,
         total_iters: int = 5,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.start_factor = start_factor
         self.end_factor = end_factor
@@ -2547,7 +2551,7 @@ class ConstantLR(LRScheduler):
         base_lr: Union[float, List[float]] = 1e-3,
         factor: float = 1.0 / 3,
         total_iters: int = 5,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.factor = factor
         self.total_iters = total_iters
@@ -2811,7 +2815,7 @@ class SequentialLR(LRScheduler):
         self,
         schedulers: List[LRScheduler],
         milestones: List[int],
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
 
         # Get base_lr from first scheduler
@@ -2826,6 +2830,10 @@ class SequentialLR(LRScheduler):
         # JIT-compatible: Find which scheduler to use using searchsorted
         milestones_array = jnp.array(milestones + [float('inf')])
         self._current_scheduler_idx = int(jnp.searchsorted(milestones_array, last_epoch, side='right'))
+
+    @property
+    def current_scheduler_idx(self):
+        return self._current_scheduler_idx
 
     def step(self, epoch: Optional[int] = None):
         if epoch is None:
@@ -2868,7 +2876,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         T_0: int = 10,
         T_mult: int = 1,
         eta_min: float = 0,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.T_0 = T_0
         self.T_mult = T_mult
@@ -2911,7 +2919,7 @@ class WarmupCosineSchedule(LRScheduler):
         total_steps: int = 10000,
         warmup_start_lr: float = 0.0,
         eta_min: float = 0.0,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         self.warmup_steps = warmup_steps
         self.total_steps = total_steps
@@ -2949,7 +2957,7 @@ class PiecewiseConstantSchedule(LRScheduler):
         base_lr: Union[float, List[float]] = 1e-3,
         boundaries: List[int] = None,
         values: List[float] = None,
-        last_epoch: int = -1,
+        last_epoch: int = 0,
     ):
         if boundaries is None:
             boundaries = [1000, 2000]
