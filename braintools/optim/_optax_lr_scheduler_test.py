@@ -31,7 +31,7 @@ class SimpleModel(bst.nn.Module):
         return self.linear(x)
 
 
-class polynomial_warmup_schedulers(unittest.TestCase):
+class test_polynomial_warmup_schedulers(unittest.TestCase):
 
     # ============================================================================
     # PolynomialLR Tests
