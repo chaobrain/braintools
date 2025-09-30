@@ -182,7 +182,7 @@ class OptaxOptimizer(Optimizer):
     opt_state: Optional[LongTermState]
     step_count: LongTermState
     base_lr: float
-    current_lr: LongTermState
+    current_lr: flaat
     param_groups: List[Dict[str, Any]]
     param_groups_opt_states: List[LongTermState]
     schedulers: List[LRScheduler]

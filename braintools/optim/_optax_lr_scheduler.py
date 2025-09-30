@@ -1601,7 +1601,269 @@ class WarmupScheduler(LRScheduler):
 
 
 class CyclicLR(LRScheduler):
-    """Cyclic learning rate scheduler."""
+    r"""Cyclic learning rate scheduler - Oscillates learning rate between bounds.
+
+    CyclicLR implements a learning rate schedule that cyclically varies between a
+    minimum (base_lr) and maximum (max_lr) learning rate. This helps the optimizer
+    explore different regions of the loss landscape and can lead to better convergence
+    and generalization. The policy was originally proposed for faster convergence
+    without extensive hyperparameter tuning.
+
+    Parameters
+    ----------
+    base_lr : float or list of float, optional
+        Lower learning rate boundaries in each cycle. This is the minimum learning
+        rate during the cycle. Can be a single float or list for multiple parameter
+        groups. Default: 1e-3.
+    max_lr : float or list of float, optional
+        Upper learning rate boundaries in each cycle. The learning rate will oscillate
+        between base_lr and max_lr. Can be a single float or list. Default: 1e-2.
+    step_size_up : int, optional
+        Number of iterations in the increasing half of a cycle. Default: 2000.
+    step_size_down : int, optional
+        Number of iterations in the decreasing half of a cycle. If None, it's set
+        equal to step_size_up. Default: None.
+    mode : str, optional
+        One of {'triangular', 'triangular2', 'exp_range'}. Values correspond to
+        policies detailed below:
+
+        - 'triangular': Basic triangular cycle without amplitude scaling.
+        - 'triangular2': Basic triangular cycle that scales amplitude by half each cycle.
+        - 'exp_range': Triangular cycle that scales amplitude by gamma^(cycle iterations).
+
+        Default: 'triangular'.
+    gamma : float, optional
+        Constant used in 'exp_range' mode for multiplicative scaling.
+        gamma^(cycle iterations) gives the scaling factor. Default: 1.0.
+    scale_fn : callable, optional
+        Custom scaling function given y = scale_fn(x), where x is the current
+        cycle iteration. Overrides mode parameter. Default: None.
+    scale_mode : str, optional
+        {'cycle', 'iterations'}. Determines whether scale_fn uses cycle number
+        or cycle iterations as input. Default: 'cycle'.
+    last_epoch : int, optional
+        The index of the last epoch. Used when resuming training. Default: 0.
+
+    Notes
+    -----
+    **Mathematical Formulation:**
+
+    The learning rate oscillates according to:
+
+    .. math::
+        \text{lr} = \text{base\_lr} + (\text{max\_lr} - \text{base\_lr})
+                    \times \max(0, 1 - |x - 1|) \times \text{scale}
+
+    where x cycles between 0 and 2, and scale depends on the mode.
+
+    **Modes Explained:**
+
+    1. **triangular**: Constant amplitude oscillation
+       - LR oscillates between base_lr and max_lr with fixed amplitude
+
+    2. **triangular2**: Decaying amplitude by half each cycle
+       - Amplitude = (max_lr - base_lr) * 0.5^(cycle_number)
+
+    3. **exp_range**: Exponentially decaying amplitude
+       - Amplitude = (max_lr - base_lr) * gamma^(iterations)
+
+    **Finding Optimal LR Range:**
+
+    Use the LR range test to find optimal base_lr and max_lr:
+    1. Start with very low LR (e.g., 1e-7)
+    2. Increase LR exponentially each batch
+    3. Plot loss vs LR and find:
+       - base_lr: LR where loss starts decreasing
+       - max_lr: LR where loss stops decreasing or starts increasing
+
+    **Benefits:**
+
+    - **No manual schedule tuning**: Automatically handles LR scheduling
+    - **Escapes saddle points**: Periodic high LR helps escape flat regions
+    - **Better generalization**: Oscillation prevents overfitting to sharp minima
+    - **Fast convergence**: Can achieve super-convergence with proper range
+
+    Examples
+    --------
+    **Basic triangular schedule:**
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> import brainstate
+        >>>
+        >>> # Basic triangular oscillation
+        >>> scheduler = braintools.optim.CyclicLR(
+        ...     base_lr=0.001,
+        ...     max_lr=0.006,
+        ...     step_size_up=2000,  # 2000 iterations to go from base to max
+        ...     mode='triangular'
+        ... )
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+    **Triangular2 with amplitude decay:**
+
+    .. code-block:: python
+
+        >>> # Amplitude halves each cycle for fine-tuning
+        >>> scheduler = braintools.optim.CyclicLR(
+        ...     base_lr=0.0001,
+        ...     max_lr=0.001,
+        ...     step_size_up=1000,
+        ...     step_size_down=1000,
+        ...     mode='triangular2'  # Amplitude decay
+        ... )
+        >>>
+        >>> # First cycle: LR oscillates between 0.0001 and 0.001
+        >>> # Second cycle: LR oscillates between 0.0001 and 0.0055
+        >>> # Third cycle: LR oscillates between 0.0001 and 0.00325
+        >>> # And so on...
+
+    **Exponential range decay:**
+
+    .. code-block:: python
+
+        >>> # Exponentially decreasing amplitude
+        >>> scheduler = braintools.optim.CyclicLR(
+        ...     base_lr=0.0001,
+        ...     max_lr=0.01,
+        ...     step_size_up=500,
+        ...     mode='exp_range',
+        ...     gamma=0.99994  # Gradual decay
+        ... )
+
+    **Asymmetric cycles:**
+
+    .. code-block:: python
+
+        >>> # Spend more time at lower learning rates
+        >>> scheduler = braintools.optim.CyclicLR(
+        ...     base_lr=0.0001,
+        ...     max_lr=0.001,
+        ...     step_size_up=500,   # Quick ramp up
+        ...     step_size_down=1500  # Slow ramp down
+        ... )
+
+    **Custom scaling function:**
+
+    .. code-block:: python
+
+        >>> # Custom amplitude scaling
+        >>> def custom_scale(x):
+        ...     '''Custom scaling: faster decay initially'''
+        ...     return 1 / (1 + 0.0005 * x)
+        >>>
+        >>> scheduler = braintools.optim.CyclicLR(
+        ...     base_lr=0.001,
+        ...     max_lr=0.1,
+        ...     step_size_up=1000,
+        ...     scale_fn=custom_scale,
+        ...     scale_mode='iterations'
+        ... )
+
+    **LR range test implementation:**
+
+    .. code-block:: python
+
+        >>> # Find optimal LR range
+        >>> def lr_range_test(model, data_loader, max_lr=10, num_iter=100):
+        ...     scheduler = braintools.optim.CyclicLR(
+        ...         base_lr=1e-7,
+        ...         max_lr=max_lr,
+        ...         step_size_up=num_iter,
+        ...         mode='triangular'
+        ...     )
+        ...     optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        ...
+        ...     lrs, losses = [], []
+        ...     for i, batch in enumerate(data_loader):
+        ...         if i >= num_iter:
+        ...             break
+        ...         loss = train_step(model, batch, optimizer)
+        ...         lrs.append(scheduler.get_lr()[0])
+        ...         losses.append(loss)
+        ...         scheduler.step()
+        ...
+        ...     # Plot and find optimal range
+        ...     import matplotlib.pyplot as plt
+        ...     plt.semilogx(lrs, losses)
+        ...     plt.xlabel('Learning Rate')
+        ...     plt.ylabel('Loss')
+        ...     plt.show()
+
+    **For super-convergence:**
+
+    .. code-block:: python
+
+        >>> # Super-convergence with one cycle
+        >>> # Use with large batch sizes and proper regularization
+        >>> scheduler = braintools.optim.CyclicLR(
+        ...     base_lr=0.08,   # Relatively high base_lr
+        ...     max_lr=0.8,     # Very high max_lr
+        ...     step_size_up=epochs * len(train_loader) // 2,
+        ...     step_size_down=epochs * len(train_loader) // 2,
+        ...     mode='triangular'
+        ... )
+        >>>
+        >>> # Combine with strong regularization
+        >>> optimizer = braintools.optim.SGD(
+        ...     lr=scheduler,
+        ...     momentum=0.95,
+        ...     weight_decay=1e-4
+        ... )
+
+    **Multiple parameter groups:**
+
+    .. code-block:: python
+
+        >>> # Different LR ranges for different layers
+        >>> scheduler = braintools.optim.CyclicLR(
+        ...     base_lr=[0.0001, 0.001],   # Lower for pretrained layers
+        ...     max_lr=[0.001, 0.01],       # Higher for new layers
+        ...     step_size_up=1000
+        ... )
+
+    **Monitoring cycles:**
+
+    .. code-block:: python
+
+        >>> scheduler = braintools.optim.CyclicLR(
+        ...     base_lr=0.001,
+        ...     max_lr=0.01,
+        ...     step_size_up=100,
+        ...     step_size_down=100
+        ... )
+        >>>
+        >>> for iteration in range(1000):
+        ...     train_step(...)
+        ...     scheduler.step()
+        ...
+        ...     if iteration % 50 == 0:
+        ...         cycle = iteration // (scheduler.step_size_up + scheduler.step_size_down)
+        ...         lr = scheduler.get_lr()[0]
+        ...         print(f"Iter {iteration}, Cycle {cycle}, LR: {lr:.6f}")
+
+    See Also
+    --------
+    OneCycleLR : One cycle learning rate policy
+    CosineAnnealingLR : Cosine annealing schedule
+    CosineAnnealingWarmRestarts : Cosine annealing with restarts
+    TriangularLR : Simplified triangular schedule
+
+    References
+    ----------
+    .. [1] Smith, L. N. (2017).
+           "Cyclical learning rates for training neural networks."
+           2017 IEEE Winter Conference on Applications of Computer Vision (WACV).
+    .. [2] Smith, L. N. (2018).
+           "A disciplined approach to neural network hyper-parameters: Part 1 --
+           learning rate, batch size, momentum, and weight decay."
+           arXiv preprint arXiv:1803.09820.
+    .. [3] Smith, L. N., & Topin, N. (2019).
+           "Super-convergence: Very fast training of neural networks using large learning rates."
+           Artificial Intelligence and Machine Learning for Multi-Domain Operations Applications.
+    """
 
     def __init__(
         self,
@@ -1661,7 +1923,329 @@ class CyclicLR(LRScheduler):
 
 
 class OneCycleLR(LRScheduler):
-    """One cycle learning rate scheduler."""
+    r"""One cycle learning rate scheduler - Super-convergence training policy.
+
+    OneCycleLR implements the 1cycle learning rate policy, which enables super-convergence
+    - training neural networks an order of magnitude faster than with standard methods.
+    The policy consists of two phases: first increasing the learning rate from a low value
+    to a maximum value, then decreasing it to a value much lower than the initial one.
+    This is typically combined with momentum scheduling in the opposite direction.
+
+    Parameters
+    ----------
+    max_lr : float or list of float, optional
+        Upper learning rate boundaries in the cycle. This is the peak learning rate
+        that will be reached during training. Can be a single float or list for
+        multiple parameter groups. Default: 1e-2.
+    total_steps : int, optional
+        The total number of steps (batches) in the cycle. Either this or the
+        combination of epochs and steps_per_epoch must be provided.
+    epochs : int, optional
+        The number of epochs to train for. Used with steps_per_epoch to calculate
+        total_steps if total_steps is not provided.
+    steps_per_epoch : int, optional
+        The number of steps (batches) per epoch. Used with epochs to calculate
+        total_steps if total_steps is not provided.
+    pct_start : float, optional
+        The percentage of the cycle spent increasing the learning rate.
+        Default: 0.3 (30% of cycle for warmup).
+    anneal_strategy : str, optional
+        {'cos', 'linear'}. Specifies the annealing strategy:
+
+        - 'cos': Cosine annealing from max_lr to final_lr
+        - 'linear': Linear annealing from max_lr to final_lr
+
+        Default: 'cos'.
+    div_factor : float, optional
+        Determines the initial learning rate via initial_lr = max_lr / div_factor.
+        Default: 25.0.
+    final_div_factor : float, optional
+        Determines the final learning rate via final_lr = max_lr / final_div_factor.
+        Default: 1e4.
+    last_epoch : int, optional
+        The index of the last batch. Used when resuming training. Default: 0.
+
+    Notes
+    -----
+    **Three Phases of OneCycleLR:**
+
+    1. **Warmup phase** (0 to pct_start):
+       - LR increases from initial_lr to max_lr
+       - Allows gradients to stabilize
+
+    2. **Annealing phase** (pct_start to 1.0):
+       - LR decreases from max_lr to final_lr
+       - Uses cosine or linear annealing
+
+    3. **Final phase** (optional extension):
+       - LR stays at final_lr for additional training
+
+    **Mathematical Formulation:**
+
+    Initial learning rate:
+
+    .. math::
+        \text{initial\_lr} = \frac{\text{max\_lr}}{\text{div\_factor}}
+
+    Final learning rate:
+
+    .. math::
+        \text{final\_lr} = \frac{\text{max\_lr}}{\text{final\_div\_factor}}
+
+    **Super-Convergence Benefits:**
+
+    - **10x faster training**: Achieve same accuracy in 1/10th the epochs
+    - **Better generalization**: Often achieves better final accuracy
+    - **Regularization effect**: High LR acts as regularization
+    - **Simpler hyperparameter tuning**: Mainly need to find max_lr
+
+    **Finding Optimal max_lr:**
+
+    Use the LR range test:
+    1. Start with very small LR
+    2. Gradually increase LR each batch
+    3. Plot loss vs LR
+    4. Choose max_lr slightly less than where loss starts increasing
+
+    **Momentum Scheduling:**
+
+    OneCycleLR works best with momentum scheduling in opposite direction:
+    - When LR increases, momentum decreases
+    - When LR decreases, momentum increases
+
+    Examples
+    --------
+    **Basic usage with super-convergence:**
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> import brainstate
+        >>>
+        >>> # Training for 5 epochs with 100 batches per epoch
+        >>> scheduler = braintools.optim.OneCycleLR(
+        ...     max_lr=0.1,
+        ...     epochs=5,
+        ...     steps_per_epoch=100
+        ... )
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>>
+        >>> for epoch in range(5):
+        ...     for batch in train_loader:
+        ...         train_step(batch)
+        ...         scheduler.step()
+
+    **With total steps specification:**
+
+    .. code-block:: python
+
+        >>> # Specify total training steps directly
+        >>> total_training_steps = 10000
+        >>> scheduler = braintools.optim.OneCycleLR(
+        ...     max_lr=0.3,
+        ...     total_steps=total_training_steps,
+        ...     pct_start=0.3,  # 30% warmup
+        ...     anneal_strategy='cos'
+        ... )
+
+    **Custom phase percentages:**
+
+    .. code-block:: python
+
+        >>> # Longer warmup phase (40% of training)
+        >>> scheduler = braintools.optim.OneCycleLR(
+        ...     max_lr=0.1,
+        ...     total_steps=5000,
+        ...     pct_start=0.4,  # 40% for warmup
+        ...     div_factor=10,  # Start from 0.01
+        ...     final_div_factor=100  # End at 0.001
+        ... )
+
+    **For different model sizes:**
+
+    .. code-block:: python
+
+        >>> # Small model/dataset - conservative settings
+        >>> scheduler_small = braintools.optim.OneCycleLR(
+        ...     max_lr=0.01,
+        ...     total_steps=1000,
+        ...     pct_start=0.3,
+        ...     div_factor=25,
+        ...     final_div_factor=1000
+        ... )
+        >>>
+        >>> # Large model - aggressive settings for super-convergence
+        >>> scheduler_large = braintools.optim.OneCycleLR(
+        ...     max_lr=1.0,  # Very high max_lr
+        ...     total_steps=10000,
+        ...     pct_start=0.2,  # Shorter warmup
+        ...     div_factor=25,
+        ...     final_div_factor=10000
+        ... )
+
+    **With momentum cycling (recommended):**
+
+    .. code-block:: python
+
+        >>> class OneCycleOptimizer:
+        ...     def __init__(self, model, max_lr=0.1, total_steps=1000):
+        ...         self.scheduler = braintools.optim.OneCycleLR(
+        ...             max_lr=max_lr,
+        ...             total_steps=total_steps
+        ...         )
+        ...         self.base_momentum = 0.85
+        ...         self.max_momentum = 0.95
+        ...         self.optimizer = braintools.optim.SGD(
+        ...             lr=self.scheduler,
+        ...             momentum=self.max_momentum
+        ...         )
+        ...
+        ...     def step(self, grads):
+        ...         # Update learning rate
+        ...         self.scheduler.step()
+        ...
+        ...         # Cycle momentum in opposite direction
+        ...         pct_complete = self.scheduler.last_epoch / self.scheduler.total_steps
+        ...         if pct_complete < self.scheduler.pct_start:
+        ...             # LR increasing, momentum decreasing
+        ...             momentum = self.max_momentum - (self.max_momentum - self.base_momentum) * pct_complete / self.scheduler.pct_start
+        ...         else:
+        ...             # LR decreasing, momentum increasing
+        ...             momentum = self.base_momentum + (self.max_momentum - self.base_momentum) * (pct_complete - self.scheduler.pct_start) / (1 - self.scheduler.pct_start)
+        ...
+        ...         self.optimizer.momentum = momentum
+        ...         self.optimizer.update(grads)
+
+    **LR range test for finding max_lr:**
+
+    .. code-block:: python
+
+        >>> def find_max_lr(model, data_loader, init_lr=1e-7, final_lr=10, num_iter=100):
+        ...     '''Find optimal max_lr using LR range test'''
+        ...     scheduler = braintools.optim.OneCycleLR(
+        ...         max_lr=final_lr,
+        ...         total_steps=num_iter,
+        ...         div_factor=final_lr/init_lr,
+        ...         final_div_factor=1.0,  # Don't decrease at end
+        ...         pct_start=1.0  # Only increase
+        ...     )
+        ...     optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        ...
+        ...     lrs, losses = [], []
+        ...     for i, batch in enumerate(data_loader):
+        ...         if i >= num_iter:
+        ...             break
+        ...
+        ...         loss = compute_loss(model, batch)
+        ...         grads = compute_gradients(loss)
+        ...         optimizer.update(grads)
+        ...
+        ...         lrs.append(scheduler.get_lr()[0])
+        ...         losses.append(loss.item())
+        ...         scheduler.step()
+        ...
+        ...     # Find LR where loss stops decreasing
+        ...     import numpy as np
+        ...     smooth_losses = np.convolve(losses, np.ones(5)/5, mode='valid')
+        ...     max_lr_idx = np.argmin(smooth_losses) + len(losses) - len(smooth_losses)
+        ...     suggested_max_lr = lrs[max_lr_idx]
+        ...     print(f"Suggested max_lr: {suggested_max_lr}")
+        ...
+        ...     return lrs, losses
+
+    **Transfer learning with OneCycle:**
+
+    .. code-block:: python
+
+        >>> # Fine-tuning pretrained model
+        >>> scheduler = braintools.optim.OneCycleLR(
+        ...     max_lr=0.001,  # Lower max_lr for fine-tuning
+        ...     total_steps=2000,
+        ...     pct_start=0.1,  # Short warmup
+        ...     div_factor=100,  # Very low initial LR
+        ...     final_div_factor=1000
+        ... )
+        >>>
+        >>> # Freeze early layers initially
+        >>> for param in model.early_layers.parameters():
+        ...     param.requires_grad = False
+        >>>
+        >>> # Unfreeze after warmup
+        >>> def unfreeze_callback(epoch):
+        ...     if epoch > scheduler.total_steps * scheduler.pct_start:
+        ...         for param in model.early_layers.parameters():
+        ...             param.requires_grad = True
+
+    **Different annealing strategies:**
+
+    .. code-block:: python
+
+        >>> # Cosine annealing (smoother)
+        >>> scheduler_cos = braintools.optim.OneCycleLR(
+        ...     max_lr=0.1,
+        ...     total_steps=1000,
+        ...     anneal_strategy='cos'
+        ... )
+        >>>
+        >>> # Linear annealing (more aggressive)
+        >>> scheduler_linear = braintools.optim.OneCycleLR(
+        ...     max_lr=0.1,
+        ...     total_steps=1000,
+        ...     anneal_strategy='linear'
+        ... )
+
+    **Monitoring training progress:**
+
+    .. code-block:: python
+
+        >>> scheduler = braintools.optim.OneCycleLR(
+        ...     max_lr=0.1,
+        ...     total_steps=1000,
+        ...     pct_start=0.3
+        ... )
+        >>>
+        >>> for step in range(1000):
+        ...     train_step(...)
+        ...     scheduler.step()
+        ...
+        ...     if step % 100 == 0:
+        ...         phase = "warmup" if step < 300 else "annealing"
+        ...         lr = scheduler.get_lr()[0]
+        ...         progress = step / 1000 * 100
+        ...         print(f"Step {step} ({progress:.1f}%): {phase} phase, LR={lr:.6f}")
+
+    **Multiple parameter groups:**
+
+    .. code-block:: python
+
+        >>> # Different max_lr for different layers
+        >>> scheduler = braintools.optim.OneCycleLR(
+        ...     max_lr=[0.001, 0.01],  # Lower for pretrained, higher for new layers
+        ...     total_steps=1000,
+        ...     pct_start=0.3
+        ... )
+
+    See Also
+    --------
+    CyclicLR : Cyclic learning rate schedules
+    CosineAnnealingLR : Cosine annealing schedule
+    LinearLR : Linear learning rate schedule
+    WarmupScheduler : Simple warmup schedule
+
+    References
+    ----------
+    .. [1] Smith, L. N., & Topin, N. (2019).
+           "Super-convergence: Very fast training of neural networks using large learning rates."
+           Artificial Intelligence and Machine Learning for Multi-Domain Operations Applications.
+    .. [2] Smith, L. N. (2018).
+           "A disciplined approach to neural network hyper-parameters: Part 1 --
+           learning rate, batch size, momentum, and weight decay."
+           arXiv preprint arXiv:1803.09820.
+    .. [3] Howard, J., & Gugger, S. (2020).
+           "Fastai: A layered API for deep learning."
+           Information, 11(2), 108.
+    """
 
     def __init__(
         self,
@@ -3195,7 +3779,281 @@ class SequentialLR(LRScheduler):
 
 
 class CosineAnnealingWarmRestarts(LRScheduler):
-    """Cosine annealing with warm restarts."""
+    r"""Cosine annealing with warm restarts - SGDR (Stochastic Gradient Descent with Warm Restarts).
+
+    CosineAnnealingWarmRestarts implements a learning rate schedule where the learning rate
+    decreases following a cosine annealing schedule, then periodically restarts from the
+    initial value. This creates a series of cosine waves with potentially increasing periods,
+    allowing the model to escape local minima and explore different regions of the loss landscape.
+
+    Parameters
+    ----------
+    base_lr : float or list of float, optional
+        Initial learning rate(s). This is the maximum learning rate at the start of each
+        cosine annealing cycle. Can be a single float or a list for multiple parameter
+        groups. Default: 1e-3.
+    T_0 : int, optional
+        Number of epochs for the first restart cycle. This defines the initial period
+        before the first restart. Default: 10.
+    T_mult : int, optional
+        Factor by which the period increases after each restart. If T_mult=1, all cycles
+        have the same length. If T_mult=2, each cycle is twice as long as the previous.
+        Default: 1.
+    eta_min : float, optional
+        Minimum learning rate. The learning rate will never go below this value during
+        the cosine annealing. Default: 0.
+    last_epoch : int, optional
+        The index of the last epoch. Used when resuming training. Default: 0.
+
+    Notes
+    -----
+    **Mathematical Formulation:**
+
+    Within each cosine annealing cycle, the learning rate follows:
+
+    .. math::
+        \eta_t = \eta_{min} + \frac{1}{2}(\eta_{max} - \eta_{min})
+                 \left(1 + \cos\left(\frac{T_{cur}}{T_i}\pi\right)\right)
+
+    where:
+    - :math:`\eta_{max}` is the base learning rate
+    - :math:`\eta_{min}` is the minimum learning rate
+    - :math:`T_{cur}` is the number of epochs since the last restart
+    - :math:`T_i` is the current cycle length
+
+    **Restart Schedule:**
+
+    The cycle lengths follow the pattern:
+    - First cycle: :math:`T_0` epochs
+    - Second cycle: :math:`T_0 \times T_{mult}` epochs
+    - Third cycle: :math:`T_0 \times T_{mult}^2` epochs
+    - And so on...
+
+    **Benefits of Warm Restarts:**
+
+    1. **Escape Local Minima**: Periodic restarts help the optimizer escape sharp minima
+    2. **Ensemble Effect**: Each restart produces a different model, creating an implicit ensemble
+    3. **Fast Convergence**: Combines rapid initial progress with fine-tuning
+    4. **Exploration**: Allows exploring different regions of the parameter space
+
+    **JIT Compatibility:**
+
+    This implementation is JIT-compatible through the use of `jnp.where` for conditional
+    updates in the restart logic.
+
+    Examples
+    --------
+    **Basic usage with fixed-length cycles:**
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> import brainstate
+        >>>
+        >>> # Restart every 50 epochs with same cycle length
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.1,
+        ...     T_0=50,
+        ...     T_mult=1,  # Fixed cycle length
+        ...     eta_min=0.001
+        ... )
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>>
+        >>> for epoch in range(200):
+        ...     train_epoch(...)
+        ...     scheduler.step()
+        ...     # LR will restart at epochs 50, 100, 150
+
+    **Increasing cycle lengths (recommended):**
+
+    .. code-block:: python
+
+        >>> # Cycles of increasing length: 10, 20, 40, 80, ...
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.1,
+        ...     T_0=10,
+        ...     T_mult=2,  # Double cycle length each time
+        ...     eta_min=0.0001
+        ... )
+        >>>
+        >>> # Training schedule:
+        >>> # Epochs [0, 10): First cycle (10 epochs)
+        >>> # Epochs [10, 30): Second cycle (20 epochs)
+        >>> # Epochs [30, 70): Third cycle (40 epochs)
+        >>> # And so on...
+
+    **For transformer training:**
+
+    .. code-block:: python
+
+        >>> # Transformer models often benefit from warm restarts
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.0005,
+        ...     T_0=1000,  # First cycle: 1000 steps
+        ...     T_mult=2,   # Increasing cycles
+        ...     eta_min=1e-6
+        ... )
+        >>> optimizer = braintools.optim.AdamW(lr=scheduler, weight_decay=0.01)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+    **Fine-tuning with short cycles:**
+
+    .. code-block:: python
+
+        >>> # Fine-tuning with frequent restarts for exploration
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.001,  # Lower LR for fine-tuning
+        ...     T_0=5,          # Short initial cycle
+        ...     T_mult=1,       # Keep cycles short
+        ...     eta_min=1e-5
+        ... )
+        >>>
+        >>> # This creates rapid oscillations for better exploration
+        >>> for epoch in range(50):
+        ...     fine_tune_epoch(...)
+        ...     scheduler.step()
+
+    **Snapshot ensembling:**
+
+    .. code-block:: python
+
+        >>> # Save model at each restart for ensemble
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.1,
+        ...     T_0=25,
+        ...     T_mult=1,
+        ...     eta_min=0
+        ... )
+        >>>
+        >>> snapshots = []
+        >>> for epoch in range(100):
+        ...     train_epoch(...)
+        ...     scheduler.step()
+        ...
+        ...     # Save snapshot at minimum LR (just before restart)
+        ...     if scheduler.T_cur.value == scheduler.T_i.value - 1:
+        ...         snapshot = copy.deepcopy(model.state_dict())
+        ...         snapshots.append(snapshot)
+        ...         print(f"Saved snapshot at epoch {epoch}")
+
+    **Monitoring restarts:**
+
+    .. code-block:: python
+
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.1,
+        ...     T_0=10,
+        ...     T_mult=2,
+        ...     eta_min=0.001
+        ... )
+        >>>
+        >>> for epoch in range(100):
+        ...     old_T_cur = scheduler.T_cur.value
+        ...     scheduler.step()
+        ...     current_lr = scheduler.get_lr()[0]
+        ...
+        ...     # Detect restart
+        ...     if scheduler.T_cur.value < old_T_cur.value:
+        ...         print(f"Restart at epoch {epoch}! LR reset to {current_lr:.6f}")
+        ...
+        ...     if epoch % 10 == 0:
+        ...         print(f"Epoch {epoch}: LR={current_lr:.6f}, "
+        ...               f"T_cur={scheduler.T_cur.value}, T_i={scheduler.T_i.value}")
+
+    **Custom restart schedule with T_mult > 1:**
+
+    .. code-block:: python
+
+        >>> # Create a schedule with specific restart points
+        >>> # Restarts at: 0, 100, 300, 700, 1500, ...
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.01,
+        ...     T_0=100,    # First cycle: 100 epochs
+        ...     T_mult=2,   # Each cycle doubles
+        ...     eta_min=0.0001
+        ... )
+        >>>
+        >>> # Calculate when restarts will occur
+        >>> def get_restart_epochs(T_0, T_mult, n_restarts):
+        ...     epochs = [0]
+        ...     T_i = T_0
+        ...     for i in range(n_restarts):
+        ...         epochs.append(epochs[-1] + T_i)
+        ...         T_i = T_i * T_mult
+        ...     return epochs
+        >>>
+        >>> restart_epochs = get_restart_epochs(100, 2, 5)
+        >>> print(f"Restarts at epochs: {restart_epochs}")
+        >>> # Output: [0, 100, 300, 700, 1500, 3100]
+
+    **Combining with other techniques:**
+
+    .. code-block:: python
+
+        >>> # Combine with gradient clipping and weight decay
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.1,
+        ...     T_0=30,
+        ...     T_mult=2,
+        ...     eta_min=0.001
+        ... )
+        >>>
+        >>> optimizer = braintools.optim.AdamW(
+        ...     lr=scheduler,
+        ...     weight_decay=1e-4,
+        ...     clip_norm=1.0  # Gradient clipping
+        ... )
+
+    **State persistence for long training:**
+
+    .. code-block:: python
+
+        >>> # Save and restore scheduler state
+        >>> scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.1, T_0=50, T_mult=2
+        ... )
+        >>>
+        >>> # Train for some epochs
+        >>> for epoch in range(75):
+        ...     scheduler.step()
+        >>>
+        >>> # Save state
+        >>> state = {
+        ...     'epoch': 75,
+        ...     'scheduler': scheduler.state_dict(),
+        ...     'T_cur': scheduler.T_cur,
+        ...     'T_i': scheduler.T_i
+        ... }
+        >>>
+        >>> # Later: restore and continue
+        >>> new_scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+        ...     base_lr=0.1, T_0=50, T_mult=2
+        ... )
+        >>> new_scheduler.load_state_dict(state['scheduler'])
+        >>> new_scheduler.T_cur = state['T_cur']
+        >>> new_scheduler.T_i = state['T_i']
+
+    See Also
+    --------
+    CosineAnnealingLR : Standard cosine annealing without restarts
+    OneCycleLR : One cycle learning rate policy
+    CyclicLR : Cyclic learning rates between bounds
+    ChainedScheduler : Chain multiple schedulers together
+
+    References
+    ----------
+    .. [1] Loshchilov, I., & Hutter, F. (2016).
+           "SGDR: Stochastic gradient descent with warm restarts."
+           International Conference on Learning Representations (ICLR 2017).
+           arXiv preprint arXiv:1608.03983.
+    .. [2] Huang, G., et al. (2017).
+           "Snapshot ensembles: Train 1, get M for free."
+           International Conference on Learning Representations.
+    .. [3] Smith, L. N., & Topin, N. (2019).
+           "Super-convergence: Very fast training of neural networks using large learning rates."
+           Artificial Intelligence and Machine Learning for Multi-Domain Operations Applications.
+    """
 
     def __init__(
         self,
@@ -3208,13 +4066,13 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         self.T_0 = T_0
         self.T_mult = T_mult
         self.eta_min = eta_min
-        self.T_cur = 0
-        self.T_i = T_0
+        self.T_cur = LongTermState(0)
+        self.T_i = LongTermState(T_0)
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
         return [self.eta_min + (base_lr - self.eta_min) *
-                (1 + jnp.cos(jnp.pi * self.T_cur / self.T_i)) / 2
+                (1 + jnp.cos(jnp.pi * self.T_cur.value / self.T_i.value)) / 2
                 for base_lr in self.base_lrs]
 
     def step(self, epoch: Optional[int] = None):
@@ -3222,10 +4080,10 @@ class CosineAnnealingWarmRestarts(LRScheduler):
             epoch = self.last_epoch.value + 1
 
         # JIT-compatible: use jnp.where for conditional updates
-        self.T_cur = self.T_cur + 1
-        should_restart = self.T_cur >= self.T_i
-        self.T_cur = jnp.where(should_restart, 0, self.T_cur)
-        self.T_i = jnp.where(should_restart, self.T_i * self.T_mult, self.T_i)
+        self.T_cur.value = self.T_cur.value + 1
+        should_restart = self.T_cur.value >= self.T_i.value
+        self.T_cur.value = jnp.where(should_restart, 0, self.T_cur.value)
+        self.T_i.value = jnp.where(should_restart, self.T_i.value * self.T_mult, self.T_i.value)
 
         self.last_epoch.value = epoch
 
@@ -3237,7 +4095,313 @@ class CosineAnnealingWarmRestarts(LRScheduler):
 
 
 class WarmupCosineSchedule(LRScheduler):
-    """Warmup + Cosine annealing schedule."""
+    r"""Warmup + Cosine annealing schedule for smooth training transitions.
+
+    WarmupCosineSchedule combines linear warmup with cosine annealing to create a
+    smooth learning rate schedule that's particularly effective for training deep
+    neural networks from scratch. The schedule starts with a low learning rate,
+    linearly increases to the base rate during warmup, then follows a cosine decay
+    to a minimum value.
+
+    This scheduler is widely used in:
+    - Vision Transformers (ViT) and other transformer architectures
+    - Self-supervised learning (SimCLR, BYOL, MAE)
+    - Large-scale distributed training
+    - Fine-tuning pre-trained models
+
+    Parameters
+    ----------
+    base_lr : float or list of float, optional
+        Peak learning rate(s) reached at the end of warmup. This is the maximum
+        learning rate in the schedule. Can be a single float or list for multiple
+        parameter groups. Default: 1e-3.
+    warmup_steps : int, optional
+        Number of steps for the linear warmup phase. During this phase, the
+        learning rate linearly increases from warmup_start_lr to base_lr.
+        Default: 1000.
+    total_steps : int, optional
+        Total number of training steps. The cosine annealing phase spans from
+        warmup_steps to total_steps. Default: 10000.
+    warmup_start_lr : float, optional
+        Starting learning rate for the warmup phase. Set to 0 for linear warmup
+        from zero, or a small value (e.g., 1e-6) for stability. Default: 0.0.
+    eta_min : float, optional
+        Minimum learning rate at the end of cosine annealing. The learning rate
+        will not go below this value. Default: 0.0.
+    last_epoch : int, optional
+        The index of the last epoch. Used when resuming training. Default: 0.
+
+    Notes
+    -----
+    **Mathematical Formulation:**
+
+    The learning rate schedule consists of two phases:
+
+    1. **Linear Warmup Phase** (step < warmup_steps):
+
+    .. math::
+        \eta_t = \eta_{warmup\_start} + \frac{t}{T_{warmup}}
+                 \cdot (\eta_{base} - \eta_{warmup\_start})
+
+    2. **Cosine Annealing Phase** (step >= warmup_steps):
+
+    .. math::
+        \eta_t = \eta_{min} + \frac{1}{2}(\eta_{base} - \eta_{min})
+                 \cdot \left(1 + \cos\left(\pi \cdot \frac{t - T_{warmup}}
+                 {T_{total} - T_{warmup}}\right)\right)
+
+    where:
+    - :math:`t` is the current step
+    - :math:`T_{warmup}` is the number of warmup steps
+    - :math:`T_{total}` is the total number of steps
+    - :math:`\eta_{base}` is the peak learning rate
+    - :math:`\eta_{min}` is the minimum learning rate
+
+    **Benefits of Warmup:**
+
+    1. **Stability**: Prevents divergence in early training with large learning rates
+    2. **Gradient Statistics**: Allows optimizer to gather statistics before full LR
+    3. **Weight Initialization**: Gives random weights time to organize
+    4. **Large Batch Training**: Essential for stable training with large batches
+
+    **JIT Compatibility:**
+
+    This implementation is fully JIT-compatible through the use of JAX operations
+    and conditional selection with `jnp.where`.
+
+    Examples
+    --------
+    **Basic Vision Transformer training:**
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> import brainstate
+        >>>
+        >>> # Standard ViT training schedule
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=0.001,           # Peak learning rate
+        ...     warmup_steps=10000,      # 10k warmup steps
+        ...     total_steps=100000,      # 100k total steps
+        ...     warmup_start_lr=1e-6,    # Start from small LR
+        ...     eta_min=1e-5             # End at small LR
+        ... )
+        >>> optimizer = braintools.optim.AdamW(lr=scheduler, weight_decay=0.05)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>>
+        >>> for step in range(100000):
+        ...     loss = train_step(...)
+        ...     scheduler.step()
+        ...     if step % 1000 == 0:
+        ...         lr = scheduler.get_lr()[0]
+        ...         print(f"Step {step}: LR = {lr:.6f}")
+
+    **Self-supervised learning (SimCLR/BYOL style):**
+
+    .. code-block:: python
+
+        >>> # Self-supervised learning benefits from longer warmup
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=0.3,             # High LR for contrastive learning
+        ...     warmup_steps=4000,       # ~10 epochs warmup
+        ...     total_steps=40000,       # 100 epochs total
+        ...     warmup_start_lr=0.0,     # Start from zero
+        ...     eta_min=0.0              # Decay to zero
+        ... )
+        >>>
+        >>> # Scale learning rate with batch size (linear scaling rule)
+        >>> batch_size = 4096
+        >>> base_batch_size = 256
+        >>> scaled_lr = 0.3 * (batch_size / base_batch_size)
+        >>> scheduler.base_lrs = [scaled_lr]
+
+    **Fine-tuning pre-trained models:**
+
+    .. code-block:: python
+
+        >>> # Shorter warmup for fine-tuning
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=5e-5,            # Lower LR for fine-tuning
+        ...     warmup_steps=500,        # Quick warmup
+        ...     total_steps=10000,       # Shorter total training
+        ...     warmup_start_lr=0.0,
+        ...     eta_min=1e-6
+        ... )
+        >>> optimizer = braintools.optim.AdamW(lr=scheduler, weight_decay=0.01)
+
+    **Distributed training with large batches:**
+
+    .. code-block:: python
+
+        >>> # Large batch training needs careful warmup
+        >>> world_size = 8  # 8 GPUs
+        >>> batch_per_gpu = 64
+        >>> total_batch = batch_per_gpu * world_size  # 512
+        >>>
+        >>> # Linear scaling rule with warmup
+        >>> base_lr = 0.001
+        >>> scaled_lr = base_lr * (total_batch / 128)  # Scale from base batch 128
+        >>>
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=scaled_lr,
+        ...     warmup_steps=2000,       # Longer warmup for large batch
+        ...     total_steps=50000,
+        ...     warmup_start_lr=base_lr / 100,  # Start at 1% of base
+        ...     eta_min=scaled_lr * 0.01
+        ... )
+
+    **MAE-style masked autoencoder training:**
+
+    .. code-block:: python
+
+        >>> # MAE uses specific warmup schedule
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=1.5e-4,          # Base LR for batch 4096
+        ...     warmup_steps=40 * 312,   # 40 epochs of warmup
+        ...     total_steps=1600 * 312,  # 1600 epochs total
+        ...     warmup_start_lr=0.0,
+        ...     eta_min=0.0
+        ... )
+        >>>
+        >>> # Combined with specific optimizer settings
+        >>> optimizer = braintools.optim.AdamW(
+        ...     lr=scheduler,
+        ...     betas=(0.9, 0.95),  # MAE-specific betas
+        ...     weight_decay=0.05
+        ... )
+
+    **BERT-style transformer training:**
+
+    .. code-block:: python
+
+        >>> # BERT uses fraction-based warmup
+        >>> total_steps = 1000000
+        >>> warmup_fraction = 0.1  # 10% warmup
+        >>>
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=1e-4,
+        ...     warmup_steps=int(total_steps * warmup_fraction),
+        ...     total_steps=total_steps,
+        ...     warmup_start_lr=0.0,
+        ...     eta_min=1e-5
+        ... )
+
+    **Monitoring warmup progression:**
+
+    .. code-block:: python
+
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=0.001,
+        ...     warmup_steps=1000,
+        ...     total_steps=10000,
+        ...     warmup_start_lr=1e-5,
+        ...     eta_min=1e-4
+        ... )
+        >>>
+        >>> for step in range(10000):
+        ...     scheduler.step()
+        ...     lr = scheduler.get_lr()[0]
+        ...
+        ...     # Track phase transitions
+        ...     if step == 0:
+        ...         print(f"Starting warmup from LR = {lr:.6f}")
+        ...     elif step == scheduler.warmup_steps - 1:
+        ...         print(f"Ending warmup at LR = {lr:.6f}")
+        ...     elif step == scheduler.warmup_steps:
+        ...         print(f"Starting cosine decay from LR = {lr:.6f}")
+        ...     elif step == scheduler.total_steps - 1:
+        ...         print(f"Training complete at LR = {lr:.6f}")
+
+    **Custom warmup strategies:**
+
+    .. code-block:: python
+
+        >>> # Aggressive warmup (reach peak quickly)
+        >>> fast_warmup = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=0.01,
+        ...     warmup_steps=100,        # Very short warmup
+        ...     total_steps=10000,
+        ...     warmup_start_lr=0.001,   # Start at 10% of peak
+        ...     eta_min=0.0001
+        ... )
+        >>>
+        >>> # Conservative warmup (gradual increase)
+        >>> slow_warmup = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=0.01,
+        ...     warmup_steps=5000,       # 50% of training for warmup
+        ...     total_steps=10000,
+        ...     warmup_start_lr=1e-6,    # Start very low
+        ...     eta_min=0.001
+        ... )
+
+    **Combining with gradient accumulation:**
+
+    .. code-block:: python
+
+        >>> # Gradient accumulation affects effective batch size
+        >>> accumulation_steps = 4
+        >>> per_step_batch = 32
+        >>> effective_batch = per_step_batch * accumulation_steps  # 128
+        >>>
+        >>> # Adjust learning rate and warmup accordingly
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=0.001 * (effective_batch / 32),
+        ...     warmup_steps=2000 // accumulation_steps,  # Adjust for accumulation
+        ...     total_steps=50000 // accumulation_steps,
+        ...     warmup_start_lr=1e-5,
+        ...     eta_min=1e-5
+        ... )
+
+    **State persistence for checkpointing:**
+
+    .. code-block:: python
+
+        >>> # Save scheduler state
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=0.001,
+        ...     warmup_steps=1000,
+        ...     total_steps=10000
+        ... )
+        >>> # ... train for some steps ...
+        >>> checkpoint = {
+        ...     'step': current_step,
+        ...     'scheduler': scheduler.state_dict(),
+        ...     'optimizer': optimizer.state_dict(),
+        ...     'model': model.state_dict()
+        ... }
+        >>> save(checkpoint, 'checkpoint.pkl')
+        >>>
+        >>> # Resume training
+        >>> scheduler = braintools.optim.WarmupCosineSchedule(
+        ...     base_lr=0.001,
+        ...     warmup_steps=1000,
+        ...     total_steps=10000
+        ... )
+        >>> scheduler.load_state_dict(checkpoint['scheduler'])
+        >>> # Continue from saved step
+
+    See Also
+    --------
+    CosineAnnealingLR : Pure cosine annealing without warmup
+    LinearLR : Linear learning rate schedule (can be used for warmup)
+    OneCycleLR : Another schedule combining warmup with annealing
+    PolynomialLR : Polynomial decay schedule
+
+    References
+    ----------
+    .. [1] Dosovitskiy, A., et al. (2020).
+           "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale."
+           International Conference on Learning Representations.
+    .. [2] He, K., et al. (2022).
+           "Masked Autoencoders Are Scalable Vision Learners."
+           Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition.
+    .. [3] Goyal, P., et al. (2017).
+           "Accurate, large minibatch SGD: Training ImageNet in 1 hour."
+           arXiv preprint arXiv:1706.02677.
+    .. [4] Chen, T., et al. (2020).
+           "A Simple Framework for Contrastive Learning of Visual Representations."
+           International Conference on Machine Learning.
+    """
 
     def __init__(
         self,
@@ -3277,7 +4441,332 @@ class WarmupCosineSchedule(LRScheduler):
 
 
 class PiecewiseConstantSchedule(LRScheduler):
-    """Piecewise constant learning rate schedule."""
+    r"""Piecewise constant learning rate schedule with step-wise transitions.
+
+    PiecewiseConstantSchedule implements a learning rate schedule where the learning
+    rate remains constant within specified intervals and changes abruptly at predefined
+    boundaries. This creates a step function that's useful for stage-based training
+    where different phases require different learning rates.
+
+    This scheduler is particularly effective for:
+    - Multi-stage training pipelines
+    - Transfer learning with progressive unfreezing
+    - Training with curriculum learning
+    - Reproducing specific research papers with fixed schedules
+    - Budget-constrained training with predetermined phases
+
+    Parameters
+    ----------
+    base_lr : float or list of float, optional
+        Base learning rate(s) that will be scaled by the values parameter.
+        Can be a single float or list for multiple parameter groups. This serves
+        as a reference that gets multiplied by the values at each stage.
+        Default: 1e-3.
+    boundaries : list of int, optional
+        Step indices where the learning rate changes. Must be sorted in ascending
+        order. The schedule will have len(boundaries) + 1 distinct phases.
+        Default: [1000, 2000].
+    values : list of float, optional
+        Multiplicative factors for the base learning rate in each phase. Must have
+        exactly len(boundaries) + 1 elements. The i-th value applies from
+        boundary[i-1] to boundary[i]. Default: [1.0, 0.1, 0.01].
+    last_epoch : int, optional
+        The index of the last epoch. Used when resuming training. Default: 0.
+
+    Notes
+    -----
+    **Mathematical Formulation:**
+
+    The learning rate at step t is defined as:
+
+    .. math::
+        \eta_t = \eta_{base} \times v_i
+
+    where :math:`v_i` is determined by:
+
+    .. math::
+        v_i = \begin{cases}
+            \text{values}[0] & \text{if } t < \text{boundaries}[0] \\
+            \text{values}[1] & \text{if } \text{boundaries}[0] \leq t < \text{boundaries}[1] \\
+            ... & ... \\
+            \text{values}[n] & \text{if } t \geq \text{boundaries}[n-1]
+        \end{cases}
+
+    **Schedule Structure:**
+
+    Given boundaries [b1, b2, ..., bn] and values [v0, v1, ..., vn]:
+    - Steps [0, b1): learning_rate = base_lr × v0
+    - Steps [b1, b2): learning_rate = base_lr × v1
+    - Steps [b2, b3): learning_rate = base_lr × v2
+    - ...
+    - Steps [bn, ∞): learning_rate = base_lr × vn
+
+    **JIT Compatibility:**
+
+    This implementation is JIT-compatible through the use of `jnp.searchsorted`
+    for efficient boundary-based value selection without Python conditionals.
+
+    Examples
+    --------
+    **Classic ImageNet training schedule:**
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> import brainstate
+        >>>
+        >>> # ResNet50 on ImageNet schedule
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.1,
+        ...     boundaries=[30, 60, 80],  # Epochs to decrease LR
+        ...     values=[1.0, 0.1, 0.01, 0.001]  # LR multipliers
+        ... )
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>>
+        >>> # Train for 90 epochs total
+        >>> for epoch in range(90):
+        ...     train_epoch(...)
+        ...     scheduler.step()
+        ...     lr = scheduler.get_lr()[0]
+        ...     print(f"Epoch {epoch}: LR = {lr:.6f}")
+        ...     # LR: 0.1 (epochs 0-29), 0.01 (30-59), 0.001 (60-79), 0.0001 (80-89)
+
+    **Transfer learning with progressive unfreezing:**
+
+    .. code-block:: python
+
+        >>> # Unfreeze layers progressively with different LRs
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=1e-3,
+        ...     boundaries=[5, 10, 15],  # Unfreeze stages
+        ...     values=[0.01, 0.1, 0.5, 1.0]  # Gradual increase
+        ... )
+        >>>
+        >>> # Stage 1 (0-4): Only train head, very low LR
+        >>> # Stage 2 (5-9): Unfreeze top layers
+        >>> # Stage 3 (10-14): Unfreeze middle layers
+        >>> # Stage 4 (15+): Full model training
+        >>>
+        >>> for epoch in range(20):
+        ...     if epoch == 5:
+        ...         unfreeze_top_layers(model)
+        ...     elif epoch == 10:
+        ...         unfreeze_middle_layers(model)
+        ...     elif epoch == 15:
+        ...         unfreeze_all_layers(model)
+        ...
+        ...     train_epoch(...)
+        ...     scheduler.step()
+
+    **Budget-aware training schedule:**
+
+    .. code-block:: python
+
+        >>> # Training with computational budget constraints
+        >>> # Fast initial training, then careful fine-tuning
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.01,
+        ...     boundaries=[100, 500, 800],
+        ...     values=[10.0, 1.0, 0.1, 0.01]  # Aggressive start, careful end
+        ... )
+        >>>
+        >>> # Steps 0-99: Fast exploration (LR=0.1)
+        >>> # Steps 100-499: Normal training (LR=0.01)
+        >>> # Steps 500-799: Fine-tuning (LR=0.001)
+        >>> # Steps 800+: Final refinement (LR=0.0001)
+
+    **Multi-phase curriculum learning:**
+
+    .. code-block:: python
+
+        >>> # Different learning rates for different curriculum stages
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=1e-3,
+        ...     boundaries=[1000, 3000, 6000, 9000],
+        ...     values=[0.1, 0.5, 1.0, 0.5, 0.1]
+        ... )
+        >>>
+        >>> curriculum_difficulties = [0.2, 0.4, 0.6, 0.8, 1.0]
+        >>>
+        >>> for step in range(10000):
+        ...     # Determine curriculum difficulty
+        ...     stage = sum(step >= b for b in scheduler.boundaries)
+        ...     difficulty = curriculum_difficulties[stage]
+        ...
+        ...     # Train with appropriate difficulty
+        ...     batch = get_curriculum_batch(difficulty)
+        ...     train_step(batch)
+        ...     scheduler.step()
+
+    **Reproducing paper schedules:**
+
+    .. code-block:: python
+
+        >>> # WideResNet schedule from paper
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.1,
+        ...     boundaries=[60, 120, 160],  # Specific to WideResNet
+        ...     values=[1.0, 0.2, 0.04, 0.008]
+        ... )
+        >>>
+        >>> # CIFAR training schedule from "Bag of Tricks"
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.1,
+        ...     boundaries=[150, 250],
+        ...     values=[1.0, 0.1, 0.01]
+        ... )
+
+    **Step-based (not epoch-based) scheduling:**
+
+    .. code-block:: python
+
+        >>> # Define boundaries in terms of training steps
+        >>> steps_per_epoch = len(train_loader)
+        >>> epoch_boundaries = [30, 60, 80]  # Desired epoch boundaries
+        >>> step_boundaries = [e * steps_per_epoch for e in epoch_boundaries]
+        >>>
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.1,
+        ...     boundaries=step_boundaries,
+        ...     values=[1.0, 0.1, 0.01, 0.001]
+        ... )
+        >>>
+        >>> global_step = 0
+        >>> for epoch in range(90):
+        ...     for batch in train_loader:
+        ...         train_step(batch)
+        ...         scheduler.step(global_step)
+        ...         global_step += 1
+
+    **Combining with warmup:**
+
+    .. code-block:: python
+
+        >>> # Add warmup to piecewise schedule
+        >>> warmup_steps = 500
+        >>> main_boundaries = [5000, 10000, 15000]
+        >>>
+        >>> # Combine warmup with main schedule
+        >>> all_boundaries = [warmup_steps] + main_boundaries
+        >>> all_values = [0.01, 1.0, 0.1, 0.01, 0.001]  # Low start for warmup
+        >>>
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.01,
+        ...     boundaries=all_boundaries,
+        ...     values=all_values
+        ... )
+
+    **Dynamic monitoring and adjustment:**
+
+    .. code-block:: python
+
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.1,
+        ...     boundaries=[1000, 2000, 3000],
+        ...     values=[1.0, 0.5, 0.1, 0.01]
+        ... )
+        >>>
+        >>> for step in range(4000):
+        ...     old_lr = scheduler.get_lr()[0]
+        ...     scheduler.step()
+        ...     new_lr = scheduler.get_lr()[0]
+        ...
+        ...     # Detect LR changes
+        ...     if old_lr != new_lr:
+        ...         print(f"Step {step}: LR changed from {old_lr:.6f} to {new_lr:.6f}")
+        ...         # Optionally reset momentum or other optimizer states
+        ...         reset_optimizer_momentum(optimizer)
+        ...
+        ...     if step % 100 == 0:
+        ...         print(f"Step {step}: LR = {new_lr:.6f}")
+
+    **Research experimentation with multiple schedules:**
+
+    .. code-block:: python
+
+        >>> # Compare different decay strategies
+        >>> schedules = {
+        ...     'aggressive': braintools.optim.PiecewiseConstantSchedule(
+        ...         base_lr=0.1,
+        ...         boundaries=[10, 20],
+        ...         values=[1.0, 0.01, 0.0001]
+        ...     ),
+        ...     'conservative': braintools.optim.PiecewiseConstantSchedule(
+        ...         base_lr=0.1,
+        ...         boundaries=[30, 60],
+        ...         values=[1.0, 0.5, 0.1]
+        ...     ),
+        ...     'multi_stage': braintools.optim.PiecewiseConstantSchedule(
+        ...         base_lr=0.1,
+        ...         boundaries=[10, 20, 30, 40],
+        ...         values=[1.0, 0.8, 0.4, 0.1, 0.01]
+        ...     )
+        ... }
+        >>>
+        >>> # Run experiments
+        >>> for name, scheduler in schedules.items():
+        ...     print(f"Testing schedule: {name}")
+        ...     model = create_model()
+        ...     optimizer = braintools.optim.SGD(lr=scheduler)
+        ...     results = train_model(model, optimizer)
+        ...     log_results(name, results)
+
+    **State persistence and checkpointing:**
+
+    .. code-block:: python
+
+        >>> # Save and restore schedule state
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.1,
+        ...     boundaries=[1000, 2000],
+        ...     values=[1.0, 0.1, 0.01]
+        ... )
+        >>>
+        >>> # Train for some steps
+        >>> for step in range(1500):
+        ...     train_step(...)
+        ...     scheduler.step()
+        >>>
+        >>> # Save checkpoint
+        >>> checkpoint = {
+        ...     'step': 1500,
+        ...     'scheduler_state': scheduler.state_dict(),
+        ...     'model_state': model.state_dict()
+        ... }
+        >>> save(checkpoint, 'checkpoint.pkl')
+        >>>
+        >>> # Later: restore and continue
+        >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
+        ...     base_lr=0.1,
+        ...     boundaries=[1000, 2000],
+        ...     values=[1.0, 0.1, 0.01]
+        ... )
+        >>> scheduler.load_state_dict(checkpoint['scheduler_state'])
+        >>> # Continue from step 1500 with correct LR
+
+    See Also
+    --------
+    StepLR : Exponential decay at regular intervals
+    MultiStepLR : Similar concept with multiplicative decay
+    CosineAnnealingLR : Smooth transitions instead of step changes
+    SequentialLR : Chain multiple schedulers sequentially
+
+    References
+    ----------
+    .. [1] He, K., et al. (2016).
+           "Deep Residual Learning for Image Recognition."
+           Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition.
+    .. [2] Zagoruyko, S., & Komodakis, N. (2016).
+           "Wide Residual Networks."
+           British Machine Vision Conference.
+    .. [3] Smith, L. N. (2017).
+           "Cyclical Learning Rates for Training Neural Networks."
+           IEEE Winter Conference on Applications of Computer Vision.
+    .. [4] He, T., et al. (2019).
+           "Bag of Tricks for Image Classification with Convolutional Neural Networks."
+           Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition.
+    """
 
     def __init__(
         self,
@@ -3295,7 +4784,7 @@ class PiecewiseConstantSchedule(LRScheduler):
             raise ValueError("boundaries must have one less element than values")
 
         self.boundaries = boundaries
-        self.values = values
+        self.values = jnp.array(values)
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
@@ -3303,10 +4792,9 @@ class PiecewiseConstantSchedule(LRScheduler):
         # searchsorted returns the index where epoch would be inserted to maintain order
         epoch = self.last_epoch.value
         boundaries_array = jnp.array(self.boundaries)
-        values_array = jnp.array(self.values)
 
         # Find which segment we're in
         idx = jnp.searchsorted(boundaries_array, epoch, side='right')
-        value = values_array[idx]
+        value = self.values[idx]
 
         return [value for _ in self.base_lrs]
