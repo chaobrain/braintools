@@ -5,11 +5,11 @@ Visual analytics help interpret large neural simulations at a glance. Dive into 
 ```{toctree}
 :maxdepth: 1
 
-neural_data_visualization.ipynb
-advanced_neural_plots.ipynb
-statistical_visualization.ipynb
-model_evaluation_plots.ipynb
-interactive_visualization.ipynb
-3d_visualization.ipynb
-styling_and_themes.ipynb
+vis_tutorial_01_neural_data_visualization.ipynb
+vis_tutorial_02_advanced_neural_plots.ipynb
+vis_tutorial_03_statistical_visualization.ipynb
+vis_tutorial_04_model_evaluation_plots.ipynb
+vis_tutorial_05_interactive_visualization.ipynb
+vis_tutorial_06_3d_visualization.ipynb
+vis_tutorial_07_styling_and_themes.ipynb
 ```
