@@ -41,9 +41,8 @@ __all__ = [
 # Base Class
 # =============================================================================
 
-from ._init import Initialization
 
-class DistanceProfile(Initialization):
+class DistanceProfile(ABC):
     """
     Base class for distance-dependent connectivity profiles.
 
@@ -93,33 +92,6 @@ class DistanceProfile(Initialization):
         >>> clipped_profile = GaussianProfile(50.0 * u.um).clip(0.1, 0.9)
     """
 
-    def __call__(self, rng, size, **kwargs):
-        """
-        Generate values based on the distance profile.
-
-        When distances are provided in kwargs, returns weight scaling values.
-        Otherwise, returns the probability values for uniform random distances.
-
-        Parameters
-        ----------
-        rng : numpy.random.Generator
-            Random number generator.
-        size : int or tuple
-            Shape of the output array.
-        **kwargs : dict
-            Should contain 'distances' key with distance array.
-
-        Returns
-        -------
-        values : array_like
-            Weight scaling values based on distances.
-        """
-        if 'distances' in kwargs:
-            return self.weight_scaling(kwargs['distances'])
-        else:
-            # Fallback: return uniform random values
-            # This allows the profile to be used even without distances
-            return rng.random(size)
 
     @abstractmethod
     def probability(self, distances: u.Quantity) -> np.ndarray:
