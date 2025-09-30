@@ -39,7 +39,8 @@ dependencies = [
     "numpy>=1.15",
     "brainstate>=0.1.0",
     "brainunit>=0.0.8",
-    "typing_extensions"
+    "typing_extensions",
+    "optax",
 ]
 
 [project.optional-dependencies]
@@ -51,35 +52,50 @@ testing = [
     "nevergrad",
     "scipy",
     "msgpack",
+    "optax",
     "pytest",
-    "absl-py"
+    "absl-py",
+    "typing_extensions",
 ]
 cpu = [
     "jax[cpu]",
     "brainstate",
     "brainunit",
     "matplotlib",
-    "nevergrad",
     "scipy",
-    "msgpack"
+    "msgpack",
+    "optax",
+    "typing_extensions",
 ]
 cuda12 = [
     "jax[cuda12]",
     "brainstate",
     "brainunit",
     "matplotlib",
-    "nevergrad",
     "scipy",
-    "msgpack"
+    "msgpack",
+    "optax",
+    "typing_extensions",
+]
+cuda13 = [
+    "jax[cuda13]",
+    "brainstate",
+    "brainunit",
+    "matplotlib",
+    "scipy",
+    "msgpack",
+    "optax",
+    "typing_extensions",
 ]
 tpu = [
     "jax[tpu]",
     "brainstate",
     "brainunit",
     "matplotlib",
-    "nevergrad",
     "scipy",
-    "msgpack"
+    "msgpack",
+    "optax",
+    "typing_extensions",
 ]
 
 [project.urls]

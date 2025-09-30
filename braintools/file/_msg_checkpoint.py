@@ -121,8 +121,8 @@ def _is_namedtuple(x):
 
 
 def msgpack_from_state_dict(
-    target,
-    state: Dict[str, Any],
+    target: Any,
+    state: Any,
     name: str = '.',
     mismatch: str = 'error'
 ):
