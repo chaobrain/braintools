@@ -1266,7 +1266,7 @@ class test_advanced_schedulers(unittest.TestCase):
             scheduler.step()
 
         # Third cycle should be even longer (10 * 2 = 20 steps)
-        assert scheduler.T_i == 20
+        assert scheduler.T_i.value == 20
 
         print("[OK] test_cosineannealingwarmrestarts_t_mult")
 
