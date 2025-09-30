@@ -24,6 +24,7 @@ from typing import Optional, Union
 
 import brainunit as u
 import numpy as np
+from scipy.stats import truncnorm
 
 from ._init import Initialization
 
@@ -321,8 +322,12 @@ class ExponentialDecay(Initialization):
         >>> weights = init(rng, 4, distances=distances)
     """
 
-    def __init__(self, max_weight: u.Quantity, decay_constant: u.Quantity,
-                 min_weight: Optional[u.Quantity] = None):
+    def __init__(
+        self,
+        max_weight: u.Quantity,
+        decay_constant: u.Quantity,
+        min_weight: Optional[u.Quantity] = None
+    ):
         self.max_weight = max_weight
         self.decay_constant = decay_constant
         self.min_weight = min_weight if min_weight is not None else 0.0 * max_weight.unit
@@ -381,19 +386,19 @@ class TruncatedNormal(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, mean: u.Quantity, std: u.Quantity,
-                 low: Optional[u.Quantity] = None, high: Optional[u.Quantity] = None):
+    def __init__(
+        self,
+        mean: u.Quantity,
+        std: u.Quantity,
+        low: Optional[u.Quantity] = None,
+        high: Optional[u.Quantity] = None
+    ):
         self.mean = mean
         self.std = std
         self.low = low
         self.high = high
 
     def __call__(self, rng, size, **kwargs):
-        try:
-            from scipy.stats import truncnorm
-        except ImportError:
-            raise ImportError("TruncatedNormal requires scipy. Install with: pip install scipy")
-
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
 
@@ -437,7 +442,13 @@ class Beta(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, alpha: float, beta: float, low: u.Quantity, high: u.Quantity):
+    def __init__(
+        self,
+        alpha: float,
+        beta: float,
+        low: u.Quantity,
+        high: u.Quantity
+    ):
         self.alpha = alpha
         self.beta = beta
         self.low = low
@@ -592,7 +603,12 @@ class Conditional(Initialization):
         >>> weights = init(rng, 1000, neuron_indices=np.arange(1000))
     """
 
-    def __init__(self, condition_fn, true_dist: Initialization, false_dist: Initialization):
+    def __init__(
+        self,
+        condition_fn,
+        true_dist: Initialization,
+        false_dist: Initialization
+    ):
         self.condition_fn = condition_fn
         self.true_dist = true_dist
         self.false_dist = false_dist
@@ -648,7 +664,11 @@ class Scaled(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, base_dist: Initialization, scale_factor: Union[float, u.Quantity]):
+    def __init__(
+        self,
+        base_dist: Initialization,
+        scale_factor: Union[float, u.Quantity]
+    ):
         self.base_dist = base_dist
         self.scale_factor = scale_factor
 
@@ -689,8 +709,12 @@ class Clipped(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, base_dist: Initialization, min_val: Optional[u.Quantity] = None,
-                 max_val: Optional[u.Quantity] = None):
+    def __init__(
+        self,
+        base_dist: Initialization,
+        min_val: Optional[u.Quantity] = None,
+        max_val: Optional[u.Quantity] = None
+    ):
         self.base_dist = base_dist
         self.min_val = min_val
         self.max_val = max_val
