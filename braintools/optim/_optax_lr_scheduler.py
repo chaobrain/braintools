@@ -75,10 +75,6 @@ class LRScheduler:
         # Current learning rates
         self._current_lrs = LongTermState(list(self.base_lrs))
 
-        # Initialize learning rates
-        if last_epoch == -1:
-            self.step()
-
     def attach_optimizer(self, optimizer: 'OptaxOptimizer'):
         """Attach this scheduler to an optimizer."""
         from ._optax_optimizer import OptaxOptimizer
@@ -1053,6 +1049,7 @@ class PolynomialLR(LRScheduler):
         the learning rate becomes 0. Default: 5.
     power : float, optional
         The power of the polynomial. Controls the shape of the decay curve.
+
         - power=1.0: Linear decay
         - power>1.0: Slower initial decay, faster later
         - power<1.0: Faster initial decay, slower later
@@ -1747,6 +1744,7 @@ class ReduceLROnPlateau(LRScheduler):
         parameter groups. Default: 1e-3.
     mode : {'min', 'max'}, optional
         Whether to minimize or maximize the monitored metric.
+
         - 'min': Reduce lr when metric stops decreasing (e.g., for loss)
         - 'max': Reduce lr when metric stops increasing (e.g., for accuracy)
         Default: 'min'.
@@ -1762,6 +1760,7 @@ class ReduceLROnPlateau(LRScheduler):
         considered as improvement. Default: 1e-4.
     threshold_mode : {'rel', 'abs'}, optional
         How to compute the threshold for improvement.
+
         - 'rel': dynamic threshold = best * (1 ± threshold)
         - 'abs': static threshold = best ± threshold
         Default: 'rel'.
@@ -2058,6 +2057,7 @@ class ReduceLROnPlateau(LRScheduler):
         eps: float = 1e-8,
         last_epoch: int = -1,
     ):
+        super().__init__(last_epoch=last_epoch)
         if factor >= 1.0:
             raise ValueError("Factor should be < 1.0")
 
@@ -2079,19 +2079,6 @@ class ReduceLROnPlateau(LRScheduler):
         self.best = None
         self.num_bad_epochs = 0
         self.mode_worse = float('inf') if mode == 'min' else -float('inf')
-
-        # Initialize base class attributes manually (don't call super().__init__ because it calls step())
-        self.optimizer = None
-        self.last_epoch = LongTermState(last_epoch)
-
-        # Support both single lr and multiple lrs for param groups
-        if isinstance(base_lr, (list, tuple)):
-            self.base_lrs = list(base_lr)
-        else:
-            self.base_lrs = [base_lr]
-
-        # Current learning rates
-        self._current_lrs = LongTermState(list(self.base_lrs))
 
     def step(self, metrics: float, epoch: Optional[int] = None):
         """
@@ -2826,20 +2813,15 @@ class SequentialLR(LRScheduler):
         milestones: List[int],
         last_epoch: int = -1,
     ):
+
+        # Get base_lr from first scheduler
+        base_lr = schedulers[0].base_lrs if len(schedulers) else [1e-3]
+        super().__init__(base_lr=base_lr, last_epoch=last_epoch)
         if len(schedulers) != len(milestones) + 1:
             raise ValueError("Number of schedulers should be len(milestones) + 1")
 
         self.schedulers = schedulers
         self.milestones = milestones
-
-        # Get base_lr from first scheduler
-        base_lr = schedulers[0].base_lrs if hasattr(schedulers[0], 'base_lrs') else [1e-3]
-
-        # Initialize parent without calling step()
-        self.optimizer = None
-        self.last_epoch = LongTermState(last_epoch)
-        self.base_lrs = base_lr
-        self._current_lrs = LongTermState(list(base_lr))
 
         # JIT-compatible: Find which scheduler to use using searchsorted
         milestones_array = jnp.array(milestones + [float('inf')])

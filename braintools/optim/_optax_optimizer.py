@@ -1897,6 +1897,7 @@ class Lamb(OptaxOptimizer):
         w_{t+1} = w_t - \alpha \cdot \text{trust_ratio} \cdot r_t
 
     LAMB is particularly effective for:
+
     - Training with batch sizes of 32K or larger
     - BERT and other transformer models
     - Distributed training across multiple GPUs/TPUs
@@ -2108,12 +2109,14 @@ class Lars(OptaxOptimizer):
     and :math:`\alpha` is the global learning rate.
 
     Key properties of LARS:
+
     - Enables linear scaling of batch size with learning rate
     - Particularly effective for training ResNets and other CNNs
     - Maintains different learning rates for different layers
     - Prevents rapid weight changes in any single layer
 
     The trust ratio mechanism ensures that:
+
     - Layers with large weights get smaller updates
     - Layers with large gradients get smaller updates
     - The relative change in weights is controlled
@@ -2342,11 +2345,13 @@ class Lookahead(OptaxOptimizer):
         \theta_f^{t+k} = \theta_s^{t+k}
 
     where:
+
     - :math:`k` is the sync_period
     - :math:`\alpha` is the slow step size (alpha parameter)
     - :math:`g_t` is the gradient at step t
 
     Benefits of Lookahead:
+
     - Reduces variance in the optimization trajectory
     - Often achieves better generalization than the base optimizer alone
     - Provides a form of implicit regularization
@@ -2584,6 +2589,7 @@ class Yogi(OptaxOptimizer):
     can happen with Adam's multiplicative update.
 
     Key advantages of Yogi over Adam:
+
     - More stable convergence in some scenarios
     - Prevents the effective learning rate from growing unboundedly
     - Better handles changing gradient magnitudes
@@ -2781,6 +2787,7 @@ class LBFGS(OptaxOptimizer):
         \rho_k = \frac{1}{y_k^T s_k}
 
     Key characteristics of L-BFGS:
+
     - **Second-order method**: Uses curvature information for faster convergence
     - **Memory efficient**: Stores only m past gradient/position pairs
     - **Batch optimization**: Works best with full-batch gradients
@@ -2789,12 +2796,14 @@ class LBFGS(OptaxOptimizer):
     - **Deterministic**: Typically used with deterministic gradients
 
     L-BFGS is particularly well-suited for:
+
     - Fine-tuning with small datasets
     - Scientific computing problems
     - Convex optimization
     - Problems where second-order information is valuable
 
     **Limitations:**
+
     - Not suitable for mini-batch stochastic optimization
     - Requires full gradients for best performance
     - Memory increases with memory_size parameter
@@ -3001,6 +3010,7 @@ class Rprop(OptaxOptimizer):
         w_t^{(i)} = w_{t-1}^{(i)} - \text{sign}\left(\frac{\partial E}{\partial w_i^{(t)}}\right) \cdot \Delta_t^{(i)}
 
     Key characteristics of Rprop:
+
     - **Sign-based updates**: Uses only gradient sign, not magnitude
     - **Individual step sizes**: Each parameter has its own adaptive step size
     - **Batch learning**: Designed for full-batch gradient descent
@@ -3009,17 +3019,20 @@ class Rprop(OptaxOptimizer):
     - **Local adaptation**: Adapts based on consecutive gradient signs
 
     Rprop is particularly well-suited for:
+
     - Neural network training with batch learning
     - Problems with varying gradient scales across parameters
     - Scenarios where gradient magnitudes are unreliable
     - Feed-forward networks and small-medium sized problems
 
     **Advantages:**
+
     - Robust to gradient scaling issues
     - Fast convergence on many problems
     - Simple to implement and tune
 
     **Limitations:**
+
     - Not designed for mini-batch stochastic optimization
     - Requires sign consistency across consecutive steps
     - Less effective with very noisy gradients
@@ -3247,6 +3260,7 @@ class Adafactor(OptaxOptimizer):
         \theta_{t+1} = \theta_t - \alpha_t \frac{M_t}{\sqrt{V_t} + \epsilon}
 
     Key advantages of Adafactor:
+
     - **Memory efficient**: O(n+m) instead of O(n×m) for factored mode
     - **Adaptive learning rate**: Can work without explicit learning rate
     - **Large models**: Designed for transformer and large embedding models
@@ -3254,6 +3268,7 @@ class Adafactor(OptaxOptimizer):
     - **Automatic scheduling**: Polynomial decay of second moment
 
     Adafactor is particularly well-suited for:
+
     - Training very large transformer models (BERT, GPT, T5)
     - Models with large embedding tables
     - Situations with limited GPU memory
@@ -3473,6 +3488,7 @@ class AdaBelief(OptaxOptimizer):
         \theta_{t+1} = \theta_t - \alpha \frac{\hat{M}_t}{\sqrt{\hat{S}_t} + \epsilon}
 
     where:
+
     - :math:`G_t` is the gradient at step t
     - :math:`M_t` is the first moment (exponential moving average of gradients)
     - :math:`S_t` is the "belief" - variance of gradient prediction error
@@ -3481,10 +3497,12 @@ class AdaBelief(OptaxOptimizer):
     - :math:`\alpha` is the learning rate
 
     The key difference from Adam is the second moment estimation:
+
     - **Adam**: :math:`V_t = \beta_2 V_{t-1} + (1 - \beta_2) G_t^2` (gradient magnitude)
     - **AdaBelief**: :math:`S_t = \beta_2 S_{t-1} + (1 - \beta_2) (G_t - M_t)^2` (gradient variance)
 
     Key advantages of AdaBelief:
+
     - **Better generalization**: Adapts based on gradient variance, not magnitude
     - **Fast convergence**: Takes larger steps when gradient is reliable
     - **Stable training**: Takes smaller steps when gradient is noisy
@@ -3492,6 +3510,7 @@ class AdaBelief(OptaxOptimizer):
     - **Works across domains**: Effective for image, language, and RL tasks
 
     AdaBelief is particularly well-suited for:
+
     - Training deep neural networks with complex loss landscapes
     - Problems where Adam overfits or converges slowly
     - Transfer learning and fine-tuning tasks
@@ -3687,6 +3706,7 @@ class Lion(OptaxOptimizer):
         M_t = \beta_2 M_{t-1} + (1 - \beta_2) G_t
 
     where:
+
     - :math:`G_t` is the gradient at step t
     - :math:`M_t` is the momentum (exponential moving average of gradients)
     - :math:`C_t` is the interpolation between momentum and current gradient
@@ -3694,6 +3714,7 @@ class Lion(OptaxOptimizer):
     - :math:`\alpha` is the learning rate
 
     Key differences from Adam:
+
     - **Sign-based updates**: Uses sign(gradient) instead of gradient magnitude
     - **Simpler computation**: No square root or division operations
     - **Less memory**: Only stores momentum (not second moment)
@@ -3701,6 +3722,7 @@ class Lion(OptaxOptimizer):
     - **Implicit adaptive learning**: Sign operation provides adaptation
 
     Key advantages of Lion:
+
     - **Memory efficient**: Only 1 state per parameter (vs 2 for Adam)
     - **Computationally simple**: No expensive operations (sqrt, division)
     - **Strong regularization**: Sign operation provides implicit regularization
@@ -3708,12 +3730,14 @@ class Lion(OptaxOptimizer):
     - **Robust**: Works well across different architectures and tasks
 
     Lion is particularly well-suited for:
+
     - Training large language models (LLMs) and vision transformers
     - Memory-constrained environments
     - Tasks requiring strong generalization
     - Replacing Adam/AdamW with better efficiency
 
     Hyperparameter recommendations (relative to Adam):
+
     - Learning rate: Use 3-10× smaller (e.g., Adam lr=1e-3 → Lion lr=1e-4)
     - Weight decay: Use 3-10× larger (e.g., Adam wd=0.01 → Lion wd=0.1)
     - Batch size: Can use with same batch size as Adam
@@ -3874,6 +3898,7 @@ class SM3(OptaxOptimizer):
     only one value per dimension instead of one value per parameter.
 
     SM3 is particularly effective for:
+
     - Models with large embedding layers (e.g., recommendation systems, NLP)
     - Sparse gradient scenarios (word embeddings, sparse features)
     - Memory-constrained training environments
@@ -3921,6 +3946,7 @@ class SM3(OptaxOptimizer):
         \theta_{t+1} = \theta_t - \alpha \frac{M_t}{v_t}
 
     where:
+
     - :math:`G_t` is the gradient at step t
     - :math:`V_t^{(i)}` is the second moment accumulator for dimension i
     - :math:`v_t` is the effective second moment (min of all dimension accumulators)
@@ -3929,11 +3955,13 @@ class SM3(OptaxOptimizer):
     - :math:`\alpha` is the learning rate
 
     Memory comparison for parameter shape (n, m):
+
     - **Adam**: Stores 2nm values (first + second moment)
     - **SM3**: Stores n + m values (one per dimension)
     - **Savings**: For large embeddings (e.g., 100k × 512), ~99.5% reduction
 
     Key advantages of SM3:
+
     - **Extreme memory efficiency**: O(sum of dimensions) vs O(product of dimensions)
     - **Sparse gradient friendly**: Designed for sparse updates
     - **Adaptive learning rates**: Maintains per-parameter adaptation
@@ -3941,12 +3969,14 @@ class SM3(OptaxOptimizer):
     - **Embedding-optimized**: Ideal for large embedding layers
 
     SM3 is particularly well-suited for:
+
     - Training models with large vocabulary embeddings (NLP, RecSys)
     - Sparse gradient scenarios (word2vec, matrix factorization)
     - Memory-constrained environments (edge devices, limited GPU memory)
     - Recommendation systems with large item/user embeddings
 
     Comparison with other optimizers:
+
     - **vs Adam**: Much less memory, competitive performance on sparse tasks
     - **vs Adagrad**: Similar memory, better performance with momentum
     - **vs SGD**: Adaptive rates help with sparse features
@@ -4151,6 +4181,7 @@ class Novograd(OptaxOptimizer):
         \theta_t^{(l)} = \theta_{t-1}^{(l)} - \alpha \frac{m_t^{(l)}}{\sqrt{v_t^{(l)}} + \epsilon}
 
     where:
+
     - :math:`G_t^{(l)}` is the gradient for layer l at step t
     - :math:`g_t^{(l)}` is the normalized gradient (unit norm)
     - :math:`v_t^{(l)}` is the second moment (per-layer, not per-weight)
@@ -4159,6 +4190,7 @@ class Novograd(OptaxOptimizer):
     - :math:`\alpha` is the learning rate
 
     Key differences from Adam:
+
     - **Layer-wise normalization**: Normalizes gradients by layer L2 norm
     - **Per-layer second moment**: Stores one variance per layer, not per weight
     - **Memory efficient**: Reduces memory for second moment estimation
@@ -4166,6 +4198,7 @@ class Novograd(OptaxOptimizer):
     - **Better for varied layer sizes**: Handles layers of different sizes better
 
     Key advantages of Novograd:
+
     - **Stable training**: Layer-wise normalization reduces gradient variance
     - **Memory efficient**: Per-layer second moment reduces memory usage
     - **Robust to layer size**: Works well with varying layer dimensions
@@ -4173,6 +4206,7 @@ class Novograd(OptaxOptimizer):
     - **Simple**: No complex hyperparameter tuning needed
 
     Novograd is particularly well-suited for:
+
     - Speech recognition models (Jasper, QuartzNet)
     - Training from scratch (not fine-tuning)
     - Models with layers of varying sizes
@@ -4180,6 +4214,7 @@ class Novograd(OptaxOptimizer):
     - Replacing Adam for better generalization
 
     Comparison with other optimizers:
+
     - **vs Adam**: Less memory, more stable, better generalization
     - **vs SGD**: Adaptive rates, no manual lr tuning needed
     - **vs RMSprop**: Better momentum, per-layer adaptation
@@ -4381,6 +4416,7 @@ class Fromage(OptaxOptimizer):
         \theta_{t+1} = \theta_t - \alpha_t \cdot M_t
 
     where:
+
     - :math:`G_t` is the gradient at step t
     - :math:`\alpha_t` is the automatically computed step size
     - :math:`\|G_t\|_2` is the L2 norm of the current gradient
@@ -4394,6 +4430,7 @@ class Fromage(OptaxOptimizer):
     local curvature.
 
     Key advantages of Fromage:
+
     - **Learning-rate-free**: No manual lr tuning needed
     - **Automatic adaptation**: Step size adjusts to local curvature
     - **Simple**: Minimal hyperparameters to tune
@@ -4402,6 +4439,7 @@ class Fromage(OptaxOptimizer):
     - **Robust**: Works across different problem scales
 
     Fromage is particularly well-suited for:
+
     - Rapid prototyping and experimentation
     - Hyperparameter-free training pipelines
     - Problems where learning rate is hard to tune
@@ -4410,12 +4448,14 @@ class Fromage(OptaxOptimizer):
     - Research experiments requiring minimal tuning
 
     Comparison with other optimizers:
+
     - **vs SGD**: No learning rate tuning required
     - **vs Adam**: Simpler, fewer hyperparameters, learning-rate-free
     - **vs AdaGrad**: Automatic adaptation without accumulation issues
     - **vs Hypergradient methods**: Simpler, more efficient computation
 
     Limitations:
+
     - May be less optimal than well-tuned adaptive optimizers
     - Requires multiple gradient evaluations for best performance
     - Gradient difference computation adds slight overhead
