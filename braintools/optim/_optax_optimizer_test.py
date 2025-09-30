@@ -49,7 +49,7 @@ class TestOptaxOptimizer(unittest.TestCase):
         self.input_data = jax.random.normal(jax.random.PRNGKey(0), (32, 4))
         self.target_data = jax.random.normal(jax.random.PRNGKey(1), (32, 2))
 
-    def _compute_loss_and_grads(self, model):
+    def _compute_loss_and_grads(self):
         """Helper to compute loss and gradients."""
 
         # Get current parameters as a dictionary
@@ -119,7 +119,7 @@ class TestOptaxOptimizer(unittest.TestCase):
                 initial_params[k] = v.value.copy()
 
         # Compute gradients
-        _, grads = self._compute_loss_and_grads(self.model)
+        _, grads = self._compute_loss_and_grads()
 
         # Take optimization step
         optimizer.step(grads)
@@ -155,7 +155,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 
         # Take a few steps
         for _ in range(3):
-            _, grads = self._compute_loss_and_grads(self.model)
+            _, grads = self._compute_loss_and_grads()
             optimizer.step(grads)
 
         # Save state
@@ -332,7 +332,7 @@ class TestOptaxOptimizer(unittest.TestCase):
                 initial_params[k] = v.value.copy()
 
         # Compute gradients
-        _, grads = self._compute_loss_and_grads(self.model)
+        _, grads = self._compute_loss_and_grads()
 
         # Take optimization step
         optimizer.step(grads)
@@ -395,7 +395,7 @@ class TestOptaxOptimizer(unittest.TestCase):
                     params_before[k] = v.value.copy()
 
             # Compute gradients
-            _, grads = self._compute_loss_and_grads(self.model)
+            _, grads = self._compute_loss_and_grads()
 
             # Take step
             optimizer.step(grads)
@@ -498,7 +498,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 
         # Manually update lr after some steps
         for i in range(10):
-            _, grads = self._compute_loss_and_grads(self.model)
+            _, grads = self._compute_loss_and_grads()
             optimizer.step(grads)
 
             # Manually decay learning rate
@@ -613,7 +613,7 @@ class TestOptaxOptimizer(unittest.TestCase):
         num_accumulations = 3
 
         for _ in range(num_accumulations):
-            _, grads = self._compute_loss_and_grads(self.model)
+            _, grads = self._compute_loss_and_grads()
 
             if accumulated_grads is None:
                 accumulated_grads = grads
@@ -649,7 +649,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 
         # Take several steps to build up momentum
         for _ in range(5):
-            _, grads = self._compute_loss_and_grads(self.model)
+            _, grads = self._compute_loss_and_grads()
             optimizer1.step(grads)
 
         # Store current step count
