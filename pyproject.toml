@@ -73,6 +73,15 @@ cuda12 = [
     "msgpack",
     "typing_extensions",
 ]
+cuda13 = [
+    "jax[cuda13]",
+    "brainstate",
+    "brainunit",
+    "matplotlib",
+    "scipy",
+    "msgpack",
+    "typing_extensions",
+]
 tpu = [
     "jax[tpu]",
     "brainstate",

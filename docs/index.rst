@@ -32,11 +32,12 @@ Installation
           pip install -U braintools[cpu]
 
 
-    .. tab-item:: GPU (CUDA 12.x)
+    .. tab-item:: GPU
 
        .. code-block:: bash
 
           pip install -U braintools[cuda12]
+          pip install -U braintools[cuda13]
 
     .. tab-item:: TPU
 
