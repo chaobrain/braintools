@@ -207,14 +207,14 @@ class StepLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
         >>> # Create model and scheduler
-        >>> model = bst.nn.Linear(10, 5)
-        >>> scheduler = bts.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> model = brainstate.nn.Linear(10, 5)
+        >>> scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Training loop
         >>> for epoch in range(90):
@@ -233,9 +233,9 @@ class StepLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.StepLR(base_lr=0.001, step_size=10, gamma=0.5)
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.StepLR(base_lr=0.001, step_size=10, gamma=0.5)
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(25):
         ...     # Training step
@@ -247,9 +247,9 @@ class StepLR(LRScheduler):
     .. code-block:: python
 
         >>> # Aggressive decay every 5 epochs
-        >>> scheduler = bts.optim.StepLR(base_lr=0.1, step_size=5, gamma=0.5)
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=5, gamma=0.5)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # After 15 epochs: lr = 0.1 * 0.5^3 = 0.0125
 
@@ -257,9 +257,9 @@ class StepLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Train for some epochs
         >>> for epoch in range(50):
@@ -274,7 +274,7 @@ class StepLR(LRScheduler):
         ... }
         >>>
         >>> # Later, resume training
-        >>> new_scheduler = bts.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
+        >>> new_scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
         >>> new_scheduler.load_state_dict(checkpoint['scheduler'])
         >>> # Continue from epoch 50
 
@@ -283,12 +283,12 @@ class StepLR(LRScheduler):
     .. code-block:: python
 
         >>> # Different learning rates for different layers
-        >>> scheduler = bts.optim.StepLR(
+        >>> scheduler = braintools.optim.StepLR(
         ...     base_lr=[0.1, 0.01],  # Different base lr for each group
         ...     step_size=30,
         ...     gamma=0.1
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
         >>> # Both groups decay by gamma every step_size epochs
 
     **Complete training example:**
@@ -297,16 +297,16 @@ class StepLR(LRScheduler):
 
         >>> import jax.numpy as jnp
         >>>
-        >>> model = bst.nn.Linear(10, 5)
-        >>> scheduler = bts.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> model = brainstate.nn.Linear(10, 5)
+        >>> scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> def train_epoch(model, optimizer, data):
         ...     def loss_fn(params):
         ...         # Compute loss
         ...         return loss
-        ...     grads = jax.grad(loss_fn)(model.states(bst.ParamState))
+        ...     grads = jax.grad(loss_fn)(model.states(brainstate.ParamState))
         ...     optimizer.update(grads)
         >>>
         >>> for epoch in range(90):
@@ -401,17 +401,17 @@ class MultiStepLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
-        >>> scheduler = bts.optim.MultiStepLR(
+        >>> model = brainstate.nn.Linear(10, 5)
+        >>> scheduler = braintools.optim.MultiStepLR(
         ...     base_lr=0.1,
         ...     milestones=[30, 80],
         ...     gamma=0.1
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # lr schedule:
         >>> # epochs 0-29:  lr = 0.1
@@ -422,13 +422,13 @@ class MultiStepLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.MultiStepLR(
+        >>> scheduler = braintools.optim.MultiStepLR(
         ...     base_lr=0.001,
         ...     milestones=[10, 20, 30],
         ...     gamma=0.5
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(40):
         ...     # Training code
@@ -440,13 +440,13 @@ class MultiStepLR(LRScheduler):
     .. code-block:: python
 
         >>> # Standard ImageNet schedule: 90 epochs with drops at 30 and 60
-        >>> scheduler = bts.optim.MultiStepLR(
+        >>> scheduler = braintools.optim.MultiStepLR(
         ...     base_lr=0.1,
         ...     milestones=[30, 60],
         ...     gamma=0.1
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(90):
         ...     optimizer.step(grads)
@@ -458,13 +458,13 @@ class MultiStepLR(LRScheduler):
     .. code-block:: python
 
         >>> # CIFAR-10/100 schedule: 200 epochs
-        >>> scheduler = bts.optim.MultiStepLR(
+        >>> scheduler = braintools.optim.MultiStepLR(
         ...     base_lr=0.1,
         ...     milestones=[60, 120, 160],
         ...     gamma=0.2
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=5e-4)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=5e-4)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(200):
         ...     optimizer.step(grads)
@@ -475,13 +475,13 @@ class MultiStepLR(LRScheduler):
     .. code-block:: python
 
         >>> # Frequent drops for quick convergence
-        >>> scheduler = bts.optim.MultiStepLR(
+        >>> scheduler = braintools.optim.MultiStepLR(
         ...     base_lr=0.1,
         ...     milestones=[5, 10, 15, 20, 25],
         ...     gamma=0.5
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # lr rapidly decreases at each milestone
 
@@ -490,13 +490,13 @@ class MultiStepLR(LRScheduler):
     .. code-block:: python
 
         >>> # Save training state
-        >>> scheduler = bts.optim.MultiStepLR(
+        >>> scheduler = braintools.optim.MultiStepLR(
         ...     base_lr=0.1,
         ...     milestones=[30, 60, 90],
         ...     gamma=0.1
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(50):
         ...     scheduler.step()
@@ -504,7 +504,7 @@ class MultiStepLR(LRScheduler):
         >>> checkpoint = {'scheduler': scheduler.state_dict(), 'epoch': 50}
         >>>
         >>> # Resume later
-        >>> new_scheduler = bts.optim.MultiStepLR(
+        >>> new_scheduler = braintools.optim.MultiStepLR(
         ...     base_lr=0.1,
         ...     milestones=[30, 60, 90],
         ...     gamma=0.1
@@ -603,14 +603,14 @@ class ExponentialLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
+        >>> model = brainstate.nn.Linear(10, 5)
         >>> # Decay by 0.95 each epoch
-        >>> scheduler = bts.optim.ExponentialLR(base_lr=0.1, gamma=0.95)
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.1, gamma=0.95)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(20):
         ...     # Training code
@@ -627,9 +627,9 @@ class ExponentialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Very gentle decay with gamma=0.99
-        >>> scheduler = bts.optim.ExponentialLR(base_lr=0.001, gamma=0.99)
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.001, gamma=0.99)
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     finetune_epoch(model, optimizer, finetune_loader)
@@ -641,9 +641,9 @@ class ExponentialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Moderate decay with gamma=0.96
-        >>> scheduler = bts.optim.ExponentialLR(base_lr=0.1, gamma=0.96)
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.1, gamma=0.96)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(50):
         ...     optimizer.step(grads)
@@ -655,16 +655,16 @@ class ExponentialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Warmup followed by exponential decay
-        >>> warmup = bts.optim.LinearLR(
+        >>> warmup = braintools.optim.LinearLR(
         ...     start_factor=0.1,
         ...     end_factor=1.0,
         ...     total_iters=5
         ... )
-        >>> decay = bts.optim.ExponentialLR(base_lr=0.01, gamma=0.95)
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
+        >>> decay = braintools.optim.ExponentialLR(base_lr=0.01, gamma=0.95)
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>>
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     optimizer.step(grads)
@@ -675,25 +675,25 @@ class ExponentialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Works with any optimizer
-        >>> scheduler = bts.optim.ExponentialLR(base_lr=0.001, gamma=0.98)
+        >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.001, gamma=0.98)
         >>>
         >>> # With Adam
-        >>> adam_opt = bts.optim.Adam(lr=scheduler)
-        >>> adam_opt.register_trainable_weights(model.states(bst.ParamState))
+        >>> adam_opt = braintools.optim.Adam(lr=scheduler)
+        >>> adam_opt.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Or with RMSprop
-        >>> model2 = bst.nn.Linear(10, 5)
-        >>> scheduler2 = bts.optim.ExponentialLR(base_lr=0.001, gamma=0.98)
-        >>> rmsprop_opt = bts.optim.RMSprop(lr=scheduler2)
-        >>> rmsprop_opt.register_trainable_weights(model2.states(bst.ParamState))
+        >>> model2 = brainstate.nn.Linear(10, 5)
+        >>> scheduler2 = braintools.optim.ExponentialLR(base_lr=0.001, gamma=0.98)
+        >>> rmsprop_opt = braintools.optim.RMSprop(lr=scheduler2)
+        >>> rmsprop_opt.register_trainable_weights(model2.states(brainstate.ParamState))
 
     **Saving and loading state:**
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.ExponentialLR(base_lr=0.1, gamma=0.95)
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.1, gamma=0.95)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Train for some epochs
         >>> for epoch in range(50):
@@ -707,7 +707,7 @@ class ExponentialLR(LRScheduler):
         ... }
         >>>
         >>> # Resume training
-        >>> new_scheduler = bts.optim.ExponentialLR(base_lr=0.1, gamma=0.95)
+        >>> new_scheduler = braintools.optim.ExponentialLR(base_lr=0.1, gamma=0.95)
         >>> new_scheduler.load_state_dict(checkpoint['scheduler'])
         >>> # lr will be correctly set to 0.1 * 0.95^50
 
@@ -716,9 +716,9 @@ class ExponentialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Fast decay with gamma=0.9
-        >>> scheduler = bts.optim.ExponentialLR(base_lr=0.1, gamma=0.9)
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.1, gamma=0.9)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(30):
         ...     optimizer.step(grads)
@@ -815,18 +815,18 @@ class CosineAnnealingLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
+        >>> model = brainstate.nn.Linear(10, 5)
         >>> # Anneal from 0.1 to 0 over 100 epochs
-        >>> scheduler = bts.optim.CosineAnnealingLR(
+        >>> scheduler = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.1,
         ...     T_max=100,
         ...     eta_min=0
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     optimizer.step(grads)
@@ -843,13 +843,13 @@ class CosineAnnealingLR(LRScheduler):
     .. code-block:: python
 
         >>> # Anneal from 0.01 to 0.0001 over 50 epochs
-        >>> scheduler = bts.optim.CosineAnnealingLR(
+        >>> scheduler = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.01,
         ...     T_max=50,
         ...     eta_min=0.0001
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(50):
         ...     optimizer.step(grads)
@@ -860,20 +860,20 @@ class CosineAnnealingLR(LRScheduler):
     .. code-block:: python
 
         >>> # Warmup for 5 epochs, then cosine decay
-        >>> warmup = bts.optim.LinearLR(
+        >>> warmup = braintools.optim.LinearLR(
         ...     start_factor=0.01,
         ...     end_factor=1.0,
         ...     total_iters=5
         ... )
-        >>> cosine = bts.optim.CosineAnnealingLR(
+        >>> cosine = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.1,
         ...     T_max=90,
         ...     eta_min=0
         ... )
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, cosine])
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, cosine])
         >>>
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(95):
         ...     optimizer.step(grads)
@@ -884,13 +884,13 @@ class CosineAnnealingLR(LRScheduler):
     .. code-block:: python
 
         >>> # Standard CIFAR schedule: 200 epochs with cosine decay
-        >>> scheduler = bts.optim.CosineAnnealingLR(
+        >>> scheduler = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.1,
         ...     T_max=200,
         ...     eta_min=0
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=5e-4)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=5e-4)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(200):
         ...     optimizer.step(grads)
@@ -901,20 +901,20 @@ class CosineAnnealingLR(LRScheduler):
     .. code-block:: python
 
         >>> # ImageNet: 90 epochs with warmup + cosine
-        >>> warmup = bts.optim.LinearLR(
+        >>> warmup = braintools.optim.LinearLR(
         ...     start_factor=0.1,
         ...     end_factor=1.0,
         ...     total_iters=5
         ... )
-        >>> cosine = bts.optim.CosineAnnealingLR(
+        >>> cosine = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.1,
         ...     T_max=85,
         ...     eta_min=0
         ... )
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, cosine])
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, cosine])
         >>>
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(90):
         ...     optimizer.step(grads)
@@ -925,13 +925,13 @@ class CosineAnnealingLR(LRScheduler):
     .. code-block:: python
 
         >>> # Gentle decay for fine-tuning: min lr = 10% of base lr
-        >>> scheduler = bts.optim.CosineAnnealingLR(
+        >>> scheduler = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.0001,
         ...     T_max=30,
         ...     eta_min=0.00001
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler, weight_decay=1e-5)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler, weight_decay=1e-5)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(30):
         ...     finetune_epoch(model, optimizer, finetune_loader)
@@ -941,13 +941,13 @@ class CosineAnnealingLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.CosineAnnealingLR(
+        >>> scheduler = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.1,
         ...     T_max=100,
         ...     eta_min=0
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Train for some epochs
         >>> for epoch in range(50):
@@ -961,7 +961,7 @@ class CosineAnnealingLR(LRScheduler):
         ... }
         >>>
         >>> # Resume training
-        >>> new_scheduler = bts.optim.CosineAnnealingLR(
+        >>> new_scheduler = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.1,
         ...     T_max=100,
         ...     eta_min=0
@@ -974,20 +974,20 @@ class CosineAnnealingLR(LRScheduler):
     .. code-block:: python
 
         >>> # ViT training schedule
-        >>> warmup = bts.optim.LinearLR(
+        >>> warmup = braintools.optim.LinearLR(
         ...     start_factor=0.001,
         ...     end_factor=1.0,
         ...     total_iters=10
         ... )
-        >>> cosine = bts.optim.CosineAnnealingLR(
+        >>> cosine = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.001,
         ...     T_max=290,
         ...     eta_min=1e-6
         ... )
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, cosine])
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, cosine])
         >>>
-        >>> optimizer = bts.optim.AdamW(lr=scheduler, weight_decay=0.05)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.AdamW(lr=scheduler, weight_decay=0.05)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(300):
         ...     optimizer.step(grads)
@@ -1099,18 +1099,18 @@ class PolynomialLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
+        >>> model = brainstate.nn.Linear(10, 5)
         >>> # Linear decay from 0.1 to 0 over 100 epochs
-        >>> scheduler = bts.optim.PolynomialLR(
+        >>> scheduler = braintools.optim.PolynomialLR(
         ...     base_lr=0.1,
         ...     total_iters=100,
         ...     power=1.0
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     optimizer.step(grads)
@@ -1122,13 +1122,13 @@ class PolynomialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Slower initial decay, faster later decay
-        >>> scheduler = bts.optim.PolynomialLR(
+        >>> scheduler = braintools.optim.PolynomialLR(
         ...     base_lr=0.1,
         ...     total_iters=100,
         ...     power=2.0
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     optimizer.step(grads)
@@ -1140,13 +1140,13 @@ class PolynomialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Faster initial decay, slower later decay
-        >>> scheduler = bts.optim.PolynomialLR(
+        >>> scheduler = braintools.optim.PolynomialLR(
         ...     base_lr=0.01,
         ...     total_iters=50,
         ...     power=0.5
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(50):
         ...     optimizer.step(grads)
@@ -1157,17 +1157,17 @@ class PolynomialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Common setup for semantic segmentation
-        >>> scheduler = bts.optim.PolynomialLR(
+        >>> scheduler = braintools.optim.PolynomialLR(
         ...     base_lr=0.007,
         ...     total_iters=30000,  # Iterations, not epochs
         ...     power=0.9
         ... )
-        >>> optimizer = bts.optim.SGD(
+        >>> optimizer = braintools.optim.SGD(
         ...     lr=scheduler,
         ...     momentum=0.9,
         ...     weight_decay=5e-4
         ... )
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for iteration in range(30000):
         ...     train_step(model, optimizer, batch)
@@ -1178,13 +1178,13 @@ class PolynomialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Quick decay for fine-tuning
-        >>> scheduler = bts.optim.PolynomialLR(
+        >>> scheduler = braintools.optim.PolynomialLR(
         ...     base_lr=0.001,
         ...     total_iters=10,
         ...     power=1.0
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler, weight_decay=1e-5)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler, weight_decay=1e-5)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(10):
         ...     finetune_epoch(model, optimizer, finetune_loader)
@@ -1195,20 +1195,20 @@ class PolynomialLR(LRScheduler):
     .. code-block:: python
 
         >>> # Warmup followed by polynomial decay
-        >>> warmup = bts.optim.LinearLR(
+        >>> warmup = braintools.optim.LinearLR(
         ...     start_factor=0.1,
         ...     end_factor=1.0,
         ...     total_iters=5
         ... )
-        >>> poly_decay = bts.optim.PolynomialLR(
+        >>> poly_decay = braintools.optim.PolynomialLR(
         ...     base_lr=0.01,
         ...     total_iters=95,
         ...     power=0.9
         ... )
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, poly_decay])
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, poly_decay])
         >>>
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     optimizer.step(grads)
@@ -1218,13 +1218,13 @@ class PolynomialLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.PolynomialLR(
+        >>> scheduler = braintools.optim.PolynomialLR(
         ...     base_lr=0.1,
         ...     total_iters=100,
         ...     power=2.0
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Train for some epochs
         >>> for epoch in range(50):
@@ -1237,7 +1237,7 @@ class PolynomialLR(LRScheduler):
         ... }
         >>>
         >>> # Resume training
-        >>> new_scheduler = bts.optim.PolynomialLR(
+        >>> new_scheduler = braintools.optim.PolynomialLR(
         ...     base_lr=0.1,
         ...     total_iters=100,
         ...     power=2.0
@@ -1257,7 +1257,7 @@ class PolynomialLR(LRScheduler):
         >>> base_lr = 0.1
         >>>
         >>> for power in powers:
-        ...     scheduler = bts.optim.PolynomialLR(
+        ...     scheduler = braintools.optim.PolynomialLR(
         ...         base_lr=base_lr,
         ...         total_iters=total_iters,
         ...         power=power
@@ -1370,18 +1370,18 @@ class WarmupScheduler(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
+        >>> model = brainstate.nn.Linear(10, 5)
         >>> # Warmup from 0 to 0.1 over 10 epochs
-        >>> scheduler = bts.optim.WarmupScheduler(
+        >>> scheduler = braintools.optim.WarmupScheduler(
         ...     base_lr=0.1,
         ...     warmup_epochs=10,
         ...     warmup_start_lr=0.0
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(50):
         ...     optimizer.step(grads)
@@ -1394,13 +1394,13 @@ class WarmupScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # Start from 10% of target lr
-        >>> scheduler = bts.optim.WarmupScheduler(
+        >>> scheduler = braintools.optim.WarmupScheduler(
         ...     base_lr=0.01,
         ...     warmup_epochs=5,
         ...     warmup_start_lr=0.001
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(30):
         ...     optimizer.step(grads)
@@ -1411,17 +1411,17 @@ class WarmupScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # Warmup for large batch size (1024+)
-        >>> scheduler = bts.optim.WarmupScheduler(
+        >>> scheduler = braintools.optim.WarmupScheduler(
         ...     base_lr=0.4,  # Linear scaling rule: 0.1 * (batch_size / 256)
         ...     warmup_epochs=20,
         ...     warmup_start_lr=0.0
         ... )
-        >>> optimizer = bts.optim.SGD(
+        >>> optimizer = braintools.optim.SGD(
         ...     lr=scheduler,
         ...     momentum=0.9,
         ...     weight_decay=1e-4
         ... )
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     train_epoch(model, optimizer, large_batch_loader)
@@ -1432,13 +1432,13 @@ class WarmupScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # BERT-style warmup
-        >>> scheduler = bts.optim.WarmupScheduler(
+        >>> scheduler = braintools.optim.WarmupScheduler(
         ...     base_lr=0.0001,
         ...     warmup_epochs=10000,  # Often in steps/iterations
         ...     warmup_start_lr=0.0
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler, weight_decay=0.01)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler, weight_decay=0.01)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for step in range(100000):
         ...     train_step(model, optimizer, batch)
@@ -1449,16 +1449,16 @@ class WarmupScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # Warmup then step decay
-        >>> warmup = bts.optim.WarmupScheduler(
+        >>> warmup = braintools.optim.WarmupScheduler(
         ...     base_lr=0.1,
         ...     warmup_epochs=5,
         ...     warmup_start_lr=0.0
         ... )
-        >>> decay = bts.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
+        >>> decay = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>>
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(90):
         ...     optimizer.step(grads)
@@ -1469,13 +1469,13 @@ class WarmupScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # Gentle warmup for transfer learning
-        >>> scheduler = bts.optim.WarmupScheduler(
+        >>> scheduler = braintools.optim.WarmupScheduler(
         ...     base_lr=0.0001,
         ...     warmup_epochs=3,
         ...     warmup_start_lr=0.00001
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler, weight_decay=1e-5)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler, weight_decay=1e-5)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(20):
         ...     finetune_epoch(model, optimizer, finetune_loader)
@@ -1486,19 +1486,19 @@ class WarmupScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # ViT warmup schedule
-        >>> warmup = bts.optim.WarmupScheduler(
+        >>> warmup = braintools.optim.WarmupScheduler(
         ...     base_lr=0.001,
         ...     warmup_epochs=10,
         ...     warmup_start_lr=0.0
         ... )
-        >>> cosine = bts.optim.CosineAnnealingLR(
+        >>> cosine = braintools.optim.CosineAnnealingLR(
         ...     base_lr=0.001,
         ...     T_max=290,
         ...     eta_min=1e-6
         ... )
         >>> # Use sequentially: warmup first, then cosine
-        >>> optimizer = bts.optim.AdamW(lr=warmup, weight_decay=0.05)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.AdamW(lr=warmup, weight_decay=0.05)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Warmup phase
         >>> for epoch in range(10):
@@ -1515,13 +1515,13 @@ class WarmupScheduler(LRScheduler):
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.WarmupScheduler(
+        >>> scheduler = braintools.optim.WarmupScheduler(
         ...     base_lr=0.1,
         ...     warmup_epochs=10,
         ...     warmup_start_lr=0.0
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Train for some epochs
         >>> for epoch in range(5):
@@ -1534,7 +1534,7 @@ class WarmupScheduler(LRScheduler):
         ... }
         >>>
         >>> # Resume training
-        >>> new_scheduler = bts.optim.WarmupScheduler(
+        >>> new_scheduler = braintools.optim.WarmupScheduler(
         ...     base_lr=0.1,
         ...     warmup_epochs=10,
         ...     warmup_start_lr=0.0
@@ -1546,14 +1546,14 @@ class WarmupScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # WarmupScheduler: lr increases then stays constant
-        >>> warmup_sched = bts.optim.WarmupScheduler(
+        >>> warmup_sched = braintools.optim.WarmupScheduler(
         ...     base_lr=0.1,
         ...     warmup_epochs=10,
         ...     warmup_start_lr=0.0
         ... )
         >>>
         >>> # LinearLR: lr increases then CAN decrease or stay constant
-        >>> linear_sched = bts.optim.LinearLR(
+        >>> linear_sched = braintools.optim.LinearLR(
         ...     start_factor=0.0,
         ...     end_factor=1.0,
         ...     total_iters=10
@@ -1828,19 +1828,19 @@ class ReduceLROnPlateau(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
-        >>> scheduler = bts.optim.ReduceLROnPlateau(
+        >>> model = brainstate.nn.Linear(10, 5)
+        >>> scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.1,
         ...     mode='min',
         ...     factor=0.5,
         ...     patience=5,
         ...     min_lr=0.001
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     # Training
@@ -1858,15 +1858,15 @@ class ReduceLROnPlateau(LRScheduler):
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.ReduceLROnPlateau(
+        >>> scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.01,
         ...     mode='max',  # Maximize accuracy
         ...     factor=0.1,
         ...     patience=10,
         ...     threshold=0.01
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(200):
         ...     optimizer.step(grads)
@@ -1878,7 +1878,7 @@ class ReduceLROnPlateau(LRScheduler):
     .. code-block:: python
 
         >>> # Reduce lr by half when no improvement for 10 epochs
-        >>> scheduler = bts.optim.ReduceLROnPlateau(
+        >>> scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.1,
         ...     mode='min',
         ...     factor=0.5,
@@ -1886,15 +1886,15 @@ class ReduceLROnPlateau(LRScheduler):
         ...     threshold=1e-3,
         ...     cooldown=5  # Wait 5 epochs after reduction
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     **Aggressive schedule for quick adaptation:**
 
     .. code-block:: python
 
         >>> # Reduce lr by 90% when no improvement for 3 epochs
-        >>> scheduler = bts.optim.ReduceLROnPlateau(
+        >>> scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.01,
         ...     mode='min',
         ...     factor=0.1,
@@ -1902,15 +1902,15 @@ class ReduceLROnPlateau(LRScheduler):
         ...     threshold=1e-4,
         ...     min_lr=1e-6
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     **With absolute threshold mode:**
 
     .. code-block:: python
 
         >>> # Use absolute threshold for improvement
-        >>> scheduler = bts.optim.ReduceLROnPlateau(
+        >>> scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.1,
         ...     mode='min',
         ...     factor=0.5,
@@ -1918,8 +1918,8 @@ class ReduceLROnPlateau(LRScheduler):
         ...     threshold=0.001,
         ...     threshold_mode='abs'  # Absolute improvement threshold
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     **Complete training loop with early stopping:**
 
@@ -1927,16 +1927,16 @@ class ReduceLROnPlateau(LRScheduler):
 
         >>> import jax.numpy as jnp
         >>>
-        >>> model = bst.nn.Linear(10, 5)
-        >>> scheduler = bts.optim.ReduceLROnPlateau(
+        >>> model = brainstate.nn.Linear(10, 5)
+        >>> scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.01,
         ...     mode='min',
         ...     factor=0.5,
         ...     patience=10,
         ...     min_lr=1e-5
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> best_loss = float('inf')
         >>> patience_counter = 0
@@ -1970,14 +1970,14 @@ class ReduceLROnPlateau(LRScheduler):
 
     .. code-block:: python
 
-        >>> scheduler = bts.optim.ReduceLROnPlateau(
+        >>> scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.1,
         ...     mode='min',
         ...     factor=0.5,
         ...     patience=5
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Train for some epochs
         >>> for epoch in range(50):
@@ -1994,7 +1994,7 @@ class ReduceLROnPlateau(LRScheduler):
         ... }
         >>>
         >>> # Resume training
-        >>> new_scheduler = bts.optim.ReduceLROnPlateau(
+        >>> new_scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.1,
         ...     mode='min',
         ...     factor=0.5,
@@ -2008,14 +2008,14 @@ class ReduceLROnPlateau(LRScheduler):
     .. code-block:: python
 
         >>> # Monitor different metrics for different purposes
-        >>> val_scheduler = bts.optim.ReduceLROnPlateau(
+        >>> val_scheduler = braintools.optim.ReduceLROnPlateau(
         ...     base_lr=0.01,
         ...     mode='min',
         ...     factor=0.5,
         ...     patience=5
         ... )
-        >>> optimizer = bts.optim.Adam(lr=val_scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=val_scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     optimizer.step(grads)
@@ -2292,18 +2292,18 @@ class LinearLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
+        >>> model = brainstate.nn.Linear(10, 5)
         >>> # Warmup from 0.001 * 0.1 = 0.0001 to 0.001 over 10 epochs
-        >>> scheduler = bts.optim.LinearLR(
+        >>> scheduler = braintools.optim.LinearLR(
         ...     start_factor=0.1,
         ...     end_factor=1.0,
         ...     total_iters=10
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(15):
         ...     # Training code
@@ -2317,9 +2317,9 @@ class LinearLR(LRScheduler):
     .. code-block:: python
 
         >>> # Default: warmup from base_lr/3 to base_lr over 5 epochs
-        >>> scheduler = bts.optim.LinearLR()
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.LinearLR()
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # lr increases from ~0.00033 to 0.001 over 5 epochs
 
@@ -2328,13 +2328,13 @@ class LinearLR(LRScheduler):
     .. code-block:: python
 
         >>> # Linearly decrease lr from base_lr to base_lr*0.01 over 20 epochs
-        >>> scheduler = bts.optim.LinearLR(
+        >>> scheduler = braintools.optim.LinearLR(
         ...     start_factor=1.0,
         ...     end_factor=0.01,
         ...     total_iters=20
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(30):
         ...     optimizer.step(grads)
@@ -2346,16 +2346,16 @@ class LinearLR(LRScheduler):
     .. code-block:: python
 
         >>> # Warmup for 5 epochs, then step decay
-        >>> warmup = bts.optim.LinearLR(
+        >>> warmup = braintools.optim.LinearLR(
         ...     start_factor=0.1,
         ...     end_factor=1.0,
         ...     total_iters=5
         ... )
-        >>> decay = bts.optim.StepLR(base_lr=0.01, step_size=30, gamma=0.1)
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
+        >>> decay = braintools.optim.StepLR(base_lr=0.01, step_size=30, gamma=0.1)
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>>
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(90):
         ...     optimizer.step(grads)
@@ -2366,13 +2366,13 @@ class LinearLR(LRScheduler):
     .. code-block:: python
 
         >>> # Start with very small lr and gradually increase
-        >>> scheduler = bts.optim.LinearLR(
+        >>> scheduler = braintools.optim.LinearLR(
         ...     start_factor=0.01,
         ...     end_factor=1.0,
         ...     total_iters=100
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # lr increases from 0.00001 to 0.001 over 100 epochs
 
@@ -2381,13 +2381,13 @@ class LinearLR(LRScheduler):
     .. code-block:: python
 
         >>> # Start at 30% of base lr, reach full lr in 3 epochs
-        >>> scheduler = bts.optim.LinearLR(
+        >>> scheduler = braintools.optim.LinearLR(
         ...     start_factor=0.3,
         ...     end_factor=1.0,
         ...     total_iters=3
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(20):
         ...     finetune_epoch(model, optimizer, finetune_loader)
@@ -2487,18 +2487,18 @@ class ConstantLR(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
+        >>> model = brainstate.nn.Linear(10, 5)
         >>> # Use 0.5 * base_lr for first 10 epochs, then full base_lr
-        >>> scheduler = bts.optim.ConstantLR(
+        >>> scheduler = braintools.optim.ConstantLR(
         ...     base_lr=0.001,
         ...     factor=0.5,
         ...     total_iters=10
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Epochs 0-9:  lr = 0.0005
         >>> # Epochs 10+:  lr = 0.001
@@ -2508,9 +2508,9 @@ class ConstantLR(LRScheduler):
     .. code-block:: python
 
         >>> # Default: lr = base_lr/3 for 5 epochs, then lr = base_lr
-        >>> scheduler = bts.optim.ConstantLR()
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.ConstantLR()
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(10):
         ...     optimizer.step(grads)
@@ -2524,13 +2524,13 @@ class ConstantLR(LRScheduler):
     .. code-block:: python
 
         >>> # Use 20% of base_lr for first 3 epochs
-        >>> scheduler = bts.optim.ConstantLR(
+        >>> scheduler = braintools.optim.ConstantLR(
         ...     base_lr=0.0001,
         ...     factor=0.2,
         ...     total_iters=3
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Epochs 0-2:  lr = 0.00002
         >>> # Epochs 3+:   lr = 0.0001
@@ -2540,16 +2540,16 @@ class ConstantLR(LRScheduler):
     .. code-block:: python
 
         >>> # Warmup, then step decay
-        >>> warmup = bts.optim.ConstantLR(
+        >>> warmup = braintools.optim.ConstantLR(
         ...     base_lr=0.1,
         ...     factor=0.1,
         ...     total_iters=5
         ... )
-        >>> decay = bts.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
+        >>> decay = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>>
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(90):
         ...     optimizer.step(grads)
@@ -2564,13 +2564,13 @@ class ConstantLR(LRScheduler):
     .. code-block:: python
 
         >>> # Start with very low lr for stability
-        >>> scheduler = bts.optim.ConstantLR(
+        >>> scheduler = braintools.optim.ConstantLR(
         ...     base_lr=0.001,
         ...     factor=0.01,
         ...     total_iters=10
         ... )
-        >>> optimizer = bts.optim.Adam(lr=scheduler, weight_decay=1e-5)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler, weight_decay=1e-5)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # First 10 epochs: lr = 0.00001 (conservative)
         >>> # Remaining epochs: lr = 0.001 (normal training)
@@ -2580,12 +2580,12 @@ class ConstantLR(LRScheduler):
     .. code-block:: python
 
         >>> # Different base_lr for different layers
-        >>> scheduler = bts.optim.ConstantLR(
+        >>> scheduler = braintools.optim.ConstantLR(
         ...     base_lr=[0.1, 0.01],
         ...     factor=0.1,
         ...     total_iters=5
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
         >>> # Both groups use factor=0.1 for first 5 epochs
 
     **Complete training workflow:**
@@ -2594,20 +2594,20 @@ class ConstantLR(LRScheduler):
 
         >>> import jax.numpy as jnp
         >>>
-        >>> model = bst.nn.Linear(10, 5)
-        >>> scheduler = bts.optim.ConstantLR(
+        >>> model = brainstate.nn.Linear(10, 5)
+        >>> scheduler = braintools.optim.ConstantLR(
         ...     base_lr=0.01,
         ...     factor=0.1,
         ...     total_iters=5
         ... )
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(50):
         ...     # Training step
         ...     for batch in train_loader:
         ...         loss = compute_loss(model, batch)
-        ...         grads = jax.grad(compute_loss)(model.states(bst.ParamState))
+        ...         grads = jax.grad(compute_loss)(model.states(brainstate.ParamState))
         ...         optimizer.update(grads)
         ...
         ...     scheduler.step()
@@ -2690,23 +2690,23 @@ class ChainedScheduler(LRScheduler):
 
     .. code-block:: python
 
-        >>> import braintools as bts
-        >>> import brainstate as bst
+        >>> import braintools
+        >>> import brainstate
         >>>
-        >>> model = bst.nn.Linear(10, 5)
+        >>> model = brainstate.nn.Linear(10, 5)
         >>>
         >>> # Create individual schedulers
-        >>> warmup = bts.optim.LinearLR(
+        >>> warmup = braintools.optim.LinearLR(
         ...     start_factor=0.1,
         ...     end_factor=1.0,
         ...     total_iters=5
         ... )
-        >>> decay = bts.optim.StepLR(base_lr=0.01, step_size=30, gamma=0.1)
+        >>> decay = braintools.optim.StepLR(base_lr=0.01, step_size=30, gamma=0.1)
         >>>
         >>> # Chain them together
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Training loop
         >>> for epoch in range(90):
@@ -2722,16 +2722,16 @@ class ChainedScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # Start with reduced lr, then schedule decays
-        >>> warmup = bts.optim.ConstantLR(factor=0.1, total_iters=5)
-        >>> decay = bts.optim.MultiStepLR(
+        >>> warmup = braintools.optim.ConstantLR(factor=0.1, total_iters=5)
+        >>> decay = braintools.optim.MultiStepLR(
         ...     base_lr=0.1,
         ...     milestones=[30, 60, 80],
         ...     gamma=0.1
         ... )
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>>
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(100):
         ...     optimizer.step(grads)
@@ -2742,20 +2742,20 @@ class ChainedScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # Two-stage warmup
-        >>> warmup1 = bts.optim.ConstantLR(
+        >>> warmup1 = braintools.optim.ConstantLR(
         ...     base_lr=0.01,
         ...     factor=0.01,
         ...     total_iters=3
         ... )
-        >>> warmup2 = bts.optim.LinearLR(
+        >>> warmup2 = braintools.optim.LinearLR(
         ...     start_factor=0.1,
         ...     end_factor=1.0,
         ...     total_iters=7
         ... )
-        >>> scheduler = bts.optim.ChainedScheduler([warmup1, warmup2])
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup1, warmup2])
         >>>
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         # Epochs 0-2:   lr = 0.0001 (constant low)
         # Epochs 3-9:   lr increases from ~0.001 to 0.01 (linear)
         # Epochs 10+:   lr = 0.01 (normal)
@@ -2764,12 +2764,12 @@ class ChainedScheduler(LRScheduler):
 
     .. code-block:: python
 
-        >>> warmup = bts.optim.LinearLR(start_factor=0.1, end_factor=1.0, total_iters=5)
-        >>> decay = bts.optim.StepLR(base_lr=0.01, step_size=30, gamma=0.1)
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
+        >>> warmup = braintools.optim.LinearLR(start_factor=0.1, end_factor=1.0, total_iters=5)
+        >>> decay = braintools.optim.StepLR(base_lr=0.01, step_size=30, gamma=0.1)
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>>
-        >>> optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Train for some epochs
         >>> for epoch in range(50):
@@ -2779,9 +2779,9 @@ class ChainedScheduler(LRScheduler):
         >>> checkpoint = {'scheduler': scheduler.state_dict(), 'epoch': 50}
         >>>
         >>> # Later, resume training
-        >>> new_warmup = bts.optim.LinearLR(start_factor=0.1, end_factor=1.0, total_iters=5)
-        >>> new_decay = bts.optim.StepLR(base_lr=0.01, step_size=30, gamma=0.1)
-        >>> new_scheduler = bts.optim.ChainedScheduler([new_warmup, new_decay])
+        >>> new_warmup = braintools.optim.LinearLR(start_factor=0.1, end_factor=1.0, total_iters=5)
+        >>> new_decay = braintools.optim.StepLR(base_lr=0.01, step_size=30, gamma=0.1)
+        >>> new_scheduler = braintools.optim.ChainedScheduler([new_warmup, new_decay])
         >>> new_scheduler.load_state_dict(checkpoint['scheduler'])
         >>> # Continue from epoch 50
 
@@ -2790,24 +2790,24 @@ class ChainedScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # Standard ImageNet: warmup + step decay
-        >>> warmup = bts.optim.LinearLR(
+        >>> warmup = braintools.optim.LinearLR(
         ...     start_factor=0.01,
         ...     end_factor=1.0,
         ...     total_iters=5
         ... )
-        >>> decay = bts.optim.MultiStepLR(
+        >>> decay = braintools.optim.MultiStepLR(
         ...     base_lr=0.1,
         ...     milestones=[30, 60],
         ...     gamma=0.1
         ... )
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>>
-        >>> optimizer = bts.optim.SGD(
+        >>> optimizer = braintools.optim.SGD(
         ...     lr=scheduler,
         ...     momentum=0.9,
         ...     weight_decay=1e-4
         ... )
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(90):
         ...     optimizer.step(grads)
@@ -2818,20 +2818,20 @@ class ChainedScheduler(LRScheduler):
     .. code-block:: python
 
         >>> # Conservative warmup for transfer learning
-        >>> warmup = bts.optim.ConstantLR(
+        >>> warmup = braintools.optim.ConstantLR(
         ...     base_lr=0.001,
         ...     factor=0.1,
         ...     total_iters=3
         ... )
-        >>> decay = bts.optim.MultiStepLR(
+        >>> decay = braintools.optim.MultiStepLR(
         ...     base_lr=0.001,
         ...     milestones=[10, 20],
         ...     gamma=0.5
         ... )
-        >>> scheduler = bts.optim.ChainedScheduler([warmup, decay])
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>>
-        >>> optimizer = bts.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(bst.ParamState))
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> for epoch in range(30):
         ...     finetune_epoch(model, optimizer, finetune_loader)
@@ -2894,7 +2894,225 @@ class ChainedScheduler(LRScheduler):
 
 
 class SequentialLR(LRScheduler):
-    """Sequential learning rate scheduler (JIT-compatible)."""
+    r"""Sequential learning rate scheduler - Chains multiple schedulers based on epoch milestones.
+
+    SequentialLR allows you to chain multiple learning rate schedulers, with each scheduler
+    being active during specific epoch ranges defined by milestones. This is particularly
+    useful for complex training strategies that require different learning rate policies
+    at different stages of training.
+
+    Parameters
+    ----------
+    schedulers : List[LRScheduler]
+        List of schedulers to be sequentially applied. The number of schedulers should
+        be ``len(milestones) + 1``.
+    milestones : List[int]
+        List of epoch indices that define when to switch schedulers. Must be in
+        ascending order. For n milestones, you need n+1 schedulers.
+    last_epoch : int, optional
+        The index of the last epoch. Default: 0.
+
+    Notes
+    -----
+    **Scheduler Switching Logic:**
+
+    Given milestones [m1, m2, ..., mn] and schedulers [s0, s1, ..., sn]:
+
+    - Epochs [0, m1): uses scheduler s0
+    - Epochs [m1, m2): uses scheduler s1
+    - ...
+    - Epochs [mn, ∞): uses scheduler sn
+
+    **JIT Compatibility:**
+
+    This implementation is JIT-compatible through the use of JAX operations for
+    scheduler selection. The scheduler index is computed using ``jnp.searchsorted``
+    for efficient milestone-based switching.
+
+    **Important Considerations:**
+
+    1. Each scheduler should be initialized with the appropriate ``base_lr`` that
+       matches your intended learning rate at the transition point.
+    2. The ``last_epoch`` parameter of individual schedulers is managed internally.
+    3. When saving/loading state, all schedulers' states are preserved.
+
+    Examples
+    --------
+    **Basic usage with warmup and decay:**
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> import brainstate
+        >>>
+        >>> # Warmup for 5 epochs, then exponential decay
+        >>> warmup = braintools.optim.LinearLR(
+        ...     base_lr=0.1,
+        ...     start_factor=0.01,
+        ...     end_factor=1.0,
+        ...     total_iters=5
+        ... )
+        >>> decay = braintools.optim.ExponentialLR(
+        ...     base_lr=0.1,
+        ...     gamma=0.95
+        ... )
+        >>> scheduler = braintools.optim.SequentialLR(
+        ...     schedulers=[warmup, decay],
+        ...     milestones=[5]
+        ... )
+        >>>
+        >>> optimizer = braintools.optim.Adam(lr=scheduler)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>>
+        >>> for epoch in range(100):
+        ...     train(...)
+        ...     scheduler.step(epoch)
+
+    **Three-phase training (warmup → training → fine-tuning):**
+
+    .. code-block:: python
+
+        >>> # Phase 1: Warmup (epochs 0-5)
+        >>> warmup = braintools.optim.LinearLR(
+        ...     base_lr=0.001,
+        ...     start_factor=0.1,
+        ...     end_factor=1.0,
+        ...     total_iters=5
+        ... )
+        >>>
+        >>> # Phase 2: Main training (epochs 5-80)
+        >>> main_training = braintools.optim.CosineAnnealingLR(
+        ...     base_lr=0.001,
+        ...     T_max=75,
+        ...     eta_min=0.0001
+        ... )
+        >>>
+        >>> # Phase 3: Fine-tuning (epochs 80+)
+        >>> fine_tuning = braintools.optim.ConstantLR(
+        ...     base_lr=0.0001,
+        ...     factor=1.0
+        ... )
+        >>>
+        >>> scheduler = braintools.optim.SequentialLR(
+        ...     schedulers=[warmup, main_training, fine_tuning],
+        ...     milestones=[5, 80]
+        ... )
+
+    **Complex schedule for transformer training:**
+
+    .. code-block:: python
+
+        >>> # Transformer training schedule
+        >>> # 1. Linear warmup
+        >>> warmup = braintools.optim.LinearLR(
+        ...     base_lr=0.0005,
+        ...     start_factor=0.0,
+        ...     end_factor=1.0,
+        ...     total_iters=4000  # 4000 steps
+        ... )
+        >>>
+        >>> # 2. Constant learning rate
+        >>> constant = braintools.optim.ConstantLR(
+        ...     base_lr=0.0005,
+        ...     factor=1.0
+        ... )
+        >>>
+        >>> # 3. Cosine decay to near zero
+        >>> cosine_decay = braintools.optim.CosineAnnealingLR(
+        ...     base_lr=0.0005,
+        ...     T_max=20000,
+        ...     eta_min=1e-6
+        ... )
+        >>>
+        >>> scheduler = braintools.optim.SequentialLR(
+        ...     schedulers=[warmup, constant, cosine_decay],
+        ...     milestones=[4000, 10000]
+        ... )
+
+    **State persistence across training sessions:**
+
+    .. code-block:: python
+
+        >>> # Save scheduler state
+        >>> scheduler = braintools.optim.SequentialLR(
+        ...     schedulers=[scheduler1, scheduler2],
+        ...     milestones=[50]
+        ... )
+        >>> # ... train for some epochs ...
+        >>> checkpoint = {
+        ...     'epoch': epoch,
+        ...     'scheduler': scheduler.state_dict(),
+        ...     'optimizer': optimizer.state_dict(),
+        ... }
+        >>> save(checkpoint, 'checkpoint.pkl')
+        >>>
+        >>> # Resume training
+        >>> scheduler = braintools.optim.SequentialLR(
+        ...     schedulers=[scheduler1, scheduler2],
+        ...     milestones=[50]
+        ... )
+        >>> scheduler.load_state_dict(checkpoint['scheduler'])
+        >>> # Continue training from saved epoch
+
+    **Using with different optimizers:**
+
+    .. code-block:: python
+
+        >>> # Works with any optimizer
+        >>> scheduler = braintools.optim.SequentialLR(
+        ...     schedulers=[warmup_sched, main_sched],
+        ...     milestones=[10]
+        ... )
+        >>>
+        >>> # With SGD
+        >>> sgd_opt = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+        >>>
+        >>> # With Adam
+        >>> adam_opt = braintools.optim.Adam(lr=scheduler)
+        >>>
+        >>> # With LAMB for large batch training
+        >>> lamb_opt = braintools.optim.LAMB(lr=scheduler)
+
+    **Monitoring scheduler transitions:**
+
+    .. code-block:: python
+
+        >>> scheduler = braintools.optim.SequentialLR(
+        ...     schedulers=[sched1, sched2, sched3],
+        ...     milestones=[10, 20]
+        ... )
+        >>>
+        >>> for epoch in range(30):
+        ...     scheduler.step(epoch)
+        ...     current_lr = scheduler.get_lr()
+        ...     active_scheduler = scheduler.current_scheduler_idx
+        ...     print(f"Epoch {epoch}: LR={current_lr[0]:.6f}, "
+        ...           f"Active scheduler: {active_scheduler}")
+        ...
+        ...     # Detect transitions
+        ...     if epoch in scheduler.milestones:
+        ...         print(f"  -> Switching to scheduler {active_scheduler}")
+
+    See Also
+    --------
+    ChainedScheduler : Applies multiple schedulers simultaneously
+    LinearLR : Linear learning rate schedule (good for warmup)
+    CosineAnnealingLR : Cosine annealing schedule
+    ExponentialLR : Exponential decay schedule
+    StepLR : Step-wise decay schedule
+
+    References
+    ----------
+    .. [1] Goyal, P., et al. (2017).
+           "Accurate, large minibatch SGD: Training ImageNet in 1 hour."
+           arXiv preprint arXiv:1706.02677.
+    .. [2] Liu, L., et al. (2019).
+           "On the variance of the adaptive learning rate and beyond."
+           International Conference on Learning Representations.
+    .. [3] You, Y., et al. (2019).
+           "Large batch optimization for deep learning: Training BERT in 76 minutes."
+           International Conference on Learning Representations.
+    """
 
     def __init__(
         self,
