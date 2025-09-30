@@ -184,7 +184,7 @@ class StepLR(LRScheduler):
     The learning rate at epoch :math:`t` is computed as:
 
     .. math::
-        \eta_t = \eta_0 \cdot \gamma^{\lfloor t / \text{step\_size} \rfloor}
+        \eta_t = \eta_0 \cdot \gamma^{\lfloor t / \text{step_size} \rfloor}
 
     where :math:`\eta_0` is the initial learning rate (base_lr), and :math:`\lfloor \cdot \rfloor`
     denotes the floor function.
@@ -1651,7 +1651,7 @@ class CyclicLR(LRScheduler):
     The learning rate oscillates according to:
 
     .. math::
-        \text{lr} = \text{base\_lr} + (\text{max\_lr} - \text{base\_lr})
+        \text{lr} = \text{base_lr} + (\text{max_lr} - \text{base_lr})
                     \times \max(0, 1 - |x - 1|) \times \text{scale}
 
     where x cycles between 0 and 2, and scale depends on the mode.
@@ -1985,12 +1985,12 @@ class OneCycleLR(LRScheduler):
     Initial learning rate:
 
     .. math::
-        \text{initial\_lr} = \frac{\text{max\_lr}}{\text{div\_factor}}
+        \text{initial_lr} = \frac{\text{max_lr}}{\text{div_factor}}
 
     Final learning rate:
 
     .. math::
-        \text{final\_lr} = \frac{\text{max\_lr}}{\text{final\_div\_factor}}
+        \text{final_lr} = \frac{\text{max_lr}}{\text{final_div_factor}}
 
     **Super-Convergence Benefits:**
 
@@ -3047,7 +3047,7 @@ class ConstantLR(LRScheduler):
 
     .. math::
         \eta_t = \begin{cases}
-            \eta_0 \cdot \text{factor} & \text{if } t < \text{total\_iters} \\
+            \eta_0 \cdot \text{factor} & \text{if } t < \text{total_iters} \\
             \eta_0 & \text{otherwise}
         \end{cases}
 
@@ -4140,8 +4140,8 @@ class WarmupCosineSchedule(LRScheduler):
     1. **Linear Warmup Phase** (step < warmup_steps):
 
     .. math::
-        \eta_t = \eta_{warmup\_start} + \frac{t}{T_{warmup}}
-                 \cdot (\eta_{base} - \eta_{warmup\_start})
+        \eta_t = \eta_{warmup_start} + \frac{t}{T_{warmup}}
+                 \cdot (\eta_{base} - \eta_{warmup_start})
 
     2. **Cosine Annealing Phase** (step >= warmup_steps):
 
@@ -4495,6 +4495,7 @@ class PiecewiseConstantSchedule(LRScheduler):
     **Schedule Structure:**
 
     Given boundaries [b1, b2, ..., bn] and values [v0, v1, ..., vn]:
+
     - Steps [0, b1): learning_rate = base_lr × v0
     - Steps [b1, b2): learning_rate = base_lr × v1
     - Steps [b2, b3): learning_rate = base_lr × v2
