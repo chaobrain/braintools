@@ -1,5 +1,5 @@
 """
-Comprehensive tests for _base.py
+Comprehensive tests for _init.py
 
 Tests cover:
 - Basic Initialization class functionality
@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import brainunit as u
 
-from braintools.init._base import (
+from braintools.init._init import (
     Initialization,
     init_call,
     Compose,

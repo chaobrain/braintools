@@ -17,69 +17,42 @@
 Weight initialization classes for connectivity generation.
 
 This module provides weight initialization strategies for synaptic connections.
-All classes inherit from the WeightInit base class.
+All classes inherit from the Initialization base class.
 """
 
-from typing import Optional, Union, Callable
+from typing import Optional, Union
 
 import brainunit as u
 import numpy as np
 
-from ._base import Initialization
+from ._init import Initialization
 
 __all__ = [
-    'WeightInit',
-    'ConstantWeight',
-    'UniformWeight',
-    'NormalWeight',
-    'LogNormalWeight',
-    'GammaWeight',
-    'ExponentialWeight',
-    'ExponentialDecayWeight',
-    'TruncatedNormalWeight',
-    'BetaWeight',
-    'WeibullWeight',
-    'MixtureWeight',
-    'ConditionalWeight',
-    'ScaledWeight',
-    'ClippedWeight',
-    'DistanceModulatedWeight',
+    'Initialization',
+    'Constant',
+    'Uniform',
+    'Normal',
+    'LogNormal',
+    'Gamma',
+    'Exponential',
+    'ExponentialDecay',
+    'TruncatedNormal',
+    'Beta',
+    'Weibull',
+    'Mixture',
+    'Conditional',
+    'Scaled',
+    'Clipped',
+    'DistanceModulated',
+    'DistanceProportional',
 ]
-
-
-# =============================================================================
-# Base Class
-# =============================================================================
-
-class WeightInit(Initialization):
-    """
-    Base class for weight initialization strategies.
-
-    All weight initialization classes should inherit from this base class.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import WeightInit
-
-        class CustomWeight(WeightInit):
-            def __init__(self, value):
-                self.value = value
-
-            def __call__(self, rng, size, **kwargs):
-                return np.full(size, self.value)
-    """
-    pass
 
 
 # =============================================================================
 # Basic Weight Distributions
 # =============================================================================
 
-class ConstantWeight(WeightInit):
+class Constant(Initialization):
     """
     Constant value initialization.
 
@@ -94,13 +67,13 @@ class ConstantWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import ConstantWeight
-
-        init = ConstantWeight(0.5 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 100)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Constant
+        >>>
+        >>> init = Constant(0.5 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 100)
     """
 
     def __init__(self, value: u.Quantity):
@@ -112,10 +85,10 @@ class ConstantWeight(WeightInit):
         return u.math.full(size, self.value)
 
     def __repr__(self):
-        return f'ConstantWeight(value={self.value})'
+        return f'Constant(value={self.value})'
 
 
-class UniformWeight(WeightInit):
+class Uniform(Initialization):
     """
     Uniform distribution initialization.
 
@@ -132,13 +105,13 @@ class UniformWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import UniformWeight
-
-        init = UniformWeight(0.1 * u.siemens, 1.0 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Uniform
+        >>>
+        >>> init = Uniform(0.1 * u.siemens, 1.0 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, low: u.Quantity, high: u.Quantity):
@@ -152,10 +125,10 @@ class UniformWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'UniformWeight(low={self.low}, high={self.high})'
+        return f'Uniform(low={self.low}, high={self.high})'
 
 
-class NormalWeight(WeightInit):
+class Normal(Initialization):
     """
     Normal (Gaussian) distribution initialization.
 
@@ -172,13 +145,13 @@ class NormalWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import NormalWeight
-
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Normal
+        >>>
+        >>> init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, mean: u.Quantity, std: u.Quantity):
@@ -192,10 +165,10 @@ class NormalWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'NormalWeight(mean={self.mean}, std={self.std})'
+        return f'Normal(mean={self.mean}, std={self.std})'
 
 
-class LogNormalWeight(WeightInit):
+class LogNormal(Initialization):
     """
     Log-normal distribution initialization.
 
@@ -213,13 +186,13 @@ class LogNormalWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import LogNormalWeight
-
-        init = LogNormalWeight(0.5 * u.siemens, 0.2 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import LogNormal
+        >>>
+        >>> init = LogNormal(0.5 * u.siemens, 0.2 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, mean: u.Quantity, std: u.Quantity):
@@ -237,10 +210,10 @@ class LogNormalWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'LogNormalWeight(mean={self.mean}, std={self.std})'
+        return f'LogNormal(mean={self.mean}, std={self.std})'
 
 
-class GammaWeight(WeightInit):
+class Gamma(Initialization):
     """
     Gamma distribution initialization.
 
@@ -257,13 +230,13 @@ class GammaWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import GammaWeight
-
-        init = GammaWeight(shape=2.0, scale=0.5 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Gamma
+        >>>
+        >>> init = Gamma(shape=2.0, scale=0.5 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, shape: float, scale: u.Quantity):
@@ -276,10 +249,10 @@ class GammaWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'GammaWeight(shape={self.shape}, scale={self.scale})'
+        return f'Gamma(shape={self.shape}, scale={self.scale})'
 
 
-class ExponentialWeight(WeightInit):
+class Exponential(Initialization):
     """
     Exponential distribution initialization.
 
@@ -294,13 +267,13 @@ class ExponentialWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import ExponentialWeight
-
-        init = ExponentialWeight(0.5 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Exponential
+        >>>
+        >>> init = Exponential(0.5 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, scale: u.Quantity):
@@ -312,10 +285,10 @@ class ExponentialWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'ExponentialWeight(scale={self.scale})'
+        return f'Exponential(scale={self.scale})'
 
 
-class ExponentialDecayWeight(WeightInit):
+class ExponentialDecay(Initialization):
     """
     Distance-dependent exponential decay weight distribution.
 
@@ -334,18 +307,18 @@ class ExponentialDecayWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import ExponentialDecayWeight
-
-        init = ExponentialDecayWeight(
-            max_weight=1.0 * u.siemens,
-            decay_constant=100.0 * u.um,
-            min_weight=0.01 * u.siemens
-        )
-        rng = np.random.default_rng(0)
-        distances = np.array([0, 50, 100, 200]) * u.um
-        weights = init(rng, 4, distances=distances)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import ExponentialDecay
+        >>>
+        >>> init = ExponentialDecay(
+        ...     max_weight=1.0 * u.siemens,
+        ...     decay_constant=100.0 * u.um,
+        ...     min_weight=0.01 * u.siemens
+        ... )
+        >>> rng = np.random.default_rng(0)
+        >>> distances = np.array([0, 50, 100, 200]) * u.um
+        >>> weights = init(rng, 4, distances=distances)
     """
 
     def __init__(self, max_weight: u.Quantity, decay_constant: u.Quantity,
@@ -369,10 +342,10 @@ class ExponentialDecayWeight(WeightInit):
         return u.maybe_decimal(weights * weight_unit)
 
     def __repr__(self):
-        return f'ExponentialDecayWeight(max_weight={self.max_weight}, decay_constant={self.decay_constant}, min_weight={self.min_weight})'
+        return f'ExponentialDecay(max_weight={self.max_weight}, decay_constant={self.decay_constant}, min_weight={self.min_weight})'
 
 
-class TruncatedNormalWeight(WeightInit):
+class TruncatedNormal(Initialization):
     """
     Truncated normal distribution initialization.
 
@@ -394,18 +367,18 @@ class TruncatedNormalWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import TruncatedNormalWeight
-
-        init = TruncatedNormalWeight(
-            mean=0.5 * u.siemens,
-            std=0.2 * u.siemens,
-            low=0.0 * u.siemens,
-            high=1.0 * u.siemens
-        )
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import TruncatedNormal
+        >>>
+        >>> init = TruncatedNormal(
+        ...     mean=0.5 * u.siemens,
+        ...     std=0.2 * u.siemens,
+        ...     low=0.0 * u.siemens,
+        ...     high=1.0 * u.siemens
+        ... )
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, mean: u.Quantity, std: u.Quantity,
@@ -419,7 +392,7 @@ class TruncatedNormalWeight(WeightInit):
         try:
             from scipy.stats import truncnorm
         except ImportError:
-            raise ImportError("TruncatedNormalWeight requires scipy. Install with: pip install scipy")
+            raise ImportError("TruncatedNormal requires scipy. Install with: pip install scipy")
 
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
@@ -431,10 +404,10 @@ class TruncatedNormalWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'TruncatedNormalWeight(mean={self.mean}, std={self.std}, low={self.low}, high={self.high})'
+        return f'TruncatedNormal(mean={self.mean}, std={self.std}, low={self.low}, high={self.high})'
 
 
-class BetaWeight(WeightInit):
+class Beta(Initialization):
     """
     Beta distribution initialization (rescaled to desired range).
 
@@ -455,13 +428,13 @@ class BetaWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import BetaWeight
-
-        init = BetaWeight(alpha=2.0, beta=5.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Beta
+        >>>
+        >>> init = Beta(alpha=2.0, beta=5.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, alpha: float, beta: float, low: u.Quantity, high: u.Quantity):
@@ -477,10 +450,10 @@ class BetaWeight(WeightInit):
         return u.maybe_decimal((low + (high - low) * samples) * unit)
 
     def __repr__(self):
-        return f'BetaWeight(alpha={self.alpha}, beta={self.beta}, low={self.low}, high={self.high})'
+        return f'Beta(alpha={self.alpha}, beta={self.beta}, low={self.low}, high={self.high})'
 
 
-class WeibullWeight(WeightInit):
+class Weibull(Initialization):
     """
     Weibull distribution initialization.
 
@@ -497,13 +470,13 @@ class WeibullWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import WeibullWeight
-
-        init = WeibullWeight(shape=1.5, scale=0.5 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Weibull
+        >>>
+        >>> init = Weibull(shape=1.5, scale=0.5 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, shape: float, scale: u.Quantity):
@@ -516,14 +489,14 @@ class WeibullWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'WeibullWeight(shape={self.shape}, scale={self.scale})'
+        return f'Weibull(shape={self.shape}, scale={self.scale})'
 
 
 # =============================================================================
 # Composite Weight Distributions
 # =============================================================================
 
-class MixtureWeight(WeightInit):
+class Mixture(Initialization):
     """
     Mixture of multiple weight distributions.
 
@@ -531,7 +504,7 @@ class MixtureWeight(WeightInit):
 
     Parameters
     ----------
-    distributions : list of WeightInit
+    distributions : list of Initialization
         List of initialization distributions to mix.
     weights : list of float, optional
         Probability weights for each distribution (must sum to 1).
@@ -541,19 +514,19 @@ class MixtureWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import MixtureWeight, NormalWeight, UniformWeight
-
-        init = MixtureWeight(
-            distributions=[
-                NormalWeight(0.5 * u.siemens, 0.1 * u.siemens),
-                UniformWeight(0.8 * u.siemens, 1.2 * u.siemens)
-            ],
-            weights=[0.7, 0.3]
-        )
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Mixture, Normal, Uniform
+        >>>
+        >>> init = Mixture(
+        ...     distributions=[
+        ...         Normal(0.5 * u.siemens, 0.1 * u.siemens),
+        ...         Uniform(0.8 * u.siemens, 1.2 * u.siemens)
+        ...     ],
+        ...     weights=[0.7, 0.3]
+        ... )
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, distributions: list, weights: Optional[list] = None):
@@ -581,10 +554,10 @@ class MixtureWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'MixtureWeight(distributions={self.distributions}, weights={self.weights})'
+        return f'Mixture(distributions={self.distributions}, weights={self.weights})'
 
 
-class ConditionalWeight(WeightInit):
+class Conditional(Initialization):
     """
     Conditional weight distribution based on neuron properties.
 
@@ -594,32 +567,32 @@ class ConditionalWeight(WeightInit):
     ----------
     condition_fn : callable
         Function that takes neuron indices and returns boolean array.
-    true_dist : WeightInit
+    true_dist : Initialization
         Distribution to use when condition is True.
-    false_dist : WeightInit
+    false_dist : Initialization
         Distribution to use when condition is False.
 
     Examples
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import ConditionalWeight, ConstantWeight, NormalWeight
-
-        def is_excitatory(indices):
-            return indices < 800
-
-        init = ConditionalWeight(
-            condition_fn=is_excitatory,
-            true_dist=NormalWeight(0.5 * u.siemens, 0.1 * u.siemens),
-            false_dist=NormalWeight(-0.3 * u.siemens, 0.05 * u.siemens)
-        )
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000, neuron_indices=np.arange(1000))
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Conditional, Constant, Normal
+        >>>
+        >>> def is_excitatory(indices):
+        ...     return indices < 800
+        >>>
+        >>> init = Conditional(
+        ...     condition_fn=is_excitatory,
+        ...     true_dist=Normal(0.5 * u.siemens, 0.1 * u.siemens),
+        ...     false_dist=Normal(-0.3 * u.siemens, 0.05 * u.siemens)
+        ... )
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000, neuron_indices=np.arange(1000))
     """
 
-    def __init__(self, condition_fn, true_dist: WeightInit, false_dist: WeightInit):
+    def __init__(self, condition_fn, true_dist: Initialization, false_dist: Initialization):
         self.condition_fn = condition_fn
         self.true_dist = true_dist
         self.false_dist = false_dist
@@ -645,10 +618,10 @@ class ConditionalWeight(WeightInit):
         return u.maybe_decimal(samples * unit)
 
     def __repr__(self):
-        return f'ConditionalWeight(condition_fn={self.condition_fn}, true_dist={self.true_dist}, false_dist={self.false_dist})'
+        return f'Conditional(condition_fn={self.condition_fn}, true_dist={self.true_dist}, false_dist={self.false_dist})'
 
 
-class ScaledWeight(WeightInit):
+class Scaled(Initialization):
     """
     Scaled version of another distribution.
 
@@ -656,7 +629,7 @@ class ScaledWeight(WeightInit):
 
     Parameters
     ----------
-    base_dist : WeightInit
+    base_dist : Initialization
         Base distribution to scale.
     scale_factor : float or Quantity
         Factor to multiply the base distribution by.
@@ -665,17 +638,17 @@ class ScaledWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import ScaledWeight, NormalWeight
-
-        base = NormalWeight(1.0 * u.siemens, 0.2 * u.siemens)
-        init = ScaledWeight(base, scale_factor=0.5)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Scaled, Normal
+        >>>
+        >>> base = Normal(1.0 * u.siemens, 0.2 * u.siemens)
+        >>> init = Scaled(base, scale_factor=0.5)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, base_dist: WeightInit, scale_factor: Union[float, u.Quantity]):
+    def __init__(self, base_dist: Initialization, scale_factor: Union[float, u.Quantity]):
         self.base_dist = base_dist
         self.scale_factor = scale_factor
 
@@ -684,10 +657,10 @@ class ScaledWeight(WeightInit):
         return base_samples * self.scale_factor
 
     def __repr__(self):
-        return f'ScaledWeight(base_dist={self.base_dist}, scale_factor={self.scale_factor})'
+        return f'Scaled(base_dist={self.base_dist}, scale_factor={self.scale_factor})'
 
 
-class ClippedWeight(WeightInit):
+class Clipped(Initialization):
     """
     Clipped version of another distribution.
 
@@ -695,7 +668,7 @@ class ClippedWeight(WeightInit):
 
     Parameters
     ----------
-    base_dist : WeightInit
+    base_dist : Initialization
         Base distribution to clip.
     min_val : Quantity, optional
         Minimum value (default: no lower bound).
@@ -706,17 +679,17 @@ class ClippedWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import ClippedWeight, NormalWeight
-
-        base = NormalWeight(0.5 * u.siemens, 0.3 * u.siemens)
-        init = ClippedWeight(base, min_val=0.0 * u.siemens, max_val=1.0 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Clipped, Normal
+        >>>
+        >>> base = Normal(0.5 * u.siemens, 0.3 * u.siemens)
+        >>> init = Clipped(base, min_val=0.0 * u.siemens, max_val=1.0 * u.siemens)
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, base_dist: WeightInit, min_val: Optional[u.Quantity] = None,
+    def __init__(self, base_dist: Initialization, min_val: Optional[u.Quantity] = None,
                  max_val: Optional[u.Quantity] = None):
         self.base_dist = base_dist
         self.min_val = min_val
@@ -736,10 +709,10 @@ class ClippedWeight(WeightInit):
         return samples
 
     def __repr__(self):
-        return f'ClippedWeight(base_dist={self.base_dist}, min_val={self.min_val}, max_val={self.max_val})'
+        return f'Clipped(base_dist={self.base_dist}, min_val={self.min_val}, max_val={self.max_val})'
 
 
-class DistanceModulatedWeight(WeightInit):
+class DistanceModulated(Initialization):
     """
     Weight distribution modulated by distance.
 
@@ -748,7 +721,7 @@ class DistanceModulatedWeight(WeightInit):
 
     Parameters
     ----------
-    base_dist : WeightInit
+    base_dist : Initialization
         Base weight distribution.
     distance_profile : callable or str
         Distance modulation function. Can be:
@@ -765,25 +738,25 @@ class DistanceModulatedWeight(WeightInit):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import DistanceModulatedWeight, NormalWeight
-
-        init = DistanceModulatedWeight(
-            base_dist=NormalWeight(1.0 * u.nS, 0.2 * u.nS),
-            distance_profile='exponential',
-            sigma=100.0 * u.um,
-            min_weight=0.01 * u.nS
-        )
-
-        rng = np.random.default_rng(0)
-        distances = np.linspace(0, 300, 100) * u.um
-        weights = init(rng, 100, distances=distances)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import DistanceModulated, Normal
+        >>>
+        >>> init = DistanceModulated(
+        ...     base_dist=Normal(1.0 * u.nS, 0.2 * u.nS),
+        ...     distance_profile='exponential',
+        ...     sigma=100.0 * u.um,
+        ...     min_weight=0.01 * u.nS
+        ... )
+        >>>
+        >>> rng = np.random.default_rng(0)
+        >>> distances = np.linspace(0, 300, 100) * u.um
+        >>> weights = init(rng, 100, distances=distances)
     """
 
     def __init__(
         self,
-        base_dist: WeightInit,
+        base_dist: Initialization,
         distance_profile: Union[str, callable],
         sigma: u.Quantity,
         min_weight: Optional[u.Quantity] = None
@@ -800,7 +773,8 @@ class DistanceModulatedWeight(WeightInit):
             elif distance_profile == 'linear':
                 self.profile_func = lambda d, s: np.maximum(0, 1 - d / s)
             else:
-                raise ValueError(f"Unknown distance profile: {distance_profile}. Use 'exponential', 'gaussian', 'linear', or a callable.")
+                raise ValueError(
+                    f"Unknown distance profile: {distance_profile}. Use 'exponential', 'gaussian', 'linear', or a callable.")
         elif callable(distance_profile):
             self.profile_func = distance_profile
         else:
@@ -833,4 +807,69 @@ class DistanceModulatedWeight(WeightInit):
             return modulated
 
     def __repr__(self):
-        return f'DistanceModulatedWeight(base_dist={self.base_dist}, sigma={self.sigma}, min_weight={self.min_weight})'
+        return f'DistanceModulated(base_dist={self.base_dist}, sigma={self.sigma}, min_weight={self.min_weight})'
+
+
+class DistanceProportional(Initialization):
+    """
+    Distance-proportional delay initialization.
+
+    Generates delays proportional to distance: delay = base_delay + distance / velocity.
+    Models axonal conduction delays.
+
+    Parameters
+    ----------
+    base_delay : Quantity
+        Minimum delay at zero distance (synaptic delay).
+    velocity : Quantity
+        Conduction velocity (e.g., 0.5 m/s for unmyelinated, 5-10 m/s for myelinated).
+    max_delay : Quantity, optional
+        Maximum delay cap (default: no limit).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import DistanceProportional
+        >>>
+        >>> init = DistanceProportional(
+        ...     base_delay=0.5 * u.ms,
+        ...     velocity=1.0 * u.meter / u.second,
+        ...     max_delay=10.0 * u.ms
+        ... )
+        >>>
+        >>> rng = np.random.default_rng(0)
+        >>> distances = np.array([0, 100, 500, 1000]) * u.um
+        >>> delays = init(rng, 4, distances=distances)
+    """
+
+    def __init__(
+        self,
+        base_delay: u.Quantity,
+        velocity: u.Quantity,
+        max_delay: Optional[u.Quantity] = None
+    ):
+        self.base_delay = base_delay
+        self.velocity = velocity
+        self.max_delay = max_delay
+
+    def __call__(self, rng, size, distances: Optional[u.Quantity] = None, **kwargs):
+        if distances is None:
+            return u.math.full(size, self.base_delay)
+
+        base_val, time_unit = u.split_mantissa_unit(self.base_delay)
+
+        velocity_in_units = self.velocity.to(distances.unit / time_unit)
+        conduction_delays = distances / velocity_in_units
+
+        total_delays = self.base_delay + conduction_delays
+
+        if self.max_delay is not None:
+            total_delays = u.math.minimum(total_delays, self.max_delay)
+
+        return total_delays
+
+    def __repr__(self):
+        return f'DistanceProportional(base_delay={self.base_delay}, velocity={self.velocity}, max_delay={self.max_delay})'

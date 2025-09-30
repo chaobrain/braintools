@@ -41,31 +41,85 @@ __all__ = [
 # Base Class
 # =============================================================================
 
-class DistanceProfile(ABC):
+from ._init import Initialization
+
+class DistanceProfile(Initialization):
     """
     Base class for distance-dependent connectivity profiles.
 
     Distance profiles define how connection probability and weight strength vary with
-    spatial distance between neurons.
+    spatial distance between neurons. As a subclass of Initialization, DistanceProfile
+    can be composed with other initialization strategies using arithmetic operations
+    and functional composition.
 
     Examples
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import DistanceProfile
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import DistanceProfile
+        >>>
+        >>> class LinearDecayProfile(DistanceProfile):
+        ...     def __init__(self, max_dist):
+        ...         self.max_dist = max_dist
+        ...
+        ...     def probability(self, distances):
+        ...         return np.maximum(0, 1 - distances / self.max_dist)
+        ...
+        ...     def weight_scaling(self, distances):
+        ...         return self.probability(distances)
+        ...
+        ...     def __call__(self, rng, size, **kwargs):
+        ...         # Use distance-based weights if distances are provided
+        ...         if 'distances' in kwargs:
+        ...             return self.weight_scaling(kwargs['distances'])
+        ...         # Fallback to uniform random weights
+        ...         return rng.random(size)
 
-        class LinearDecayProfile(DistanceProfile):
-            def __init__(self, max_dist):
-                self.max_dist = max_dist
+    Composition Examples
+    --------------------
+    .. code-block:: python
 
-            def probability(self, distances):
-                return np.maximum(0, 1 - distances / self.max_dist)
-
-            def weight_scaling(self, distances):
-                return self.probability(distances)
+        >>> from braintools.init import GaussianProfile, Normal
+        >>>
+        >>> # Scale a Gaussian profile
+        >>> profile = GaussianProfile(50.0 * u.um) * 0.5 * u.nS
+        >>>
+        >>> # Add noise to distance-based weights
+        >>> noisy_profile = GaussianProfile(50.0 * u.um) + Normal(0, 0.1 * u.nS)
+        >>>
+        >>> # Clip profile values
+        >>> clipped_profile = GaussianProfile(50.0 * u.um).clip(0.1, 0.9)
     """
+
+    def __call__(self, rng, size, **kwargs):
+        """
+        Generate values based on the distance profile.
+
+        When distances are provided in kwargs, returns weight scaling values.
+        Otherwise, returns the probability values for uniform random distances.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator.
+        size : int or tuple
+            Shape of the output array.
+        **kwargs : dict
+            Should contain 'distances' key with distance array.
+
+        Returns
+        -------
+        values : array_like
+            Weight scaling values based on distances.
+        """
+        if 'distances' in kwargs:
+            return self.weight_scaling(kwargs['distances'])
+        else:
+            # Fallback: return uniform random values
+            # This allows the profile to be used even without distances
+            return rng.random(size)
 
     @abstractmethod
     def probability(self, distances: u.Quantity) -> np.ndarray:
@@ -123,13 +177,13 @@ class GaussianProfile(DistanceProfile):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import GaussianProfile
-
-        profile = GaussianProfile(sigma=50.0 * u.um, max_distance=200.0 * u.um)
-        distances = np.array([0, 25, 50, 100, 200]) * u.um
-        probs = profile.probability(distances)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import GaussianProfile
+        >>>
+        >>> profile = GaussianProfile(sigma=50.0 * u.um, max_distance=200.0 * u.um)
+        >>> distances = np.array([0, 25, 50, 100, 200]) * u.um
+        >>> probs = profile.probability(distances)
     """
 
     def __init__(self, sigma: u.Quantity, max_distance: Optional[u.Quantity] = None):
@@ -172,16 +226,16 @@ class ExponentialProfile(DistanceProfile):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import ExponentialProfile
-
-        profile = ExponentialProfile(
-            decay_constant=100.0 * u.um,
-            max_distance=500.0 * u.um
-        )
-        distances = np.array([0, 50, 100, 200, 500]) * u.um
-        probs = profile.probability(distances)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import ExponentialProfile
+        >>>
+        >>> profile = ExponentialProfile(
+        ...     decay_constant=100.0 * u.um,
+        ...     max_distance=500.0 * u.um
+        ... )
+        >>> distances = np.array([0, 50, 100, 200, 500]) * u.um
+        >>> probs = profile.probability(distances)
     """
 
     def __init__(
@@ -230,17 +284,17 @@ class PowerLawProfile(DistanceProfile):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import PowerLawProfile
-
-        profile = PowerLawProfile(
-            exponent=2.0,
-            min_distance=1.0 * u.um,
-            max_distance=1000.0 * u.um
-        )
-        distances = np.array([1, 10, 100, 1000]) * u.um
-        probs = profile.probability(distances)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import PowerLawProfile
+        >>>
+        >>> profile = PowerLawProfile(
+        ...     exponent=2.0,
+        ...     min_distance=1.0 * u.um,
+        ...     max_distance=1000.0 * u.um
+        ... )
+        >>> distances = np.array([1, 10, 100, 1000]) * u.um
+        >>> probs = profile.probability(distances)
     """
 
     def __init__(self, exponent: float, min_distance: Optional[u.Quantity] = None,
@@ -285,13 +339,13 @@ class LinearProfile(DistanceProfile):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import LinearProfile
-
-        profile = LinearProfile(max_distance=200.0 * u.um)
-        distances = np.array([0, 50, 100, 150, 200]) * u.um
-        probs = profile.probability(distances)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import LinearProfile
+        >>>
+        >>> profile = LinearProfile(max_distance=200.0 * u.um)
+        >>> distances = np.array([0, 50, 100, 150, 200]) * u.um
+        >>> probs = profile.probability(distances)
     """
 
     def __init__(self, max_distance: u.Quantity):
@@ -331,17 +385,17 @@ class StepProfile(DistanceProfile):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import StepProfile
-
-        profile = StepProfile(
-            threshold=100.0 * u.um,
-            inside_prob=0.8,
-            outside_prob=0.1
-        )
-        distances = np.array([50, 100, 150]) * u.um
-        probs = profile.probability(distances)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import StepProfile
+        >>>
+        >>> profile = StepProfile(
+        ...     threshold=100.0 * u.um,
+        ...     inside_prob=0.8,
+        ...     outside_prob=0.1
+        ... )
+        >>> distances = np.array([50, 100, 150]) * u.um
+        >>> probs = profile.probability(distances)
     """
 
     def __init__(self, threshold: u.Quantity, inside_prob: float = 1.0, outside_prob: float = 0.0):

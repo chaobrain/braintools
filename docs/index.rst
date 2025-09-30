@@ -51,7 +51,7 @@ Installation
 See also the ecosystem
 ^^^^^^^^^^^^^^^^^^^^^^
 
-BrainTools is part of our `brain simulation ecosystem <https://brainmodeling.readthedocs.io/>`_.
+BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling.readthedocs.io/>`_.
 
 
 ----

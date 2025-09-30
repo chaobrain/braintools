@@ -48,7 +48,7 @@ from braintools.conn import (
 
 class TestConstantWeight(unittest.TestCase):
     """
-    Test ConstantWeight initialization.
+    Test Constant initialization.
 
     Examples
     --------
@@ -56,9 +56,9 @@ class TestConstantWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import ConstantWeight
+        from braintools.conn import Constant
 
-        init = ConstantWeight(0.5 * u.siemens)
+        init = Constant(0.5 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 100)
         assert np.all(weights == 0.5 * u.siemens)
@@ -82,13 +82,13 @@ class TestConstantWeight(unittest.TestCase):
     def test_repr(self):
         init = ConstantWeight(0.5 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('ConstantWeight', repr_str)
+        self.assertIn('Constant', repr_str)
         self.assertIn('0.5', repr_str)
 
 
 class TestUniformWeight(unittest.TestCase):
     """
-    Test UniformWeight initialization.
+    Test Uniform initialization.
 
     Examples
     --------
@@ -96,9 +96,9 @@ class TestUniformWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import UniformWeight
+        from braintools.conn import Uniform
 
-        init = UniformWeight(0.1 * u.siemens, 1.0 * u.siemens)
+        init = Uniform(0.1 * u.siemens, 1.0 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert np.all((weights >= 0.1 * u.siemens) & (weights < 1.0 * u.siemens))
@@ -123,12 +123,12 @@ class TestUniformWeight(unittest.TestCase):
     def test_repr(self):
         init = UniformWeight(0.1 * u.siemens, 1.0 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('UniformWeight', repr_str)
+        self.assertIn('Uniform', repr_str)
 
 
 class TestNormalWeight(unittest.TestCase):
     """
-    Test NormalWeight initialization.
+    Test Normal initialization.
 
     Examples
     --------
@@ -136,9 +136,9 @@ class TestNormalWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import NormalWeight
+        from braintools.conn import Normal
 
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
+        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert abs(np.mean(weights.mantissa) - 0.5) < 0.05
@@ -163,12 +163,12 @@ class TestNormalWeight(unittest.TestCase):
     def test_repr(self):
         init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('NormalWeight', repr_str)
+        self.assertIn('Normal', repr_str)
 
 
 class TestLogNormalWeight(unittest.TestCase):
     """
-    Test LogNormalWeight initialization.
+    Test LogNormal initialization.
 
     Examples
     --------
@@ -176,9 +176,9 @@ class TestLogNormalWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import LogNormalWeight
+        from braintools.conn import LogNormal
 
-        init = LogNormalWeight(0.5 * u.siemens, 0.2 * u.siemens)
+        init = LogNormal(0.5 * u.siemens, 0.2 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert np.all(weights > 0 * u.siemens)
@@ -201,12 +201,12 @@ class TestLogNormalWeight(unittest.TestCase):
     def test_repr(self):
         init = LogNormalWeight(0.5 * u.siemens, 0.2 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('LogNormalWeight', repr_str)
+        self.assertIn('LogNormal', repr_str)
 
 
 class TestGammaWeight(unittest.TestCase):
     """
-    Test GammaWeight initialization.
+    Test Gamma initialization.
 
     Examples
     --------
@@ -214,9 +214,9 @@ class TestGammaWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import GammaWeight
+        from braintools.conn import Gamma
 
-        init = GammaWeight(shape=2.0, scale=0.5 * u.siemens)
+        init = Gamma(shape=2.0, scale=0.5 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert np.all(weights >= 0 * u.siemens)
@@ -242,12 +242,12 @@ class TestGammaWeight(unittest.TestCase):
     def test_repr(self):
         init = GammaWeight(shape=2.0, scale=0.5 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('GammaWeight', repr_str)
+        self.assertIn('Gamma', repr_str)
 
 
 class TestExponentialWeight(unittest.TestCase):
     """
-    Test ExponentialWeight initialization.
+    Test Exponential initialization.
 
     Examples
     --------
@@ -255,9 +255,9 @@ class TestExponentialWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import ExponentialWeight
+        from braintools.conn import Exponential
 
-        init = ExponentialWeight(0.5 * u.siemens)
+        init = Exponential(0.5 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert np.all(weights >= 0 * u.siemens)
@@ -281,12 +281,12 @@ class TestExponentialWeight(unittest.TestCase):
     def test_repr(self):
         init = ExponentialWeight(0.5 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('ExponentialWeight', repr_str)
+        self.assertIn('Exponential', repr_str)
 
 
 class TestExponentialDecayWeight(unittest.TestCase):
     """
-    Test ExponentialDecayWeight initialization.
+    Test ExponentialDecay initialization.
 
     Examples
     --------
@@ -294,9 +294,9 @@ class TestExponentialDecayWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import ExponentialDecayWeight
+        from braintools.conn import ExponentialDecay
 
-        init = ExponentialDecayWeight(
+        init = ExponentialDecay(
             max_weight=1.0 * u.siemens,
             decay_constant=100.0 * u.um,
             min_weight=0.01 * u.siemens
@@ -345,12 +345,12 @@ class TestExponentialDecayWeight(unittest.TestCase):
     def test_repr(self):
         init = ExponentialDecayWeight(1.0 * u.siemens, 100.0 * u.um)
         repr_str = repr(init)
-        self.assertIn('ExponentialDecayWeight', repr_str)
+        self.assertIn('ExponentialDecay', repr_str)
 
 
 class TestTruncatedNormalWeight(unittest.TestCase):
     """
-    Test TruncatedNormalWeight initialization.
+    Test TruncatedNormal initialization.
 
     Examples
     --------
@@ -358,9 +358,9 @@ class TestTruncatedNormalWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import TruncatedNormalWeight
+        from braintools.conn import TruncatedNormal
 
-        init = TruncatedNormalWeight(
+        init = TruncatedNormal(
             mean=0.5 * u.siemens,
             std=0.2 * u.siemens,
             low=0.0 * u.siemens,
@@ -418,12 +418,12 @@ class TestTruncatedNormalWeight(unittest.TestCase):
     def test_repr(self):
         init = TruncatedNormalWeight(0.5 * u.siemens, 0.2 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('TruncatedNormalWeight', repr_str)
+        self.assertIn('TruncatedNormal', repr_str)
 
 
 class TestBetaWeight(unittest.TestCase):
     """
-    Test BetaWeight initialization.
+    Test Beta initialization.
 
     Examples
     --------
@@ -431,9 +431,9 @@ class TestBetaWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import BetaWeight
+        from braintools.conn import Beta
 
-        init = BetaWeight(alpha=2.0, beta=5.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
+        init = Beta(alpha=2.0, beta=5.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert np.all((weights >= 0.0 * u.siemens) & (weights <= 1.0 * u.siemens))
@@ -469,12 +469,12 @@ class TestBetaWeight(unittest.TestCase):
     def test_repr(self):
         init = BetaWeight(2.0, 5.0, 0.0 * u.siemens, 1.0 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('BetaWeight', repr_str)
+        self.assertIn('Beta', repr_str)
 
 
 class TestWeibullWeight(unittest.TestCase):
     """
-    Test WeibullWeight initialization.
+    Test Weibull initialization.
 
     Examples
     --------
@@ -482,9 +482,9 @@ class TestWeibullWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import WeibullWeight
+        from braintools.conn import Weibull
 
-        init = WeibullWeight(shape=1.5, scale=0.5 * u.siemens)
+        init = Weibull(shape=1.5, scale=0.5 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert np.all(weights >= 0 * u.siemens)
@@ -501,12 +501,12 @@ class TestWeibullWeight(unittest.TestCase):
     def test_repr(self):
         init = WeibullWeight(1.5, 0.5 * u.siemens)
         repr_str = repr(init)
-        self.assertIn('WeibullWeight', repr_str)
+        self.assertIn('Weibull', repr_str)
 
 
 class TestMixtureWeight(unittest.TestCase):
     """
-    Test MixtureWeight composite distribution.
+    Test Mixture composite distribution.
 
     Examples
     --------
@@ -514,12 +514,12 @@ class TestMixtureWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import MixtureWeight, NormalWeight, UniformWeight
+        from braintools.conn import Mixture, Normal, Uniform
 
-        init = MixtureWeight(
+        init = Mixture(
             distributions=[
-                NormalWeight(0.5 * u.siemens, 0.1 * u.siemens),
-                UniformWeight(0.8 * u.siemens, 1.2 * u.siemens)
+                Normal(0.5 * u.siemens, 0.1 * u.siemens),
+                Uniform(0.8 * u.siemens, 1.2 * u.siemens)
             ],
             weights=[0.7, 0.3]
         )
@@ -558,12 +558,12 @@ class TestMixtureWeight(unittest.TestCase):
 
     def test_repr(self):
         init = MixtureWeight([ConstantWeight(0.5 * u.siemens)])
-        self.assertIn('MixtureWeight', repr(init))
+        self.assertIn('Mixture', repr(init))
 
 
 class TestConditionalWeight(unittest.TestCase):
     """
-    Test ConditionalWeight composite distribution.
+    Test Conditional composite distribution.
 
     Examples
     --------
@@ -571,15 +571,15 @@ class TestConditionalWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import ConditionalWeight, ConstantWeight, NormalWeight
+        from braintools.conn import Conditional, Constant, Normal
 
         def is_excitatory(indices):
             return indices < 800
 
-        init = ConditionalWeight(
+        init = Conditional(
             condition_fn=is_excitatory,
-            true_dist=NormalWeight(0.5 * u.siemens, 0.1 * u.siemens),
-            false_dist=NormalWeight(-0.3 * u.siemens, 0.05 * u.siemens)
+            true_dist=Normal(0.5 * u.siemens, 0.1 * u.siemens),
+            false_dist=Normal(-0.3 * u.siemens, 0.05 * u.siemens)
         )
         rng = np.random.default_rng(0)
         weights = init(rng, 1000, neuron_indices=np.arange(1000))
@@ -627,12 +627,12 @@ class TestConditionalWeight(unittest.TestCase):
             ConstantWeight(0.5 * u.siemens),
             ConstantWeight(1.0 * u.siemens)
         )
-        self.assertIn('ConditionalWeight', repr(init))
+        self.assertIn('Conditional', repr(init))
 
 
 class TestScaledWeight(unittest.TestCase):
     """
-    Test ScaledWeight composite distribution.
+    Test Scaled composite distribution.
 
     Examples
     --------
@@ -640,10 +640,10 @@ class TestScaledWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import ScaledWeight, NormalWeight
+        from braintools.conn import Scaled, Normal
 
-        base = NormalWeight(1.0 * u.siemens, 0.2 * u.siemens)
-        init = ScaledWeight(base, scale_factor=0.5)
+        base = Normal(1.0 * u.siemens, 0.2 * u.siemens)
+        init = Scaled(base, scale_factor=0.5)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert np.mean(weights.mantissa) < 1.0
@@ -674,12 +674,12 @@ class TestScaledWeight(unittest.TestCase):
     def test_repr(self):
         base = ConstantWeight(1.0 * u.siemens)
         init = ScaledWeight(base, 0.5)
-        self.assertIn('ScaledWeight', repr(init))
+        self.assertIn('Scaled', repr(init))
 
 
 class TestClippedWeight(unittest.TestCase):
     """
-    Test ClippedWeight composite distribution.
+    Test Clipped composite distribution.
 
     Examples
     --------
@@ -687,10 +687,10 @@ class TestClippedWeight(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import ClippedWeight, NormalWeight
+        from braintools.conn import Clipped, Normal
 
-        base = NormalWeight(0.5 * u.siemens, 0.3 * u.siemens)
-        init = ClippedWeight(base, min_val=0.0 * u.siemens, max_val=1.0 * u.siemens)
+        base = Normal(0.5 * u.siemens, 0.3 * u.siemens)
+        init = Clipped(base, min_val=0.0 * u.siemens, max_val=1.0 * u.siemens)
         rng = np.random.default_rng(0)
         weights = init(rng, 1000)
         assert np.all((weights >= 0.0 * u.siemens) & (weights <= 1.0 * u.siemens))
@@ -728,7 +728,7 @@ class TestClippedWeight(unittest.TestCase):
     def test_repr(self):
         base = ConstantWeight(1.0 * u.siemens)
         init = ClippedWeight(base, min_val=0.0 * u.siemens)
-        self.assertIn('ClippedWeight', repr(init))
+        self.assertIn('Clipped', repr(init))
 
 
 class TestInitCall(unittest.TestCase):
@@ -741,11 +741,11 @@ class TestInitCall(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import init_call, NormalWeight
+        from braintools.conn import init_call, Normal
 
         rng = np.random.default_rng(0)
 
-        weights = init_call(NormalWeight(0.5 * u.siemens, 0.1 * u.siemens), rng, 100)
+        weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), rng, 100)
         assert len(weights) == 100
 
         scalar_weights = init_call(0.5, rng, 100)
@@ -805,9 +805,9 @@ class TestEdgeCases(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn import NormalWeight
+        from braintools.conn import Normal
 
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
+        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
         rng = np.random.default_rng(0)
 
         weights_1d = init(rng, 100)
@@ -861,15 +861,15 @@ class TestCompositeScenarios(unittest.TestCase):
         import numpy as np
         import brainunit as u
         from braintools.conn import (
-            ClippedWeight, ScaledWeight, MixtureWeight, NormalWeight, UniformWeight
+            Clipped, Scaled, Mixture, Normal, Uniform
         )
 
-        init = ClippedWeight(
-            ScaledWeight(
-                MixtureWeight(
+        init = Clipped(
+            Scaled(
+                Mixture(
                     distributions=[
-                        NormalWeight(0.5 * u.siemens, 0.1 * u.siemens),
-                        UniformWeight(0.3 * u.siemens, 0.7 * u.siemens)
+                        Normal(0.5 * u.siemens, 0.1 * u.siemens),
+                        Uniform(0.3 * u.siemens, 0.7 * u.siemens)
                     ],
                     weights=[0.6, 0.4]
                 ),

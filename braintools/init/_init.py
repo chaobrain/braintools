@@ -61,30 +61,30 @@ class Initialization(ABC):
 
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import Initialization
-
-        class CustomInit(Initialization):
-            def __init__(self, value):
-                self.value = value
-
-            def __call__(self, rng, size, **kwargs):
-                return np.full(size, self.value)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Initialization
+        >>>
+        >>> class CustomInit(Initialization):
+        ...     def __init__(self, value):
+        ...         self.value = value
+        ...
+        ...     def __call__(self, rng, size, **kwargs):
+        ...         return np.full(size, self.value)
 
     Compose initializations:
 
     .. code-block:: python
 
-        from braintools.conn import NormalWeight, UniformDelay
-
-        weight_init = NormalWeight(0.5 * u.nS, 0.1 * u.nS) * 2.0 + 0.1 * u.nS
-
-        delay_init = UniformDelay(1.0 * u.ms, 3.0 * u.ms).clip(0.5 * u.ms, 5.0 * u.ms)
-
-        combined = (NormalWeight(1.0 * u.nS, 0.2 * u.nS) |
-                    lambda x: x.clip(0, 2 * u.nS) |
-                    lambda x: x * 0.5)
+        >>> from braintools.init import Normal, Uniform
+        >>>
+        >>> weight_init = Normal(0.5 * u.nS, 0.1 * u.nS) * 2.0 + 0.1 * u.nS
+        >>>
+        >>> delay_init = Uniform(1.0 * u.ms, 3.0 * u.ms).clip(0.5 * u.ms, 5.0 * u.ms)
+        >>>
+        >>> combined = (Normal(1.0 * u.nS, 0.2 * u.nS) |
+        ...             lambda x: x.clip(0, 2 * u.nS) |
+        ...             lambda x: x * 0.5)
     """
 
     @abstractmethod
@@ -206,15 +206,15 @@ def init_call(init: Optional[Initialization], rng: np.random.Generator, n: int, 
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import init_call, NormalWeight
-
-        rng = np.random.default_rng(0)
-
-        weights = init_call(NormalWeight(0.5 * u.siemens, 0.1 * u.siemens), rng, 100)
-
-        scalar_weights = init_call(0.5, rng, 100)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import init_call, Normal
+        >>>
+        >>> rng = np.random.default_rng(0)
+        >>>
+        >>> weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), rng, 100)
+        >>>
+        >>> scalar_weights = init_call(0.5, rng, 100)
     """
     if init is None:
         return None
@@ -391,18 +391,18 @@ class Compose(Initialization):
     --------
     .. code-block:: python
 
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import NormalWeight, Compose
-
-        init = Compose(
-            NormalWeight(1.0 * u.nS, 0.2 * u.nS),
-            lambda x: u.math.maximum(x, 0 * u.nS),
-            lambda x: x * 0.5
-        )
-
-        rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import Normal, Compose
+        >>>
+        >>> init = Compose(
+        ...     Normal(1.0 * u.nS, 0.2 * u.nS),
+        ...     lambda x: u.math.maximum(x, 0 * u.nS),
+        ...     lambda x: x * 0.5
+        ... )
+        >>>
+        >>> rng = np.random.default_rng(0)
+        >>> weights = init(rng, 1000)
     """
 
     def __init__(self, *inits):
