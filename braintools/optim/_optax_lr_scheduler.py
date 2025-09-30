@@ -550,16 +550,17 @@ class ConstantLR(LRScheduler):
 
     def __init__(
         self,
+        base_lr: Union[float, List[float]] = 1e-3,
         factor: float = 1.0 / 3,
         total_iters: int = 5,
         last_epoch: int = -1,
     ):
         self.factor = factor
         self.total_iters = total_iters
-        super().__init__(last_epoch)
+        super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
-        if self.last_epoch < self.total_iters:
+        if self.last_epoch.value < self.total_iters:
             return [base_lr * self.factor for base_lr in self.base_lrs]
         else:
             return self.base_lrs

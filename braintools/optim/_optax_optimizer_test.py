@@ -182,8 +182,8 @@ class TestOptaxOptimizer(unittest.TestCase):
 
         # Compute gradient norm before clipping
         grad_norm_before = jnp.sqrt(sum(
-            jnp.sum(g**2) if not isinstance(g, dict) else
-            sum(jnp.sum(sub_g**2) for sub_g in g.values())
+            jnp.sum(g ** 2) if not isinstance(g, dict) else
+            sum(jnp.sum(sub_g ** 2) for sub_g in g.values())
             for g in grads.values()
         ))
 
@@ -259,7 +259,7 @@ class TestOptaxOptimizer(unittest.TestCase):
         for k, v in param_states_no_decay.items():
             if isinstance(v.value, dict):
                 initial_norms[k] = {sub_k: jnp.linalg.norm(sub_v)
-                                   for sub_k, sub_v in v.value.items()}
+                                    for sub_k, sub_v in v.value.items()}
             else:
                 initial_norms[k] = jnp.linalg.norm(v.value)
 
@@ -268,7 +268,7 @@ class TestOptaxOptimizer(unittest.TestCase):
         for k, v in param_states_no_decay.items():
             if isinstance(v.value, dict):
                 zero_grads[k] = {sub_k: jnp.zeros_like(sub_v)
-                                for sub_k, sub_v in v.value.items()}
+                                 for sub_k, sub_v in v.value.items()}
             else:
                 zero_grads[k] = jnp.zeros_like(v.value)
 
@@ -394,7 +394,7 @@ class TestOptaxOptimizer(unittest.TestCase):
             for k, v in self.param_states.items():
                 if isinstance(v.value, dict):
                     current_updates[k] = {sub_k: v.value[sub_k] - params_before[k][sub_k]
-                                         for sub_k in v.value}
+                                          for sub_k in v.value}
                 else:
                     current_updates[k] = v.value - params_before[k]
 
@@ -425,7 +425,7 @@ class TestOptaxOptimizer(unittest.TestCase):
         for k, v in self.param_states.items():
             if isinstance(v.value, dict):
                 nan_grads[k] = {sub_k: jnp.full_like(sub_v, jnp.nan)
-                               for sub_k, sub_v in v.value.items()}
+                                for sub_k, sub_v in v.value.items()}
             else:
                 nan_grads[k] = jnp.full_like(v.value, jnp.nan)
 
@@ -474,8 +474,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 
             # Loss should decrease after optimization
             final_loss = loss_fn()
-            self.assertLess(final_loss, initial_loss,
-                          f"{opt.__class__.__name__} should reduce loss")
+            self.assertLess(final_loss, initial_loss, f"{opt.__class__.__name__} should reduce loss")
 
     def test_lr_scheduler_integration(self):
         """Test integration with learning rate scheduler."""
@@ -554,14 +553,14 @@ class TestOptaxOptimizer(unittest.TestCase):
                 # Non-zero gradients for linear1
                 if isinstance(v.value, dict):
                     mixed_grads[k] = {sub_k: jnp.ones_like(sub_v) * 0.01
-                                     for sub_k, sub_v in v.value.items()}
+                                      for sub_k, sub_v in v.value.items()}
                 else:
                     mixed_grads[k] = jnp.ones_like(v.value) * 0.01
             else:
                 # Zero gradients for other parameters
                 if isinstance(v.value, dict):
                     mixed_grads[k] = {sub_k: jnp.zeros_like(sub_v)
-                                     for sub_k, sub_v in v.value.items()}
+                                      for sub_k, sub_v in v.value.items()}
                 else:
                     mixed_grads[k] = jnp.zeros_like(v.value)
 

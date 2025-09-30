@@ -24,7 +24,7 @@ from brainstate.typing import PyTree
 
 from braintools.file._msg_checkpoint import msgpack_from_state_dict
 from ._base import Optimizer
-from ._optax_lr_scheduler import LRScheduler
+from ._optax_lr_scheduler import LRScheduler, ConstantLR
 from ._state_uniquifier import UniqueStateManager
 
 MaskOrFn = Optional[Union[Any, Callable]]
@@ -138,17 +138,7 @@ class OptaxOptimizer(Optimizer):
 
         self.param_states = UniqueStateManager()
 
-        # Handle lr as either float or scheduler
-        if isinstance(lr, LRScheduler):
-            self._lr_scheduler = lr
-            self._base_lr = lr.base_lrs[0] if lr.base_lrs else 1e-3
-            self._current_lr = LongTermState(self._base_lr)
-            lr.attach_optimizer(self)
-        else:
-            self._lr_scheduler = None
-            self._base_lr = lr
-            self._current_lr = LongTermState(lr)
-
+        # Initialize attributes first
         self.weight_decay = weight_decay
         self.grad_clip_norm = grad_clip_norm
         self.grad_clip_value = grad_clip_value
@@ -156,6 +146,14 @@ class OptaxOptimizer(Optimizer):
         self.param_groups = []
         self.param_groups_opt_states = []  # Changed to list
         self._schedulers = []
+
+        # Handle lr as either float or scheduler
+        # Convert float to ConstantLR for unified handling
+        lr = ConstantLR(base_lr=lr, factor=1.0, total_iters=0) if not isinstance(lr, LRScheduler) else lr
+        self._lr_scheduler = lr
+        self._base_lr = lr.base_lrs[0] if lr.base_lrs else 1e-3
+        self._current_lr = LongTermState(self._base_lr)
+        lr.attach_optimizer(self)
 
         if tx is not None:
             if not isinstance(tx, optax.GradientTransformation):
@@ -181,16 +179,8 @@ class OptaxOptimizer(Optimizer):
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
 
-        # Use a schedule function that reads from the State or scheduler
-        if self._lr_scheduler is not None:
-            # Use the scheduler's __call__ method
-            transforms.append(optax.scale_by_schedule(self._lr_scheduler))
-        else:
-            # Use a simple function that reads from the State
-            def lr_schedule(count):
-                return -self.lr
-
-            transforms.append(optax.scale_by_schedule(lr_schedule))
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
 
         return optax.chain(*transforms)
 
@@ -525,43 +515,49 @@ class SGD(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         momentum: float = 0.0,
         weight_decay: float = 0.0,
         nesterov: bool = False,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        transforms = []
+        # Store SGD-specific parameters
+        self.momentum = momentum
+        self.nesterov = nesterov
 
-        if grad_clip_norm is not None:
-            transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-
-        if grad_clip_value is not None:
-            transforms.append(optax.clip(grad_clip_value))
-
-        if momentum > 0:
-            if nesterov:
-                transforms.append(optax.trace(decay=momentum, nesterov=True))
-            else:
-                transforms.append(optax.trace(decay=momentum, nesterov=False))
-
-        if weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(weight_decay))
-
-        transforms.append(optax.scale(-lr))
-
-        tx = optax.chain(*transforms) if transforms else optax.sgd(lr)
-
+        # Don't build tx here, let the base class handle it
         super().__init__(
-            tx=tx,
+            tx=None,  # Will be created by base class
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.momentum = momentum
-        self.nesterov = nesterov
+
+    def _create_default_tx(self):
+        """Create SGD-specific gradient transformation."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        if self.momentum > 0:
+            if self.nesterov:
+                transforms.append(optax.trace(decay=self.momentum, nesterov=True))
+            else:
+                transforms.append(optax.trace(decay=self.momentum, nesterov=False))
+
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+
+        return optax.chain(*transforms)
 
 
 class Adam(OptaxOptimizer):
@@ -609,16 +605,8 @@ class Adam(OptaxOptimizer):
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
 
-        # Use a schedule function that reads from the State or scheduler
-        if hasattr(self, '_lr_scheduler') and self._lr_scheduler is not None:
-            # Use the scheduler's __call__ method
-            transforms.append(optax.scale_by_schedule(self._lr_scheduler))
-        else:
-            # Use a simple function that reads from the State
-            def lr_schedule(count):
-                return -self.lr
-
-            transforms.append(optax.scale_by_schedule(lr_schedule))
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
 
         return optax.chain(*transforms)
 
