@@ -20,6 +20,7 @@ import brainunit as u
 import jax
 import numpy as np
 from brainstate._compatible_import import safe_zip
+from ._base import Optimizer
 
 try:
     import nevergrad as ng
@@ -58,7 +59,7 @@ def concat_parameters(*parameters):
     return final_parameters
 
 
-class NevergradOptimizer:
+class NevergradOptimizer(Optimizer):
     """
     Ask/tell optimizer wrapper around Nevergrad with batched evaluation support.
 

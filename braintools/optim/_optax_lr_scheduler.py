@@ -124,7 +124,7 @@ class LRScheduler:
                     param_group['lr'] = lr
 
             # Update the main optimizer lr
-            self.optimizer.lr = values[0]
+            self.optimizer.current_lr = values[0]
 
     def step_epoch(self):
         """Step the scheduler by one epoch."""
@@ -220,7 +220,7 @@ class StepLR(LRScheduler):
         ...     # ... training code ...
         ...     scheduler.step()
         ...     if epoch in [0, 29, 30, 59, 60, 89]:
-        ...         print(f"Epoch {epoch}: lr = {optimizer.lr:.6f}")
+        ...         print(f"Epoch {epoch}: lr = {optimizer.current_lr:.6f}")
         Epoch 0: lr = 0.100000
         Epoch 29: lr = 0.100000
         Epoch 30: lr = 0.010000  # First decay
@@ -311,7 +311,7 @@ class StepLR(LRScheduler):
         >>> for epoch in range(90):
         ...     train_epoch(model, optimizer, train_data)
         ...     scheduler.step()
-        ...     print(f"Epoch {epoch}: lr = {optimizer.lr}")
+        ...     print(f"Epoch {epoch}: lr = {optimizer.current_lr}")
 
     See Also
     --------
@@ -450,7 +450,7 @@ class MultiStepLR(LRScheduler):
         >>> for epoch in range(90):
         ...     optimizer.step(grads)
         ...     scheduler.step()
-        ...     print(f"Epoch {epoch}: lr = {optimizer.lr}")
+        ...     print(f"Epoch {epoch}: lr = {optimizer.current_lr}")
 
     **CIFAR training schedule:**
 
@@ -616,7 +616,7 @@ class ExponentialLR(LRScheduler):
         ...     # Training code
         ...     scheduler.step()
         ...     if epoch % 5 == 0:
-        ...         print(f"Epoch {epoch}: lr = {optimizer.lr:.6f}")
+        ...         print(f"Epoch {epoch}: lr = {optimizer.current_lr:.6f}")
         Epoch 0: lr = 0.100000
         Epoch 5: lr = 0.077378  # lr * 0.95^5
         Epoch 10: lr = 0.059874  # lr * 0.95^10
@@ -832,7 +832,7 @@ class CosineAnnealingLR(LRScheduler):
         ...     optimizer.step(grads)
         ...     scheduler.step()
         ...     if epoch % 25 == 0:
-        ...         print(f"Epoch {epoch}: lr = {optimizer.lr:.6f}")
+        ...         print(f"Epoch {epoch}: lr = {optimizer.current_lr:.6f}")
         Epoch 0: lr = 0.100000
         Epoch 25: lr = 0.085355  # Slow decay early
         Epoch 50: lr = 0.050000  # Fast decay middle
@@ -1852,7 +1852,7 @@ class ReduceLROnPlateau(LRScheduler):
         ...     # Update learning rate based on validation loss
         ...     scheduler.step(val_loss)
         ...
-        ...     print(f"Epoch {epoch}: lr={optimizer.lr:.6f}, val_loss={val_loss:.4f}")
+        ...     print(f"Epoch {epoch}: lr={optimizer.current_lr:.6f}, val_loss={val_loss:.4f}")
 
     **With validation accuracy (maximize mode):**
 
@@ -1950,10 +1950,10 @@ class ReduceLROnPlateau(LRScheduler):
         ...     val_loss = validate(model, val_loader)
         ...
         ...     # Update learning rate
-        ...     old_lr = optimizer.lr
+        ...     old_lr = optimizer.current_lr
         ...     scheduler.step(val_loss)
-        ...     if optimizer.lr < old_lr:
-        ...         print(f"Epoch {epoch}: Reduced LR to {optimizer.lr:.6f}")
+        ...     if optimizer.current_lr < old_lr:
+        ...         print(f"Epoch {epoch}: Reduced LR to {optimizer.current_lr:.6f}")
         ...
         ...     # Early stopping
         ...     if val_loss < best_loss:
@@ -2026,7 +2026,7 @@ class ReduceLROnPlateau(LRScheduler):
         ...
         ...     # Could also track other metrics separately
         ...     val_acc = evaluate_accuracy(model, val_loader)
-        ...     print(f"Epoch {epoch}: lr={optimizer.lr:.6f}, "
+        ...     print(f"Epoch {epoch}: lr={optimizer.current_lr:.6f}, "
         ...           f"val_loss={val_loss:.4f}, val_acc={val_acc:.4f}")
 
     See Also
@@ -2143,7 +2143,7 @@ class ReduceLROnPlateau(LRScheduler):
                 if i < len(new_lrs):
                     param_group['lr'] = new_lrs[i]
             # Update the main optimizer lr
-            self.optimizer.lr = new_lrs[0]
+            self.optimizer.current_lr = new_lrs[0]
 
     def get_lr(self):
         # Return current learning rates
@@ -2224,7 +2224,7 @@ class LinearLR(LRScheduler):
         ...     # Training code
         ...     scheduler.step()
         ...     if epoch < 11:
-        ...         print(f"Epoch {epoch}: lr ≈ {optimizer.lr:.6f}")
+        ...         print(f"Epoch {epoch}: lr ≈ {optimizer.current_lr:.6f}")
         # lr gradually increases from 0.0001 to 0.001
 
     **Standard warmup with default parameters:**
@@ -2430,7 +2430,7 @@ class ConstantLR(LRScheduler):
         >>> for epoch in range(10):
         ...     optimizer.step(grads)
         ...     scheduler.step()
-        ...     print(f"Epoch {epoch}: lr = {optimizer.lr}")
+        ...     print(f"Epoch {epoch}: lr = {optimizer.current_lr}")
         # First 5 epochs: lr ≈ 0.000333
         # Remaining epochs: lr = 0.001
 
@@ -2527,7 +2527,7 @@ class ConstantLR(LRScheduler):
         ...
         ...     scheduler.step()
         ...     if epoch in [0, 4, 5, 10]:
-        ...         print(f"Epoch {epoch}: lr = {optimizer.lr}")
+        ...         print(f"Epoch {epoch}: lr = {optimizer.current_lr}")
 
     See Also
     --------
@@ -2906,7 +2906,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         if self.optimizer is not None:
             for param_group, lr in zip(self.optimizer.param_groups, values):
                 param_group['lr'] = lr
-            self.optimizer.lr = values[0]
+            self.optimizer.current_lr = values[0]
 
 
 class WarmupCosineSchedule(LRScheduler):

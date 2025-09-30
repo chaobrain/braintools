@@ -43,14 +43,14 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         # At halfway point (epoch 50), should be approximately half of initial lr
         for _ in range(50):
             scheduler.step()
 
         expected_lr = 0.1 * ((1 - 50 / 100) ** 1.0)  # = 0.05
-        assert abs(optimizer.lr - expected_lr) < 1e-6
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
         print("[OK] test_polynomiallr_linear_decay")
 
     def test_polynomiallr_quadratic_decay(self):
@@ -59,14 +59,14 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         # At epoch 25: lr = 0.1 * ((1 - 25/100)^2) = 0.1 * 0.75^2 = 0.05625
         for _ in range(25):
             scheduler.step()
 
         expected_lr = 0.1 * ((1 - 25 / 100) ** 2.0)
-        assert abs(optimizer.lr - expected_lr) < 1e-6
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
         print("[OK] test_polynomiallr_quadratic_decay")
 
     def test_polynomiallr_sqrt_decay(self):
@@ -75,13 +75,13 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         for _ in range(25):
             scheduler.step()
 
         # Verify decay happened
-        assert optimizer.lr < initial_lr
+        assert optimizer.current_lr < initial_lr
         print("[OK] test_polynomiallr_sqrt_decay")
 
     def test_polynomiallr_short_training(self):
@@ -90,13 +90,13 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler, weight_decay=1e-5)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.001) < 1e-7
+        assert abs(optimizer.current_lr - 0.001) < 1e-7
 
         for _ in range(10):
             scheduler.step()
 
         # After total_iters, lr should be close to 0
-        assert optimizer.lr < 1e-5
+        assert optimizer.current_lr < 1e-5
         print("[OK] test_polynomiallr_short_training")
 
     def test_polynomiallr_with_warmup(self):
@@ -151,7 +151,7 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
                 scheduler.step()
 
             # All should have decayed from initial lr
-            assert optimizer.lr < 0.1
+            assert optimizer.current_lr < 0.1
 
         print("[OK] test_polynomiallr_power_comparison")
 
@@ -178,13 +178,13 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
             scheduler.step()
 
         # After warmup period (epoch 10), should reach base_lr
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         # After warmup, lr stays constant
         for _ in range(5):
             scheduler.step()
 
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
         print("[OK] test_warmupscheduler_basic")
 
     def test_warmupscheduler_nonzero_start(self):
@@ -196,14 +196,14 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
         # Initial lr should be close to warmup_start_lr
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
         assert initial_lr >= 0.001 - 1e-7
 
         # After warmup, should reach base_lr
         for _ in range(5):
             scheduler.step()
 
-        assert abs(optimizer.lr - 0.01) < 1e-7
+        assert abs(optimizer.current_lr - 0.01) < 1e-7
         print("[OK] test_warmupscheduler_nonzero_start")
 
     def test_warmupscheduler_large_batch(self):
@@ -214,14 +214,14 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         # Step through warmup
         for _ in range(20):
             scheduler.step()
 
         # Should reach target base_lr
-        assert abs(optimizer.lr - 0.4) < 1e-6
+        assert abs(optimizer.current_lr - 0.4) < 1e-6
         print("[OK] test_warmupscheduler_large_batch")
 
     def test_warmupscheduler_short_warmup(self):
@@ -233,13 +233,13 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
         # Initial lr
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         # After short warmup
         for _ in range(3):
             scheduler.step()
 
-        assert abs(optimizer.lr - 0.0001) < 1e-7
+        assert abs(optimizer.current_lr - 0.0001) < 1e-7
         print("[OK] test_warmupscheduler_short_warmup")
 
     def test_warmupscheduler_with_decay(self):
@@ -299,13 +299,13 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         for _ in range(10):
             warmup_sched.step()
 
-        lr_after_warmup = warmup_opt.lr
+        lr_after_warmup = warmup_opt.current_lr
 
         # Step more - lr should stay constant
         for _ in range(5):
             warmup_sched.step()
 
-        assert abs(warmup_opt.lr - lr_after_warmup) < 1e-6
+        assert abs(warmup_opt.current_lr - lr_after_warmup) < 1e-6
         print("[OK] test_warmupscheduler_comparison_linearlr")
 
     # ============================================================================
@@ -339,7 +339,7 @@ class test_polynomial_warmup_schedulers(unittest.TestCase):
         poly_sched = bts.optim.PolynomialLR(base_lr=0.001, total_iters=50, power=1.0)
         adam = bts.optim.Adam(lr=poly_sched)
         adam.register_trainable_weights(model1.states(bst.ParamState))
-        assert abs(adam.lr - 0.001) < 1e-7
+        assert abs(adam.current_lr - 0.001) < 1e-7
 
         # WarmupScheduler with SGD
         model2 = bst.nn.Linear(10, 5)
@@ -364,12 +364,12 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert optimizer.lr == 0.1
+        assert optimizer.current_lr == 0.1
 
         # After 30 steps
         for _ in range(30):
             scheduler.step()
-        assert abs(optimizer.lr - 0.01) < 1e-6
+        assert abs(optimizer.current_lr - 0.01) < 1e-6
         print("[OK] test_steplr_basic")
 
     def test_steplr_with_adam(self):
@@ -378,11 +378,11 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
 
         for _ in range(10):
             scheduler.step()
-        assert abs(optimizer.lr - 0.0005) < 1e-7
+        assert abs(optimizer.current_lr - 0.0005) < 1e-7
         print("[OK] test_steplr_with_adam")
 
     # ============================================================================
@@ -443,12 +443,12 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = abs(optimizer.lr)
+        initial_lr = abs(optimizer.current_lr)
 
         # Step to the end
         for _ in range(10):
             scheduler.step()
-        final_lr = abs(optimizer.lr)
+        final_lr = abs(optimizer.current_lr)
 
         # Should increase linearly (using absolute values due to optax scaling)
         assert final_lr >= initial_lr
@@ -502,7 +502,7 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
 
         # Simulate training for 10 epochs
         for epoch in range(10):
@@ -510,7 +510,7 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
             scheduler.step()
             if epoch == 4:
                 # After 5 epochs, lr should decay
-                assert abs(optimizer.lr - 0.001) < 1e-6
+                assert abs(optimizer.current_lr - 0.001) < 1e-6
         print("[OK] test_scheduler_integration")
 
     def test_scheduler_with_different_optimizers(self):
@@ -520,14 +520,14 @@ class test_lr_schedulers_comprehensive(unittest.TestCase):
         # Test with Adam
         adam = bts.optim.Adam(lr=scheduler)
         adam.register_trainable_weights(model.states(bst.ParamState))
-        assert adam.lr == 0.001
+        assert adam.current_lr == 0.001
 
         # Test with SGD (new model)
         model2 = bst.nn.Linear(10, 5)
         scheduler2 = bts.optim.MultiStepLR(base_lr=0.01, milestones=[10, 20], gamma=0.1)
         sgd = bts.optim.SGD(lr=scheduler2, momentum=0.9)
         sgd.register_trainable_weights(model2.states(bst.ParamState))
-        assert sgd.lr == 0.01
+        assert sgd.current_lr == 0.01
 
         print("[OK] test_scheduler_with_different_optimizers")
 
@@ -580,13 +580,13 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         # After 10 steps: lr = 0.1 * 0.95^10
         for _ in range(10):
             scheduler.step()
         expected_lr = 0.1 * (0.95 ** 10)
-        assert abs(optimizer.lr - expected_lr) < 1e-6
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
         print("[OK] test_exponentiallr_basic")
 
     def test_exponentiallr_slow_decay(self):
@@ -595,12 +595,12 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.001) < 1e-7
+        assert abs(optimizer.current_lr - 0.001) < 1e-7
 
         for _ in range(100):
             scheduler.step()
         expected_lr = 0.001 * (0.99 ** 100)
-        assert abs(optimizer.lr - expected_lr) < 1e-7
+        assert abs(optimizer.current_lr - expected_lr) < 1e-7
         print("[OK] test_exponentiallr_slow_decay")
 
     def test_exponentiallr_moderate_decay(self):
@@ -609,13 +609,13 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=1e-4)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         for _ in range(50):
             scheduler.step()
 
         expected_lr = 0.1 * (0.96 ** 50)
-        assert abs(optimizer.lr - expected_lr) < 1e-6
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
         print("[OK] test_exponentiallr_moderate_decay")
 
     def test_exponentiallr_with_warmup(self):
@@ -646,7 +646,7 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
             scheduler.step()
 
         expected_lr = 0.1 * (0.9 ** 30)
-        assert abs(optimizer.lr - expected_lr) < 1e-6
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
         print("[OK] test_exponentiallr_aggressive_decay")
 
     def test_exponentiallr_state_dict(self):
@@ -679,14 +679,14 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         # At T_max/2, lr should be approximately 0.05 (halfway)
         for _ in range(50):
             scheduler.step()
 
         # Check lr is decreasing
-        assert optimizer.lr < 0.1
+        assert optimizer.current_lr < 0.1
         print("[OK] test_cosineannealinglr_basic")
 
     def test_cosineannealinglr_with_eta_min(self):
@@ -695,13 +695,13 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.01) < 1e-6
+        assert abs(optimizer.current_lr - 0.01) < 1e-6
 
         for _ in range(50):
             scheduler.step()
 
         # At T_max, should be close to eta_min
-        assert optimizer.lr >= 0.0001 - 1e-6
+        assert optimizer.current_lr >= 0.0001 - 1e-6
         print("[OK] test_cosineannealinglr_with_eta_min")
 
     def test_cosineannealinglr_with_warmup(self):
@@ -733,14 +733,14 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9, weight_decay=5e-4)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         # Simulate partial training
         for _ in range(100):
             scheduler.step()
 
         # lr should have decreased significantly at halfway point
-        assert optimizer.lr < 0.1
+        assert optimizer.current_lr < 0.1
         print("[OK] test_cosineannealinglr_cifar_schedule")
 
     def test_cosineannealinglr_finetuning(self):
@@ -749,13 +749,13 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler, weight_decay=1e-5)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        assert abs(optimizer.lr - 0.0001) < 1e-7
+        assert abs(optimizer.current_lr - 0.0001) < 1e-7
 
         for _ in range(30):
             scheduler.step()
 
         # Should be close to eta_min at end
-        assert optimizer.lr >= 0.00001 - 1e-7
+        assert optimizer.current_lr >= 0.00001 - 1e-7
         print("[OK] test_cosineannealinglr_finetuning")
 
     def test_cosineannealinglr_state_dict(self):
@@ -799,8 +799,8 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
             cos_scheduler.step()
 
         # Both should have decreased from initial lr
-        assert exp_optimizer.lr < 0.1
-        assert cos_optimizer.lr < 0.1
+        assert exp_optimizer.current_lr < 0.1
+        assert cos_optimizer.current_lr < 0.1
         print("[OK] test_scheduler_comparison")
 
     def test_different_optimizers(self):
@@ -810,14 +810,14 @@ class test_exponential_cosine_schedulers(unittest.TestCase):
         exp_scheduler = bts.optim.ExponentialLR(base_lr=0.001, gamma=0.98)
         adam = bts.optim.Adam(lr=exp_scheduler)
         adam.register_trainable_weights(model.states(bst.ParamState))
-        assert abs(adam.lr - 0.001) < 1e-7
+        assert abs(adam.current_lr - 0.001) < 1e-7
 
         # Test CosineAnnealingLR with SGD
         model2 = bst.nn.Linear(10, 5)
         cos_scheduler = bts.optim.CosineAnnealingLR(base_lr=0.01, T_max=50, eta_min=0.0001)
         sgd = bts.optim.SGD(lr=cos_scheduler, momentum=0.9)
         sgd.register_trainable_weights(model2.states(bst.ParamState))
-        assert abs(sgd.lr - 0.01) < 1e-6
+        assert abs(sgd.current_lr - 0.01) < 1e-6
 
         print("[OK] test_different_optimizers")
 
@@ -836,7 +836,7 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
         assert initial_lr is not None
 
         # Step through a cycle
@@ -857,7 +857,7 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
         assert initial_lr is not None
 
         # Step through warmup
@@ -905,7 +905,7 @@ class test_cyclic_schedulers(unittest.TestCase):
         # Step once to initialize
         scheduler.step(metrics=1.0)
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
         # Note: Initial lr might be default base_lr, not the specified one
 
         # Simulate improving metrics (no reduction)
@@ -913,7 +913,7 @@ class test_cyclic_schedulers(unittest.TestCase):
             scheduler.step(metrics=1.0 - i * 0.1)
 
         # lr should not change with improving metrics
-        assert optimizer.lr == initial_lr
+        assert optimizer.current_lr == initial_lr
 
         # Simulate plateau (no improvement) - need more than patience epochs
         for i in range(7):  # Changed from 10 to 7 to ensure we trigger after patience
@@ -923,7 +923,7 @@ class test_cyclic_schedulers(unittest.TestCase):
         # But it can't go below min_lr
         factor = 0.5
         expected_lr = max(initial_lr * factor, 0.001)  # min_lr is 0.001
-        assert abs(optimizer.lr - expected_lr) < 1e-6  # Should be at expected_lr
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6  # Should be at expected_lr
 
         print("[OK] test_reducelronplateau_basic")
 
@@ -939,14 +939,14 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         # Simulate plateau in max mode
         for i in range(10):
             scheduler.step(metrics=0.8)  # Metric not increasing
 
         # lr should be reduced
-        assert optimizer.lr < initial_lr
+        assert optimizer.current_lr < initial_lr
 
         print("[OK] test_reducelronplateau_max_mode")
 
@@ -1028,7 +1028,7 @@ class test_cyclic_schedulers(unittest.TestCase):
         # Step once to initialize
         scheduler.step(metrics=1.0)
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
         # Note: Initial lr might be the default base_lr
 
         # Simulate slow improvement - should not trigger reduction quickly
@@ -1037,7 +1037,7 @@ class test_cyclic_schedulers(unittest.TestCase):
 
         # With high patience and threshold, lr might still be at initial value
         # or reduced at most once
-        assert optimizer.lr >= initial_lr * 0.5 - 1e-6  # At most one reduction
+        assert optimizer.current_lr >= initial_lr * 0.5 - 1e-6  # At most one reduction
 
         print("[OK] test_reducelronplateau_conservative")
 
@@ -1056,14 +1056,14 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         # Simulate plateau
         for i in range(10):
             scheduler.step(metrics=0.5)
 
         # With low patience and aggressive factor, lr should reduce multiple times
-        assert optimizer.lr < initial_lr * 0.5  # At least one reduction
+        assert optimizer.current_lr < initial_lr * 0.5  # At least one reduction
 
         print("[OK] test_reducelronplateau_aggressive")
 
@@ -1081,14 +1081,14 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer = bts.optim.Adam(lr=scheduler)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         # Small improvements that don't meet absolute threshold
         for i in range(10):
             scheduler.step(metrics=1.0 - i * 0.0001)  # Improvements of 0.0001
 
         # Should trigger reduction because improvements < 0.001
-        assert optimizer.lr < initial_lr
+        assert optimizer.current_lr < initial_lr
 
         print("[OK] test_reducelronplateau_abs_threshold")
 
@@ -1106,13 +1106,13 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         # Trigger first reduction by providing patience+1 steps with no improvement
         for i in range(3):
             scheduler.step(metrics=1.0)
 
-        lr_after_first = optimizer.lr
+        lr_after_first = optimizer.current_lr
         assert lr_after_first <= initial_lr  # May or may not have reduced yet
 
         # Continue stepping to ensure reduction happens
@@ -1120,7 +1120,7 @@ class test_cyclic_schedulers(unittest.TestCase):
             scheduler.step(metrics=1.0)
 
         # Verify lr has been reduced at least once from initial
-        assert optimizer.lr <= initial_lr
+        assert optimizer.current_lr <= initial_lr
 
         print("[OK] test_reducelronplateau_cooldown")
 
@@ -1159,7 +1159,7 @@ class test_cyclic_schedulers(unittest.TestCase):
                 break
 
         # Should have stopped early and reduced lr at least once
-        assert optimizer.lr < 0.1
+        assert optimizer.current_lr < 0.1
 
         print("[OK] test_reducelronplateau_with_early_stopping")
 
@@ -1181,8 +1181,8 @@ class test_cyclic_schedulers(unittest.TestCase):
             scheduler.step(metrics=1.0)  # Constant, no improvement
 
         # Should never go below min_lr
-        assert optimizer.lr >= 0.001
-        assert abs(optimizer.lr - 0.001) < 1e-6  # Should be at min_lr
+        assert optimizer.current_lr >= 0.001
+        assert abs(optimizer.current_lr - 0.001) < 1e-6  # Should be at min_lr
 
         print("[OK] test_reducelronplateau_min_lr_constraint")
 
@@ -1200,7 +1200,7 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler_loss, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         # Simulate training where we monitor loss
         val_losses = [1.0, 0.9, 0.8, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75]
@@ -1209,7 +1209,7 @@ class test_cyclic_schedulers(unittest.TestCase):
             scheduler_loss.step(val_loss)
 
         # Should have reduced lr due to plateau
-        assert optimizer.lr < initial_lr
+        assert optimizer.current_lr < initial_lr
 
         print("[OK] test_reducelronplateau_multiple_metrics")
 
@@ -1232,7 +1232,7 @@ class test_advanced_schedulers(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
         assert abs(initial_lr - 0.1) < 1e-6
 
         # Step through first restart cycle
@@ -1318,20 +1318,20 @@ class test_advanced_schedulers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
         # During warmup, lr should increase
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         for _ in range(10):
             scheduler.step()
 
         # After warmup, should reach base_lr
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         # Continue through cosine annealing
         for _ in range(40):
             scheduler.step()
 
         # Should be decreasing
-        assert optimizer.lr < 0.1
+        assert optimizer.current_lr < 0.1
 
         print("[OK] test_warmupcosine_basic")
 
@@ -1435,36 +1435,36 @@ class test_advanced_schedulers(unittest.TestCase):
         scheduler.step()
 
         # Initial value should be values[0] = 0.01
-        initial_lr = abs(optimizer.lr)
+        initial_lr = abs(optimizer.current_lr)
         assert abs(initial_lr - 0.01) < 1e-6
 
         # Step through boundaries (already at epoch 1)
         for _ in range(3):  # Step to epoch 4
             scheduler.step()
         # At epoch 4, should still be values[0] = 0.01
-        assert abs(optimizer.lr - 0.01) < 1e-6
+        assert abs(optimizer.current_lr - 0.01) < 1e-6
 
         scheduler.step()  # Step to epoch 5
         # At boundary 5, switches to values[1] = 0.005
-        assert abs(optimizer.lr - 0.005) < 1e-6
+        assert abs(optimizer.current_lr - 0.005) < 1e-6
 
         for _ in range(9):  # Step to epoch 14
             scheduler.step()
         # At epoch 14, should still be values[1] = 0.005
-        assert abs(optimizer.lr - 0.005) < 1e-6
+        assert abs(optimizer.current_lr - 0.005) < 1e-6
 
         scheduler.step()  # Step to epoch 15
         # At boundary 15, switches to values[2] = 0.001
-        assert abs(optimizer.lr - 0.001) < 1e-6
+        assert abs(optimizer.current_lr - 0.001) < 1e-6
 
         for _ in range(9):  # Step to epoch 24
             scheduler.step()
         # At epoch 24, should still be values[2] = 0.001
-        assert abs(optimizer.lr - 0.001) < 1e-6
+        assert abs(optimizer.current_lr - 0.001) < 1e-6
 
         scheduler.step()  # Step to epoch 25
         # At boundary 25, switches to values[3] = 0.0001
-        assert abs(optimizer.lr - 0.0001) < 1e-7
+        assert abs(optimizer.current_lr - 0.0001) < 1e-7
 
         print("[OK] test_piecewiseconstant_with_optimizer")
 
@@ -1685,7 +1685,7 @@ class test_scheduler_edge_cases(unittest.TestCase):
         # Save state
         checkpoint = {
             'scheduler_state': scheduler.state_dict(),
-            'optimizer_lr': optimizer.lr
+            'optimizer_lr': optimizer.current_lr
         }
 
         # Create new scheduler and load state
@@ -1793,7 +1793,7 @@ class test_scheduler_edge_cases(unittest.TestCase):
             # If no error, scheduler should immediately be at base_lr
             optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
             optimizer.register_trainable_weights(model.states(bst.ParamState))
-            assert abs(optimizer.lr - 0.1) < 1e-6
+            assert abs(optimizer.current_lr - 0.1) < 1e-6
         except (ZeroDivisionError, ValueError):
             # It's acceptable to raise an error for invalid warmup_epochs=0
             pass
@@ -1813,12 +1813,12 @@ class test_scheduler_edge_cases(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
         for _ in range(20):
             scheduler.step()
 
         # lr should remain constant when base_lr = max_lr
-        assert abs(optimizer.lr - initial_lr) < 1e-6
+        assert abs(optimizer.current_lr - initial_lr) < 1e-6
 
         print("[OK] test_scheduler_cyclic_edge_cases")
 
@@ -1834,13 +1834,13 @@ class test_scheduler_edge_cases(unittest.TestCase):
         optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-        initial_lr = optimizer.lr
+        initial_lr = optimizer.current_lr
 
         # Step with same metric (no improvement)
         scheduler.step(metrics=1.0)
         scheduler.step(metrics=1.0)  # Should trigger immediate reduction
 
-        assert optimizer.lr < initial_lr
+        assert optimizer.current_lr < initial_lr
 
         print("[OK] test_scheduler_plateau_immediate_reduction")
 
@@ -1880,6 +1880,6 @@ class test_scheduler_edge_cases(unittest.TestCase):
             scheduler.step()
 
         # lr should remain at base_lr until total_iters
-        assert abs(optimizer.lr - 0.1) < 1e-6
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         print("[OK] test_scheduler_polynomial_power_zero")

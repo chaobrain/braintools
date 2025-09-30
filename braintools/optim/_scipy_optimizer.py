@@ -24,6 +24,7 @@ import jax.numpy as jnp
 import numpy as np
 from brainstate._compatible_import import safe_zip, unzip2
 from scipy.optimize import minimize
+from ._base import Optimizer
 
 __all__ = [
     'ScipyOptimizer',
@@ -295,7 +296,7 @@ def scipy_minimize_with_jax(
     return results
 
 
-class ScipyOptimizer:
+class ScipyOptimizer(Optimizer):
     """
     SciPy-based optimizer with dict/sequence bounds compatible with Nevergrad.
 

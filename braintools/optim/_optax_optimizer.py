@@ -264,17 +264,21 @@ class OptaxOptimizer(Optimizer):
         return self._lr_scheduler
 
     @property
+    def lr(self):
+        return self._lr_scheduler
+
+    @property
     def base_lr(self) -> float:
         """Get base learning rate."""
         return self._base_lr
 
     @property
-    def lr(self):
+    def current_lr(self):
         """Get current learning rate."""
         return self._current_lr.value
 
-    @lr.setter
-    def lr(self, value: float):
+    @current_lr.setter
+    def current_lr(self, value: float):
         """Set learning rate (will be used by schedulers)."""
         self._current_lr.value = value
 
@@ -438,7 +442,7 @@ class OptaxOptimizer(Optimizer):
                     group_tx = group['tx']
                 else:
                     # Fallback: create transformation if not stored (for backward compatibility)
-                    group_lr = maybe_state(group.get('lr', self.lr))
+                    group_lr = maybe_state(group.get('lr', self.current_lr))
                     group_weight_decay = group.get('weight_decay', self.weight_decay)
 
                     transforms = []
@@ -539,7 +543,7 @@ class OptaxOptimizer(Optimizer):
 
         state_dict = {
             'step_count': self.step_count.value,
-            'lr': self.lr,
+            'lr': self.current_lr,
             'base_lr': self.base_lr,
             'param_groups': serializable_groups,
             'param_groups_opt_states': {
@@ -558,7 +562,7 @@ class OptaxOptimizer(Optimizer):
           state_dict: Dictionary containing optimizer state.
         """
         self.step_count.value = state_dict['step_count']
-        self.lr = msgpack_from_state_dict(self.lr, state_dict['lr'])
+        self.current_lr = msgpack_from_state_dict(self.current_lr, state_dict['lr'])
         self._base_lr = state_dict['base_lr']
 
         # Load param_groups and restore lr_state for groups that have it
@@ -589,7 +593,7 @@ class OptaxOptimizer(Optimizer):
         """Get last computed learning rates from schedulers."""
         if self._schedulers:
             return self._schedulers[-1].get_last_lr()
-        return [self.lr]
+        return [self.current_lr]
 
 
 # Optimizer implementations

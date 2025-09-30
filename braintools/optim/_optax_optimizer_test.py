@@ -141,11 +141,11 @@ class TestOptaxOptimizer(unittest.TestCase):
         optimizer = braintools.optim.Adam(lr=0.01)
 
         # Test getter
-        self.assertEqual(optimizer.lr, 0.01)
+        self.assertEqual(optimizer.current_lr, 0.01)
 
         # Test setter
-        optimizer.lr = 0.001
-        self.assertEqual(optimizer.lr, 0.001)
+        optimizer.current_lr = 0.001
+        self.assertEqual(optimizer.current_lr, 0.001)
         self.assertEqual(optimizer._current_lr.value, 0.001)
 
     def test_state_dict_and_load(self):
@@ -175,7 +175,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 
         # Check state was restored
         self.assertEqual(new_optimizer.step_count.value, 3)
-        self.assertEqual(new_optimizer.lr, optimizer.lr)
+        self.assertEqual(new_optimizer.current_lr, optimizer.current_lr)
 
     def test_gradient_clipping_by_norm(self):
         """Test gradient clipping by norm functionality."""
@@ -494,7 +494,7 @@ class TestOptaxOptimizer(unittest.TestCase):
         optimizer.register_trainable_weights(self.param_states)
 
         # Check initial lr
-        self.assertEqual(optimizer.lr, 0.1)
+        self.assertEqual(optimizer.current_lr, 0.1)
 
         # Manually update lr after some steps
         for i in range(10):
@@ -503,10 +503,10 @@ class TestOptaxOptimizer(unittest.TestCase):
 
             # Manually decay learning rate
             if i == 4:
-                optimizer.lr = 0.05
+                optimizer.current_lr = 0.05
 
         # Check lr was updated
-        self.assertEqual(optimizer.lr, 0.05)
+        self.assertEqual(optimizer.current_lr, 0.05)
 
     def test_empty_gradients(self):
         """Test optimizer with all zero gradients."""
@@ -686,7 +686,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.002
+        assert optimizer.current_lr == 0.002
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-8
         assert optimizer.momentum_decay == 4e-3
@@ -714,7 +714,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify scheduler attachment
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.01  # Initial learning rate
+        assert optimizer.current_lr == 0.01  # Initial learning rate
         print("[OK] test_nadam_with_scheduler passed")
 
     def test_nadam_gradient_clipping(self):
@@ -753,7 +753,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify optimizer was initialized correctly
-        assert optimizer.lr == 0.002
+        assert optimizer.current_lr == 0.002
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.momentum_decay == 4e-3
 
@@ -776,7 +776,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-8
         print("[OK] test_radam_basic passed")
@@ -803,7 +803,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify scheduler attachment
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.001  # Initial learning rate
+        assert optimizer.current_lr == 0.001  # Initial learning rate
         print("[OK] test_radam_with_scheduler passed")
 
     def test_radam_gradient_clipping(self):
@@ -842,7 +842,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify optimizer was initialized correctly
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
 
         # Verify optimization state exists
@@ -866,7 +866,7 @@ class TestAllOptimizers(unittest.TestCase):
         radam.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify both have same initial parameters
-        assert nadam.lr == radam.lr
+        assert nadam.current_lr == radam.current_lr
         assert nadam.betas == radam.betas
         assert nadam.eps == radam.eps
 
@@ -915,8 +915,8 @@ class TestAllOptimizers(unittest.TestCase):
         assert radam.opt_state is not None
 
         # Verify learning rates
-        assert nadam.lr == 0.01
-        assert radam.lr == 0.01
+        assert nadam.current_lr == 0.01
+        assert radam.current_lr == 0.01
 
         print("[OK] test_gradient_update_functionality passed")
 
@@ -955,12 +955,12 @@ class TestAllOptimizers(unittest.TestCase):
         # Nadam with zero lr
         nadam = braintools.optim.Nadam(lr=0.0)
         nadam.register_trainable_weights(model.states(brainstate.ParamState))
-        assert nadam.lr == 0.0
+        assert nadam.current_lr == 0.0
 
         # RAdam with zero lr
         radam = braintools.optim.RAdam(lr=0.0)
         radam.register_trainable_weights(model.states(brainstate.ParamState))
-        assert radam.lr == 0.0
+        assert radam.current_lr == 0.0
 
         print("[OK] test_edge_case_zero_learning_rate passed")
 
@@ -1010,7 +1010,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.002
+        assert optimizer.current_lr == 0.002
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-6
         print("[OK] test_lamb_basic passed")
@@ -1023,7 +1023,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer = braintools.optim.Lamb(lr=0.01, betas=(0.9, 0.999))
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.betas == (0.9, 0.999)
         print("[OK] test_lamb_large_learning_rate passed")
 
@@ -1041,7 +1041,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.002  # Initial lr
+        assert optimizer.current_lr == 0.002  # Initial lr
         print("[OK] test_lamb_with_scheduler passed")
 
     def test_lamb_weight_decay(self):
@@ -1085,7 +1085,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify configuration
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.weight_decay == 0.01
         assert optimizer.eps == 1e-6
@@ -1109,7 +1109,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.1
+        assert optimizer.current_lr == 0.1
         assert optimizer.momentum == 0.9
         assert optimizer.trust_coefficient == 0.001
         print("[OK] test_lars_basic passed")
@@ -1144,7 +1144,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         assert optimizer._lr_scheduler is scheduler
         assert optimizer.momentum == 0.9
-        assert optimizer.lr == 0.1  # Initial lr
+        assert optimizer.current_lr == 0.1  # Initial lr
         print("[OK] test_lars_with_scheduler passed")
 
     def test_lars_weight_decay(self):
@@ -1181,8 +1181,8 @@ class TestAllOptimizers(unittest.TestCase):
         )
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        assert optimizer.lr == scaled_lr
-        assert optimizer.lr == 1.6  # 0.1 * (4096/256) = 1.6
+        assert optimizer.current_lr == scaled_lr
+        assert optimizer.current_lr == 1.6  # 0.1 * (4096/256) = 1.6
         assert optimizer.momentum == 0.9
         assert optimizer.weight_decay == 5e-4
         assert optimizer.trust_coefficient == 0.001
@@ -1203,7 +1203,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify all parameters
-        assert optimizer.lr == 1.6
+        assert optimizer.current_lr == 1.6
         assert optimizer.momentum == 0.9
         assert optimizer.weight_decay == 1e-4
         assert optimizer.trust_coefficient == 0.001
@@ -1230,7 +1230,7 @@ class TestAllOptimizers(unittest.TestCase):
         lars.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Both use trust ratio mechanism
-        assert lamb.lr == lars.lr
+        assert lamb.current_lr == lars.current_lr
         assert lamb.weight_decay == lars.weight_decay
 
         # LAMB uses Adam-style betas, LARS uses momentum
@@ -1271,7 +1271,7 @@ class TestAllOptimizers(unittest.TestCase):
         # LAMB with extreme learning rate
         lamb_extreme = braintools.optim.Lamb(lr=100.0)
         lamb_extreme.register_trainable_weights(model.states(brainstate.ParamState))
-        assert lamb_extreme.lr == 100.0
+        assert lamb_extreme.current_lr == 100.0
 
         # LARS with no momentum
         lars_no_momentum = braintools.optim.Lars(lr=0.1, momentum=0.0)
@@ -1381,7 +1381,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.1  # Initial lr
+        assert optimizer.current_lr == 0.1  # Initial lr
         print("[OK] test_lookahead_with_scheduler passed")
 
     def test_lookahead_complete_config(self):
@@ -1421,7 +1421,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-3  # Note: Yogi uses larger epsilon
         print("[OK] test_yogi_basic passed")
@@ -1464,7 +1464,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.01  # Initial lr
+        assert optimizer.current_lr == 0.01  # Initial lr
         print("[OK] test_yogi_with_scheduler passed")
 
     def test_yogi_weight_decay(self):
@@ -1494,7 +1494,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify all settings
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-3
         assert optimizer.opt_state is not None
@@ -1611,7 +1611,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         assert optimizer.memory_size == 10
         assert optimizer.scale_init_hess is True
         print("[OK] test_lbfgs_basic passed")
@@ -1671,7 +1671,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify all settings
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         assert optimizer.memory_size == 10
         assert optimizer.scale_init_hess is True
         assert optimizer.opt_state is not None
@@ -1705,7 +1705,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.etas == (0.5, 1.2)
         assert optimizer.step_sizes == (1e-6, 50.0)
         print("[OK] test_rprop_basic passed")
@@ -1750,7 +1750,7 @@ class TestAllOptimizers(unittest.TestCase):
         )
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.etas == (0.5, 1.2)
         assert optimizer.step_sizes == (1e-6, 50.0)
         print("[OK] test_rprop_complete_config passed")
@@ -1767,7 +1767,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify all settings
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.etas == (0.5, 1.2)
         assert optimizer.step_sizes == (1e-6, 50.0)
         assert optimizer.opt_state is not None
@@ -1782,7 +1782,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Rprop adapts step sizes automatically
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         print("[OK] test_rprop_classification passed")
 
     # ============================================================================
@@ -1887,7 +1887,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify learning rate
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.factored is True
         print("[OK] test_adafactor_explicit_lr passed")
 
@@ -1901,7 +1901,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify beta1 is set
         assert optimizer.beta1 == 0.9
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adafactor_with_momentum passed")
 
     def test_adafactor_non_factored(self):
@@ -1914,7 +1914,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify factored is False
         assert optimizer.factored is False
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adafactor_non_factored passed")
 
     def test_adafactor_large_model(self):
@@ -1953,7 +1953,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify all parameters
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.eps == (1e-30, 1e-3)
         assert optimizer.clip_threshold == 1.0
         assert optimizer.decay_rate == -0.8
@@ -1976,7 +1976,7 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-16
         print("[OK] test_adabelief_basic passed")
@@ -1991,7 +1991,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify betas
         assert optimizer.betas == (0.8, 0.999)
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adabelief_custom_betas passed")
 
     def test_adabelief_scheduler(self):
@@ -2005,7 +2005,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify scheduler
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adabelief_scheduler passed")
 
     def test_adabelief_weight_decay(self):
@@ -2018,7 +2018,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify weight decay
         assert optimizer.weight_decay == 0.01
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adabelief_weight_decay passed")
 
     def test_adabelief_gradient_clipping(self):
@@ -2034,7 +2034,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify gradient clipping
         assert optimizer.grad_clip_norm == 1.0
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adabelief_gradient_clipping passed")
 
     def test_adabelief_complete_config(self):
@@ -2057,7 +2057,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # Verify all parameters
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-16
         assert optimizer.weight_decay == 0.0001
@@ -2081,8 +2081,8 @@ class TestAllOptimizers(unittest.TestCase):
         opt_adabelief.register_trainable_weights(model2.states(brainstate.ParamState))
 
         # Verify both are initialized
-        assert opt_adafactor.lr == 0.001
-        assert opt_adabelief.lr == 0.001
+        assert opt_adafactor.current_lr == 0.001
+        assert opt_adabelief.current_lr == 0.001
         assert opt_adafactor.opt_state is not None
         assert opt_adabelief.opt_state is not None
 
@@ -2142,7 +2142,7 @@ class TestOptimizerExample(unittest.TestCase):
         optimizer = braintools.optim.Adam(lr=0.001)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer._lr_scheduler is not None
 
     def test_optax_optimizer_with_scheduler(self):
@@ -2153,7 +2153,7 @@ class TestOptimizerExample(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
 
     def test_optax_optimizer_param_groups(self):
         """Test optimizer with multiple parameter groups."""
@@ -2179,7 +2179,7 @@ class TestOptimizerExample(unittest.TestCase):
         optimizer = braintools.optim.SGD(lr=0.01)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.momentum == 0.0
 
     def test_sgd_with_momentum(self):
@@ -2206,14 +2206,14 @@ class TestOptimizerExample(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify initial learning rate
-        assert optimizer.lr == 0.1
+        assert optimizer.current_lr == 0.1
 
         # Step the scheduler multiple times
         for _ in range(30):
             scheduler.step()
 
         # Learning rate should have decayed
-        assert optimizer.lr < 0.1
+        assert optimizer.current_lr < 0.1
 
     # ============================================================================
     # Adam Optimizer Examples
@@ -2225,7 +2225,7 @@ class TestOptimizerExample(unittest.TestCase):
         optimizer = braintools.optim.Adam(lr=0.001)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
 
     def test_adam_custom_betas(self):
@@ -2291,7 +2291,7 @@ class TestOptimizerExample(unittest.TestCase):
         optimizer = braintools.optim.Adagrad(lr=0.01)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
 
     def test_adadelta(self):
         """Test Adadelta optimizer."""
@@ -2313,7 +2313,7 @@ class TestOptimizerExample(unittest.TestCase):
 
         # Verify optimizer was initialized correctly
         assert optimizer.step_count.value == 0
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.base_lr == 0.001
         assert optimizer.opt_state is not None
 
@@ -2352,7 +2352,7 @@ class test_novograd_fromage(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-8
         print("[OK] test_novograd_basic passed")
@@ -2367,7 +2367,7 @@ class test_novograd_fromage(unittest.TestCase):
 
         # Verify betas
         assert optimizer.betas == (0.95, 0.999)
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_novograd_custom_betas passed")
 
     def test_novograd_weight_decay(self):
@@ -2380,7 +2380,7 @@ class test_novograd_fromage(unittest.TestCase):
 
         # Verify weight decay
         assert optimizer.weight_decay == 0.01
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_novograd_weight_decay passed")
 
     def test_novograd_scheduler(self):
@@ -2398,7 +2398,7 @@ class test_novograd_fromage(unittest.TestCase):
 
         # Verify scheduler
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         print("[OK] test_novograd_scheduler passed")
 
     def test_novograd_gradient_clipping(self):
@@ -2414,7 +2414,7 @@ class test_novograd_fromage(unittest.TestCase):
 
         # Verify gradient clipping
         assert optimizer.grad_clip_norm == 1.0
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_novograd_gradient_clipping passed")
 
     def test_novograd_complete_config(self):
@@ -2441,7 +2441,7 @@ class test_novograd_fromage(unittest.TestCase):
 
         # Verify all parameters
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.betas == (0.95, 0.98)
         assert optimizer.eps == 1e-8
         assert optimizer.weight_decay == 0.001
@@ -2462,7 +2462,7 @@ class test_novograd_fromage(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         assert optimizer.momentum == 0.0
         print("[OK] test_fromage_basic passed")
 
@@ -2476,7 +2476,7 @@ class test_novograd_fromage(unittest.TestCase):
 
         # Verify momentum
         assert optimizer.momentum == 0.9
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         print("[OK] test_fromage_with_momentum passed")
 
     def test_fromage_without_momentum(self):
@@ -2489,7 +2489,7 @@ class test_novograd_fromage(unittest.TestCase):
 
         # Verify momentum is disabled
         assert optimizer.momentum == 0.0
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         print("[OK] test_fromage_without_momentum passed")
 
     def test_fromage_lr_scaling(self):
@@ -2501,7 +2501,7 @@ class test_novograd_fromage(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify lr scaling
-        assert optimizer.lr == 0.5
+        assert optimizer.current_lr == 0.5
         assert optimizer.momentum == 0.9
         print("[OK] test_fromage_lr_scaling passed")
 
@@ -2519,7 +2519,7 @@ class test_novograd_fromage(unittest.TestCase):
 
         # Verify gradient clipping
         assert optimizer.grad_clip_norm == 1.0
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         assert optimizer.momentum == 0.9
         print("[OK] test_fromage_gradient_clipping passed")
 
@@ -2537,7 +2537,7 @@ class test_novograd_fromage(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify all parameters
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         assert optimizer.momentum == 0.9
         assert optimizer.grad_clip_norm == 1.0
         print("[OK] test_fromage_complete_config passed")
@@ -2559,8 +2559,8 @@ class test_novograd_fromage(unittest.TestCase):
         opt_fromage.register_trainable_weights(model2.states(brainstate.ParamState))
 
         # Verify both are initialized
-        assert opt_novograd.lr == 0.001
-        assert opt_fromage.lr == 1.0
+        assert opt_novograd.current_lr == 0.001
+        assert opt_fromage.current_lr == 1.0
         assert opt_novograd.opt_state is not None
         assert opt_fromage.opt_state is not None
 
@@ -2629,7 +2629,7 @@ class test_lion_sm3(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 1e-4
+        assert optimizer.current_lr == 1e-4
         assert optimizer.betas == (0.9, 0.99)
         assert optimizer.weight_decay == 0.0
         print("[OK] test_lion_basic passed")
@@ -2643,7 +2643,7 @@ class test_lion_sm3(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify weight decay
-        assert optimizer.lr == 1e-4
+        assert optimizer.current_lr == 1e-4
         assert optimizer.weight_decay == 0.1
         print("[OK] test_lion_weight_decay passed")
 
@@ -2657,7 +2657,7 @@ class test_lion_sm3(unittest.TestCase):
 
         # Verify betas
         assert optimizer.betas == (0.95, 0.98)
-        assert optimizer.lr == 1e-4
+        assert optimizer.current_lr == 1e-4
         print("[OK] test_lion_custom_betas passed")
 
     def test_lion_scheduler(self):
@@ -2675,7 +2675,7 @@ class test_lion_sm3(unittest.TestCase):
 
         # Verify scheduler
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 1e-4
+        assert optimizer.current_lr == 1e-4
         assert optimizer.weight_decay == 0.1
         print("[OK] test_lion_scheduler passed")
 
@@ -2693,7 +2693,7 @@ class test_lion_sm3(unittest.TestCase):
 
         # Verify gradient clipping
         assert optimizer.grad_clip_norm == 1.0
-        assert optimizer.lr == 1e-4
+        assert optimizer.current_lr == 1e-4
         assert optimizer.weight_decay == 0.1
         print("[OK] test_lion_gradient_clipping passed")
 
@@ -2720,7 +2720,7 @@ class test_lion_sm3(unittest.TestCase):
 
         # Verify all parameters
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 1e-4
+        assert optimizer.current_lr == 1e-4
         assert optimizer.betas == (0.9, 0.99)
         assert optimizer.weight_decay == 0.1
         assert optimizer.grad_clip_norm == 1.0
@@ -2740,7 +2740,7 @@ class test_lion_sm3(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         assert optimizer.momentum == 0.9
         assert optimizer.eps == 1e-8
         print("[OK] test_sm3_basic passed")
@@ -2754,7 +2754,7 @@ class test_lion_sm3(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify learning rate
-        assert optimizer.lr == 0.1
+        assert optimizer.current_lr == 0.1
         assert optimizer.momentum == 0.9
         print("[OK] test_sm3_custom_lr passed")
 
@@ -2768,7 +2768,7 @@ class test_lion_sm3(unittest.TestCase):
 
         # Verify momentum
         assert optimizer.momentum == 0.95
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         print("[OK] test_sm3_momentum passed")
 
     def test_sm3_no_momentum(self):
@@ -2781,7 +2781,7 @@ class test_lion_sm3(unittest.TestCase):
 
         # Verify momentum is disabled
         assert optimizer.momentum == 0.0
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         print("[OK] test_sm3_no_momentum passed")
 
     def test_sm3_scheduler(self):
@@ -2799,7 +2799,7 @@ class test_lion_sm3(unittest.TestCase):
 
         # Verify scheduler
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         assert optimizer.momentum == 0.9
         print("[OK] test_sm3_scheduler passed")
 
@@ -2826,7 +2826,7 @@ class test_lion_sm3(unittest.TestCase):
 
         # Verify all parameters
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
         assert optimizer.momentum == 0.9
         assert optimizer.eps == 1e-8
         assert optimizer.weight_decay == 0.0001
@@ -2849,8 +2849,8 @@ class test_lion_sm3(unittest.TestCase):
         opt_sm3.register_trainable_weights(model2.states(brainstate.ParamState))
 
         # Verify both are initialized
-        assert opt_lion.lr == 1e-4
-        assert opt_sm3.lr == 1.0
+        assert opt_lion.current_lr == 1e-4
+        assert opt_sm3.current_lr == 1.0
         assert opt_lion.opt_state is not None
         assert opt_sm3.opt_state is not None
 
@@ -2933,7 +2933,7 @@ class test_adafactor_adabelief(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify learning rate
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.factored is True
         print("[OK] test_adafactor_explicit_lr passed")
 
@@ -2947,7 +2947,7 @@ class test_adafactor_adabelief(unittest.TestCase):
 
         # Verify beta1 is set
         assert optimizer.beta1 == 0.9
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adafactor_with_momentum passed")
 
     def test_adafactor_non_factored(self):
@@ -2960,7 +2960,7 @@ class test_adafactor_adabelief(unittest.TestCase):
 
         # Verify factored is False
         assert optimizer.factored is False
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adafactor_non_factored passed")
 
     def test_adafactor_large_model(self):
@@ -2999,7 +2999,7 @@ class test_adafactor_adabelief(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify all parameters
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.eps == (1e-30, 1e-3)
         assert optimizer.clip_threshold == 1.0
         assert optimizer.decay_rate == -0.8
@@ -3022,7 +3022,7 @@ class test_adafactor_adabelief(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
         # Verify parameters
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-16
         print("[OK] test_adabelief_basic passed")
@@ -3037,7 +3037,7 @@ class test_adafactor_adabelief(unittest.TestCase):
 
         # Verify betas
         assert optimizer.betas == (0.8, 0.999)
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adabelief_custom_betas passed")
 
     def test_adabelief_scheduler(self):
@@ -3051,7 +3051,7 @@ class test_adafactor_adabelief(unittest.TestCase):
 
         # Verify scheduler
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adabelief_scheduler passed")
 
     def test_adabelief_weight_decay(self):
@@ -3064,7 +3064,7 @@ class test_adafactor_adabelief(unittest.TestCase):
 
         # Verify weight decay
         assert optimizer.weight_decay == 0.01
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adabelief_weight_decay passed")
 
     def test_adabelief_gradient_clipping(self):
@@ -3080,7 +3080,7 @@ class test_adafactor_adabelief(unittest.TestCase):
 
         # Verify gradient clipping
         assert optimizer.grad_clip_norm == 1.0
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         print("[OK] test_adabelief_gradient_clipping passed")
 
     def test_adabelief_complete_config(self):
@@ -3103,7 +3103,7 @@ class test_adafactor_adabelief(unittest.TestCase):
 
         # Verify all parameters
         assert optimizer._lr_scheduler is scheduler
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
         assert optimizer.betas == (0.9, 0.999)
         assert optimizer.eps == 1e-16
         assert optimizer.weight_decay == 0.0001
@@ -3127,8 +3127,8 @@ class test_adafactor_adabelief(unittest.TestCase):
         opt_adabelief.register_trainable_weights(model2.states(brainstate.ParamState))
 
         # Verify both are initialized
-        assert opt_adafactor.lr == 0.001
-        assert opt_adabelief.lr == 0.001
+        assert opt_adafactor.current_lr == 0.001
+        assert opt_adabelief.current_lr == 0.001
         assert opt_adafactor.opt_state is not None
         assert opt_adabelief.opt_state is not None
 
@@ -3187,7 +3187,7 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.Adagrad(lr=0.01)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
 
     def test_adagrad_custom_eps(self):
         """Test Adagrad with custom epsilon."""
@@ -3222,7 +3222,7 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.Adadelta(lr=0.5, rho=0.9)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.5
+        assert optimizer.current_lr == 0.5
         assert optimizer.rho == 0.9
 
     # ============================================================================
@@ -3234,7 +3234,7 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.RMSprop(lr=0.01)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
         assert optimizer.alpha == 0.99
 
     def test_rmsprop_momentum(self):
@@ -3267,7 +3267,7 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.Adamax(lr=0.002)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.002
+        assert optimizer.current_lr == 0.002
 
     def test_adamax_custom_betas(self):
         """Test Adamax with custom betas."""
@@ -3281,14 +3281,14 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.Nadam(lr=0.002)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.002
+        assert optimizer.current_lr == 0.002
 
     def test_radam_basic(self):
         """Test basic RAdam usage."""
         model = SimpleModelV1()
         optimizer = braintools.optim.RAdam(lr=0.001)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
 
     # ============================================================================
     # Large Batch Training Optimizers
@@ -3299,14 +3299,14 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.Lamb(lr=0.001)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
 
     def test_lars_basic(self):
         """Test basic Lars usage."""
         model = SimpleModelV1()
         optimizer = braintools.optim.Lars(lr=1.0)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
 
     # ============================================================================
     # Specialized Optimizers
@@ -3317,14 +3317,14 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.Yogi(lr=0.001)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
 
     def test_lion_basic(self):
         """Test basic Lion usage."""
         model = SimpleModelV1()
         optimizer = braintools.optim.Lion(lr=1e-4, weight_decay=0.01)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 1e-4
+        assert optimizer.current_lr == 1e-4
         assert optimizer.weight_decay == 0.01
 
     def test_adabelief_basic(self):
@@ -3332,21 +3332,21 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.AdaBelief(lr=0.001)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
 
     def test_novograd_basic(self):
         """Test basic Novograd usage."""
         model = SimpleModelV1()
         optimizer = braintools.optim.Novograd(lr=0.001)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.001
+        assert optimizer.current_lr == 0.001
 
     def test_sm3_basic(self):
         """Test basic SM3 usage."""
         model = SimpleModelV1()
         optimizer = braintools.optim.SM3(lr=1.0)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
 
     # ============================================================================
     # Second Order Optimizers
@@ -3357,14 +3357,14 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.LBFGS(lr=1.0)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
 
     def test_rprop_basic(self):
         """Test basic Rprop usage."""
         model = SimpleModelV1()
         optimizer = braintools.optim.Rprop(lr=0.01)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 0.01
+        assert optimizer.current_lr == 0.01
 
     # ============================================================================
     # Meta Optimizers
@@ -3382,7 +3382,7 @@ class test_basic(unittest.TestCase):
         model = SimpleModelV1()
         optimizer = braintools.optim.Fromage(lr=1.0)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
-        assert optimizer.lr == 1.0
+        assert optimizer.current_lr == 1.0
 
     # ============================================================================
     # Learning Rate Scheduler Integration Tests
@@ -3405,7 +3405,7 @@ class test_basic(unittest.TestCase):
             optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
             assert optimizer._lr_scheduler is scheduler, f"{name} scheduler mismatch"
-            assert optimizer.lr == 0.01, f"{name} initial lr mismatch"
+            assert optimizer.current_lr == 0.01, f"{name} initial lr mismatch"
 
     # ============================================================================
     # Gradient Clipping Tests
