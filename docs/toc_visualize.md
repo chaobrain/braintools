@@ -12,4 +12,5 @@ vis_tutorial_04_model_evaluation_plots.ipynb
 vis_tutorial_05_interactive_visualization.ipynb
 vis_tutorial_06_3d_visualization.ipynb
 vis_tutorial_07_styling_and_themes.ipynb
+vis_tutorial_08_animation_and_dynamics.ipynb
 ```
