@@ -1613,7 +1613,7 @@ class TestAllOptimizers(unittest.TestCase):
         # Verify parameters
         assert optimizer.current_lr == 1.0
         assert optimizer.memory_size == 10
-        assert optimizer.scale_init_hess is True
+        assert optimizer.scale_init_precond is True
         print("[OK] test_lbfgs_basic passed")
 
     def test_lbfgs_large_memory(self):
@@ -1652,11 +1652,11 @@ class TestAllOptimizers(unittest.TestCase):
         optimizer = braintools.optim.LBFGS(
             lr=1.0,
             memory_size=10,
-            scale_init_hess=False
+            scale_init_precond=False
         )
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        assert optimizer.scale_init_hess is False
+        assert optimizer.scale_init_precond is False
         print("[OK] test_lbfgs_no_scaling passed")
 
     def test_lbfgs_fine_tuning(self):
@@ -1673,7 +1673,7 @@ class TestAllOptimizers(unittest.TestCase):
         # Verify all settings
         assert optimizer.current_lr == 1.0
         assert optimizer.memory_size == 10
-        assert optimizer.scale_init_hess is True
+        assert optimizer.scale_init_precond is True
         assert optimizer.opt_state is not None
 
         print("[OK] test_lbfgs_fine_tuning passed")
@@ -1803,7 +1803,7 @@ class TestAllOptimizers(unittest.TestCase):
 
         # L-BFGS has memory_size parameter
         assert hasattr(lbfgs, 'memory_size')
-        assert hasattr(lbfgs, 'scale_init_hess')
+        assert hasattr(lbfgs, 'scale_init_precond')
 
         # Rprop has etas and step_sizes
         assert hasattr(rprop, 'etas')
