@@ -32,11 +32,12 @@ Installation
           pip install -U braintools[cpu]
 
 
-    .. tab-item:: GPU (CUDA 12.x)
+    .. tab-item:: GPU
 
        .. code-block:: bash
 
           pip install -U braintools[cuda12]
+          pip install -U braintools[cuda13]
 
     .. tab-item:: TPU
 
@@ -63,10 +64,10 @@ BrainTools is part of our `brain simulation ecosystem <https://brainmodeling.rea
     toc_conn.md
     toc_file.md
     toc_input.md
-    toc_metric_function.md
-    toc_optimization.md
-    toc_integration.md
-    toc_visualization.md
+    toc_metric.md
+    toc_optim.md
+    toc_quad.md
+    toc_visualize.md
     toc_spike_encoding.md
 
 

@@ -19,7 +19,7 @@ import brainstate
 import brainunit as u
 import jax
 import numpy as np
-from brainstate.typing import PyTree
+from brainstate.typing import PyTree, ArrayLike
 
 __all__ = [
     'scale',
@@ -40,8 +40,8 @@ __all__ = [
 
 
 def scale(
-    tree: PyTree[jax.typing.ArrayLike],
-    x: jax.typing.ArrayLike,
+    tree: PyTree[ArrayLike],
+    x: ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
@@ -76,8 +76,8 @@ def scale(
 
 
 def mul(
-    tree: PyTree[jax.typing.ArrayLike],
-    x: PyTree[jax.typing.ArrayLike] | jax.typing.ArrayLike,
+    tree: PyTree[ArrayLike],
+    x: PyTree[ArrayLike] | ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
@@ -117,8 +117,8 @@ def mul(
 
 
 def shift(
-    tree1: PyTree[jax.typing.ArrayLike],
-    x: jax.typing.ArrayLike,
+    tree1: PyTree[ArrayLike],
+    x: ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
@@ -148,8 +148,8 @@ def shift(
 
 
 def add(
-    tree1: PyTree[jax.typing.ArrayLike],
-    tree2: PyTree[jax.typing.ArrayLike] | jax.typing.ArrayLike,
+    tree1: PyTree[ArrayLike],
+    tree2: PyTree[ArrayLike] | ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
@@ -184,8 +184,8 @@ def add(
 
 
 def sub(
-    tree1: PyTree[jax.typing.ArrayLike],
-    tree2: PyTree[jax.typing.ArrayLike],
+    tree1: PyTree[ArrayLike],
+    tree2: PyTree[ArrayLike],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
@@ -259,7 +259,7 @@ def dot(
 
 
 def sum(
-    tree: PyTree[jax.typing.ArrayLike],
+    tree: PyTree[ArrayLike],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> jax.Array:
     """
@@ -287,7 +287,7 @@ def sum(
 
 
 def squared_norm(
-    tree: PyTree[jax.typing.ArrayLike],
+    tree: PyTree[ArrayLike],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> jax.Array:
     """
@@ -322,7 +322,7 @@ def squared_norm(
 
 
 def concat(
-    trees: Sequence[PyTree[jax.typing.ArrayLike]],
+    trees: Sequence[PyTree[ArrayLike]],
     axis: int = 0,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
@@ -396,7 +396,7 @@ def split(
 
 
 def idx(
-    tree: PyTree[jax.typing.ArrayLike],
+    tree: PyTree[ArrayLike],
     idx,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
@@ -422,7 +422,7 @@ def idx(
 
 
 def expand(
-    tree: PyTree[jax.typing.ArrayLike],
+    tree: PyTree[ArrayLike],
     axis,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
@@ -448,7 +448,7 @@ def expand(
 
 
 def take(
-    tree: PyTree[jax.typing.ArrayLike],
+    tree: PyTree[ArrayLike],
     idx,
     axis: int,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
@@ -487,7 +487,7 @@ def take(
 
 
 def as_numpy(
-    tree: PyTree[jax.typing.ArrayLike],
+    tree: PyTree[ArrayLike],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree[np.ndarray]:
     """

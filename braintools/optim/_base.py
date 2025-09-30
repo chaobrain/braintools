@@ -1,4 +1,4 @@
-# Copyright 2025 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,13 +13,41 @@
 # limitations under the License.
 # ==============================================================================
 
+
+from typing import Dict, Hashable
+
+from brainstate import State
+from brainstate.graph import Node
+from brainstate.typing import PyTree
+
 __all__ = [
     'Optimizer',
 ]
 
 
-class Optimizer:
-    def minimize(self, *args):
-        raise NotImplementedError("minimize method is not implemented.")
+class Optimizer(Node):
+    """
+    Base Optimizer Class.
+    """
 
+    def register_trainable_weights(self, param_states: Dict[Hashable, State]):
+        """
+        Register the trainable weights.
 
+        Parameters:
+        -----------
+        param_states: Dict[Hashable, State]
+            The trainable weights.
+        """
+        raise NotImplementedError
+
+    def update(self, grads: Dict[Hashable, PyTree]):
+        """
+        Update the trainable weights according to weight gradients.
+
+        Parameters:
+        -----------
+        grads: Dict[Hashable, PyTree]
+            The weight gradients.
+        """
+        raise NotImplementedError

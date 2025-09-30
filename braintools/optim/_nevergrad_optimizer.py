@@ -20,7 +20,6 @@ import brainunit as u
 import jax
 import numpy as np
 from brainstate._compatible_import import safe_zip
-
 from ._base import Optimizer
 
 try:

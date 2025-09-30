@@ -16,8 +16,8 @@
 from typing import Any, Dict
 
 import numpy as np
-
-sio = None
+from scipy.io import loadmat
+from scipy.io.matlab import mio5_params
 
 __all__ = [
     'load_matfile',
@@ -51,9 +51,6 @@ def load_matfile(
     dict
         A dictionary with the content of the .mat file.
     """
-    global sio
-    if sio is None:
-        from scipy import io as sio
 
     def parse_mat(element: Any):
         # lists (1D cell arrays usually) or numpy arrays as well
@@ -61,13 +58,13 @@ def load_matfile(
             return [parse_mat(entry) for entry in element]
 
         # matlab struct
-        if element.__class__ == sio.matlab.mio5_params.mat_struct:
+        if element.__class__ == mio5_params.mat_struct:
             return {fn: parse_mat(getattr(element, fn)) for fn in element._fieldnames}
 
         # regular numeric matrix, or a scalar
         return element
 
-    mat = sio.loadmat(filename, struct_as_record=struct_as_record, squeeze_me=squeeze_me, **kwargs)
+    mat = loadmat(filename, struct_as_record=struct_as_record, squeeze_me=squeeze_me, **kwargs)
     dict_output = dict()
 
     for key, value in mat.items():
