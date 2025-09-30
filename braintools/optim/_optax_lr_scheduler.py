@@ -2668,12 +2668,12 @@ class ReduceLROnPlateau(LRScheduler):
         self.num_bad_epochs = LongTermState(0)
         self.mode_worse = float('inf') if mode == 'min' else -float('inf')
 
-    def step(self, metrics: float, epoch: Optional[int] = None):
+    def step(self, metric: float, epoch: Optional[int] = None):
         """
         Step with metric value (JIT-compatible).
 
         Args:
-          metrics: The metric value to monitor.
+          metric: The metric value to monitor.
           epoch: Optional epoch number.
         """
         # Handle epoch update
@@ -2682,7 +2682,7 @@ class ReduceLROnPlateau(LRScheduler):
         self.last_epoch.value = epoch
 
         # Convert metrics to JAX array for compatibility
-        metrics = jnp.asarray(metrics)
+        metric = jnp.asarray(metric)
 
         # Get current state values
         cooldown_counter = self.cooldown_counter.value
@@ -2700,12 +2700,12 @@ class ReduceLROnPlateau(LRScheduler):
         )
 
         # Check if current metric is better
-        is_better = self._is_better_jax(metrics, best)
+        is_better = self._is_better_jax(metric, best)
 
         # Update best value and bad epochs counter when not in cooldown
         new_best = jnp.where(
             jnp.logical_and(jnp.logical_not(in_cooldown), is_better),
-            metrics,
+            metric,
             best
         )
 

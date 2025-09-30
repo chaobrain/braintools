@@ -903,21 +903,21 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
         # Step once to initialize
-        scheduler.step(metrics=1.0)
+        scheduler.step(metric=1.0)
 
         initial_lr = optimizer.current_lr
         # Note: Initial lr might be default base_lr, not the specified one
 
         # Simulate improving metrics (no reduction)
         for i in range(5):
-            scheduler.step(metrics=1.0 - i * 0.1)
+            scheduler.step(metric=1.0 - i * 0.1)
 
         # lr should not change with improving metrics
         assert optimizer.current_lr == initial_lr
 
         # Simulate plateau (no improvement) - need more than patience epochs
         for i in range(7):  # Changed from 10 to 7 to ensure we trigger after patience
-            scheduler.step(metrics=0.5)  # Same metric, no improvement
+            scheduler.step(metric=0.5)  # Same metric, no improvement
 
         # After patience+1 epochs with no improvement, lr should be reduced
         # But it can't go below min_lr
@@ -943,7 +943,7 @@ class test_cyclic_schedulers(unittest.TestCase):
 
         # Simulate plateau in max mode
         for i in range(10):
-            scheduler.step(metrics=0.8)  # Metric not increasing
+            scheduler.step(metric=0.8)  # Metric not increasing
 
         # lr should be reduced
         assert optimizer.current_lr < initial_lr
@@ -999,7 +999,7 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
         for i in range(10):
-            scheduler.step(metrics=0.5)
+            scheduler.step(metric=0.5)
 
         state = scheduler.state_dict()
         assert 'last_epoch' in state
@@ -1026,14 +1026,14 @@ class test_cyclic_schedulers(unittest.TestCase):
         optimizer.register_trainable_weights(model.states(bst.ParamState))
 
         # Step once to initialize
-        scheduler.step(metrics=1.0)
+        scheduler.step(metric=1.0)
 
         initial_lr = optimizer.current_lr
         # Note: Initial lr might be the default base_lr
 
         # Simulate slow improvement - should not trigger reduction quickly
         for i in range(15):
-            scheduler.step(metrics=1.0 - i * 0.001)  # Very small improvements
+            scheduler.step(metric=1.0 - i * 0.001)  # Very small improvements
 
         # With high patience and threshold, lr might still be at initial value
         # or reduced at most once
@@ -1060,7 +1060,7 @@ class test_cyclic_schedulers(unittest.TestCase):
 
         # Simulate plateau
         for i in range(10):
-            scheduler.step(metrics=0.5)
+            scheduler.step(metric=0.5)
 
         # With low patience and aggressive factor, lr should reduce multiple times
         assert optimizer.current_lr < initial_lr * 0.5  # At least one reduction
@@ -1085,7 +1085,7 @@ class test_cyclic_schedulers(unittest.TestCase):
 
         # Small improvements that don't meet absolute threshold
         for i in range(10):
-            scheduler.step(metrics=1.0 - i * 0.0001)  # Improvements of 0.0001
+            scheduler.step(metric=1.0 - i * 0.0001)  # Improvements of 0.0001
 
         # Should trigger reduction because improvements < 0.001
         assert optimizer.current_lr < initial_lr
@@ -1110,14 +1110,14 @@ class test_cyclic_schedulers(unittest.TestCase):
 
         # Trigger first reduction by providing patience+1 steps with no improvement
         for i in range(3):
-            scheduler.step(metrics=1.0)
+            scheduler.step(metric=1.0)
 
         lr_after_first = optimizer.current_lr
         # assert lr_after_first <= initial_lr  # May or may not have reduced yet
 
         # Continue stepping to ensure reduction happens
         for i in range(3):
-            scheduler.step(metrics=1.0)
+            scheduler.step(metric=1.0)
 
         # Verify lr has been reduced at least once from initial
         assert optimizer.current_lr <= initial_lr
@@ -1178,7 +1178,7 @@ class test_cyclic_schedulers(unittest.TestCase):
 
         # Trigger many reductions
         for i in range(30):
-            scheduler.step(metrics=1.0)  # Constant, no improvement
+            scheduler.step(metric=1.0)  # Constant, no improvement
 
         # Should never go below min_lr
         assert optimizer.current_lr >= 0.001
@@ -1837,8 +1837,8 @@ class test_scheduler_edge_cases(unittest.TestCase):
         initial_lr = optimizer.current_lr
 
         # Step with same metric (no improvement)
-        scheduler.step(metrics=1.0)
-        scheduler.step(metrics=1.0)  # Should trigger immediate reduction
+        scheduler.step(metric=1.0)
+        scheduler.step(metric=1.0)  # Should trigger immediate reduction
 
         assert optimizer.current_lr < initial_lr
 
