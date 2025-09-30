@@ -674,7 +674,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 # Nadam Optimizer Tests
 # ============================================================================
 
-class TestAllOptimizers:
+class TestAllOptimizers(unittest.TestCase):
 
     def test_nadam_basic(self):
         """Test basic Nadam usage with float learning rate."""
@@ -2130,7 +2130,7 @@ class TestAllOptimizers:
         print("[OK] test_belief_based_optimizers_edge_cases passed")
 
 
-class TestOptimizerExample:
+class TestOptimizerExample(unittest.TestCase):
 
     # ============================================================================
     # OptaxOptimizer Base Class Examples
@@ -2336,7 +2336,7 @@ class TestOptimizerExample:
         assert state_dict['base_lr'] == 0.001
 
 
-class test_novograd_fromage:
+class test_novograd_fromage(unittest.TestCase):
 
     # ============================================================================
     # Novograd Optimizer Tests
@@ -2613,7 +2613,7 @@ class test_novograd_fromage:
         print("[OK] test_specialized_optimizers_edge_cases passed")
 
 
-class test_lion_sm3:
+class test_lion_sm3(unittest.TestCase):
 
     # ============================================================================
     # Lion Optimizer Tests
@@ -2903,7 +2903,7 @@ class test_lion_sm3:
         print("[OK] test_sign_based_optimizers_edge_cases passed")
 
 
-class test_adafactor_adabelief:
+class test_adafactor_adabelief(unittest.TestCase):
 
     # ============================================================================
     # Adafactor Optimizer Tests
@@ -3176,7 +3176,7 @@ class test_adafactor_adabelief:
         print("[OK] test_belief_based_optimizers_edge_cases passed")
 
 
-class test_basic:
+class test_basic(unittest.TestCase):
 
     # ============================================================================
     # Adaptive Learning Rate Optimizers

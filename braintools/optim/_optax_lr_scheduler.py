@@ -2781,12 +2781,14 @@ class ChainedScheduler(LRScheduler):
     """
 
     def __init__(self, schedulers: List[LRScheduler]):
-        super().__init__()
         self.schedulers = schedulers
+        super().__init__()
         self.optimizer = schedulers[0].optimizer if schedulers else None
+        for sch in schedulers:
+            assert isinstance(sch, LRScheduler), f'All elements must be LRScheduler, got {type(sch)}'
 
         # Get base_lrs from first scheduler for compatibility with attach_optimizer
-        if schedulers and hasattr(schedulers[0], 'base_lrs'):
+        if schedulers:
             self.base_lrs = schedulers[0].base_lrs
         else:
             self.base_lrs = [1e-3]
@@ -2795,7 +2797,7 @@ class ChainedScheduler(LRScheduler):
         """Attach optimizer to all schedulers."""
         self.optimizer = optimizer
         for scheduler in self.schedulers:
-            if hasattr(scheduler, 'attach_optimizer'):
+            if isinstance(scheduler, LRScheduler):
                 scheduler.attach_optimizer(optimizer)
 
     def step(self, *args, **kwargs):
