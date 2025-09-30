@@ -2,6 +2,8 @@
 ===========================
 
 .. currentmodule:: braintools.input
+.. automodule:: braintools.input
+
 
 The input toolkit offers both functional helpers and composable classes for
 constructing stimulation protocols. The tables below group the public API by
