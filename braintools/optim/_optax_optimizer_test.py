@@ -2201,7 +2201,7 @@ class TestOptimizerExample(unittest.TestCase):
     def test_sgd_with_scheduler(self):
         """Test SGD with learning rate scheduling."""
         model = SimpleModelV1()
-        scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
+        scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=28, gamma=0.1)
         optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
