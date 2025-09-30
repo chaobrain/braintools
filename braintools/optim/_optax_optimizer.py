@@ -185,6 +185,11 @@ class OptaxOptimizer(Optimizer):
         return optax.chain(*transforms)
 
     @property
+    def base_lr(self) -> float:
+        """Get base learning rate."""
+        return self._base_lr
+
+    @property
     def lr(self):
         """Get current learning rate."""
         return self._current_lr.value
@@ -216,7 +221,7 @@ class OptaxOptimizer(Optimizer):
         manager = UniqueStateManager()
         manager.merge_with(params)
         param_values = manager.to_dict_value()
-        group_lr_state = LongTermState(kwargs.get('lr', self._base_lr))
+        group_lr_state = LongTermState(kwargs.get('lr', self.base_lr))
 
         group = {
             'params': manager.to_dict(),
@@ -274,7 +279,7 @@ class OptaxOptimizer(Optimizer):
             self.param_groups = [
                 {
                     'params': self.param_states.to_pytree(),
-                    'lr': self._base_lr,
+                    'lr': self.base_lr,
                     'weight_decay': self.weight_decay,
                 }
             ]
@@ -456,7 +461,7 @@ class OptaxOptimizer(Optimizer):
         state_dict = {
             'step_count': self.step_count.value,
             'lr': self.lr,
-            'base_lr': self._base_lr,
+            'base_lr': self.base_lr,
             'param_groups': serializable_groups,
             'param_groups_opt_states': {
                 str(i): s.value
@@ -616,33 +621,46 @@ class AdamW(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
         weight_decay: float = 0.01,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.adamw(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps, weight_decay=weight_decay)
+        # Store AdamW-specific parameters
+        self.betas = betas
+        self.eps = eps
 
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
+        # Don't build tx here, let the base class handle it
         super().__init__(
-            tx=tx,
+            tx=None,  # Will be created by base class
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
+
+    def _create_default_tx(self):
+        """Create AdamW-specific gradient transformation."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+
+        # AdamW uses decoupled weight decay
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+
+        return optax.chain(*transforms)
 
 
 class Adagrad(OptaxOptimizer):
@@ -650,7 +668,7 @@ class Adagrad(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-2,
+        lr: Union[float, LRScheduler] = 1e-2,
         lr_decay: float = 0.0,
         weight_decay: float = 0.0,
         initial_accumulator_value: float = 0.0,
@@ -658,33 +676,39 @@ class Adagrad(OptaxOptimizer):
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.adagrad(
-            learning_rate=lr,
-            initial_accumulator_value=initial_accumulator_value,
-            eps=eps
-        )
+        # Store Adagrad-specific parameters
+        self.lr_decay = lr_decay
+        self.initial_accumulator_value = initial_accumulator_value
+        self.eps = eps
 
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        # Don't build tx here, let the base class handle it
         super().__init__(
-            tx=tx,
+            tx=None,  # Will be created by base class
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.lr_decay = lr_decay
-        self.initial_accumulator_value = initial_accumulator_value
-        self.eps = eps
+
+    def _create_default_tx(self):
+        """Create Adagrad-specific gradient transformation."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        transforms.append(optax.scale_by_rms(initial_scale=self.initial_accumulator_value, eps=self.eps))
+
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+
+        return optax.chain(*transforms)
 
 
 class Adadelta(OptaxOptimizer):
@@ -692,39 +716,45 @@ class Adadelta(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1.0,
+        lr: Union[float, LRScheduler] = 1.0,
         rho: float = 0.9,
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        transforms = []
+        # Store Adadelta-specific parameters
+        self.rho = rho
+        self.eps = eps
 
-        if grad_clip_norm is not None:
-            transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-
-        if grad_clip_value is not None:
-            transforms.append(optax.clip(grad_clip_value))
-
-        transforms.append(optax.scale_by_adadelta(rho=rho, eps=eps))
-
-        if weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(weight_decay))
-
-        transforms.append(optax.scale(-lr))
-
-        tx = optax.chain(*transforms)
-
+        # Don't build tx here, let the base class handle it
         super().__init__(
-            tx=tx,
+            tx=None,  # Will be created by base class
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.rho = rho
-        self.eps = eps
+
+    def _create_default_tx(self):
+        """Create Adadelta-specific gradient transformation."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        transforms.append(optax.scale_by_adadelta(rho=self.rho, eps=self.eps))
+
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+
+        return optax.chain(*transforms)
 
 
 class RMSprop(OptaxOptimizer):
@@ -732,7 +762,7 @@ class RMSprop(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-2,
+        lr: Union[float, LRScheduler] = 1e-2,
         alpha: float = 0.99,
         eps: float = 1e-8,
         weight_decay: float = 0.0,
@@ -741,36 +771,43 @@ class RMSprop(OptaxOptimizer):
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.rmsprop(
-            learning_rate=lr,
-            decay=alpha,
-            eps=eps,
-            momentum=momentum,
-            centered=centered
-        )
+        # Store RMSprop-specific parameters
+        self.alpha = alpha
+        self.eps = eps
+        self.momentum = momentum
+        self.centered = centered
 
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        # Don't build tx here, let the base class handle it
         super().__init__(
-            tx=tx,
+            tx=None,  # Will be created by base class
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.alpha = alpha
-        self.eps = eps
-        self.momentum = momentum
-        self.centered = centered
+
+    def _create_default_tx(self):
+        """Create RMSprop-specific gradient transformation."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        transforms.append(optax.scale_by_rms(decay=self.alpha, eps=self.eps))
+
+        if self.momentum > 0:
+            transforms.append(optax.trace(decay=self.momentum))
+
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+
+        return optax.chain(*transforms)
 
 
 class Adamax(OptaxOptimizer):
@@ -778,35 +815,34 @@ class Adamax(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 2e-3,
+        lr: Union[float, LRScheduler] = 2e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.adamax(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps)
-
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        self.betas = betas
+        self.eps = eps
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_adamax(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Nadam(OptaxOptimizer):
@@ -814,7 +850,7 @@ class Nadam(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 2e-3,
+        lr: Union[float, LRScheduler] = 2e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
         weight_decay: float = 0.0,
@@ -822,35 +858,29 @@ class Nadam(OptaxOptimizer):
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.nadam(
-            learning_rate=lr,
-            b1=betas[0],
-            b2=betas[1],
-            eps=eps,
-            momentum_decay=momentum_decay
-        )
-
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        self.betas = betas
+        self.eps = eps
+        self.momentum_decay = momentum_decay
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
-        self.momentum_decay = momentum_decay
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        # Nadam is Adam with Nesterov momentum - use adam with nesterov-style updates
+        transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps, nesterov=True))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class RAdam(OptaxOptimizer):
@@ -858,35 +888,34 @@ class RAdam(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.radam(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps)
-
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        self.betas = betas
+        self.eps = eps
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_radam(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Lamb(OptaxOptimizer):
@@ -894,33 +923,35 @@ class Lamb(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.lamb(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps, weight_decay=weight_decay)
-
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
+        self.betas = betas
+        self.eps = eps
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_trust_ratio())
+        transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Lars(OptaxOptimizer):
@@ -928,7 +959,7 @@ class Lars(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1.0,
+        lr: Union[float, LRScheduler] = 1.0,
         momentum: float = 0.9,
         weight_decay: float = 0.0,
         trust_coefficient: float = 0.001,
@@ -936,32 +967,29 @@ class Lars(OptaxOptimizer):
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.lars(
-            learning_rate=lr,
-            momentum=momentum,
-            weight_decay=weight_decay,
-            trust_coefficient=trust_coefficient
-        )
-
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
+        self.momentum = momentum
+        self.trust_coefficient = trust_coefficient
+        self.eps = eps
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.momentum = momentum
-        self.trust_coefficient = trust_coefficient
-        self.eps = eps
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_trust_ratio(trust_coefficient=self.trust_coefficient, eps=self.eps))
+        transforms.append(optax.trace(decay=self.momentum))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Lookahead(OptaxOptimizer):
@@ -970,35 +998,38 @@ class Lookahead(OptaxOptimizer):
     def __init__(
         self,
         base_optimizer: optax.GradientTransformation,
-        k: int = 5,
+        sync_period: int = 5,
         alpha: float = 0.5,
-        lr: float = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.lookahead(base_optimizer, slow_step_size=alpha, period=k)
-
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        self.sync_period = sync_period
+        self.alpha = alpha
+        self.base_optimizer = base_optimizer
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.k = k
-        self.alpha = alpha
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(self.base_optimizer)
+        transforms.append(
+            optax.lookahead(self.base_optimizer, slow_step_size=self.alpha, sync_period=self.sync_period)
+        )
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Yogi(OptaxOptimizer):
@@ -1006,35 +1037,34 @@ class Yogi(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-3,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.yogi(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps)
-
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        self.betas = betas
+        self.eps = eps
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_yogi(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class LBFGS(OptaxOptimizer):
@@ -1042,31 +1072,30 @@ class LBFGS(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1.0,
+        lr: Union[float, LRScheduler] = 1.0,
         memory_size: int = 10,
         scale_init_hess: bool = True,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.lbfgs(
-            learning_rate=lr,
-            memory_size=memory_size,
-            scale_init_hess=scale_init_hess
-        )
-
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
-        super().__init__(tx=tx, lr=lr,
-                         grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
         self.memory_size = memory_size
         self.scale_init_hess = scale_init_hess
+        super().__init__(
+            tx=None,
+            lr=lr,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        # LBFGS typically doesn't use schedules, but we support it for consistency
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Rprop(OptaxOptimizer):
@@ -1074,37 +1103,38 @@ class Rprop(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-2,
+        lr: Union[float, LRScheduler] = 1e-2,
         etas: Tuple[float, float] = (0.5, 1.2),
         step_sizes: Tuple[float, float] = (1e-6, 50.0),
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.rprop(
-            learning_rate=lr,
-            eta_minus=etas[0],
-            eta_plus=etas[1],
-            min_step_size=step_sizes[0],
-            max_step_size=step_sizes[1]
-        )
-
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
+        self.etas = etas
+        self.step_sizes = step_sizes
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.etas = etas
-        self.step_sizes = step_sizes
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(
+            optax.scale_by_rprop(
+                learning_rate=self.base_lr,
+                eta_minus=self.etas[0],
+                eta_plus=self.etas[1],
+                min_step_size=self.step_sizes[0],
+                max_step_size=self.step_sizes[1]
+            )
+        )
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Adafactor(OptaxOptimizer):
@@ -1112,7 +1142,7 @@ class Adafactor(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: Optional[float] = None,
+        lr: Optional[Union[float, LRScheduler]] = None,
         eps: Tuple[float, float] = (1e-30, 1e-3),
         clip_threshold: float = 1.0,
         decay_rate: float = -0.8,
@@ -1122,37 +1152,36 @@ class Adafactor(OptaxOptimizer):
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.adafactor(
-            learning_rate=lr,
-            min_dim_size_to_factor=128 if factored else None,
-            decay_rate=decay_rate,
-            eps=eps[0],
-            clip_threshold=clip_threshold,
-            beta1=beta1,
-            weight_decay=weight_decay
-        )
-
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
-        super().__init__(
-            tx=tx,
-            lr=lr or 1e-3,
-            weight_decay=weight_decay,
-            grad_clip_norm=grad_clip_norm,
-            grad_clip_value=grad_clip_value
-        )
         self.eps = eps
         self.clip_threshold = clip_threshold
         self.decay_rate = decay_rate
         self.beta1 = beta1
         self.factored = factored
+        super().__init__(
+            tx=None,
+            lr=lr or 1e-3,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(
+            optax.scale_by_factored_rms(
+                factored=self.factored,
+                decay_rate=self.decay_rate,
+                epsilon=self.eps[0]
+            )
+        )
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class AdaBelief(OptaxOptimizer):
@@ -1160,35 +1189,34 @@ class AdaBelief(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-16,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.adabelief(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps)
-
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        self.betas = betas
+        self.eps = eps
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_belief(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Lion(OptaxOptimizer):
@@ -1196,31 +1224,32 @@ class Lion(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-4,
+        lr: Union[float, LRScheduler] = 1e-4,
         betas: Tuple[float, float] = (0.9, 0.99),
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.lion(learning_rate=lr, b1=betas[0], b2=betas[1], weight_decay=weight_decay)
-
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
+        self.betas = betas
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_lion(b1=self.betas[0], b2=self.betas[1]))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class SM3(OptaxOptimizer):
@@ -1228,35 +1257,36 @@ class SM3(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1.0,
+        lr: Union[float, LRScheduler] = 1.0,
         momentum: float = 0.9,
         eps: float = 1e-8,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.sm3(learning_rate=lr, momentum=momentum, eps=eps)
-
-        if weight_decay > 0 or grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            if weight_decay > 0:
-                transforms.append(optax.add_decayed_weights(weight_decay))
-            tx = optax.chain(*transforms)
-
+        self.momentum = momentum
+        self.eps = eps
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.momentum = momentum
-        self.eps = eps
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_sm3(eps=self.eps))
+        if self.momentum > 0:
+            transforms.append(optax.trace(decay=self.momentum))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Novograd(OptaxOptimizer):
@@ -1264,33 +1294,34 @@ class Novograd(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1e-3,
+        lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
         eps: float = 1e-8,
         weight_decay: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.novograd(learning_rate=lr, b1=betas[0], b2=betas[1], eps=eps, weight_decay=weight_decay)
-
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
+        self.betas = betas
+        self.eps = eps
         super().__init__(
-            tx=tx,
+            tx=None,
             lr=lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
         )
-        self.betas = betas
-        self.eps = eps
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        transforms.append(optax.scale_by_novograd(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
 
 
 class Fromage(OptaxOptimizer):
@@ -1298,26 +1329,22 @@ class Fromage(OptaxOptimizer):
 
     def __init__(
         self,
-        lr: float = 1.0,
+        lr: Union[float, LRScheduler] = 1.0,
         momentum: float = 0.0,
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
-        tx = optax.fromage(learning_rate=lr, momentum=momentum)
-
-        if grad_clip_norm is not None or grad_clip_value is not None:
-            transforms = []
-            if grad_clip_norm is not None:
-                transforms.append(optax.clip_by_global_norm(grad_clip_norm))
-            if grad_clip_value is not None:
-                transforms.append(optax.clip(grad_clip_value))
-            transforms.append(tx)
-            tx = optax.chain(*transforms)
-
-        super().__init__(
-            tx=tx,
-            lr=lr,
-            grad_clip_norm=grad_clip_norm,
-            grad_clip_value=grad_clip_value
-        )
         self.momentum = momentum
+        super().__init__(tx=None, lr=lr, grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
+
+    def _create_default_tx(self):
+        transforms = []
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+        # Fromage doesn't have a standard optax implementation, using basic approach
+        if self.momentum > 0:
+            transforms.append(optax.trace(decay=self.momentum))
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        return optax.chain(*transforms)
