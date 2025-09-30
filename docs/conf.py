@@ -36,7 +36,7 @@ import braintools
 import shutil
 
 shutil.rmtree('apis/generated', ignore_errors=True)
-shutil.rmtree('../_build', ignore_errors=True)
+shutil.rmtree('./_build', ignore_errors=True)
 shutil.rmtree('apis/changelog.md', ignore_errors=True)
 shutil.copy('../changelog.md', 'apis/changelog.md')
 

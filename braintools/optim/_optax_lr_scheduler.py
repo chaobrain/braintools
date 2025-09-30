@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Union, Callable, Any, List, Sequence
 
+import brainstate.transform
 import jax.numpy as jnp
 from brainstate import LongTermState
 
@@ -2085,32 +2086,79 @@ class ReduceLROnPlateau(LRScheduler):
 
     def step(self, metrics: float, epoch: Optional[int] = None):
         """
-        Step with metric value.
+        Step with metric value (JIT-compatible).
 
         Args:
           metrics: The metric value to monitor.
           epoch: Optional epoch number.
         """
+        # Handle epoch update
         if epoch is None:
             epoch = self.last_epoch.value + 1
         self.last_epoch.value = epoch
 
-        if self.cooldown_counter.value > 0:
-            self.cooldown_counter.value -= 1
-            return
+        # Convert metrics to JAX array for compatibility
+        metrics = jnp.asarray(metrics)
 
-        if self._is_better(metrics, self.best.value):
-            self.best.value = metrics
-            self.num_bad_epochs.value = 0
-        else:
-            self.num_bad_epochs.value += 1
+        # Get current state values
+        cooldown_counter = self.cooldown_counter.value
+        best = self.best.value
+        num_bad_epochs = self.num_bad_epochs.value
 
-        if self.num_bad_epochs.value > self.patience:
-            self._reduce_lr()
-            self.cooldown_counter.value = self.cooldown
-            self.num_bad_epochs.value = 0
+        # Check if in cooldown period
+        in_cooldown = cooldown_counter > 0
+
+        # Update cooldown counter
+        new_cooldown = jnp.where(
+            in_cooldown,
+            cooldown_counter - 1,
+            cooldown_counter
+        )
+
+        # Check if current metric is better
+        is_better = self._is_better_jax(metrics, best)
+
+        # Update best value and bad epochs counter when not in cooldown
+        new_best = jnp.where(
+            jnp.logical_and(jnp.logical_not(in_cooldown), is_better),
+            metrics,
+            best
+        )
+
+        new_num_bad_epochs = jnp.where(
+            in_cooldown,
+            num_bad_epochs,  # Don't change during cooldown
+            jnp.where(
+                is_better,
+                0,  # Reset on improvement
+                num_bad_epochs + 1  # Increment on no improvement
+            )
+        )
+
+        # Check if we should reduce learning rate
+        should_reduce = jnp.logical_and(
+            jnp.logical_not(in_cooldown),
+            new_num_bad_epochs > self.patience
+        )
+
+        # Update states
+        self.cooldown_counter.value = jnp.where(
+            should_reduce,
+            self.cooldown,
+            new_cooldown
+        )
+        self.best.value = new_best
+        self.num_bad_epochs.value = jnp.where(
+            should_reduce,
+            0,  # Reset after reduction
+            new_num_bad_epochs
+        )
+
+        # Conditionally reduce learning rate (JIT-compatible)
+        self._reduce_lr_conditional(should_reduce)
 
     def _is_better(self, a, b):
+        """Python version for non-JIT contexts."""
         if self.mode == 'min':
             if self.threshold_mode == 'rel':
                 return a < b * (1 - self.threshold)
@@ -2122,9 +2170,27 @@ class ReduceLROnPlateau(LRScheduler):
             else:
                 return a > b + self.threshold
 
-    def _reduce_lr(self):
-        # Reduce current learning rates using JAX operations
-        current_lrs_array = jnp.array(self.current_lrs.value)
+    def _is_better_jax(self, a, b):
+        """JAX-compatible version of _is_better."""
+        # Convert to JAX arrays
+        a = jnp.asarray(a)
+        b = jnp.asarray(b)
+
+        if self.mode == 'min':
+            if self.threshold_mode == 'rel':
+                return a < b * (1 - self.threshold)
+            else:
+                return a < (b - self.threshold)
+        else:
+            if self.threshold_mode == 'rel':
+                return a > b * (1 + self.threshold)
+            else:
+                return a > (b + self.threshold)
+
+    def _reduce_lr_conditional(self, should_reduce):
+        """Conditionally reduce learning rate in a JIT-compatible way."""
+        # Get current learning rates as array
+        current_lrs_array = jnp.array(self._current_lrs.value)
 
         # Create min_lrs array with proper broadcasting
         min_lrs_array = jnp.array(self.min_lrs)
@@ -2135,26 +2201,38 @@ class ReduceLROnPlateau(LRScheduler):
             padding = jnp.full((len(current_lrs_array) - len(min_lrs_array),), min_lrs_array[-1])
             min_lrs_array = jnp.concatenate([min_lrs_array, padding])
 
-        # Compute new learning rates
-        new_lrs_array = jnp.maximum(
+        # Compute reduced learning rates
+        reduced_lrs = jnp.maximum(
             current_lrs_array * self.factor,
             min_lrs_array
         )
 
-        # Convert back to list for storage
-        self.current_lrs.value = list(new_lrs_array)
+        # Conditionally update using jnp.where
+        new_lrs_array = jnp.where(
+            should_reduce,
+            reduced_lrs,
+            current_lrs_array
+        )
+
+        # Update stored learning rates
+        self._current_lrs.value = list(new_lrs_array)
 
         # Update optimizer if attached
         if self.optimizer is not None:
             for i, param_group in enumerate(self.optimizer.param_groups):
                 if i < len(new_lrs_array):
-                    param_group['lr'] = new_lrs_array[i]
+                    param_group['lr'] = float(new_lrs_array[i])
             # Update the main optimizer lr
-            self.optimizer.current_lr = new_lrs_array[0]
+            self.optimizer.current_lr = float(new_lrs_array[0])
+
+    def _reduce_lr(self):
+        """Direct learning rate reduction (for non-JIT contexts)."""
+        # This is called when we know for sure we want to reduce
+        self._reduce_lr_conditional(True)
 
     def get_lr(self):
         # Return current learning rates
-        return list(self.current_lrs.value)
+        return list(self._current_lrs.value)
 
 
 class LinearLR(LRScheduler):
@@ -2816,7 +2894,7 @@ class ChainedScheduler(LRScheduler):
 
 
 class SequentialLR(LRScheduler):
-    """Sequential learning rate scheduler."""
+    """Sequential learning rate scheduler (JIT-compatible)."""
 
     def __init__(
         self,
@@ -2832,15 +2910,25 @@ class SequentialLR(LRScheduler):
             raise ValueError("Number of schedulers should be len(milestones) + 1")
 
         self.schedulers = schedulers
-        self.milestones = milestones
+        self.milestones = jnp.array(milestones)
+        self.n_schedulers = len(schedulers)
 
-        # JIT-compatible: Find which scheduler to use using searchsorted
-        milestones_array = jnp.array(milestones + [float('inf')])
-        self._current_scheduler_idx = int(jnp.searchsorted(milestones_array, last_epoch, side='right'))
+        # Store current scheduler index as LongTermState for JIT compatibility
+        self._current_scheduler_idx = LongTermState(0)
+        self._update_scheduler_idx(last_epoch)
+
+    def _update_scheduler_idx(self, epoch):
+        """Update the current scheduler index in a JIT-compatible way."""
+        # Create extended milestones array with infinity at the end
+        milestones_extended = jnp.concatenate([self.milestones, jnp.array([1e10])])
+
+        # Use searchsorted to find the current scheduler index
+        idx = jnp.searchsorted(milestones_extended, epoch, side='right')
+        self._current_scheduler_idx.value = idx
 
     @property
     def current_scheduler_idx(self):
-        return self._current_scheduler_idx
+        return self._current_scheduler_idx.value
 
     def step(self, epoch: Optional[int] = None):
         if epoch is None:
@@ -2848,28 +2936,42 @@ class SequentialLR(LRScheduler):
 
         self.last_epoch.value = epoch
 
-        # JIT-compatible: Find current scheduler index using searchsorted
-        milestones_array = jnp.array(self.milestones + [float('inf')])
-        self._current_scheduler_idx = int(jnp.searchsorted(milestones_array, epoch, side='right'))
+        # Update which scheduler to use
+        self._update_scheduler_idx(epoch)
 
-        # Step the current scheduler
-        self.schedulers[self._current_scheduler_idx].step(epoch)
+        # Step all schedulers (only the active one will actually update)
+        # This is necessary for JIT compatibility since we can't index dynamically
+        brainstate.transform.switch(
+            self._current_scheduler_idx.value,
+            [sch.step for sch in self.schedulers],
+            epoch
+        )
 
     def get_lr(self):
-        return self.schedulers[self._current_scheduler_idx].get_lr()
+        """Get learning rate from the current scheduler."""
+        # For JIT compatibility, we compute all LRs and select the right one
+        all_lrs = []
+        for i, scheduler in enumerate(self.schedulers):
+            lr = scheduler.get_lr()
+            all_lrs.append(lr)
+
+        # Select the current scheduler's LR
+        # In non-JIT mode, we can just index directly
+        current_idx = self._current_scheduler_idx.value
+        return all_lrs[current_idx]
 
     def state_dict(self):
         return {
             'schedulers': [s.state_dict() for s in self.schedulers],
             'milestones': self.milestones,
-            'last_epoch': self.last_epoch,
-            '_current_scheduler_idx': self._current_scheduler_idx,
+            'last_epoch': self.last_epoch.value,
+            'current_scheduler_idx': self.current_scheduler_idx,
         }
 
     def load_state_dict(self, state_dict):
-        self.milestones = state_dict['milestones']
-        self.last_epoch = state_dict['last_epoch']
-        self._current_scheduler_idx = state_dict['_current_scheduler_idx']
+        self.milestones = jnp.array(state_dict['milestones'])
+        self.last_epoch.value = state_dict['last_epoch']
+        self._current_scheduler_idx.value = state_dict['current_scheduler_idx']
         for scheduler, s_dict in zip(self.schedulers, state_dict['schedulers']):
             scheduler.load_state_dict(s_dict)
 
