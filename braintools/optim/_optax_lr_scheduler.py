@@ -124,6 +124,10 @@ class LRScheduler:
             # Update the main optimizer lr
             self.optimizer.lr = values[0]
 
+    def step_epoch(self):
+        """Step the scheduler by one epoch."""
+        self.step()
+
     def __call__(self, count):
         """Make scheduler callable for use with optax.scale_by_schedule.
 
