@@ -1054,7 +1054,7 @@ class TestExcitatoryInhibitory(unittest.TestCase):
         self.assertEqual(result.metadata['pattern'], 'excitatory_inhibitory')
         self.assertEqual(result.metadata['exc_ratio'], 0.75)
         self.assertEqual(result.metadata['n_excitatory'], 30)  # 40 * 0.75
-        self.assertEqual(result.metadata['n_inhibitory'], 10)   # 40 - 30
+        self.assertEqual(result.metadata['n_inhibitory'], 10)  # 40 - 30
 
         if result.n_connections > 0:
             # Should have both positive and negative weights
@@ -1097,7 +1097,7 @@ class TestExcitatoryInhibitory(unittest.TestCase):
 
         conn = ExcitatoryInhibitory(
             exc_ratio=0.0,  # All inhibitory
-            exc_prob=0.2,   # Won't be used
+            exc_prob=0.2,  # Won't be used
             inh_prob=0.3,
             inh_weight=inh_weight_init,
             seed=42

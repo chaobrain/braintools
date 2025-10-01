@@ -33,11 +33,10 @@ from typing import Optional, Tuple, Union, Dict, List, Callable
 
 import brainunit as u
 import numpy as np
-from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._base import MultiCompartmentConnectivity, ConnectionResult
 from braintools.init._init_base import init_call, Initializer
+from ._base import MultiCompartmentConnectivity, ConnectionResult
 
 __all__ = [
     'SOMA',

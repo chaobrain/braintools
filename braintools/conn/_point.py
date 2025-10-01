@@ -36,9 +36,9 @@ import numpy as np
 from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._base import PointNeuronConnectivity, ConnectionResult
-from braintools.init._init_base import init_call, Initializer
 from braintools.init._distance import DistanceProfile
+from braintools.init._init_base import init_call, Initializer
+from ._base import PointNeuronConnectivity, ConnectionResult
 
 __all__ = [
     # Basic connectivity patterns

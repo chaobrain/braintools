@@ -346,7 +346,7 @@ class TestConnectionResult(unittest.TestCase):
             pre_size=2,
             post_size=2,
             weights=0.5 * u.nS,  # Scalar weight
-            delays=1.0 * u.ms    # Scalar delay
+            delays=1.0 * u.ms  # Scalar delay
         )
 
         self.assertEqual(conn.n_connections, 2)

@@ -150,8 +150,8 @@ class TestConvKernel(unittest.TestCase):
     def test_conv_kernel_threshold(self):
         kernel = np.array([
             [0.05, 0.1, 0.05],  # Low values
-            [0.1, 1.0, 0.1],    # High center value
-            [0.05, 0.1, 0.05]   # Low values
+            [0.1, 1.0, 0.1],  # High center value
+            [0.05, 0.1, 0.05]  # Low values
         ])
 
         positions = np.array([[0, 0], [1, 1]]) * u.um
@@ -713,10 +713,10 @@ class TestDoGKernel(unittest.TestCase):
         # Test that DoG creates both positive and negative weights
         # Center position and nearby positions
         positions = np.array([
-            [0, 0],    # Center
-            [5, 0],    # Close (should be positive - center dominant)
-            [20, 0],   # Medium distance (might be negative - surround)
-            [50, 0]    # Far (should be weak or zero)
+            [0, 0],  # Center
+            [5, 0],  # Close (should be positive - center dominant)
+            [20, 0],  # Medium distance (might be negative - surround)
+            [50, 0]  # Far (should be weak or zero)
         ]) * u.um
 
         conn = DoGKernel(
@@ -1267,7 +1267,7 @@ class TestCustomKernel(unittest.TestCase):
     def test_basic_custom_kernel(self):
         def simple_kernel(x, y):
             # Simple Gaussian-like function
-            return np.exp(-(x**2 + y**2) / 100)
+            return np.exp(-(x ** 2 + y ** 2) / 100)
 
         positions = np.random.RandomState(42).uniform(-30, 30, (15, 2)) * u.um
 
@@ -1291,8 +1291,8 @@ class TestCustomKernel(unittest.TestCase):
     def test_custom_kernel_oscillatory(self):
         def oscillatory_kernel(x, y):
             # Oscillatory kernel
-            r = np.sqrt(x**2 + y**2)
-            return np.exp(-r/20) * np.cos(r/5)
+            r = np.sqrt(x ** 2 + y ** 2)
+            return np.exp(-r / 20) * np.cos(r / 5)
 
         positions = np.array([[0, 0], [10, 0], [20, 0], [5, 5]]) * u.um
 
@@ -1315,7 +1315,7 @@ class TestCustomKernel(unittest.TestCase):
     def test_custom_kernel_asymmetric(self):
         def asymmetric_kernel(x, y):
             # Asymmetric kernel (stronger in x direction)
-            return np.exp(-x**2/50 - y**2/200)
+            return np.exp(-x ** 2 / 50 - y ** 2 / 200)
 
         positions = np.array([[-10, 0], [0, 0], [10, 0], [0, 10]]) * u.um
 
@@ -1336,7 +1336,7 @@ class TestCustomKernel(unittest.TestCase):
 
     def test_custom_kernel_with_weights_and_delays(self):
         def simple_kernel(x, y):
-            return np.exp(-(x**2 + y**2) / 100)
+            return np.exp(-(x ** 2 + y ** 2) / 100)
 
         positions = np.array([[0, 0], [8, 0]]) * u.um
 
@@ -1402,7 +1402,7 @@ class TestCustomKernel(unittest.TestCase):
     def test_custom_kernel_high_threshold(self):
         def small_kernel(x, y):
             # Kernel with small values
-            return 0.01 * np.exp(-(x**2 + y**2) / 100)
+            return 0.01 * np.exp(-(x ** 2 + y ** 2) / 100)
 
         positions = np.array([[0, 0], [5, 0]]) * u.um
 
@@ -1424,7 +1424,7 @@ class TestCustomKernel(unittest.TestCase):
 
     def test_custom_kernel_scalar_kernel_size(self):
         def simple_kernel(x, y):
-            return np.exp(-(x**2 + y**2) / 50)
+            return np.exp(-(x ** 2 + y ** 2) / 50)
 
         positions = np.array([[0, 0], [10, 0]])  # No units
 
@@ -1449,7 +1449,7 @@ class TestCustomKernel(unittest.TestCase):
             self.assertIsInstance(x, np.ndarray)
             self.assertIsInstance(y, np.ndarray)
             self.assertEqual(x.shape, y.shape)
-            return np.exp(-(x**2 + y**2) / 100)
+            return np.exp(-(x ** 2 + y ** 2) / 100)
 
         positions = np.array([[0, 0], [5, 0], [10, 0]]) * u.um
 

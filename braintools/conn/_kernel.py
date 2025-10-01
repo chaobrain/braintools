@@ -26,12 +26,10 @@ from typing import Optional, Union, Callable
 
 import brainunit as u
 import numpy as np
-from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
+from braintools.init import init_call, Initializer
 from ._base import PointNeuronConnectivity, ConnectionResult
-from braintools.init import init_call
-from braintools.init._init_base import Initializer
 
 __all__ = [
     'ConvKernel',

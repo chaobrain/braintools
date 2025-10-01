@@ -331,7 +331,6 @@ class PointNeuronConnectivity(Connectivity):
         pass
 
 
-
 class MultiCompartmentConnectivity(Connectivity):
     """Base class for multi-compartment neuron connectivity patterns.
 
