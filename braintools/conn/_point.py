@@ -478,7 +478,7 @@ class DistanceDependent(PointNeuronConnectivity):
 
         >>> import brainunit as u
         >>> import numpy as np
-        >>> from braintools.init import GaussianProfile, ExponentialDecay, Constant
+        >>> from braintools.init import GaussianProfile, Exponential, Constant
         >>>
         >>> # Gaussian distance-dependent connectivity
         >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
@@ -487,10 +487,7 @@ class DistanceDependent(PointNeuronConnectivity):
         ...         sigma=100 * u.um,
         ...         max_distance=300 * u.um
         ...     ),
-        ...     weight=ExponentialDecay(
-        ...         max_weight=3.0 * u.nS,
-        ...         decay_constant=80 * u.um
-        ...     ),
+        ...     weight=Exponential(3.0 * u.nS),
         ...     delay=Constant(1.0 * u.ms),
         ...     max_prob=0.3
         ... )

@@ -24,11 +24,14 @@ from braintools.init._init_basic import *
 from braintools.init._init_basic import __all__ as _init_basic_all
 from braintools.init._init_composite import *
 from braintools.init._init_composite import __all__ as composite_all
-from braintools.init._init_variance_scaling import *
-from braintools.init._init_variance_scaling import __all__ as variance_scaling_all
 from braintools.init._init_orthogonal import *
 from braintools.init._init_orthogonal import __all__ as orthogonal_all
+from braintools.init._init_variance_scaling import *
+from braintools.init._init_variance_scaling import __all__ as variance_scaling_all
+from braintools.init._init_with_distance import *
+from braintools.init._init_with_distance import __all__ as with_distance_all
 
 __all__ = init_all + _init_basic_all + distance_all + distance_impl_all + composite_all + variance_scaling_all
-__all__ = __all__ + orthogonal_all
+__all__ = __all__ + orthogonal_all + with_distance_all
 del init_all, _init_basic_all, distance_all, distance_impl_all, composite_all, variance_scaling_all, orthogonal_all
+del with_distance_all
