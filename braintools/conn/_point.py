@@ -109,7 +109,7 @@ class Random(PointNeuronConnectivity):
 
         >>> import brainunit as u
         >>> from braintools.conn import Random
-        >>> from braintools.init import Constant, Constant
+        >>> from braintools.init import Constant
         >>>
         >>> # With weights and delays
         >>> conn = Random(
@@ -423,8 +423,8 @@ class OneToOne(PointNeuronConnectivity):
         # Generate weights and delays using initialization classes
         weights = init_call(
             self.weight_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -433,8 +433,8 @@ class OneToOne(PointNeuronConnectivity):
         )
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
@@ -566,8 +566,8 @@ class DistanceDependent(PointNeuronConnectivity):
         # Pass distances for distance-dependent weight distributions
         weights = init_call(
             self.weight_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -579,8 +579,8 @@ class DistanceDependent(PointNeuronConnectivity):
         # Generate delays using initialization class
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
@@ -690,8 +690,8 @@ class SmallWorld(PointNeuronConnectivity):
         # Generate weights and delays using initialization classes
         weights = init_call(
             self.weight_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -700,8 +700,8 @@ class SmallWorld(PointNeuronConnectivity):
         )
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
@@ -829,8 +829,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
         # Generate weights separately for excitatory and inhibitory
         exc_weights = init_call(
             self.exc_weight_init,
-            self.rng,
             n_exc_conn,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -840,8 +840,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
 
         inh_weights = init_call(
             self.inh_weight_init,
-            self.rng,
             n_inh_conn,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -900,8 +900,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
         # Generate delays
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
@@ -1086,8 +1086,8 @@ class Ring(PointNeuronConnectivity):
         # Generate weights and delays
         weights = init_call(
             self.weight_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -1096,8 +1096,8 @@ class Ring(PointNeuronConnectivity):
         )
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
@@ -1221,8 +1221,8 @@ class Grid(PointNeuronConnectivity):
         # Generate weights and delays
         weights = init_call(
             self.weight_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -1231,8 +1231,8 @@ class Grid(PointNeuronConnectivity):
         )
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
@@ -1382,14 +1382,24 @@ class RadialPatches(PointNeuronConnectivity):
         n_connections = len(pre_indices)
 
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.weight_init,
+            n_connections,
+            rng=self.rng,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.delay_init,
+            n_connections,
+            rng=self.rng,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -1486,14 +1496,24 @@ class ScaleFree(PointNeuronConnectivity):
         n_connections = len(pre_indices)
 
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions')
+            self.weight_init,
+            n_connections,
+            rng=self.rng,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions')
         )
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions')
+            self.delay_init,
+            n_connections,
+            rng=self.rng,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions')
         )
 
         return ConnectionResult(
@@ -1567,14 +1587,24 @@ class Regular(PointNeuronConnectivity):
         n_connections = len(pre_indices)
 
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions')
+            self.weight_init,
+            n_connections,
+            rng=self.rng,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions')
         )
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions')
+            self.delay_init,
+            n_connections,
+            rng=self.rng,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions')
         )
 
         return ConnectionResult(
@@ -1681,14 +1711,24 @@ class Modular(PointNeuronConnectivity):
         n_connections = len(pre_indices)
 
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions')
+            self.weight_init,
+            n_connections,
+            rng=self.rng,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions')
         )
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'), post_positions=kwargs.get('post_positions')
+            self.delay_init,
+            n_connections,
+            rng=self.rng,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=kwargs.get('pre_positions'),
+            post_positions=kwargs.get('post_positions')
         )
 
         return ConnectionResult(
@@ -1812,14 +1852,24 @@ class ClusteredRandom(PointNeuronConnectivity):
         n_connections = len(pre_indices)
 
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.weight_init,
+            n_connections,
+            rng=self.rng,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.delay_init,
+            n_connections,
+            rng=self.rng,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
