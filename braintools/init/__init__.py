@@ -20,8 +20,10 @@ from braintools.init._distance_impl import *
 from braintools.init._distance_impl import __all__ as distance_impl_all
 from braintools.init._init_base import *
 from braintools.init._init_base import __all__ as init_all
-from braintools.init._init_random import *
-from braintools.init._init_random import __all__ as weight_all
+from braintools.init._init_basic import *
+from braintools.init._init_basic import __all__ as _init_basic_all
+from braintools.init._init_composite import *
+from braintools.init._init_composite import __all__ as composite_all
 
-__all__ = init_all + weight_all + distance_all + distance_impl_all
-del init_all, weight_all, distance_all, distance_impl_all
+__all__ = init_all + _init_basic_all + distance_all + distance_impl_all + composite_all
+del init_all, _init_basic_all, distance_all, distance_impl_all, composite_all

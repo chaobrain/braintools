@@ -10,9 +10,9 @@ Tests cover:
 - Edge cases and error handling
 """
 
+import brainunit as u
 import numpy as np
 import pytest
-import brainunit as u
 
 from braintools.init._init_base import (
     Initialization,
