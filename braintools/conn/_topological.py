@@ -13,11 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Optional, Union, Dict, Sequence
+from typing import Optional, Dict, Sequence
 
 import brainunit as u
 import numpy as np
-
 
 from braintools.init._init_base import init_call, Initializer
 from ._base import PointConnectivity, ConnectionResult
@@ -28,6 +27,8 @@ __all__ = [
     'Regular',
     'ModularRandom',
     'ModularGeneral',
+    'Hierarchical',
+    'CorePeriphery',
 ]
 
 
@@ -1042,3 +1043,543 @@ class ModularGeneral(PointConnectivity):
             }
         )
 
+
+class Hierarchical(PointConnectivity):
+    """Hierarchical modular network with nested community structure.
+
+    This class creates a hierarchical network where neurons are organized into modules
+    at multiple levels, forming a tree-like hierarchy. Neurons in the same finest-level
+    module have the highest connection probability, neurons sharing a parent at higher
+    levels have intermediate probabilities, and neurons in completely different branches
+    have the lowest probabilities. This architecture models the hierarchical organization
+    observed in cortical networks and many complex systems.
+
+    Hierarchical networks support multi-scale information processing, with local processing
+    at fine scales and global integration at coarse scales. The tree structure creates
+    natural pathways for information flow between different levels of the hierarchy,
+    enabling both segregated local computation and integrated global dynamics.
+
+    Parameters
+    ----------
+    n_levels : int
+        Number of hierarchical levels. Must be at least 2. More levels create deeper
+        hierarchy with more gradations of connection strength. Level 0 is the root,
+        and level n_levels-1 contains the finest modules.
+    branch_factor : int
+        Number of child modules each parent module has. Must be at least 2. Higher
+        values create broader trees with more modules at each level. Total number
+        of finest-level modules is branch_factor^(n_levels-1).
+    intra_conn : PointConnectivity
+        Connectivity instance for connections within the same finest-level module
+        (highest hierarchical proximity). These connections have the shortest
+        hierarchical distance and typically the strongest connectivity.
+    inter_conn_same_parent : PointConnectivity
+        Connectivity instance for connections between modules that share the same
+        immediate parent (intermediate hierarchical proximity). These are connections
+        between sibling modules at the finest level.
+    inter_conn_diff_parent : PointConnectivity
+        Connectivity instance for connections between modules with different parents
+        (lowest hierarchical proximity). These connections span across different
+        branches of the hierarchy.
+    **kwargs
+        Additional keyword arguments passed to the parent PointConnectivity class,
+        such as 'seed' for random number generation.
+
+    Notes
+    -----
+    - This connectivity pattern requires pre_size == post_size (recurrent connectivity)
+    - Network size should ideally be divisible by branch_factor^(n_levels-1)
+    - Hierarchical distance is measured as the level of the lowest common ancestor
+    - The algorithm groups neuron pairs by hierarchical distance and applies appropriate connectivity
+    - Computational complexity is O(n²) for grouping neurons, then depends on connectivity instances
+    - Self-connections are handled by the individual connectivity instances
+
+    References
+    ----------
+    .. [1] Ravasz, E., & Barabási, A. L. (2003). Hierarchical organization in complex networks.
+           Physical Review E, 67(2), 026112.
+    .. [2] Meunier, D., Lambiotte, R., & Bullmore, E. T. (2010). Modular and hierarchically
+           modular organization of brain networks. Frontiers in Neuroscience, 4, 200.
+
+    See Also
+    --------
+    ModularRandom : Simple modular network without hierarchy
+    ModularGeneral : Modular network with custom per-module connectivity
+
+    Examples
+    --------
+    Create a 3-level hierarchical network with binary branching:
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.conn import Hierarchical, Random
+        >>> hier = Hierarchical(
+        ...     n_levels=3,
+        ...     branch_factor=2,
+        ...     intra_conn=Random(prob=0.5, weight=1.0 * u.nS),
+        ...     inter_conn_same_parent=Random(prob=0.2, weight=0.5 * u.nS),
+        ...     inter_conn_diff_parent=Random(prob=0.05, weight=0.1 * u.nS)
+        ... )
+        >>> result = hier(pre_size=64, post_size=64)  # 2^(3-1) = 4 finest modules
+
+    Create a hierarchical network with different connectivity patterns:
+
+    .. code-block:: python
+
+        >>> from braintools.conn import SmallWorld, ScaleFree
+        >>> hier = Hierarchical(
+        ...     n_levels=4,
+        ...     branch_factor=3,
+        ...     intra_conn=SmallWorld(k=6, p=0.3, weight=2.0 * u.nS),
+        ...     inter_conn_same_parent=Random(prob=0.15, weight=1.0 * u.nS),
+        ...     inter_conn_diff_parent=ScaleFree(m=2, weight=0.2 * u.nS)
+        ... )
+        >>> result = hier(pre_size=243, post_size=243)  # 3^(4-1) = 27 finest modules
+
+    Create a hierarchical network with sparse long-range connections:
+
+    .. code-block:: python
+
+        >>> hier = Hierarchical(
+        ...     n_levels=2,
+        ...     branch_factor=5,
+        ...     intra_conn=Random(prob=0.6, weight=1.5 * u.nS, delay=1.0 * u.ms),
+        ...     inter_conn_same_parent=Random(prob=0.1, weight=0.8 * u.nS, delay=2.0 * u.ms),
+        ...     inter_conn_diff_parent=Random(prob=0.01, weight=0.3 * u.nS, delay=5.0 * u.ms)
+        ... )
+        >>> result = hier(pre_size=125, post_size=125)  # 5^(2-1) = 5 finest modules
+    """
+
+    def __init__(
+        self,
+        n_levels: int,
+        branch_factor: int,
+        intra_conn: PointConnectivity,
+        inter_conn_same_parent: PointConnectivity,
+        inter_conn_diff_parent: PointConnectivity,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        if n_levels < 2:
+            raise ValueError("n_levels must be at least 2")
+        if branch_factor < 2:
+            raise ValueError("branch_factor must be at least 2")
+
+        self.n_levels = n_levels
+        self.branch_factor = branch_factor
+        if not isinstance(inter_conn_same_parent, PointConnectivity):
+            raise TypeError('inter_conn_same_parent must be a PointConnectivity instance.')
+        if not isinstance(inter_conn_diff_parent, PointConnectivity):
+            raise TypeError('inter_conn_diff_parent must be a PointConnectivity instance.')
+        if not isinstance(intra_conn, PointConnectivity):
+            raise TypeError('intra_conn must be a PointConnectivity instance.')
+        self.intra_conn = intra_conn
+        self.inter_conn_same_parent = inter_conn_same_parent
+        self.inter_conn_diff_parent = inter_conn_diff_parent
+
+    def _get_module_hierarchy(self, neuron_id: int, n_modules: int) -> list:
+        """Get the hierarchical path (module IDs at each level) for a neuron."""
+        path = []
+        module_size = n_modules
+        current_id = neuron_id
+
+        for level in range(self.n_levels - 1):
+            module_size = module_size // self.branch_factor
+            module_id = current_id // module_size
+            path.append(module_id)
+            current_id = current_id % module_size
+
+        return path
+
+    def _hierarchical_distance(self, path1: list, path2: list) -> int:
+        """Calculate hierarchical distance (level of lowest common ancestor)."""
+        for level in range(len(path1)):
+            if path1[level] != path2[level]:
+                return level
+        return len(path1)
+
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate hierarchical modular network."""
+        pre_size = kwargs['pre_size']
+        post_size = kwargs['post_size']
+
+        if isinstance(pre_size, tuple):
+            n = int(np.prod(pre_size))
+        else:
+            n = pre_size
+
+        if pre_size != post_size:
+            raise ValueError("Hierarchical networks require pre_size == post_size")
+
+        # Number of finest-level modules
+        n_finest_modules = self.branch_factor ** (self.n_levels - 1)
+
+        # Group neurons by hierarchical modules
+        """Generate hierarchical network using PointConnectivity instances."""
+        # Group neurons by hierarchical modules
+        module_neurons = {}  # Maps (hier_dist, module_id_pair) -> list of (i, j) pairs
+
+        for i in range(n):
+            path_i = self._get_module_hierarchy(i, n)
+
+            for j in range(n):
+                if i == j:
+                    continue
+
+                path_j = self._get_module_hierarchy(j, n)
+                hier_dist = self._hierarchical_distance(path_i, path_j)
+
+                # Create a unique key for this type of connection
+                if hier_dist == self.n_levels - 1:
+                    conn_type = 'intra'
+                    key = (hier_dist, tuple(path_i))
+                elif hier_dist == self.n_levels - 2:
+                    conn_type = 'same_parent'
+                    key = (hier_dist, tuple(path_i[:hier_dist + 1]))
+                else:
+                    conn_type = 'diff_parent'
+                    key = (hier_dist, -1)  # All diff_parent connections use same connectivity
+
+                if key not in module_neurons:
+                    module_neurons[key] = []
+                module_neurons[key].append((i, j))
+
+        # Generate connections for each group
+        all_pre_indices = []
+        all_post_indices = []
+        all_weights = []
+        all_delays = []
+
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
+
+        for (hier_dist, module_key), neuron_pairs in module_neurons.items():
+            # Determine which connectivity to use
+            if hier_dist == self.n_levels - 1:
+                conn = self.intra_conn
+            elif hier_dist == self.n_levels - 2:
+                conn = self.inter_conn_same_parent
+            else:
+                conn = self.inter_conn_diff_parent
+
+            # Extract unique neurons in this group
+            pre_neurons = sorted(set(i for i, j in neuron_pairs))
+            post_neurons = sorted(set(j for i, j in neuron_pairs))
+
+            # Map global to local indices
+            pre_global_to_local = {g: l for l, g in enumerate(pre_neurons)}
+            post_global_to_local = {g: l for l, g in enumerate(post_neurons)}
+
+            group_pre_size = len(pre_neurons)
+            group_post_size = len(post_neurons)
+
+            if group_pre_size == 0 or group_post_size == 0:
+                continue
+
+            # Get positions for this group if available
+            if pre_positions is not None:
+                group_pre_pos = pre_positions[pre_neurons]
+                group_post_pos = post_positions[post_neurons]
+            else:
+                group_pre_pos = None
+                group_post_pos = None
+
+            # Generate connections using connectivity instance
+            conn.rng = self.rng
+            result = conn(
+                pre_size=group_pre_size,
+                post_size=group_post_size,
+                pre_positions=group_pre_pos,
+                post_positions=group_post_pos
+            )
+
+            # Map local indices back to global
+            if len(result.pre_indices) > 0:
+                global_pre = np.array([pre_neurons[i] for i in result.pre_indices], dtype=np.int64)
+                global_post = np.array([post_neurons[i] for i in result.post_indices], dtype=np.int64)
+
+                all_pre_indices.append(global_pre)
+                all_post_indices.append(global_post)
+
+                if result.weights is not None:
+                    all_weights.append(result.weights)
+                if result.delays is not None:
+                    all_delays.append(result.delays)
+
+        # Combine all connections
+        if len(all_pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=kwargs.get('pre_positions', None),
+                post_positions=kwargs.get('post_positions', None),
+                model_type='point'
+            )
+
+        final_pre = np.concatenate(all_pre_indices)
+        final_post = np.concatenate(all_post_indices)
+        final_weights = np.concatenate(all_weights) if len(all_weights) > 0 else None
+        final_delays = np.concatenate(all_delays) if len(all_delays) > 0 else None
+
+        return ConnectionResult(
+            final_pre, final_post,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=final_weights,
+            delays=final_delays,
+            model_type='point',
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
+            metadata={
+                'pattern': 'hierarchical',
+                'n_levels': self.n_levels,
+                'branch_factor': self.branch_factor,
+                'n_finest_modules': n_finest_modules,
+                'intra_conn': type(self.intra_conn).__name__,
+                'inter_conn_same_parent': type(self.inter_conn_same_parent).__name__,
+                'inter_conn_diff_parent': type(self.inter_conn_diff_parent).__name__,
+            }
+        )
+
+
+class CorePeriphery(PointConnectivity):
+    """Core-periphery network with densely connected core and sparse periphery.
+
+    This class creates a network with a core-periphery structure where a subset of
+    nodes (the core) are densely interconnected, while the remaining nodes (the periphery)
+    are sparsely connected to each other but maintain connections to the core. This
+    architecture is common in brain networks, social networks, and infrastructure systems.
+
+    Core-periphery organization enables efficient information integration through the
+    densely connected core while maintaining specialized processing in the periphery.
+    The core acts as a hub for global communication and coordination, while peripheral
+    nodes maintain local specialization.
+
+    Parameters
+    ----------
+    core_size : int or float
+        Size of the core. If int, specifies the exact number of core neurons.
+        If float in (0, 1), specifies the proportion of neurons in the core.
+        Core neurons are the first core_size neurons in the population.
+    core_prob : float, default=0.5
+        Connection probability within the core. Higher values create a more densely
+        connected core, which is characteristic of core-periphery networks.
+    core_periphery_prob : float, default=0.2
+        Connection probability from core to periphery and periphery to core.
+        This parameter controls the integration between core and periphery.
+    periphery_prob : float, default=0.05
+        Connection probability within the periphery. Typically much lower than core_prob,
+        creating sparse peripheral connectivity.
+    bidirectional_core_periphery : bool, default=True
+        If True, both core→periphery and periphery→core connections are generated with
+        core_periphery_prob. If False, only one direction is generated based on which
+        neuron is in the core.
+    weight : Initializer, optional
+        Weight initialization for each connection. Can be a scalar value, array,
+        or an Initializer instance for more complex initialization patterns.
+        If None, no weights are generated.
+    delay : Initializer, optional
+        Delay initialization for each connection. Can be a scalar value, array,
+        or an Initializer instance for more complex initialization patterns.
+        If None, no delays are generated.
+    **kwargs
+        Additional keyword arguments passed to the parent PointConnectivity class,
+        such as 'seed' for random number generation.
+
+    Notes
+    -----
+    - This connectivity pattern requires pre_size == post_size (recurrent connectivity)
+    - Core neurons are selected from the first core_size neurons (indices 0 to core_size-1)
+    - Self-connections are automatically excluded
+    - Core-periphery structure can be quantified using correlation measures
+    - Typical parameter regime: core_prob >> core_periphery_prob > periphery_prob
+
+    References
+    ----------
+    .. [1] Borgatti, S. P., & Everett, M. G. (2000). Models of core/periphery structures.
+           Social Networks, 21(4), 375-395.
+    .. [2] van den Heuvel, M. P., & Sporns, O. (2011). Rich-club organization of the human
+           connectome. Journal of Neuroscience, 31(44), 15775-15786.
+
+    Examples
+    --------
+    Create a core-periphery network with 20% core:
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.conn import CorePeriphery
+        >>> cp = CorePeriphery(core_size=0.2, core_prob=0.5, periphery_prob=0.05)
+        >>> result = cp(pre_size=1000, post_size=1000)
+
+    Create a network with fixed core size:
+
+    .. code-block:: python
+
+        >>> cp = CorePeriphery(
+        ...     core_size=100,
+        ...     core_prob=0.6,
+        ...     core_periphery_prob=0.2,
+        ...     periphery_prob=0.03,
+        ...     weight=1.0 * u.nS,
+        ...     delay=2.0 * u.ms
+        ... )
+        >>> result = cp(pre_size=1000, post_size=1000)
+
+    Create a network with unidirectional core-periphery connections:
+
+    .. code-block:: python
+
+        >>> cp = CorePeriphery(
+        ...     core_size=0.15,
+        ...     core_prob=0.7,
+        ...     core_periphery_prob=0.25,
+        ...     periphery_prob=0.02,
+        ...     bidirectional_core_periphery=False
+        ... )
+        >>> result = cp(pre_size=800, post_size=800)
+
+    Use with custom weight initializer:
+
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>> cp = CorePeriphery(
+        ...     core_size=200,
+        ...     core_prob=0.5,
+        ...     weight=Normal(mean=1.0, std=0.2)
+        ... )
+        >>> result = cp(pre_size=1000, post_size=1000)
+    """
+
+    def __init__(
+        self,
+        core_size: int | float,
+        core_prob: float = 0.5,
+        core_periphery_prob: float = 0.2,
+        periphery_prob: float = 0.05,
+        bidirectional_core_periphery: bool = True,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.core_size = core_size
+        self.core_prob = core_prob
+        self.core_periphery_prob = core_periphery_prob
+        self.periphery_prob = periphery_prob
+        self.bidirectional_core_periphery = bidirectional_core_periphery
+        self.weight_init = weight
+        self.delay_init = delay
+
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate core-periphery network."""
+        pre_size = kwargs['pre_size']
+        post_size = kwargs['post_size']
+
+        if isinstance(pre_size, tuple):
+            n = int(np.prod(pre_size))
+        else:
+            n = pre_size
+
+        if pre_size != post_size:
+            raise ValueError("Core-periphery networks require pre_size == post_size")
+
+        # Determine core size
+        if isinstance(self.core_size, float):
+            if not 0 < self.core_size < 1:
+                raise ValueError("core_size as float must be in (0, 1)")
+            n_core = int(self.core_size * n)
+        else:
+            n_core = self.core_size
+            if n_core >= n:
+                raise ValueError(f"core_size ({n_core}) must be less than network size ({n})")
+
+        # Generate connections
+        pre_indices = []
+        post_indices = []
+
+        for i in range(n):
+            is_i_core = i < n_core
+
+            for j in range(n):
+                if i == j:
+                    continue
+
+                is_j_core = j < n_core
+
+                # Determine connection probability
+                if is_i_core and is_j_core:
+                    # Core to core
+                    prob = self.core_prob
+                elif is_i_core and not is_j_core:
+                    # Core to periphery
+                    prob = self.core_periphery_prob if self.bidirectional_core_periphery else self.core_periphery_prob
+                elif not is_i_core and is_j_core:
+                    # Periphery to core
+                    prob = self.core_periphery_prob if self.bidirectional_core_periphery else self.core_periphery_prob
+                else:
+                    # Periphery to periphery
+                    prob = self.periphery_prob
+
+                if self.rng.random() < prob:
+                    pre_indices.append(i)
+                    post_indices.append(j)
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=kwargs.get('pre_positions', None),
+                post_positions=kwargs.get('post_positions', None),
+                model_type='point'
+            )
+
+        pre_indices = np.array(pre_indices, dtype=np.int64)
+        post_indices = np.array(post_indices, dtype=np.int64)
+        n_connections = len(pre_indices)
+
+        weights = init_call(
+            self.weight_init,
+            n_connections,
+            rng=self.rng,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
+        )
+        delays = init_call(
+            self.delay_init,
+            n_connections,
+            rng=self.rng,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
+        )
+
+        return ConnectionResult(
+            pre_indices, post_indices,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            model_type='point',
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
+            metadata={
+                'pattern': 'core_periphery',
+                'core_size': n_core,
+                'core_prob': self.core_prob,
+                'core_periphery_prob': self.core_periphery_prob,
+                'periphery_prob': self.periphery_prob,
+                'bidirectional_core_periphery': self.bidirectional_core_periphery
+            }
+        )

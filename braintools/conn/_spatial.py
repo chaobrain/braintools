@@ -21,11 +21,11 @@ from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
 from braintools.init._distance_base import DistanceProfile
+from braintools.init._distance_impl import GaussianProfile, ExponentialProfile
 from braintools.init._init_base import init_call, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
-    # Spatial patterns
     'DistanceDependent',
     'Gaussian',
     'Exponential',
@@ -68,38 +68,32 @@ class DistanceDependent(PointConnectivity):
         ...     ),
         ...     weight=Exponential(3.0 * u.nS),
         ...     delay=Constant(1.0 * u.ms),
-        ...     max_prob=0.3
         ... )
         >>> result = conn(
-        ...     pre_size=500, post_size=500,
-        ...     pre_positions=positions, post_positions=positions
+        ...     pre_size=500,
+        ...     post_size=500,
+        ...     pre_positions=positions,
+        ...     post_positions=positions
         ... )
     """
 
     def __init__(
         self,
-        distance_profile: Optional[Union[ArrayLike, DistanceProfile]] = None,
+        distance_profile: Union[ArrayLike, DistanceProfile],
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
-        max_prob: float = 1.0,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.distance_profile = distance_profile
         self.weight_init = weight
         self.delay_init = delay
-        self.max_prob = max_prob
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate distance-dependent connections."""
+
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
-
-        if pre_positions is None or post_positions is None:
-            raise ValueError("Positions required for spatial connectivity")
-
         if isinstance(pre_size, tuple):
             pre_num = int(np.prod(pre_size))
         else:
@@ -111,12 +105,23 @@ class DistanceDependent(PointConnectivity):
             post_num = post_size
 
         # Calculate distance matrix
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        distances = u.maybe_decimal(cdist(pre_pos_val, post_pos_val) * pos_unit)
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
+        distances = kwargs.get('distances', None)
+        if distances is not None:
+            # Use provided distances directly
+            distances = distances
+        elif pre_positions is None or post_positions is None:
+            raise ValueError('Positions required for distance-dependent connectivity, '
+                             'for example: pre_positions=positions, post_positions=positions, '
+                             'or provide distances directly.')
+        else:
+            pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
+            post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+            distances = u.maybe_decimal(cdist(pre_pos_val, post_pos_val) * pos_unit)
 
         # Calculate connection probabilities using distance profile
-        probs = self.max_prob * self.distance_profile.probability(distances)
+        probs = self.distance_profile.probability(distances)
 
         # Vectorized connection generation
         random_vals = self.rng.random((pre_num, post_num))
@@ -179,35 +184,54 @@ class DistanceDependent(PointConnectivity):
                 'distance_profile': self.distance_profile,
                 'weight_initialization': self.weight_init,
                 'delay_initialization': self.delay_init,
-                'max_prob': self.max_prob
             }
         )
 
 
 class Gaussian(DistanceDependent):
     """Gaussian distance-dependent connectivity.
-
-    Parameters
-    ----------
-    distance_profile : DistanceProfile
-        Must be a GaussianProfile instance.
-    **kwargs
-        Additional arguments passed to DistanceDependent.
     """
-    pass
+
+    def __init__(
+        self,
+        distance_profile: GaussianProfile,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
+        **kwargs
+    ):
+        if not isinstance(distance_profile, GaussianProfile):
+            raise TypeError(
+                "distance_profile must be an instance of GaussianProfile for Gaussian connectivity."
+            )
+        super().__init__(
+            distance_profile=distance_profile,
+            weight=weight,
+            delay=delay,
+            **kwargs
+        )
 
 
 class Exponential(DistanceDependent):
     """Exponential distance-dependent connectivity.
-
-    Parameters
-    ----------
-    distance_profile : DistanceProfile
-        Must be an ExponentialProfile instance.
-    **kwargs
-        Additional arguments passed to DistanceDependent.
     """
-    pass
+
+    def __init__(
+        self,
+        distance_profile: ExponentialProfile,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
+        **kwargs
+    ):
+        if not isinstance(distance_profile, ExponentialProfile):
+            raise TypeError(
+                "distance_profile must be an instance of ExponentialProfile for Exponential connectivity."
+            )
+        super().__init__(
+            distance_profile=distance_profile,
+            weight=weight,
+            delay=delay,
+            **kwargs
+        )
 
 
 class Ring(PointConnectivity):

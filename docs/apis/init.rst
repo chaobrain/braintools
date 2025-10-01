@@ -207,7 +207,6 @@ in flexible ways.
    Conditional
    Scaled
    Clipped
-   DistanceModulated
 
 - **Mixture**: Randomly selects from multiple distributions for each parameter according to
   specified probability weights. Useful for creating heterogeneous parameter populations.
@@ -226,6 +225,9 @@ in flexible ways.
 Distance-Modulated Initialization
 ---------------------------------
 
+Distance-modulated initialization adjusts weights based on spatial distance between neurons,
+using a specified distance profile. This is essential for spatially-structured brain models
+where connection strength depends on neuronal proximity.
 
 .. autosummary::
    :toctree: generated/
@@ -234,11 +236,6 @@ Distance-Modulated Initialization
 
    DistanceModulated
 
-
-
-- **DistanceModulated**: Modulates weights based on spatial distance between neurons using
-  a distance profile. Essential for spatially-structured brain models where connection
-  strength depends on neuronal proximity.
 
 Distance Profiles
 -----------------

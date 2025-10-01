@@ -23,7 +23,6 @@ from braintools.init._init_base import init_call, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
-    # Basic connectivity patterns
     'AllToAll',
     'OneToOne',
 ]
