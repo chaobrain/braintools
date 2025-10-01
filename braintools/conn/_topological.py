@@ -1321,8 +1321,8 @@ class Hierarchical(PointConnectivity):
 
         final_pre = np.concatenate(all_pre_indices)
         final_post = np.concatenate(all_post_indices)
-        final_weights = np.concatenate(all_weights) if len(all_weights) > 0 else None
-        final_delays = np.concatenate(all_delays) if len(all_delays) > 0 else None
+        final_weights = u.math.concatenate(all_weights) if len(all_weights) > 0 else None
+        final_delays = u.math.concatenate(all_delays) if len(all_delays) > 0 else None
 
         return ConnectionResult(
             final_pre, final_post,
