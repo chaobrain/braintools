@@ -22,8 +22,10 @@ Core infrastructure for connectivity patterns and results.
 
    ConnectionResult
    Connectivity
-   PointNeuronConnectivity
+   PointConnectivity
    MultiCompartmentConnectivity
+   ScaledConnectivity
+   CompositeConnectivity
 
 
 Point Neuron Connectivity
@@ -31,8 +33,10 @@ Point Neuron Connectivity
 
 Connectivity patterns for single-compartment point neuron models.
 
-Basic patterns
+Basic Patterns
 ~~~~~~~~~~~~~~
+
+Simple connectivity patterns including random and deterministic connections.
 
 .. autosummary::
    :toctree: generated/
@@ -40,13 +44,14 @@ Basic patterns
    :template: classtemplate.rst
 
    Random
+   FixedProb
    AllToAll
    OneToOne
-   FixedProbability
-   Custom
 
-Spatial patterns
+Spatial Patterns
 ~~~~~~~~~~~~~~~~
+
+Distance-dependent and spatially-structured connectivity patterns.
 
 .. autosummary::
    :toctree: generated/
@@ -57,12 +62,14 @@ Spatial patterns
    Gaussian
    Exponential
    Ring
-   Grid
+   Grid2d
    RadialPatches
-   Regular
+   ClusteredRandom
 
-Topological patterns
+Topological Patterns
 ~~~~~~~~~~~~~~~~~~~~
+
+Complex network topology patterns based on graph theory.
 
 .. autosummary::
    :toctree: generated/
@@ -71,11 +78,16 @@ Topological patterns
 
    SmallWorld
    ScaleFree
-   Modular
-   ClusteredRandom
+   Regular
+   ModularRandom
+   ModularGeneral
+   HierarchicalRandom
+   CorePeripheryRandom
 
-Biological patterns
+Biological Patterns
 ~~~~~~~~~~~~~~~~~~~
+
+Biologically-inspired connectivity patterns following neural principles.
 
 .. autosummary::
    :toctree: generated/
@@ -83,21 +95,19 @@ Biological patterns
    :template: classtemplate.rst
 
    ExcitatoryInhibitory
-   SynapticPlasticity
-   ActivityDependent
 
 
-Convolutional Kernels
----------------------
+Kernel-Based Connectivity
+--------------------------
 
-Connectivity patterns using convolution kernels for spatial processing.
+Connectivity patterns using convolution kernels for spatial receptive fields.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   ConvKernel
+   Conv2dKernel
    GaussianKernel
    GaborKernel
    DoGKernel
@@ -113,21 +123,24 @@ Multi-Compartment Connectivity
 Connectivity patterns for detailed multi-compartment neuron models with
 compartment-specific targeting.
 
-Compartment constants
+Compartment Constants
 ~~~~~~~~~~~~~~~~~~~~~
+
+Predefined constants for identifying neural compartments.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
-   :template: classtemplate.rst
 
    SOMA
    BASAL_DENDRITE
    APICAL_DENDRITE
    AXON
 
-Basic compartment patterns
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Basic Compartment Patterns
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fundamental patterns for compartment-specific connectivity.
 
 .. autosummary::
    :toctree: generated/
@@ -135,12 +148,13 @@ Basic compartment patterns
    :template: classtemplate.rst
 
    CompartmentSpecific
-   RandomCompartment
    AllToAllCompartments
    CustomCompartment
 
-Anatomical targeting patterns
+Anatomical Targeting Patterns
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Connectivity patterns based on anatomical organization.
 
 .. autosummary::
    :toctree: generated/
@@ -153,8 +167,10 @@ Anatomical targeting patterns
    AxonToDendrite
    DendriteToDendrite
 
-Morphology-aware patterns
+Morphology-Aware Patterns
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Patterns that utilize detailed morphological information.
 
 .. autosummary::
    :toctree: generated/
@@ -166,8 +182,10 @@ Morphology-aware patterns
    BranchSpecific
    MorphologyDistance
 
-Dendritic patterns
+Dendritic Patterns
 ~~~~~~~~~~~~~~~~~~
+
+Specialized patterns for dendritic targeting and integration.
 
 .. autosummary::
    :toctree: generated/
@@ -179,8 +197,10 @@ Dendritic patterns
    ApicalDendriteTargeting
    DendriticIntegration
 
-Axonal patterns
+Axonal Patterns
 ~~~~~~~~~~~~~~~
+
+Patterns for axonal projection and arborization.
 
 .. autosummary::
    :toctree: generated/
@@ -192,8 +212,10 @@ Axonal patterns
    AxonalArborization
    TopographicProjection
 
-Synaptic patterns
+Synaptic Patterns
 ~~~~~~~~~~~~~~~~~
+
+Patterns for synaptic placement and organization.
 
 .. autosummary::
    :toctree: generated/
@@ -202,5 +224,3 @@ Synaptic patterns
 
    SynapticPlacement
    SynapticClustering
-   ActivityDependentSynapses
-
