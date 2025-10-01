@@ -22,50 +22,10 @@ from braintools.conn import (
     Ring,
     Grid,
     RadialPatches,
-    ClusteredRandom,
 )
 
 
 class TestSpatialPatterns(unittest.TestCase):
-    """
-    Test spatial connectivity patterns (Ring, Grid, RadialPatches, ClusteredRandom).
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn._conn_point import Ring, Grid, RadialPatches, ClusteredRandom
-
-        # Ring connectivity
-        ring = Ring(neighbors=2, bidirectional=True, weight=1.0 * u.nS)
-        result_ring = ring(pre_size=20, post_size=20)
-        assert result_ring.metadata['pattern'] == 'ring'
-
-        # Grid connectivity
-        grid = Grid(
-            grid_shape=(5, 5),
-            connectivity='moore',  # 8 neighbors
-            periodic=True
-        )
-        result_grid = grid(pre_size=25, post_size=25)
-        assert result_grid.metadata['pattern'] == 'grid'
-
-        # Radial patches
-        positions = np.random.uniform(0, 100, (50, 2)) * u.um
-        patches = RadialPatches(
-            patch_radius=20 * u.um,
-            n_patches=3,
-            prob=0.7
-        )
-        result_patches = patches(
-            pre_size=50, post_size=50,
-            pre_positions=positions,
-            post_positions=positions
-        )
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -196,35 +156,3 @@ class TestSpatialPatterns(unittest.TestCase):
         )
 
         self.assertGreaterEqual(result.n_connections, 0)
-
-    def test_clustered_random_basic(self):
-        positions = np.random.RandomState(42).uniform(0, 100, (25, 2)) * u.um
-
-        conn = ClusteredRandom(
-            prob=0.1,
-            cluster_radius=25 * u.um,
-            cluster_factor=3.0,
-            seed=42
-        )
-
-        result = conn(
-            pre_size=25, post_size=25,
-            pre_positions=positions,
-            post_positions=positions
-        )
-
-        self.assertEqual(result.model_type, 'point')
-        self.assertEqual(result.metadata['pattern'], 'clustered_random')
-        self.assertEqual(result.metadata['prob'], 0.1)
-        self.assertEqual(result.metadata['cluster_radius'], 25 * u.um)
-        self.assertGreater(result.n_connections, 0)
-
-    def test_clustered_random_no_positions_error(self):
-        conn = ClusteredRandom(
-            prob=0.1,
-            cluster_radius=20 * u.um,
-            seed=42
-        )
-
-        with self.assertRaises(ValueError):
-            conn(pre_size=10, post_size=10)  # No positions
