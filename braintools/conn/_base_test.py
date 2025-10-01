@@ -392,21 +392,6 @@ class TestConnectionResult(unittest.TestCase):
 
         self.assertEqual(conn.shape, (0, 0))
 
-    def test_metadata_and_type_specific_fields(self):
-        conn = ConnectionResult(
-            pre_indices=np.array([0, 1]),
-            post_indices=np.array([1, 0]),
-            pre_size=2,
-            post_size=2,
-            model_type='multi_compartment',
-            metadata={'test': 'value'},
-            custom_field='custom_value'
-        )
-
-        self.assertEqual(conn.model_type, 'multi_compartment')
-        self.assertEqual(conn.metadata['test'], 'value')
-        self.assertEqual(conn.custom_field, 'custom_value')
-
 
 class MockConnectivity(Connectivity):
     """Mock connectivity class for testing Connectivity."""

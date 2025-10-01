@@ -6,8 +6,8 @@
 
 Modular connectivity system for building neural network connection patterns
 across different types of neural models. The system provides specialized
-implementations for point neurons, population rate models, and multi-compartment
-models with a unified API.
+implementations for point neurons and multi-compartment models with direct
+class access.
 
 
 Base Classes and Results
@@ -22,8 +22,8 @@ Core infrastructure for connectivity patterns and results.
 
    ConnectionResult
    Connectivity
-   CompositeConnectivity
-   ScaledConnectivity
+   PointNeuronConnectivity
+   MultiCompartmentConnectivity
 
 
 Point Neuron Connectivity
@@ -42,6 +42,8 @@ Basic patterns
    Random
    AllToAll
    OneToOne
+   FixedProbability
+   Custom
 
 Spatial patterns
 ~~~~~~~~~~~~~~~~
@@ -52,11 +54,28 @@ Spatial patterns
    :template: classtemplate.rst
 
    DistanceDependent
+   Gaussian
+   Exponential
+   Ring
    Grid
    RadialPatches
+   Regular
 
-Network patterns
-~~~~~~~~~~~~~~~~
+Topological patterns
+~~~~~~~~~~~~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   SmallWorld
+   ScaleFree
+   Modular
+   ClusteredRandom
+
+Biological patterns
+~~~~~~~~~~~~~~~~~~~
 
 .. autosummary::
    :toctree: generated/
@@ -64,11 +83,12 @@ Network patterns
    :template: classtemplate.rst
 
    ExcitatoryInhibitory
-   Custom
+   SynapticPlasticity
+   ActivityDependent
 
 
-Kernel patterns
-~~~~~~~~~~~~~~~
+Convolutional Kernels
+---------------------
 
 Connectivity patterns using convolution kernels for spatial processing.
 
@@ -93,33 +113,6 @@ Multi-Compartment Connectivity
 Connectivity patterns for detailed multi-compartment neuron models with
 compartment-specific targeting.
 
-Compartment-specific patterns
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   CompartmentSpecific
-   SomaToDendrite
-   AxonToSoma
-   AxonToDendrite
-   DendriteToSoma
-
-Morphology-aware patterns
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   MorphologyDistance
-   DendriticTree
-   AxonalProjection
-   CustomCompartment
-
 Compartment constants
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -133,85 +126,73 @@ Compartment constants
    APICAL_DENDRITE
    AXON
 
-
-
-
-Population Rate Connectivity
------------------------------
-
-Connectivity patterns for population rate models and mean-field dynamics.
-
-Population coupling
-~~~~~~~~~~~~~~~~~~~
+Basic compartment patterns
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   PopulationCoupling
-   MeanField
-   ExcitatoryInhibitoryPopulation
+   CompartmentSpecific
+   RandomCompartment
+   AllToAllCompartments
+   CustomCompartment
 
-Network architectures
-~~~~~~~~~~~~~~~~~~~~~
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   HierarchicalPopulations
-   WilsonCowanNetwork
-
-
-Initialization Classes
-----------------------
-
-Classes for initializing connection weights, delays, and distance-dependent profiles.
-
-Weight initialization
-~~~~~~~~~~~~~~~~~~~~~
+Anatomical targeting patterns
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   WeightInit
-   ConstantWeight
-   UniformWeight
-   NormalWeight
-   LogNormalWeight
-   ExponentialWeight
-   GammaWeight
-   BetaWeight
-   OrthogonalWeight
-   XavierUniformWeight
-   XavierNormalWeight
-   HeUniformWeight
-   HeNormalWeight
-   LeCunUniformWeight
-   LeCunNormalWeight
-   DistanceModulatedWeight
+   SomaToDendrite
+   AxonToSoma
+   DendriteToSoma
+   AxonToDendrite
+   DendriteToDendrite
 
-Delay initialization
-~~~~~~~~~~~~~~~~~~~~~
+Morphology-aware patterns
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   DelayInit
-   ConstantDelay
-   UniformDelay
-   NormalDelay
-   GammaDelay
-   DistanceProportionalDelay
-   DistanceModulatedDelay
+   ProximalTargeting
+   DistalTargeting
+   BranchSpecific
+   MorphologyDistance
 
-Distance profiles
+Dendritic patterns
+~~~~~~~~~~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   DendriticTree
+   BasalDendriteTargeting
+   ApicalDendriteTargeting
+   DendriticIntegration
+
+Axonal patterns
+~~~~~~~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   AxonalProjection
+   AxonalBranching
+   AxonalArborization
+   TopographicProjection
+
+Synaptic patterns
 ~~~~~~~~~~~~~~~~~
 
 .. autosummary::
@@ -219,10 +200,7 @@ Distance profiles
    :nosignatures:
    :template: classtemplate.rst
 
-   DistanceProfile
-   GaussianProfile
-   ExponentialProfile
-   PowerLawProfile
-   LinearProfile
-   StepProfile
+   SynapticPlacement
+   SynapticClustering
+   ActivityDependentSynapses
 

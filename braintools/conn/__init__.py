@@ -21,12 +21,13 @@ patterns across different types of neural models. The system is designed with
 complete decoupling between model types to ensure clean, specialized implementations.
 
 **Supported Model Types:**
+
 - **Point Neurons**: Single-compartment integrate-and-fire models
 - **Multi-Compartment Models**: Detailed morphological neuron models
 
 **Key Features:**
-- **Model-Specific Modules**: Dedicated implementations for each neuron type
-- **Unified Interface**: Common API across all model types via connect() function
+
+- **Direct Class Access**: All connectivity patterns available as classes
 - **Biological Realism**: Realistic parameters and constraints for each model type
 - **Spatial Awareness**: Position-dependent connectivity with proper units
 - **Composable Patterns**: Combine and transform connectivity patterns
@@ -37,58 +38,49 @@ complete decoupling between model types to ensure clean, specialized implementat
 .. code-block:: python
 
     import brainunit as u
-    from braintools.conn import connect
+    from braintools.conn import Random, ExcitatoryInhibitory, AxonToDendrite
 
     # Point neuron random connectivity
-    result = connect(
-        pattern='Random',
-        model_type='point',
-        pre_size=1000,
-        post_size=1000,
-        prob=0.1
-    )
+    random_conn = Random(prob=0.1)
+    result = random_conn(pre_size=1000, post_size=1000)
 
-    # Population rate E-I dynamics
-    result = connect(
-        pattern='ExcitatoryInhibitory',
-        model_type='population_rate',
-        pre_size=2,
-        post_size=2,
-        exc_self_coupling=0.5,
-        inh_to_exc_coupling=-1.2
+    # E-I network dynamics
+    ei_conn = ExcitatoryInhibitory(
+        exc_ratio=0.8,
+        exc_prob=0.1,
+        inh_prob=0.2,
+        exc_weight=1.0 * u.nS,
+        inh_weight=-0.8 * u.nS
     )
+    result = ei_conn(pre_size=1000, post_size=1000)
 
     # Multi-compartment axon-to-dendrite connectivity
-    result = connect(
-        pattern='AxonToDendrite',
-        model_type='multi_compartment',
-        pre_size=100,
-        post_size=100,
-        connection_prob=0.1
+    axon_dend = AxonToDendrite(
+        connection_prob=0.1,
+        weight_distribution='lognormal',
+        weight_params={'mean': 2.0 * u.nS, 'sigma': 0.5}
     )
+    result = axon_dend(pre_size=100, post_size=100)
 
-**Model-Specific Usage:**
-
-Point Neuron Connectivity:
+**Point Neuron Connectivity:**
 
 .. code-block:: python
 
     import numpy as np
     import brainunit as u
-    from braintools.conn import point
+    from braintools.conn import Random, DistanceDependent, ExcitatoryInhibitory
 
     # Realistic synaptic connectivity with proper units
-    ampa_conn = point.Random(
+    from braintools.init import LogNormal, Normal
+    ampa_conn = Random(
         prob=0.05,
-        weight='lognormal',
-        weight_params={'mean': 1.0 * u.nS, 'sigma': 0.5},
-        delay='normal',
-        delay_params={'mean': 1.5 * u.ms, 'std': 0.3 * u.ms}
+        weight=LogNormal(mean=1.0 * u.nS, sigma=0.5),
+        delay=Normal(mean=1.5 * u.ms, std=0.3 * u.ms)
     )
 
     # Spatial connectivity
     positions = np.random.uniform(0, 1000, (500, 2)) * u.um
-    spatial_conn = point.DistanceDependent(
+    spatial_conn = DistanceDependent(
         sigma=100 * u.um,
         decay='gaussian',
         max_prob=0.3
@@ -96,7 +88,7 @@ Point Neuron Connectivity:
     result = spatial_conn(500, 500, positions, positions)
 
     # E-I network with Dale's principle
-    ei_network = point.ExcitatoryInhibitory(
+    ei_network = ExcitatoryInhibitory(
         exc_ratio=0.8,
         exc_prob=0.1,
         inh_prob=0.2,
@@ -104,88 +96,48 @@ Point Neuron Connectivity:
         inh_weight=-0.8 * u.nS
     )
 
-
-Multi-Compartment Model Connectivity:
+**Multi-Compartment Model Connectivity:**
 
 .. code-block:: python
 
-    from braintools.conn import compartment
+    from braintools.conn import (
+        AxonToDendrite, CompartmentSpecific, MorphologyDistance,
+        AXON, SOMA, BASAL_DENDRITE, APICAL_DENDRITE
+    )
 
     # Axon-to-dendrite synapses
-    axon_dend = compartment.AxonToDendrite(
+    axon_dend = AxonToDendrite(
         connection_prob=0.1,
         weight_distribution='lognormal',
         weight_params={'mean': 2.0 * u.nS, 'sigma': 0.5}
     )
 
     # Specific compartment targeting
-    soma_targeting = compartment.CompartmentSpecific(
+    soma_targeting = CompartmentSpecific(
         compartment_mapping={
-            compartment.AXON: compartment.SOMA,
-            compartment.BASAL_DENDRITE: compartment.SOMA
+            AXON: SOMA,
+            BASAL_DENDRITE: SOMA
         },
         connection_prob=0.15
     )
 
     # Morphology-aware connectivity
-    morph_conn = compartment.MorphologyDistance(
+    morph_conn = MorphologyDistance(
         sigma=50 * u.um,
         decay_function='gaussian',
         compartment_mapping={
-            compartment.AXON: [
-                compartment.BASAL_DENDRITE,
-                compartment.APICAL_DENDRITE
-            ]
+            AXON: [BASAL_DENDRITE, APICAL_DENDRITE]
         }
     )
 
-Constraint Application:
-----------------------
+
+**Custom Patterns:**
 
 .. code-block:: python
 
-    # Apply Dale's principle
-    excitatory = Random(prob=0.15).constrain_excitatory()
-    inhibitory = Random(prob=0.05).constrain_inhibitory()
+    from braintools.conn import Custom, ConnectionResult
 
-    # Degree constraints
-    constrained = Random(prob=0.2).limit_degrees(max_in=50, max_out=100)
-
-    # Distance filtering
-    local_only = Random(prob=0.3).filter_distance(max_dist=150.0)
-
-    # Weight filtering and noise
-    clean_strong = (Random(prob=0.1)
-                   .add_noise(0.1)
-                   .filter_weights(min_weight=0.5))
-
-Modular and Hierarchical Networks:
----------------------------------
-
-.. code-block:: python
-
-    # Three-module network
-    modules = [100, 80, 120]  # Module sizes
-    within = Random(prob=0.3)  # Strong within-module
-    between = Random(prob=0.05)  # Weak between-module
-
-    modular_net = Modular(modules, within, between)
-
-    # Hierarchical network with multiple scales
-    micro = DistanceDependent(sigma=25.0)   # Microscale
-    meso = DistanceDependent(sigma=100.0)   # Mesoscale
-    macro = Random(prob=0.01)               # Macroscale
-
-    hierarchical = micro + meso.scale_weights(0.5) + macro.scale_weights(0.1)
-
-Custom Patterns:
----------------
-
-.. code-block:: python
-
-    from braintools.conn import Custom
-
-    def my_connectivity(pre_size, post_size, pre_pos, post_pos):
+    def my_connectivity(pre_size, post_size, pre_pos=None, post_pos=None):
         # Custom connectivity logic here
         pre_indices = [...]
         post_indices = [...]
@@ -193,44 +145,7 @@ Custom Patterns:
         return ConnectionResult(pre_indices, post_indices, weights=weights)
 
     custom_conn = Custom(my_connectivity)
-
-Available Patterns:
-------------------
-
-**Basic Patterns:**
-- **Random**: Random connectivity with fixed probability
-- **AllToAll**: Fully connected networks
-- **OneToOne**: Direct one-to-one mappings
-- **Custom**: User-defined connectivity patterns
-
-**Spatial Patterns:**
-- **DistanceDependent**: Spatial connectivity with various decay functions
-- **Gaussian**: Gaussian-weighted connectivity
-- **Regular**: Regular patterns (ring, grid, lattice)
-- **CompartmentDistanceDependent**: Distance-dependent connectivity between compartments
-- **DendriticTree**: Dendritic tree connectivity patterns
-- **AxonalProjection**: Axonal projection patterns
-
-**Topological Patterns:**
-- **SmallWorld**: Watts-Strogatz small-world networks
-- **ScaleFree**: Barabási-Albert scale-free networks
-- **Modular**: Multi-module networks
-- **Hierarchical**: Multi-scale hierarchical networks
-
-**Multi-Compartment Patterns:**
-- **CompartmentSpecific**: Target specific compartments
-- **SomaToDendrite**: Soma-to-dendrite connections
-- **AxonToSoma**: Axon-to-soma connections
-- **DendriteToSoma**: Dendrite-to-soma connections
-- **MultiCompartmentRandom**: Random with compartment-specific probabilities
-
-Operations and Transformations:
-------------------------------
-- **Arithmetic**: +, -, *, / for combining patterns
-- **Scaling**: .scale_weights(), .scale_delays()
-- **Filtering**: .filter_distance(), .filter_weights()
-- **Constraints**: .limit_degrees(), .constrain_excitatory(), .constrain_inhibitory()
-- **Transformations**: .add_noise(), .add_plasticity(), .apply_transform()
+    result = custom_conn(pre_size=100, post_size=100)
 """
 
 from ._base import *
