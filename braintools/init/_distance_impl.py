@@ -95,9 +95,6 @@ class GaussianProfile(DistanceProfile):
 
         return prob
 
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
-
     def __repr__(self):
         return f'GaussianProfile(sigma={self.sigma}, max_distance={self.max_distance})'
 
@@ -151,9 +148,6 @@ class ExponentialProfile(DistanceProfile):
             prob[dist_vals > max_val] = 0.0
 
         return prob
-
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
 
     def __repr__(self):
         return f'ExponentialProfile(decay_constant={self.decay_constant}, max_distance={self.max_distance})'
@@ -216,9 +210,6 @@ class PowerLawProfile(DistanceProfile):
 
         return prob
 
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
-
     def __repr__(self):
         return f'PowerLawProfile(exponent={self.exponent}, min_distance={self.min_distance}, max_distance={self.max_distance})'
 
@@ -257,9 +248,6 @@ class LinearProfile(DistanceProfile):
 
         prob = np.maximum(0, 1 - dist_vals / max_val)
         return prob
-
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
 
     def __repr__(self):
         return f'LinearProfile(max_distance={self.max_distance})'
@@ -313,9 +301,6 @@ class StepProfile(DistanceProfile):
 
         prob = np.where(dist_vals <= threshold, self.inside_prob, self.outside_prob)
         return prob
-
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
 
     def __repr__(self):
         return f'StepProfile(threshold={self.threshold}, inside_prob={self.inside_prob}, outside_prob={self.outside_prob})'
@@ -376,9 +361,6 @@ class SigmoidProfile(DistanceProfile):
             prob[dist_vals > max_val] = 0.0
 
         return prob
-
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
 
     def __repr__(self):
         return f'SigmoidProfile(midpoint={self.midpoint}, slope={self.slope}, max_distance={self.max_distance})'
@@ -455,9 +437,6 @@ class DoGProfile(DistanceProfile):
 
         return prob
 
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
-
     def __repr__(self):
         return (f'DoGProfile(sigma_center={self.sigma_center}, sigma_surround={self.sigma_surround}, '
                 f'amplitude_center={self.amplitude_center}, amplitude_surround={self.amplitude_surround}, '
@@ -519,9 +498,6 @@ class LogisticProfile(DistanceProfile):
             prob[dist_vals > max_val] = 0.0
 
         return prob
-
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
 
     def __repr__(self):
         return f'LogisticProfile(growth_rate={self.growth_rate}, midpoint={self.midpoint}, max_distance={self.max_distance})'
@@ -607,9 +583,6 @@ class BimodalProfile(DistanceProfile):
 
         return prob
 
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
-
     def __repr__(self):
         return (f'BimodalProfile(sigma1={self.sigma1}, sigma2={self.sigma2}, '
                 f'center1={self.center1}, center2={self.center2}, '
@@ -686,9 +659,6 @@ class MexicanHatProfile(DistanceProfile):
             prob[dist_vals > max_val] = 0.0
 
         return prob
-
-    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
 
     def __repr__(self):
         return f'MexicanHatProfile(sigma={self.sigma}, amplitude={self.amplitude}, max_distance={self.max_distance})'

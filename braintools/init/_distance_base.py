@@ -121,7 +121,6 @@ class DistanceProfile(ABC):
         """
         pass
 
-    @abstractmethod
     def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         """
         Calculate weight scaling factor based on distance.
@@ -136,7 +135,7 @@ class DistanceProfile(ABC):
         scaling : ndarray
             Weight scaling factors (typically between 0 and 1).
         """
-        pass
+        return self.probability(distances)
 
     def __call__(self, distances: ArrayLike) -> np.ndarray:
         """
