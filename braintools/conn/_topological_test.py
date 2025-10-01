@@ -1050,9 +1050,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test basic core-periphery network with default parameters."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_core_prob=0.2,
+            periphery_periphery_prob=0.05,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1060,10 +1061,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         self.assertEqual(result.model_type, 'point')
         self.assertEqual(result.metadata['pattern'], 'core_periphery')
         self.assertEqual(result.metadata['core_size'], 20)
-        self.assertEqual(result.metadata['core_prob'], 0.5)
+        self.assertEqual(result.metadata['core_core_prob'], 0.5)
         self.assertEqual(result.metadata['core_periphery_prob'], 0.2)
-        self.assertEqual(result.metadata['periphery_prob'], 0.05)
-        self.assertEqual(result.metadata['bidirectional_core_periphery'], True)
+        self.assertEqual(result.metadata['periphery_core_prob'], 0.2)
+        self.assertEqual(result.metadata['periphery_periphery_prob'], 0.05)
 
         # Should have connections
         self.assertGreater(result.n_connections, 0)
@@ -1078,7 +1079,7 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test core_size specified as a proportion."""
         conn = CorePeripheryRandom(
             core_size=0.2,  # 20% of network
-            core_prob=0.5,
+            core_core_prob=0.5,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1091,7 +1092,7 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test core_size specified as absolute number."""
         conn = CorePeripheryRandom(
             core_size=30,  # Exactly 30 neurons
-            core_prob=0.5,
+            core_core_prob=0.5,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1129,19 +1130,18 @@ class TestCorePeripheryRandom(unittest.TestCase):
             conn(pre_size=100, post_size=80)
         self.assertIn("require pre_size == post_size", str(ctx.exception))
 
-    def test_bidirectional_core_periphery_true(self):
-        """Test bidirectional core-periphery connections."""
+    def test_symmetric_core_periphery(self):
+        """Test symmetric core-periphery connections."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.3,
-            periphery_prob=0.05,
-            bidirectional_core_periphery=True,
+            periphery_core_prob=0.3,  # Same as core_periphery_prob
+            periphery_periphery_prob=0.05,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
 
-        self.assertEqual(result.metadata['bidirectional_core_periphery'], True)
         self.assertGreater(result.n_connections, 0)
 
         # Count core->periphery and periphery->core connections
@@ -1158,32 +1158,84 @@ class TestCorePeripheryRandom(unittest.TestCase):
             elif not is_pre_core and is_post_core:
                 periphery_to_core += 1
 
-        # Both directions should exist
+        # Both directions should exist and be roughly equal
         self.assertGreater(core_to_periphery, 0)
         self.assertGreater(periphery_to_core, 0)
+        # Ratio should be close to 1.0 for symmetric probabilities
+        ratio = core_to_periphery / periphery_to_core
+        self.assertGreater(ratio, 0.7)
+        self.assertLess(ratio, 1.3)
 
-    def test_bidirectional_core_periphery_false(self):
-        """Test unidirectional core-periphery connections."""
+    def test_asymmetric_core_periphery_feedforward(self):
+        """Test asymmetric core-periphery with strong feedforward."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.5,
-            core_periphery_prob=0.3,
-            periphery_prob=0.05,
-            bidirectional_core_periphery=False,
+            core_core_prob=0.5,
+            core_periphery_prob=0.4,  # Strong feedforward
+            periphery_core_prob=0.1,  # Weak feedback
+            periphery_periphery_prob=0.05,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
 
-        self.assertEqual(result.metadata['bidirectional_core_periphery'], False)
         self.assertGreater(result.n_connections, 0)
+
+        # Count core->periphery and periphery->core connections
+        core_size = result.metadata['core_size']
+        core_to_periphery = 0
+        periphery_to_core = 0
+
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            is_pre_core = pre_idx < core_size
+            is_post_core = post_idx < core_size
+
+            if is_pre_core and not is_post_core:
+                core_to_periphery += 1
+            elif not is_pre_core and is_post_core:
+                periphery_to_core += 1
+
+        # Core->periphery should be much greater than periphery->core
+        self.assertGreater(core_to_periphery, periphery_to_core)
+
+    def test_asymmetric_core_periphery_feedback(self):
+        """Test asymmetric core-periphery with strong feedback."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_core_prob=0.5,
+            core_periphery_prob=0.1,  # Weak feedforward
+            periphery_core_prob=0.4,  # Strong feedback
+            periphery_periphery_prob=0.05,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        self.assertGreater(result.n_connections, 0)
+
+        # Count core->periphery and periphery->core connections
+        core_size = result.metadata['core_size']
+        core_to_periphery = 0
+        periphery_to_core = 0
+
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            is_pre_core = pre_idx < core_size
+            is_post_core = post_idx < core_size
+
+            if is_pre_core and not is_post_core:
+                core_to_periphery += 1
+            elif not is_pre_core and is_post_core:
+                periphery_to_core += 1
+
+        # Periphery->core should be much greater than core->periphery
+        self.assertGreater(periphery_to_core, core_to_periphery)
 
     def test_no_self_connections(self):
         """Test that self-connections are excluded."""
         conn = CorePeripheryRandom(
             core_size=10,
-            core_prob=0.8,
+            core_core_prob=0.8,
             core_periphery_prob=0.5,
-            periphery_prob=0.3,
+            periphery_core_prob=0.5,
+            periphery_periphery_prob=0.3,
             seed=42
         )
         result = conn(pre_size=50, post_size=50)
@@ -1195,9 +1247,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test that core has denser connectivity than periphery."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.6,
+            core_core_prob=0.6,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_core_prob=0.2,
+            periphery_periphery_prob=0.05,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1234,9 +1287,9 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test network with small core and large periphery."""
         conn = CorePeripheryRandom(
             core_size=0.1,  # 10% core
-            core_prob=0.7,
+            core_core_prob=0.7,
             core_periphery_prob=0.15,
-            periphery_prob=0.03,
+            periphery_periphery_prob=0.03,
             seed=42
         )
         result = conn(pre_size=200, post_size=200)
@@ -1248,9 +1301,9 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test network with large core and small periphery."""
         conn = CorePeripheryRandom(
             core_size=0.8,  # 80% core
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_periphery_prob=0.05,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1262,9 +1315,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test with all probabilities set to zero."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.0,
+            core_core_prob=0.0,
             core_periphery_prob=0.0,
-            periphery_prob=0.0,
+            periphery_core_prob=0.0,
+            periphery_periphery_prob=0.0,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1278,9 +1332,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test with high connection probabilities."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.9,
+            core_core_prob=0.9,
             core_periphery_prob=0.8,
-            periphery_prob=0.7,
+            periphery_core_prob=0.8,
+            periphery_periphery_prob=0.7,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1292,9 +1347,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test network with only core-core connections."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.0,
-            periphery_prob=0.0,
+            periphery_core_prob=0.0,
+            periphery_periphery_prob=0.0,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1310,9 +1366,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test network with only periphery-periphery connections."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.0,
+            core_core_prob=0.0,
             core_periphery_prob=0.0,
-            periphery_prob=0.3,
+            periphery_core_prob=0.0,
+            periphery_periphery_prob=0.3,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1328,9 +1385,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test network with only core-periphery connections."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.0,
+            core_core_prob=0.0,
             core_periphery_prob=0.3,
-            periphery_prob=0.0,
+            periphery_core_prob=0.3,
+            periphery_periphery_prob=0.0,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1349,9 +1407,9 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test core-periphery network with weights and delays."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_periphery_prob=0.05,
             weight=1.5 * u.nS,
             delay=2.0 * u.ms,
             seed=42
@@ -1371,9 +1429,9 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test with custom weight initializer."""
         conn = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_periphery_prob=0.05,
             weight=Normal(mean=1.0 * u.nS, std=0.2 * u.nS),
             seed=42
         )
@@ -1388,18 +1446,18 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test that same seed produces same results."""
         conn1 = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_periphery_prob=0.05,
             seed=100
         )
         result1 = conn1(pre_size=100, post_size=100)
 
         conn2 = CorePeripheryRandom(
             core_size=20,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_periphery_prob=0.05,
             seed=100
         )
         result2 = conn2(pre_size=100, post_size=100)
@@ -1413,10 +1471,10 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test that all expected metadata is present."""
         conn = CorePeripheryRandom(
             core_size=25,
-            core_prob=0.6,
+            core_core_prob=0.6,
             core_periphery_prob=0.25,
-            periphery_prob=0.08,
-            bidirectional_core_periphery=False,
+            periphery_core_prob=0.15,
+            periphery_periphery_prob=0.08,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1424,26 +1482,26 @@ class TestCorePeripheryRandom(unittest.TestCase):
         metadata = result.metadata
         self.assertIn('pattern', metadata)
         self.assertIn('core_size', metadata)
-        self.assertIn('core_prob', metadata)
+        self.assertIn('core_core_prob', metadata)
         self.assertIn('core_periphery_prob', metadata)
-        self.assertIn('periphery_prob', metadata)
-        self.assertIn('bidirectional_core_periphery', metadata)
+        self.assertIn('periphery_core_prob', metadata)
+        self.assertIn('periphery_periphery_prob', metadata)
 
         self.assertEqual(metadata['pattern'], 'core_periphery')
         self.assertEqual(metadata['core_size'], 25)
-        self.assertEqual(metadata['core_prob'], 0.6)
+        self.assertEqual(metadata['core_core_prob'], 0.6)
         self.assertEqual(metadata['core_periphery_prob'], 0.25)
-        self.assertEqual(metadata['periphery_prob'], 0.08)
-        self.assertEqual(metadata['bidirectional_core_periphery'], False)
+        self.assertEqual(metadata['periphery_core_prob'], 0.15)
+        self.assertEqual(metadata['periphery_periphery_prob'], 0.08)
 
     @pytest.mark.skip(reason="too slow for regular test runs")
     def test_large_network(self):
         """Test with a larger network to ensure scalability."""
         conn = CorePeripheryRandom(
             core_size=0.15,  # 15% core
-            core_prob=0.3,
+            core_core_prob=0.3,
             core_periphery_prob=0.1,
-            periphery_prob=0.02,
+            periphery_periphery_prob=0.02,
             seed=42
         )
         result = conn(pre_size=5000, post_size=5000)
@@ -1461,9 +1519,9 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test with minimal core size (1 neuron)."""
         conn = CorePeripheryRandom(
             core_size=1,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_periphery_prob=0.05,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1476,9 +1534,9 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test that tuple pre_size/post_size is handled correctly."""
         conn = CorePeripheryRandom(
             core_size=0.2,
-            core_prob=0.5,
+            core_core_prob=0.5,
             core_periphery_prob=0.2,
-            periphery_prob=0.05,
+            periphery_periphery_prob=0.05,
             seed=42
         )
         result = conn(pre_size=(10, 10), post_size=(10, 10))
@@ -1491,9 +1549,9 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test distribution of different connection types."""
         conn = CorePeripheryRandom(
             core_size=30,
-            core_prob=0.8,
+            core_core_prob=0.8,
             core_periphery_prob=0.2,
-            periphery_prob=0.1,
+            periphery_periphery_prob=0.1,
             seed=42
         )
         result = conn(pre_size=100, post_size=100)
@@ -1532,9 +1590,9 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test with very small network."""
         conn = CorePeripheryRandom(
             core_size=2,
-            core_prob=0.8,
+            core_core_prob=0.8,
             core_periphery_prob=0.5,
-            periphery_prob=0.3,
+            periphery_periphery_prob=0.3,
             seed=42
         )
         result = conn(pre_size=5, post_size=5)
@@ -1551,8 +1609,8 @@ class TestCorePeripheryRandom(unittest.TestCase):
         result = conn(pre_size=100, post_size=100)
 
         # Check default values
-        self.assertEqual(result.metadata['core_prob'], 0.5)
+        self.assertEqual(result.metadata['core_core_prob'], 0.5)
         self.assertEqual(result.metadata['core_periphery_prob'], 0.2)
-        self.assertEqual(result.metadata['periphery_prob'], 0.05)
-        self.assertEqual(result.metadata['bidirectional_core_periphery'], True)
+        self.assertEqual(result.metadata['periphery_core_prob'], 0.2)
+        self.assertEqual(result.metadata['periphery_periphery_prob'], 0.05)
         self.assertGreater(result.n_connections, 0)

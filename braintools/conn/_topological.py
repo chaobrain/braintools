@@ -1392,19 +1392,18 @@ class CorePeripheryRandom(PointConnectivity):
         Size of the core. If int, specifies the exact number of core neurons.
         If float in (0, 1), specifies the proportion of neurons in the core.
         Core neurons are the first core_size neurons in the population.
-    core_prob : float, default=0.5
-        Connection probability within the core. Higher values create a more densely
-        connected core, which is characteristic of core-periphery networks.
+    core_core_prob : float, default=0.5
+        Connection probability within the core (core→core). Higher values create a more
+        densely connected core, which is characteristic of core-periphery networks.
     core_periphery_prob : float, default=0.2
-        Connection probability from core to periphery and periphery to core.
-        This parameter controls the integration between core and periphery.
-    periphery_prob : float, default=0.05
-        Connection probability within the periphery. Typically much lower than core_prob,
-        creating sparse peripheral connectivity.
-    bidirectional_core_periphery : bool, default=True
-        If True, both core→periphery and periphery→core connections are generated with
-        core_periphery_prob. If False, only one direction is generated based on which
-        neuron is in the core.
+        Connection probability from core to periphery (core→periphery).
+        This parameter controls how strongly core neurons project to periphery.
+    periphery_core_prob : float, default=0.2
+        Connection probability from periphery to core (periphery→core).
+        This parameter controls how periphery neurons feed back to core.
+    periphery_periphery_prob : float, default=0.05
+        Connection probability within the periphery (periphery→periphery).
+        Typically much lower than core_core_prob, creating sparse peripheral connectivity.
     weight : Initializer, optional
         Weight initialization for each connection. Can be a scalar value, array,
         or an Initializer instance for more complex initialization patterns.
@@ -1423,7 +1422,9 @@ class CorePeripheryRandom(PointConnectivity):
     - Core neurons are selected from the first core_size neurons (indices 0 to core_size-1)
     - Self-connections are automatically excluded
     - Core-periphery structure can be quantified using correlation measures
-    - Typical parameter regime: core_prob >> core_periphery_prob > periphery_prob
+    - Typical parameter regime: core_core_prob >> core_periphery_prob ≈ periphery_core_prob > periphery_periphery_prob
+    - Unlike the previous bidirectional parameter, now core→periphery and periphery→core
+      probabilities are controlled independently for more flexibility
 
     References
     ----------
@@ -1440,33 +1441,38 @@ class CorePeripheryRandom(PointConnectivity):
 
         >>> import brainunit as u
         >>> from braintools.conn import CorePeripheryRandom
-        >>> cp = CorePeripheryRandom(core_size=0.2, core_prob=0.5, periphery_prob=0.05)
+        >>> cp = CorePeripheryRandom(
+        ...     core_size=0.2,
+        ...     core_core_prob=0.5,
+        ...     periphery_periphery_prob=0.05
+        ... )
         >>> result = cp(pre_size=1000, post_size=1000)
 
-    Create a network with fixed core size:
+    Create a network with fixed core size and asymmetric core-periphery connections:
 
     .. code-block:: python
 
         >>> cp = CorePeripheryRandom(
         ...     core_size=100,
-        ...     core_prob=0.6,
-        ...     core_periphery_prob=0.2,
-        ...     periphery_prob=0.03,
+        ...     core_core_prob=0.6,
+        ...     core_periphery_prob=0.25,      # Strong core→periphery
+        ...     periphery_core_prob=0.15,      # Weaker periphery→core
+        ...     periphery_periphery_prob=0.03,
         ...     weight=1.0 * u.nS,
         ...     delay=2.0 * u.ms
         ... )
         >>> result = cp(pre_size=1000, post_size=1000)
 
-    Create a network with unidirectional core-periphery connections:
+    Create a network with strong feedback from periphery to core:
 
     .. code-block:: python
 
         >>> cp = CorePeripheryRandom(
         ...     core_size=0.15,
-        ...     core_prob=0.7,
-        ...     core_periphery_prob=0.25,
-        ...     periphery_prob=0.02,
-        ...     bidirectional_core_periphery=False
+        ...     core_core_prob=0.7,
+        ...     core_periphery_prob=0.2,
+        ...     periphery_core_prob=0.3,       # Strong feedback
+        ...     periphery_periphery_prob=0.02
         ... )
         >>> result = cp(pre_size=800, post_size=800)
 
@@ -1477,7 +1483,7 @@ class CorePeripheryRandom(PointConnectivity):
         >>> from braintools.init import Normal
         >>> cp = CorePeripheryRandom(
         ...     core_size=200,
-        ...     core_prob=0.5,
+        ...     core_core_prob=0.5,
         ...     weight=Normal(mean=1.0, std=0.2)
         ... )
         >>> result = cp(pre_size=1000, post_size=1000)
@@ -1486,20 +1492,20 @@ class CorePeripheryRandom(PointConnectivity):
     def __init__(
         self,
         core_size: int | float,
-        core_prob: float = 0.5,
+        core_core_prob: float = 0.5,
         core_periphery_prob: float = 0.2,
-        periphery_prob: float = 0.05,
-        bidirectional_core_periphery: bool = True,
+        periphery_core_prob: float = 0.2,
+        periphery_periphery_prob: float = 0.05,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.core_size = core_size
-        self.core_prob = core_prob
+        self.core_core_prob = core_core_prob
         self.core_periphery_prob = core_periphery_prob
-        self.periphery_prob = periphery_prob
-        self.bidirectional_core_periphery = bidirectional_core_periphery
+        self.periphery_core_prob = periphery_core_prob
+        self.periphery_periphery_prob = periphery_periphery_prob
         self.weight_init = weight
         self.delay_init = delay
 
@@ -1542,16 +1548,16 @@ class CorePeripheryRandom(PointConnectivity):
                 # Determine connection probability
                 if is_i_core and is_j_core:
                     # Core to core
-                    prob = self.core_prob
+                    prob = self.core_core_prob
                 elif is_i_core and not is_j_core:
                     # Core to periphery
-                    prob = self.core_periphery_prob if self.bidirectional_core_periphery else self.core_periphery_prob
+                    prob = self.core_periphery_prob
                 elif not is_i_core and is_j_core:
                     # Periphery to core
-                    prob = self.core_periphery_prob if self.bidirectional_core_periphery else self.core_periphery_prob
+                    prob = self.periphery_core_prob
                 else:
                     # Periphery to periphery
-                    prob = self.periphery_prob
+                    prob = self.periphery_periphery_prob
 
                 if self.rng.random() < prob:
                     pre_indices.append(i)
@@ -1560,10 +1566,10 @@ class CorePeripheryRandom(PointConnectivity):
         metadata = {
             'pattern': 'core_periphery',
             'core_size': n_core,
-            'core_prob': self.core_prob,
+            'core_core_prob': self.core_core_prob,
             'core_periphery_prob': self.core_periphery_prob,
-            'periphery_prob': self.periphery_prob,
-            'bidirectional_core_periphery': self.bidirectional_core_periphery
+            'periphery_core_prob': self.periphery_core_prob,
+            'periphery_periphery_prob': self.periphery_periphery_prob,
         }
         if len(pre_indices) == 0:
             return ConnectionResult(
