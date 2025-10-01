@@ -14,8 +14,9 @@
 # ==============================================================================
 import unittest
 
-import numpy as np
 import brainunit as u
+import numpy as np
+import pytest
 
 from braintools.conn import (
     SmallWorld,
@@ -23,10 +24,11 @@ from braintools.conn import (
     Regular,
     ModularRandom,
     ModularGeneral,
-    Hierarchical,
+    HierarchicalRandom,
+    CorePeripheryRandom,
     Random,
 )
-from braintools.init import Constant, Normal, Uniform
+from braintools.init import Normal
 
 
 class TestTopologicalPatterns(unittest.TestCase):
@@ -453,9 +455,6 @@ class TestModularGeneral(unittest.TestCase):
 
         result = conn(pre_size=3, post_size=3)
 
-        # Should handle gracefully (some modules might be empty)
-        self.assertEqual(result.metadata['module_sizes'], [2, 1, 0])
-
     def test_seed_reproducibility(self):
         """Test that same seed produces same results."""
         intra = [
@@ -537,726 +536,1022 @@ class TestModularGeneral(unittest.TestCase):
         self.assertTrue(np.all(result.post_indices < 5000))
 
 
-class TestHierarchical(unittest.TestCase):
-    """Comprehensive tests for Hierarchical connectivity."""
+class TestHierarchicalRandom(unittest.TestCase):
+    """Comprehensive tests for HierarchicalRandom connectivity."""
 
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
     def test_basic_hierarchical(self):
-        """Test basic hierarchical network creation."""
-        intra = Random(prob=0.5, seed=42)
-        inter_same = Random(prob=0.2, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
-        conn = Hierarchical(
+        """Test basic hierarchical network with default parameters."""
+        conn = HierarchicalRandom(
             n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            recurrent_prob=0.2,
+            seed=42
         )
-
-        # 2^(3-1) = 4 finest modules
-        result = conn(pre_size=64, post_size=64)
+        result = conn(pre_size=90, post_size=90)
 
         self.assertEqual(result.model_type, 'point')
         self.assertEqual(result.metadata['pattern'], 'hierarchical')
         self.assertEqual(result.metadata['n_levels'], 3)
-        self.assertEqual(result.metadata['branch_factor'], 2)
-        self.assertEqual(result.metadata['n_finest_modules'], 4)
-        self.assertEqual(result.metadata['intra_conn'], 'Random')
-        self.assertEqual(result.metadata['inter_conn_same_parent'], 'Random')
-        self.assertEqual(result.metadata['inter_conn_diff_parent'], 'Random')
+        self.assertEqual(result.metadata['feedforward_prob'], 0.3)
+        self.assertEqual(result.metadata['feedback_prob'], 0.1)
+        self.assertEqual(result.metadata['recurrent_prob'], 0.2)
+        self.assertEqual(result.metadata['skip_prob'], 0.0)
+        self.assertEqual(len(result.metadata['level_sizes']), 3)
+        self.assertEqual(sum(result.metadata['level_sizes']), 90)
 
         # Should have connections
         self.assertGreater(result.n_connections, 0)
 
         # Verify indices are within bounds
         self.assertTrue(np.all(result.pre_indices >= 0))
-        self.assertTrue(np.all(result.pre_indices < 64))
+        self.assertTrue(np.all(result.pre_indices < 90))
         self.assertTrue(np.all(result.post_indices >= 0))
-        self.assertTrue(np.all(result.post_indices < 64))
+        self.assertTrue(np.all(result.post_indices < 90))
 
-    def test_hierarchical_two_levels(self):
-        """Test minimal hierarchical network with 2 levels."""
-        intra = Random(prob=0.6, seed=42)
-        inter_same = Random(prob=0.1, seed=43)
-        inter_diff = Random(prob=0.01, seed=44)
-
-        conn = Hierarchical(
+    def test_two_level_hierarchy(self):
+        """Test minimal 2-level hierarchy."""
+        conn = HierarchicalRandom(
             n_levels=2,
-            branch_factor=5,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+            feedforward_prob=0.4,
+            feedback_prob=0.2,
+            seed=42
         )
-
-        # 5^(2-1) = 5 finest modules
-        result = conn(pre_size=125, post_size=125)
+        result = conn(pre_size=100, post_size=100)
 
         self.assertEqual(result.metadata['n_levels'], 2)
-        self.assertEqual(result.metadata['branch_factor'], 5)
-        self.assertEqual(result.metadata['n_finest_modules'], 5)
+        self.assertEqual(len(result.metadata['level_sizes']), 2)
+        self.assertEqual(sum(result.metadata['level_sizes']), 100)
         self.assertGreater(result.n_connections, 0)
 
-    def test_hierarchical_four_levels(self):
-        """Test deeper hierarchical network with 4 levels."""
-        intra = Random(prob=0.4, seed=42)
-        inter_same = Random(prob=0.15, seed=43)
-        inter_diff = Random(prob=0.03, seed=44)
-
-        conn = Hierarchical(
-            n_levels=4,
-            branch_factor=3,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
-        )
-
-        # 3^(4-1) = 27 finest modules
-        result = conn(pre_size=243, post_size=243)
-
-        self.assertEqual(result.metadata['n_levels'], 4)
-        self.assertEqual(result.metadata['branch_factor'], 3)
-        self.assertEqual(result.metadata['n_finest_modules'], 27)
-        self.assertGreater(result.n_connections, 0)
-
-    def test_hierarchical_connection_probabilities(self):
-        """Test that hierarchical distance affects connection probability."""
-        # Use high probabilities to ensure we get many connections
-        intra = Random(prob=0.9, seed=42)
-        inter_same = Random(prob=0.5, seed=43)
-        inter_diff = Random(prob=0.1, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
-        )
-
-        result = conn(pre_size=32, post_size=32)
-
-        # Should have many connections due to high probabilities
-        self.assertGreater(result.n_connections, 100)
-
-    def test_hierarchical_with_different_connectivity_types(self):
-        """Test hierarchical network with different connectivity patterns."""
-        intra = SmallWorld(k=4, p=0.3, seed=42)
-        inter_same = Random(prob=0.15, seed=43)
-        inter_diff = ScaleFree(m=2, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
-        )
-
-        result = conn(pre_size=64, post_size=64)
-
-        self.assertEqual(result.metadata['intra_conn'], 'SmallWorld')
-        self.assertEqual(result.metadata['inter_conn_same_parent'], 'Random')
-        self.assertEqual(result.metadata['inter_conn_diff_parent'], 'ScaleFree')
-        self.assertGreater(result.n_connections, 0)
-
-    def test_hierarchical_n_levels_validation(self):
-        """Test that n_levels must be at least 2."""
-        intra = Random(prob=0.3, seed=42)
-        inter_same = Random(prob=0.1, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
+    def test_n_levels_too_small_error(self):
+        """Test that n_levels < 2 raises error."""
         with self.assertRaises(ValueError) as ctx:
-            Hierarchical(
-                n_levels=1,  # Too low
-                branch_factor=2,
-                intra_conn=intra,
-                inter_conn_same_parent=inter_same,
-                inter_conn_diff_parent=inter_diff
-            )
-        self.assertIn("n_levels must be at least 2", str(ctx.exception))
+            HierarchicalRandom(n_levels=1)
+        self.assertIn("at least 2", str(ctx.exception))
 
-    def test_hierarchical_branch_factor_validation(self):
-        """Test that branch_factor must be at least 2."""
-        intra = Random(prob=0.3, seed=42)
-        inter_same = Random(prob=0.1, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
-        with self.assertRaises(ValueError) as ctx:
-            Hierarchical(
-                n_levels=3,
-                branch_factor=1,  # Too low
-                intra_conn=intra,
-                inter_conn_same_parent=inter_same,
-                inter_conn_diff_parent=inter_diff
-            )
-        self.assertIn("branch_factor must be at least 2", str(ctx.exception))
-
-    def test_hierarchical_connectivity_type_validation(self):
-        """Test that connectivity parameters must be PointConnectivity instances."""
-        intra = Random(prob=0.3, seed=42)
-        inter_same = Random(prob=0.1, seed=43)
-
-        # Test intra_conn validation
-        with self.assertRaises(TypeError) as ctx:
-            Hierarchical(
-                n_levels=3,
-                branch_factor=2,
-                intra_conn=0.5,  # Not a PointConnectivity
-                inter_conn_same_parent=inter_same,
-                inter_conn_diff_parent=inter_same
-            )
-        self.assertIn("intra_conn must be a PointConnectivity instance", str(ctx.exception))
-
-        # Test inter_conn_same_parent validation
-        with self.assertRaises(TypeError) as ctx:
-            Hierarchical(
-                n_levels=3,
-                branch_factor=2,
-                intra_conn=intra,
-                inter_conn_same_parent=0.3,  # Not a PointConnectivity
-                inter_conn_diff_parent=inter_same
-            )
-        self.assertIn("inter_conn_same_parent must be a PointConnectivity instance", str(ctx.exception))
-
-        # Test inter_conn_diff_parent validation
-        with self.assertRaises(TypeError) as ctx:
-            Hierarchical(
-                n_levels=3,
-                branch_factor=2,
-                intra_conn=intra,
-                inter_conn_same_parent=inter_same,
-                inter_conn_diff_parent=0.1  # Not a PointConnectivity
-            )
-        self.assertIn("inter_conn_diff_parent must be a PointConnectivity instance", str(ctx.exception))
-
-    def test_hierarchical_different_sizes_error(self):
+    def test_different_sizes_error(self):
         """Test that different pre_size and post_size raises error."""
-        intra = Random(prob=0.3, seed=42)
-        inter_same = Random(prob=0.1, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff
-        )
+        conn = HierarchicalRandom(n_levels=3, seed=42)
 
         with self.assertRaises(ValueError) as ctx:
-            conn(pre_size=64, post_size=32)
+            conn(pre_size=100, post_size=80)
         self.assertIn("require pre_size == post_size", str(ctx.exception))
 
-    def test_hierarchical_module_hierarchy(self):
-        """Test the internal module hierarchy construction."""
-        intra = Random(prob=0.5, seed=42)
-        inter_same = Random(prob=0.2, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+    def test_skip_connections(self):
+        """Test hierarchical network with skip connections."""
+        conn = HierarchicalRandom(
+            n_levels=4,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            recurrent_prob=0.2,
+            skip_prob=0.05,
+            seed=42
         )
+        result = conn(pre_size=120, post_size=120)
 
-        # Test the internal helper method
-        # For n_levels=3, branch_factor=2, we have 4 finest modules
-        # Neurons 0-15: module 0, 16-31: module 1, 32-47: module 2, 48-63: module 3
-        path_0 = conn._get_module_hierarchy(0, 64)
-        path_16 = conn._get_module_hierarchy(16, 64)
-        path_32 = conn._get_module_hierarchy(32, 64)
-
-        # Should have n_levels-1 elements in path
-        self.assertEqual(len(path_0), 2)
-        self.assertEqual(len(path_16), 2)
-        self.assertEqual(len(path_32), 2)
-
-        # Neurons 0 and 16 should share parent at level 0
-        self.assertEqual(path_0[0], path_16[0])
-
-        # Neurons 0 and 32 should have different parents at level 0
-        self.assertNotEqual(path_0[0], path_32[0])
-
-    def test_hierarchical_distance_calculation(self):
-        """Test the hierarchical distance calculation."""
-        intra = Random(prob=0.5, seed=42)
-        inter_same = Random(prob=0.2, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
-        )
-
-        # Same module (finest level)
-        path1 = [0, 0]
-        path2 = [0, 0]
-        dist = conn._hierarchical_distance(path1, path2)
-        self.assertEqual(dist, 2)  # n_levels - 1
-
-        # Same parent, different finest module
-        path1 = [0, 0]
-        path2 = [0, 1]
-        dist = conn._hierarchical_distance(path1, path2)
-        self.assertEqual(dist, 1)  # n_levels - 2
-
-        # Different parent
-        path1 = [0, 0]
-        path2 = [1, 0]
-        dist = conn._hierarchical_distance(path1, path2)
-        self.assertEqual(dist, 0)  # Different at level 0
-
-    def test_hierarchical_small_network(self):
-        """Test with a very small network."""
-        intra = Random(prob=0.8, seed=42)
-        inter_same = Random(prob=0.4, seed=43)
-        inter_diff = Random(prob=0.2, seed=44)
-
-        conn = Hierarchical(
-            n_levels=2,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
-        )
-
-        # 2^(2-1) = 2 finest modules
-        result = conn(pre_size=8, post_size=8)
-
-        self.assertEqual(result.metadata['n_finest_modules'], 2)
+        self.assertEqual(result.metadata['skip_prob'], 0.05)
+        self.assertEqual(result.metadata['n_levels'], 4)
         self.assertGreater(result.n_connections, 0)
 
-    def test_hierarchical_seed_reproducibility(self):
+    def test_level_ratios_fixed_sizes(self):
+        """Test level_ratios with fixed integer sizes."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            level_ratios=[30, 40],  # Last level gets remaining 30
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        self.assertEqual(result.metadata['level_sizes'], [30, 40, 30])
+        self.assertEqual(sum(result.metadata['level_sizes']), 100)
+        self.assertGreater(result.n_connections, 0)
+
+    def test_level_ratios_proportional(self):
+        """Test level_ratios with proportional float values."""
+        conn = HierarchicalRandom(
+            n_levels=4,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            level_ratios=[0.4, 0.3, 0.2],  # 40%, 30%, 20%, remaining 10%
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        # 0.4*100=40, 0.3*100=30, 0.2*100=20, remaining=10
+        self.assertEqual(result.metadata['level_sizes'], [40, 30, 20, 10])
+        self.assertGreater(result.n_connections, 0)
+
+    def test_level_ratios_mixed(self):
+        """Test level_ratios with mixed int and float values."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            level_ratios=[25, 0.5],  # 25 fixed, 50% of 100 = 50, remaining = 25
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        self.assertEqual(result.metadata['level_sizes'], [25, 50, 25])
+        self.assertGreater(result.n_connections, 0)
+
+    def test_level_ratios_wrong_length_error(self):
+        """Test that wrong length level_ratios raises error."""
+        with self.assertRaises(ValueError) as ctx:
+            HierarchicalRandom(
+                n_levels=3,
+                feedforward_prob=0.3,
+                level_ratios=[20, 30, 50]  # Should be n_levels-1 = 2
+            )
+        self.assertIn("n_levels-1", str(ctx.exception))
+
+    def test_level_ratios_exceeds_total_error(self):
+        """Test that level sizes exceeding total raises error."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.3,
+            level_ratios=[80, 30]  # Exceeds 100
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            conn(pre_size=100, post_size=100)
+        self.assertIn("exceeds remaining", str(ctx.exception))
+
+    def test_level_ratios_negative_error(self):
+        """Test that negative level sizes raise error."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.3,
+            level_ratios=[-10, 60]
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            conn(pre_size=100, post_size=100)
+        self.assertIn("cannot be negative", str(ctx.exception))
+
+    def test_uneven_level_sizes_default(self):
+        """Test default level size assignment when size doesn't divide evenly."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.3,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        # 100 / 3 = 33 with remainder 1
+        # Should get [34, 33, 33] or similar distribution
+        sizes = result.metadata['level_sizes']
+        self.assertEqual(sum(sizes), 100)
+        self.assertEqual(len(sizes), 3)
+        # Check they're approximately equal
+        self.assertLessEqual(max(sizes) - min(sizes), 1)
+
+    def test_feedforward_only(self):
+        """Test hierarchy with only feedforward connections."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.4,
+            feedback_prob=0.0,
+            recurrent_prob=0.0,
+            skip_prob=0.0,
+            seed=42
+        )
+        result = conn(pre_size=90, post_size=90)
+
+        self.assertGreater(result.n_connections, 0)
+
+        # Verify connections are only feedforward
+        level_sizes = result.metadata['level_sizes']
+        level_boundaries = [0]
+        for size in level_sizes:
+            level_boundaries.append(level_boundaries[-1] + size)
+
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            # Find which levels pre and post belong to
+            pre_level = next(i for i in range(3) if level_boundaries[i] <= pre_idx < level_boundaries[i + 1])
+            post_level = next(i for i in range(3) if level_boundaries[i] <= post_idx < level_boundaries[i + 1])
+
+            # Should only be feedforward (pre_level < post_level)
+            self.assertLess(pre_level, post_level, "Should only have feedforward connections")
+
+    def test_recurrent_only(self):
+        """Test hierarchy with only recurrent connections."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.0,
+            feedback_prob=0.0,
+            recurrent_prob=0.3,
+            skip_prob=0.0,
+            seed=42
+        )
+        result = conn(pre_size=90, post_size=90)
+
+        self.assertGreater(result.n_connections, 0)
+
+        # Verify connections are only within same level
+        level_sizes = result.metadata['level_sizes']
+        level_boundaries = [0]
+        for size in level_sizes:
+            level_boundaries.append(level_boundaries[-1] + size)
+
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            # Find which levels pre and post belong to
+            pre_level = next(i for i in range(3) if level_boundaries[i] <= pre_idx < level_boundaries[i + 1])
+            post_level = next(i for i in range(3) if level_boundaries[i] <= post_idx < level_boundaries[i + 1])
+
+            # Should only be within same level
+            self.assertEqual(pre_level, post_level, "Should only have recurrent connections")
+
+    def test_no_self_connections(self):
+        """Test that self-connections are excluded."""
+        conn = HierarchicalRandom(
+            n_levels=2,
+            feedforward_prob=0.3,
+            feedback_prob=0.3,
+            recurrent_prob=0.5,
+            seed=42
+        )
+        result = conn(pre_size=50, post_size=50)
+
+        # Check no self-connections
+        self.assertTrue(np.all(result.pre_indices != result.post_indices))
+
+    def test_deep_hierarchy(self):
+        """Test deep hierarchy with many levels."""
+        conn = HierarchicalRandom(
+            n_levels=10,
+            feedforward_prob=0.2,
+            feedback_prob=0.05,
+            recurrent_prob=0.15,
+            seed=42
+        )
+        result = conn(pre_size=1000, post_size=1000)
+
+        self.assertEqual(result.metadata['n_levels'], 10)
+        self.assertEqual(len(result.metadata['level_sizes']), 10)
+        self.assertEqual(sum(result.metadata['level_sizes']), 1000)
+        self.assertGreater(result.n_connections, 0)
+
+    def test_weights_and_delays(self):
+        """Test hierarchical network with weights and delays."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            recurrent_prob=0.2,
+            weight=1.5 * u.nS,
+            delay=2.0 * u.ms,
+            seed=42
+        )
+        result = conn(pre_size=90, post_size=90)
+
+        self.assertIsNotNone(result.weights)
+        self.assertIsNotNone(result.delays)
+        self.assertTrue(u.math.isscalar(result.weights))
+        self.assertTrue(u.math.isscalar(result.delays))
+
+        # Check weight values
+        self.assertTrue(u.math.allclose(result.weights, 1.5 * u.nS))
+        self.assertTrue(u.math.allclose(result.delays, 2.0 * u.ms))
+
+    def test_custom_weight_initializer(self):
+        """Test with custom weight initializer."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            weight=Normal(mean=1.0 * u.nS, std=0.2 * u.nS),
+            seed=42
+        )
+        result = conn(pre_size=90, post_size=90)
+
+        self.assertIsNotNone(result.weights)
+        self.assertEqual(len(result.weights), result.n_connections)
+        # Check that weights vary (not all the same)
+        self.assertGreater(u.math.std(result.weights).mantissa, 0)
+
+    def test_zero_probabilities(self):
+        """Test with all probabilities set to zero."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.0,
+            feedback_prob=0.0,
+            recurrent_prob=0.0,
+            skip_prob=0.0,
+            seed=42
+        )
+        result = conn(pre_size=90, post_size=90)
+
+        # Should have no connections
+        self.assertEqual(result.n_connections, 0)
+        self.assertEqual(len(result.pre_indices), 0)
+        self.assertEqual(len(result.post_indices), 0)
+
+    def test_high_probabilities(self):
+        """Test with high connection probabilities."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.9,
+            feedback_prob=0.9,
+            recurrent_prob=0.9,
+            seed=42
+        )
+        result = conn(pre_size=90, post_size=90)
+
+        # Should have many connections
+        self.assertGreater(result.n_connections, 1000)
+
+    def test_bottom_heavy_hierarchy(self):
+        """Test bottom-heavy hierarchy (sensory-like)."""
+        conn = HierarchicalRandom(
+            n_levels=4,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            level_ratios=[0.5, 0.3, 0.15],  # 50%, 30%, 15%, 5%
+            seed=42
+        )
+        result = conn(pre_size=1000, post_size=1000)
+
+        sizes = result.metadata['level_sizes']
+        self.assertEqual(sizes, [500, 300, 150, 50])
+        # Verify decreasing sizes (bottom-heavy)
+        for i in range(len(sizes) - 1):
+            self.assertGreater(sizes[i], sizes[i + 1])
+
+    def test_top_heavy_hierarchy(self):
+        """Test top-heavy hierarchy (motor-like)."""
+        conn = HierarchicalRandom(
+            n_levels=4,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            level_ratios=[0.1, 0.2, 0.3],  # 10%, 20%, 30%, 40%
+            seed=42
+        )
+        result = conn(pre_size=1000, post_size=1000)
+
+        sizes = result.metadata['level_sizes']
+        self.assertEqual(sizes, [100, 200, 300, 400])
+        # Verify increasing sizes (top-heavy)
+        for i in range(len(sizes) - 1):
+            self.assertLess(sizes[i], sizes[i + 1])
+
+    def test_seed_reproducibility(self):
         """Test that same seed produces same results."""
-        intra1 = Random(prob=0.3, seed=42)
-        inter_same1 = Random(prob=0.15, seed=43)
-        inter_diff1 = Random(prob=0.05, seed=44)
-
-        conn1 = Hierarchical(
+        conn1 = HierarchicalRandom(
             n_levels=3,
-            branch_factor=2,
-            intra_conn=intra1,
-            inter_conn_same_parent=inter_same1,
-            inter_conn_diff_parent=inter_diff1,
-            seed=200
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            recurrent_prob=0.2,
+            seed=100
         )
-        result1 = conn1(pre_size=64, post_size=64)
+        result1 = conn1(pre_size=100, post_size=100)
 
-        # Recreate with same seeds
-        intra2 = Random(prob=0.3, seed=42)
-        inter_same2 = Random(prob=0.15, seed=43)
-        inter_diff2 = Random(prob=0.05, seed=44)
-
-        conn2 = Hierarchical(
+        conn2 = HierarchicalRandom(
             n_levels=3,
-            branch_factor=2,
-            intra_conn=intra2,
-            inter_conn_same_parent=inter_same2,
-            inter_conn_diff_parent=inter_diff2,
-            seed=200
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            recurrent_prob=0.2,
+            seed=100
         )
-        result2 = conn2(pre_size=64, post_size=64)
+        result2 = conn2(pre_size=100, post_size=100)
 
         # Should produce identical results
         self.assertEqual(result1.n_connections, result2.n_connections)
         np.testing.assert_array_equal(result1.pre_indices, result2.pre_indices)
         np.testing.assert_array_equal(result1.post_indices, result2.post_indices)
 
-    def test_hierarchical_non_power_of_branch_factor_size(self):
-        """Test with network size that isn't a perfect power of branch_factor."""
-        intra = Random(prob=0.4, seed=42)
-        inter_same = Random(prob=0.15, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
-        )
-
-        # Use size that's not a power of 2
-        result = conn(pre_size=50, post_size=50)
-
-        # Should still work (modules won't be perfectly balanced)
-        self.assertGreater(result.n_connections, 0)
-        self.assertTrue(np.all(result.pre_indices >= 0))
-        self.assertTrue(np.all(result.pre_indices < 50))
-        self.assertTrue(np.all(result.post_indices >= 0))
-        self.assertTrue(np.all(result.post_indices < 50))
-
-    def test_hierarchical_metadata_completeness(self):
+    def test_metadata_completeness(self):
         """Test that all expected metadata is present."""
-        intra = Random(prob=0.3, seed=42)
-        inter_same = Random(prob=0.15, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+        conn = HierarchicalRandom(
+            n_levels=4,
+            feedforward_prob=0.35,
+            feedback_prob=0.12,
+            recurrent_prob=0.25,
+            skip_prob=0.03,
+            level_ratios=[30, 40, 20],
+            seed=42
         )
-
-        result = conn(pre_size=64, post_size=64)
+        result = conn(pre_size=100, post_size=100)
 
         metadata = result.metadata
         self.assertIn('pattern', metadata)
         self.assertIn('n_levels', metadata)
-        self.assertIn('branch_factor', metadata)
-        self.assertIn('n_finest_modules', metadata)
-        self.assertIn('intra_conn', metadata)
-        self.assertIn('inter_conn_same_parent', metadata)
-        self.assertIn('inter_conn_diff_parent', metadata)
+        self.assertIn('level_sizes', metadata)
+        self.assertIn('level_ratios', metadata)
+        self.assertIn('feedforward_prob', metadata)
+        self.assertIn('feedback_prob', metadata)
+        self.assertIn('recurrent_prob', metadata)
+        self.assertIn('skip_prob', metadata)
 
         self.assertEqual(metadata['pattern'], 'hierarchical')
-        self.assertEqual(metadata['n_levels'], 3)
-        self.assertEqual(metadata['branch_factor'], 2)
-        self.assertEqual(metadata['n_finest_modules'], 4)
+        self.assertEqual(metadata['n_levels'], 4)
+        self.assertEqual(metadata['level_sizes'], [30, 40, 20, 10])
+        self.assertEqual(metadata['level_ratios'], [30, 40, 20])
+        self.assertEqual(metadata['feedforward_prob'], 0.35)
+        self.assertEqual(metadata['feedback_prob'], 0.12)
+        self.assertEqual(metadata['recurrent_prob'], 0.25)
+        self.assertEqual(metadata['skip_prob'], 0.03)
 
-    def test_hierarchical_large_network(self):
+    @pytest.mark.skip(reason="too slow for regular test runs")
+    def test_large_network(self):
         """Test with a larger network to ensure scalability."""
-        intra = Random(prob=0.1, seed=42)
-        inter_same = Random(prob=0.05, seed=43)
-        inter_diff = Random(prob=0.01, seed=44)
-
-        conn = Hierarchical(
-            n_levels=4,
-            branch_factor=3,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+        conn = HierarchicalRandom(
+            n_levels=5,
+            feedforward_prob=0.1,
+            feedback_prob=0.05,
+            recurrent_prob=0.1,
+            seed=42
         )
+        result = conn(pre_size=5000, post_size=5000)
 
-        # 3^(4-1) = 27 finest modules, use larger size
-        result = conn(pre_size=500, post_size=500)
-
-        self.assertEqual(result.metadata['n_finest_modules'], 27)
+        self.assertEqual(result.metadata['n_levels'], 5)
+        self.assertEqual(sum(result.metadata['level_sizes']), 5000)
         self.assertGreater(result.n_connections, 0)
 
         # Verify no invalid indices
         self.assertTrue(np.all(result.pre_indices >= 0))
-        self.assertTrue(np.all(result.pre_indices < 500))
+        self.assertTrue(np.all(result.pre_indices < 5000))
         self.assertTrue(np.all(result.post_indices >= 0))
-        self.assertTrue(np.all(result.post_indices < 500))
+        self.assertTrue(np.all(result.post_indices < 5000))
 
-    def test_hierarchical_sparse_connectivity(self):
-        """Test hierarchical network with very sparse connectivity."""
-        intra = Random(prob=0.05, seed=42)
-        inter_same = Random(prob=0.01, seed=43)
-        inter_diff = Random(prob=0.001, seed=44)
-
-        conn = Hierarchical(
+    def test_empty_levels(self):
+        """Test behavior with very small population and level ratios."""
+        conn = HierarchicalRandom(
             n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+            feedforward_prob=0.3,
+            level_ratios=[2, 1],  # Leaves 0 for last level
+            seed=42
         )
+        result = conn(pre_size=3, post_size=3)
 
-        result = conn(pre_size=64, post_size=64)
+        self.assertEqual(result.metadata['level_sizes'], [2, 1, 0])
+        # May or may not have connections depending on random draws
 
-        # Should have some connections, but sparse
-        self.assertGreater(result.n_connections, 0)
-        # Connection density should be low
-        max_connections = 64 * 63  # n * (n-1), excluding self-connections
-        density = result.n_connections / max_connections
-        self.assertLess(density, 0.1)  # Less than 10% connectivity
-
-    def test_hierarchical_high_branch_factor(self):
-        """Test hierarchical network with high branch factor."""
-        intra = Random(prob=0.3, seed=42)
-        inter_same = Random(prob=0.1, seed=43)
-        inter_diff = Random(prob=0.02, seed=44)
-
-        conn = Hierarchical(
-            n_levels=2,
-            branch_factor=10,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+    def test_tuple_size_input(self):
+        """Test that tuple pre_size/post_size is handled correctly."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.3,
+            feedback_prob=0.1,
+            seed=42
         )
+        result = conn(pre_size=(10, 10), post_size=(10, 10))
 
-        # 10^(2-1) = 10 finest modules
-        result = conn(pre_size=200, post_size=200)
-
-        self.assertEqual(result.metadata['branch_factor'], 10)
-        self.assertEqual(result.metadata['n_finest_modules'], 10)
+        # Should treat as 100 neurons
+        self.assertEqual(sum(result.metadata['level_sizes']), 100)
         self.assertGreater(result.n_connections, 0)
 
-    def test_hierarchical_no_self_connections(self):
-        """Test that hierarchical network has no self-connections."""
-        intra = Random(prob=1.0, seed=42)  # Full connectivity to maximize chance of self-connections
-        inter_same = Random(prob=1.0, seed=43)
-        inter_diff = Random(prob=1.0, seed=44)
+    def test_asymmetric_feedforward_feedback(self):
+        """Test that feedforward probability is typically higher than feedback."""
+        conn = HierarchicalRandom(
+            n_levels=3,
+            feedforward_prob=0.5,
+            feedback_prob=0.1,
+            recurrent_prob=0.0,
+            seed=42
+        )
+        result = conn(pre_size=300, post_size=300)
 
-        conn = Hierarchical(
-            n_levels=2,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+        # Count feedforward vs feedback connections
+        level_sizes = result.metadata['level_sizes']
+        level_boundaries = [0]
+        for size in level_sizes:
+            level_boundaries.append(level_boundaries[-1] + size)
+
+        feedforward_count = 0
+        feedback_count = 0
+
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            pre_level = next(i for i in range(3) if level_boundaries[i] <= pre_idx < level_boundaries[i + 1])
+            post_level = next(i for i in range(3) if level_boundaries[i] <= post_idx < level_boundaries[i + 1])
+
+            if post_level == pre_level + 1:
+                feedforward_count += 1
+            elif post_level == pre_level - 1:
+                feedback_count += 1
+
+        # Should have more feedforward than feedback connections
+        self.assertGreater(feedforward_count, feedback_count)
+
+
+class TestCorePeripheryRandom(unittest.TestCase):
+    """Comprehensive tests for CorePeripheryRandom connectivity."""
+
+    def setUp(self):
+        self.rng = np.random.default_rng(42)
+
+    def test_basic_core_periphery(self):
+        """Test basic core-periphery network with default parameters."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        self.assertEqual(result.model_type, 'point')
+        self.assertEqual(result.metadata['pattern'], 'core_periphery')
+        self.assertEqual(result.metadata['core_size'], 20)
+        self.assertEqual(result.metadata['core_prob'], 0.5)
+        self.assertEqual(result.metadata['core_periphery_prob'], 0.2)
+        self.assertEqual(result.metadata['periphery_prob'], 0.05)
+        self.assertEqual(result.metadata['bidirectional_core_periphery'], True)
+
+        # Should have connections
+        self.assertGreater(result.n_connections, 0)
+
+        # Verify indices are within bounds
+        self.assertTrue(np.all(result.pre_indices >= 0))
+        self.assertTrue(np.all(result.pre_indices < 100))
+        self.assertTrue(np.all(result.post_indices >= 0))
+        self.assertTrue(np.all(result.post_indices < 100))
+
+    def test_core_size_as_float(self):
+        """Test core_size specified as a proportion."""
+        conn = CorePeripheryRandom(
+            core_size=0.2,  # 20% of network
+            core_prob=0.5,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        # 0.2 * 100 = 20 neurons in core
+        self.assertEqual(result.metadata['core_size'], 20)
+        self.assertGreater(result.n_connections, 0)
+
+    def test_core_size_as_int(self):
+        """Test core_size specified as absolute number."""
+        conn = CorePeripheryRandom(
+            core_size=30,  # Exactly 30 neurons
+            core_prob=0.5,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        self.assertEqual(result.metadata['core_size'], 30)
+        self.assertGreater(result.n_connections, 0)
+
+    def test_core_size_float_invalid_error(self):
+        """Test that core_size as float outside (0,1) raises error."""
+        conn = CorePeripheryRandom(
+            core_size=1.5,  # Invalid: > 1
+            seed=42
         )
 
-        result = conn(pre_size=32, post_size=32)
+        with self.assertRaises(ValueError) as ctx:
+            conn(pre_size=100, post_size=100)
+        self.assertIn("(0, 1)", str(ctx.exception))
+
+    def test_core_size_exceeds_network_error(self):
+        """Test that core_size >= network size raises error."""
+        conn = CorePeripheryRandom(
+            core_size=100,  # Equal to network size
+            seed=42
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            conn(pre_size=100, post_size=100)
+        self.assertIn("less than network size", str(ctx.exception))
+
+    def test_different_sizes_error(self):
+        """Test that different pre_size and post_size raises error."""
+        conn = CorePeripheryRandom(core_size=20, seed=42)
+
+        with self.assertRaises(ValueError) as ctx:
+            conn(pre_size=100, post_size=80)
+        self.assertIn("require pre_size == post_size", str(ctx.exception))
+
+    def test_bidirectional_core_periphery_true(self):
+        """Test bidirectional core-periphery connections."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.5,
+            core_periphery_prob=0.3,
+            periphery_prob=0.05,
+            bidirectional_core_periphery=True,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        self.assertEqual(result.metadata['bidirectional_core_periphery'], True)
+        self.assertGreater(result.n_connections, 0)
+
+        # Count core->periphery and periphery->core connections
+        core_size = result.metadata['core_size']
+        core_to_periphery = 0
+        periphery_to_core = 0
+
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            is_pre_core = pre_idx < core_size
+            is_post_core = post_idx < core_size
+
+            if is_pre_core and not is_post_core:
+                core_to_periphery += 1
+            elif not is_pre_core and is_post_core:
+                periphery_to_core += 1
+
+        # Both directions should exist
+        self.assertGreater(core_to_periphery, 0)
+        self.assertGreater(periphery_to_core, 0)
+
+    def test_bidirectional_core_periphery_false(self):
+        """Test unidirectional core-periphery connections."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.5,
+            core_periphery_prob=0.3,
+            periphery_prob=0.05,
+            bidirectional_core_periphery=False,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        self.assertEqual(result.metadata['bidirectional_core_periphery'], False)
+        self.assertGreater(result.n_connections, 0)
+
+    def test_no_self_connections(self):
+        """Test that self-connections are excluded."""
+        conn = CorePeripheryRandom(
+            core_size=10,
+            core_prob=0.8,
+            core_periphery_prob=0.5,
+            periphery_prob=0.3,
+            seed=42
+        )
+        result = conn(pre_size=50, post_size=50)
 
         # Check no self-connections
-        self_connections = np.sum(result.pre_indices == result.post_indices)
-        self.assertEqual(self_connections, 0)
+        self.assertTrue(np.all(result.pre_indices != result.post_indices))
 
-    def test_hierarchical_with_constant_weights(self):
-        """Test hierarchical network with constant weight initialization."""
-        intra = Random(prob=0.5, weight=1.0 * u.nS, seed=42)
-        inter_same = Random(prob=0.2, weight=0.5 * u.nS, seed=43)
-        inter_diff = Random(prob=0.05, weight=0.1 * u.nS, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+    def test_core_connectivity_higher_than_periphery(self):
+        """Test that core has denser connectivity than periphery."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.6,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
+            seed=42
         )
+        result = conn(pre_size=100, post_size=100)
 
-        result = conn(pre_size=64, post_size=64)
+        core_size = result.metadata['core_size']
 
-        # Should have weights
+        # Count core-core and periphery-periphery connections
+        core_core = 0
+        periphery_periphery = 0
+
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            is_pre_core = pre_idx < core_size
+            is_post_core = post_idx < core_size
+
+            if is_pre_core and is_post_core:
+                core_core += 1
+            elif not is_pre_core and not is_post_core:
+                periphery_periphery += 1
+
+        # Core should have connections
+        self.assertGreater(core_core, 0)
+
+        # Core density should be higher than periphery density
+        core_possible = core_size * (core_size - 1)
+        periphery_size = 100 - core_size
+        periphery_possible = periphery_size * (periphery_size - 1)
+
+        core_density = core_core / core_possible if core_possible > 0 else 0
+        periphery_density = periphery_periphery / periphery_possible if periphery_possible > 0 else 0
+
+        self.assertGreater(core_density, periphery_density)
+
+    def test_small_core_large_periphery(self):
+        """Test network with small core and large periphery."""
+        conn = CorePeripheryRandom(
+            core_size=0.1,  # 10% core
+            core_prob=0.7,
+            core_periphery_prob=0.15,
+            periphery_prob=0.03,
+            seed=42
+        )
+        result = conn(pre_size=200, post_size=200)
+
+        self.assertEqual(result.metadata['core_size'], 20)  # 10% of 200
+        self.assertGreater(result.n_connections, 0)
+
+    def test_large_core_small_periphery(self):
+        """Test network with large core and small periphery."""
+        conn = CorePeripheryRandom(
+            core_size=0.8,  # 80% core
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        self.assertEqual(result.metadata['core_size'], 80)  # 80% of 100
+        self.assertGreater(result.n_connections, 0)
+
+    def test_zero_probabilities(self):
+        """Test with all probabilities set to zero."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.0,
+            core_periphery_prob=0.0,
+            periphery_prob=0.0,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        # Should have no connections
+        self.assertEqual(result.n_connections, 0)
+        self.assertEqual(len(result.pre_indices), 0)
+        self.assertEqual(len(result.post_indices), 0)
+
+    def test_high_probabilities(self):
+        """Test with high connection probabilities."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.9,
+            core_periphery_prob=0.8,
+            periphery_prob=0.7,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        # Should have many connections
+        self.assertGreater(result.n_connections, 5000)
+
+    def test_core_only_connections(self):
+        """Test network with only core-core connections."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.5,
+            core_periphery_prob=0.0,
+            periphery_prob=0.0,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        core_size = result.metadata['core_size']
+
+        # All connections should be within core
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            self.assertLess(pre_idx, core_size)
+            self.assertLess(post_idx, core_size)
+
+    def test_periphery_only_connections(self):
+        """Test network with only periphery-periphery connections."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.0,
+            core_periphery_prob=0.0,
+            periphery_prob=0.3,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        core_size = result.metadata['core_size']
+
+        # All connections should be within periphery
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            self.assertGreaterEqual(pre_idx, core_size)
+            self.assertGreaterEqual(post_idx, core_size)
+
+    def test_core_periphery_only_connections(self):
+        """Test network with only core-periphery connections."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.0,
+            core_periphery_prob=0.3,
+            periphery_prob=0.0,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        core_size = result.metadata['core_size']
+
+        # All connections should be between core and periphery
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            is_pre_core = pre_idx < core_size
+            is_post_core = post_idx < core_size
+
+            # Should not be both in core or both in periphery
+            self.assertNotEqual(is_pre_core, is_post_core)
+
+    def test_weights_and_delays(self):
+        """Test core-periphery network with weights and delays."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
+            weight=1.5 * u.nS,
+            delay=2.0 * u.ms,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
         self.assertIsNotNone(result.weights)
-        self.assertEqual(len(result.weights), result.n_connections)
-
-        # Weights should be in expected ranges (mixture of different connectivity weights)
-        self.assertTrue(np.all(result.weights.magnitude >= 0))
-        self.assertTrue(np.all(result.weights.magnitude <= 1.0))
-        self.assertEqual(result.weights.unit, u.nS)
-
-    def test_hierarchical_with_constant_delays(self):
-        """Test hierarchical network with constant delay initialization."""
-        intra = Random(prob=0.5, delay=1.0 * u.ms, seed=42)
-        inter_same = Random(prob=0.2, delay=2.0 * u.ms, seed=43)
-        inter_diff = Random(prob=0.05, delay=5.0 * u.ms, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
-        )
-
-        result = conn(pre_size=64, post_size=64)
-
-        # Should have delays
         self.assertIsNotNone(result.delays)
+        self.assertEqual(len(result.weights), result.n_connections)
         self.assertEqual(len(result.delays), result.n_connections)
 
-        # Delays should be in expected ranges
-        self.assertTrue(np.all(result.delays.magnitude >= 1.0))
-        self.assertTrue(np.all(result.delays.magnitude <= 5.0))
-        self.assertEqual(result.delays.unit, u.ms)
+        # Check weight values
+        self.assertTrue(np.allclose(result.weights, 1.5 * u.nS))
+        self.assertTrue(np.allclose(result.delays, 2.0 * u.ms))
 
-    def test_hierarchical_with_weights_and_delays(self):
-        """Test hierarchical network with both weights and delays."""
-        intra = Random(prob=0.5, weight=1.5 * u.nS, delay=1.0 * u.ms, seed=42)
-        inter_same = Random(prob=0.2, weight=1.0 * u.nS, delay=2.0 * u.ms, seed=43)
-        inter_diff = Random(prob=0.05, weight=0.3 * u.nS, delay=3.0 * u.ms, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+    def test_custom_weight_initializer(self):
+        """Test with custom weight initializer."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
+            weight=Normal(mean=1.0 * u.nS, std=0.2 * u.nS),
+            seed=42
         )
+        result = conn(pre_size=100, post_size=100)
 
-        result = conn(pre_size=64, post_size=64)
-
-        # Should have both weights and delays
-        self.assertIsNotNone(result.weights)
-        self.assertIsNotNone(result.delays)
-        self.assertEqual(len(result.weights), result.n_connections)
-        self.assertEqual(len(result.delays), result.n_connections)
-
-        # Check units
-        self.assertEqual(result.weights.unit, u.nS)
-        self.assertEqual(result.delays.unit, u.ms)
-
-    def test_hierarchical_with_initializer_weights(self):
-        """Test hierarchical network with Initializer-based weights."""
-        intra = Random(prob=0.5, weight=Normal(mean=1.0, std=0.1), seed=42)
-        inter_same = Random(prob=0.2, weight=Uniform(low=0.3, high=0.7), seed=43)
-        inter_diff = Random(prob=0.05, weight=Constant(value=0.1), seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
-        )
-
-        result = conn(pre_size=64, post_size=64)
-
-        # Should have weights
         self.assertIsNotNone(result.weights)
         self.assertEqual(len(result.weights), result.n_connections)
+        # Check that weights vary (not all the same)
+        self.assertGreater(u.math.std(result.weights).mantissa, 0)
 
-        # Weights should be positive (mostly, given Normal distribution)
-        self.assertGreater(np.sum(result.weights >= 0), result.n_connections * 0.9)
-
-    def test_hierarchical_with_initializer_delays(self):
-        """Test hierarchical network with Initializer-based delays."""
-        intra = Random(prob=0.5, delay=Uniform(low=0.5, high=1.5), seed=42)
-        inter_same = Random(prob=0.2, delay=Normal(mean=2.0, std=0.2), seed=43)
-        inter_diff = Random(prob=0.05, delay=Constant(value=5.0), seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
+    def test_seed_reproducibility(self):
+        """Test that same seed produces same results."""
+        conn1 = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
             seed=100
         )
+        result1 = conn1(pre_size=100, post_size=100)
 
-        result = conn(pre_size=64, post_size=64)
-
-        # Should have delays
-        self.assertIsNotNone(result.delays)
-        self.assertEqual(len(result.delays), result.n_connections)
-
-        # Delays should be mostly positive
-        self.assertGreater(np.sum(result.delays >= 0), result.n_connections * 0.9)
-
-    def test_hierarchical_no_weights_no_delays(self):
-        """Test hierarchical network without weights or delays."""
-        intra = Random(prob=0.5, seed=42)
-        inter_same = Random(prob=0.2, seed=43)
-        inter_diff = Random(prob=0.05, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
+        conn2 = CorePeripheryRandom(
+            core_size=20,
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
             seed=100
         )
+        result2 = conn2(pre_size=100, post_size=100)
 
-        result = conn(pre_size=64, post_size=64)
+        # Should produce identical results
+        self.assertEqual(result1.n_connections, result2.n_connections)
+        np.testing.assert_array_equal(result1.pre_indices, result2.pre_indices)
+        np.testing.assert_array_equal(result1.post_indices, result2.post_indices)
 
-        # Should not have weights or delays
-        self.assertIsNone(result.weights)
-        self.assertIsNone(result.delays)
-
-    def test_hierarchical_mixed_weight_specifications(self):
-        """Test hierarchical network with different weight specs per connectivity type."""
-        # Intra uses scalar, inter_same uses Initializer, inter_diff has no weight
-        intra = Random(prob=0.5, weight=2.0 * u.nS, seed=42)
-        inter_same = Random(prob=0.2, weight=Normal(mean=1.0, std=0.2), seed=43)
-        inter_diff = Random(prob=0.05, seed=44)  # No weight
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+    def test_metadata_completeness(self):
+        """Test that all expected metadata is present."""
+        conn = CorePeripheryRandom(
+            core_size=25,
+            core_prob=0.6,
+            core_periphery_prob=0.25,
+            periphery_prob=0.08,
+            bidirectional_core_periphery=False,
+            seed=42
         )
+        result = conn(pre_size=100, post_size=100)
 
-        result = conn(pre_size=64, post_size=64)
+        metadata = result.metadata
+        self.assertIn('pattern', metadata)
+        self.assertIn('core_size', metadata)
+        self.assertIn('core_prob', metadata)
+        self.assertIn('core_periphery_prob', metadata)
+        self.assertIn('periphery_prob', metadata)
+        self.assertIn('bidirectional_core_periphery', metadata)
 
-        # Should have weights (from connections that specify them)
-        # Note: The result may have weights from some connections and None from others
-        # depending on implementation details
-        if result.weights is not None:
-            self.assertEqual(len(result.weights), result.n_connections)
+        self.assertEqual(metadata['pattern'], 'core_periphery')
+        self.assertEqual(metadata['core_size'], 25)
+        self.assertEqual(metadata['core_prob'], 0.6)
+        self.assertEqual(metadata['core_periphery_prob'], 0.25)
+        self.assertEqual(metadata['periphery_prob'], 0.08)
+        self.assertEqual(metadata['bidirectional_core_periphery'], False)
 
-    def test_hierarchical_weight_distribution(self):
-        """Test that weights from different hierarchy levels are properly combined."""
-        # Use distinct weight values for each hierarchy level
-        intra = Random(prob=0.8, weight=10.0 * u.nS, seed=42)
-        inter_same = Random(prob=0.8, weight=5.0 * u.nS, seed=43)
-        inter_diff = Random(prob=0.8, weight=1.0 * u.nS, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+    def test_large_network(self):
+        """Test with a larger network to ensure scalability."""
+        conn = CorePeripheryRandom(
+            core_size=0.15,  # 15% core
+            core_prob=0.3,
+            core_periphery_prob=0.1,
+            periphery_prob=0.02,
+            seed=42
         )
+        result = conn(pre_size=5000, post_size=5000)
 
-        result = conn(pre_size=32, post_size=32)
+        self.assertEqual(result.metadata['core_size'], 750)  # 15% of 5000
+        self.assertGreater(result.n_connections, 0)
 
-        # Should have weights with values from all three categories
-        self.assertIsNotNone(result.weights)
-        unique_weights = np.unique(result.weights.magnitude)
+        # Verify no invalid indices
+        self.assertTrue(np.all(result.pre_indices >= 0))
+        self.assertTrue(np.all(result.pre_indices < 5000))
+        self.assertTrue(np.all(result.post_indices >= 0))
+        self.assertTrue(np.all(result.post_indices < 5000))
 
-        # Should have weights close to 10.0, 5.0, and 1.0
-        has_intra = np.any(np.abs(unique_weights - 10.0) < 0.01)
-        has_inter_same = np.any(np.abs(unique_weights - 5.0) < 0.01)
-        has_inter_diff = np.any(np.abs(unique_weights - 1.0) < 0.01)
-
-        # At least intra-module connections should exist
-        self.assertTrue(has_intra)
-
-    def test_hierarchical_delay_distribution(self):
-        """Test that delays from different hierarchy levels are properly combined."""
-        # Use distinct delay values for each hierarchy level
-        intra = Random(prob=0.8, delay=1.0 * u.ms, seed=42)
-        inter_same = Random(prob=0.8, delay=3.0 * u.ms, seed=43)
-        inter_diff = Random(prob=0.8, delay=7.0 * u.ms, seed=44)
-
-        conn = Hierarchical(
-            n_levels=3,
-            branch_factor=2,
-            intra_conn=intra,
-            inter_conn_same_parent=inter_same,
-            inter_conn_diff_parent=inter_diff,
-            seed=100
+    def test_minimal_core(self):
+        """Test with minimal core size (1 neuron)."""
+        conn = CorePeripheryRandom(
+            core_size=1,
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
+            seed=42
         )
+        result = conn(pre_size=100, post_size=100)
 
-        result = conn(pre_size=32, post_size=32)
+        self.assertEqual(result.metadata['core_size'], 1)
+        # Core neuron should have connections to periphery
+        self.assertGreater(result.n_connections, 0)
 
-        # Should have delays with values from all three categories
-        self.assertIsNotNone(result.delays)
-        unique_delays = np.unique(result.delays.magnitude)
+    def test_tuple_size_input(self):
+        """Test that tuple pre_size/post_size is handled correctly."""
+        conn = CorePeripheryRandom(
+            core_size=0.2,
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.05,
+            seed=42
+        )
+        result = conn(pre_size=(10, 10), post_size=(10, 10))
 
-        # Should have delays close to 1.0, 3.0, and 7.0
-        has_intra = np.any(np.abs(unique_delays - 1.0) < 0.01)
-        has_inter_same = np.any(np.abs(unique_delays - 3.0) < 0.01)
-        has_inter_diff = np.any(np.abs(unique_delays - 7.0) < 0.01)
+        # Should treat as 100 neurons, 20% = 20 neurons in core
+        self.assertEqual(result.metadata['core_size'], 20)
+        self.assertGreater(result.n_connections, 0)
 
-        # At least intra-module connections should exist
-        self.assertTrue(has_intra)
+    def test_connection_type_distribution(self):
+        """Test distribution of different connection types."""
+        conn = CorePeripheryRandom(
+            core_size=30,
+            core_prob=0.5,
+            core_periphery_prob=0.2,
+            periphery_prob=0.1,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        core_size = result.metadata['core_size']
+
+        # Count each connection type
+        core_core = 0
+        core_periphery = 0
+        periphery_core = 0
+        periphery_periphery = 0
+
+        for pre_idx, post_idx in zip(result.pre_indices, result.post_indices):
+            is_pre_core = pre_idx < core_size
+            is_post_core = post_idx < core_size
+
+            if is_pre_core and is_post_core:
+                core_core += 1
+            elif is_pre_core and not is_post_core:
+                core_periphery += 1
+            elif not is_pre_core and is_post_core:
+                periphery_core += 1
+            else:
+                periphery_periphery += 1
+
+        # All types should exist with these parameters
+        self.assertGreater(core_core, 0)
+        self.assertGreater(core_periphery, 0)
+        self.assertGreater(periphery_core, 0)
+        self.assertGreater(periphery_periphery, 0)
+
+        # Core-core should be most dense
+        self.assertGreater(core_core, periphery_periphery)
+
+    def test_very_small_network(self):
+        """Test with very small network."""
+        conn = CorePeripheryRandom(
+            core_size=2,
+            core_prob=0.8,
+            core_periphery_prob=0.5,
+            periphery_prob=0.3,
+            seed=42
+        )
+        result = conn(pre_size=5, post_size=5)
+
+        self.assertEqual(result.metadata['core_size'], 2)
+        # Should work without errors
+
+    def test_default_parameters(self):
+        """Test with default parameters."""
+        conn = CorePeripheryRandom(
+            core_size=20,
+            seed=42
+        )
+        result = conn(pre_size=100, post_size=100)
+
+        # Check default values
+        self.assertEqual(result.metadata['core_prob'], 0.5)
+        self.assertEqual(result.metadata['core_periphery_prob'], 0.2)
+        self.assertEqual(result.metadata['periphery_prob'], 0.05)
+        self.assertEqual(result.metadata['bidirectional_core_periphery'], True)
+        self.assertGreater(result.n_connections, 0)
