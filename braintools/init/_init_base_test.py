@@ -1,5 +1,5 @@
 """
-Comprehensive tests for _init_base.py
+Comprehensive tests for _init.py
 
 Tests cover:
 - Basic Initialization class functionality
@@ -10,21 +10,14 @@ Tests cover:
 - Edge cases and error handling
 """
 
+import brainunit as u
 import numpy as np
 import pytest
-import brainunit as u
 
-from braintools.conn._init_base import (
+from braintools.init._init_base import (
     Initialization,
     init_call,
     Compose,
-    _AddInit,
-    _SubInit,
-    _MulInit,
-    _DivInit,
-    _ClipInit,
-    _ApplyInit,
-    _PipeInit,
 )
 
 
@@ -34,7 +27,7 @@ class SimpleInit(Initialization):
     def __init__(self, value):
         self.value = value
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
         if isinstance(size, int):
             return np.full(size, self.value)
         return np.full(size, self.value)
@@ -49,7 +42,7 @@ class QuantityInit(Initialization):
     def __init__(self, value):
         self.value = value
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
         if isinstance(size, int):
             return u.math.full(size, self.value)
         return u.math.full(size, self.value)
@@ -65,7 +58,8 @@ class RandomInit(Initialization):
         self.mean = mean
         self.std = std
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         return rng.normal(self.mean, self.std, size)
 
     def __repr__(self):
@@ -80,7 +74,7 @@ class TestBasicInitialization:
         rng = np.random.default_rng(42)
         init = SimpleInit(5.0)
 
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert result.shape == (10,)
         assert np.all(result == 5.0)
 
@@ -89,7 +83,7 @@ class TestBasicInitialization:
         rng = np.random.default_rng(42)
         init = QuantityInit(2.5 * u.nS)
 
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert result.shape == (10,)
         assert isinstance(result, u.Quantity)
         assert np.all(result.to(u.nS).mantissa == 2.5)
@@ -99,7 +93,7 @@ class TestBasicInitialization:
         rng = np.random.default_rng(42)
         init = RandomInit(0.0, 1.0)
 
-        result = init(rng, 100)
+        result = init(100, rng=rng)
         assert result.shape == (100,)
         assert -3.0 < result.mean() < 3.0
         assert 0.5 < result.std() < 1.5
@@ -108,7 +102,7 @@ class TestBasicInitialization:
         """Test that kwargs are properly passed to initialization."""
 
         class KwargsInit(Initialization):
-            def __call__(self, rng, size, custom_param=None, **kwargs):
+            def __call__(self, size, custom_param=None, **kwargs):
                 if custom_param is not None:
                     return np.full(size, custom_param)
                 return np.zeros(size)
@@ -116,7 +110,7 @@ class TestBasicInitialization:
         rng = np.random.default_rng(42)
         init = KwargsInit()
 
-        result = init(rng, 5, custom_param=7.0)
+        result = init(5, custom_param=7.0, rng=rng)
         assert np.all(result == 7.0)
 
 
@@ -129,7 +123,7 @@ class TestArithmeticOperations:
         init = SimpleInit(5.0)
         result_init = init + 3.0
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 8.0)
 
     def test_addition_with_quantity(self):
@@ -138,7 +132,7 @@ class TestArithmeticOperations:
         init = QuantityInit(2.0 * u.nS)
         result_init = init + 1.0 * u.nS
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result.to(u.nS).mantissa == 3.0)
 
     def test_addition_with_initialization(self):
@@ -148,7 +142,7 @@ class TestArithmeticOperations:
         init2 = SimpleInit(3.0)
         result_init = init1 + init2
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 8.0)
 
     def test_right_addition(self):
@@ -157,7 +151,7 @@ class TestArithmeticOperations:
         init = SimpleInit(5.0)
         result_init = 3.0 + init
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 8.0)
 
     def test_subtraction_with_scalar(self):
@@ -166,7 +160,7 @@ class TestArithmeticOperations:
         init = SimpleInit(5.0)
         result_init = init - 2.0
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 3.0)
 
     def test_subtraction_with_initialization(self):
@@ -176,7 +170,7 @@ class TestArithmeticOperations:
         init2 = SimpleInit(2.0)
         result_init = init1 - init2
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 3.0)
 
     def test_right_subtraction(self):
@@ -185,7 +179,7 @@ class TestArithmeticOperations:
         init = SimpleInit(5.0)
         result_init = 10.0 - init
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 5.0)
 
     def test_multiplication_with_scalar(self):
@@ -194,7 +188,7 @@ class TestArithmeticOperations:
         init = SimpleInit(5.0)
         result_init = init * 3.0
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 15.0)
 
     def test_multiplication_with_initialization(self):
@@ -204,7 +198,7 @@ class TestArithmeticOperations:
         init2 = SimpleInit(3.0)
         result_init = init1 * init2
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 15.0)
 
     def test_right_multiplication(self):
@@ -213,7 +207,7 @@ class TestArithmeticOperations:
         init = SimpleInit(5.0)
         result_init = 3.0 * init
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 15.0)
 
     def test_division_with_scalar(self):
@@ -222,7 +216,7 @@ class TestArithmeticOperations:
         init = SimpleInit(10.0)
         result_init = init / 2.0
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 5.0)
 
     def test_division_with_initialization(self):
@@ -232,7 +226,7 @@ class TestArithmeticOperations:
         init2 = SimpleInit(2.0)
         result_init = init1 / init2
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 5.0)
 
     def test_right_division(self):
@@ -241,7 +235,7 @@ class TestArithmeticOperations:
         init = SimpleInit(5.0)
         result_init = 20.0 / init
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 4.0)
 
     def test_chained_arithmetic(self):
@@ -250,7 +244,7 @@ class TestArithmeticOperations:
         init = SimpleInit(5.0)
         result_init = (init + 3.0) * 2.0 - 1.0
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 15.0)
 
     def test_arithmetic_with_quantities(self):
@@ -259,7 +253,7 @@ class TestArithmeticOperations:
         init = QuantityInit(2.0 * u.nS)
         result_init = init * 3.0 + 1.0 * u.nS
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result.to(u.nS).mantissa == 7.0)
 
 
@@ -272,7 +266,7 @@ class TestTransformationMethods:
         init = RandomInit(0.0, 5.0)
         clipped = init.clip(-2.0, 2.0)
 
-        result = clipped(rng, 100)
+        result = clipped(100, rng=rng)
         assert np.all(result >= -2.0)
         assert np.all(result <= 2.0)
 
@@ -282,7 +276,7 @@ class TestTransformationMethods:
         init = RandomInit(0.0, 5.0)
         clipped = init.clip(min_val=0.0)
 
-        result = clipped(rng, 100)
+        result = clipped(100, rng=rng)
         assert np.all(result >= 0.0)
 
     def test_clip_max_only(self):
@@ -291,7 +285,7 @@ class TestTransformationMethods:
         init = RandomInit(0.0, 5.0)
         clipped = init.clip(max_val=2.0)
 
-        result = clipped(rng, 100)
+        result = clipped(100, rng=rng)
         assert np.all(result <= 2.0)
 
     def test_clip_with_quantities(self):
@@ -300,7 +294,7 @@ class TestTransformationMethods:
         init = QuantityInit(5.0 * u.nS)
         clipped = init.clip(1.0 * u.nS, 3.0 * u.nS)
 
-        result = clipped(rng, 10)
+        result = clipped(10, rng=rng)
         result_vals = result.to(u.nS).mantissa
         assert np.all(result_vals == 3.0)
 
@@ -310,7 +304,7 @@ class TestTransformationMethods:
         init = SimpleInit(5.0)
         result_init = init.add(3.0)
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 8.0)
 
     def test_multiply_method(self):
@@ -319,7 +313,7 @@ class TestTransformationMethods:
         init = SimpleInit(5.0)
         result_init = init.multiply(3.0)
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 15.0)
 
     def test_apply_method(self):
@@ -328,7 +322,7 @@ class TestTransformationMethods:
         init = SimpleInit(5.0)
         result_init = init.apply(lambda x: x ** 2)
 
-        result = result_init(rng, 10)
+        result = result_init(10, rng=rng)
         assert np.all(result == 25.0)
 
     def test_apply_with_numpy_function(self):
@@ -337,7 +331,7 @@ class TestTransformationMethods:
         init = RandomInit(1.0, 0.1)
         result_init = init.apply(np.abs)
 
-        result = result_init(rng, 100)
+        result = result_init(100, rng=rng)
         assert np.all(result >= 0.0)
 
     def test_chained_transformations(self):
@@ -346,7 +340,7 @@ class TestTransformationMethods:
         init = RandomInit(0.0, 2.0)
         transformed = init.clip(-1.0, 1.0).add(5.0).multiply(2.0)
 
-        result = transformed(rng, 100)
+        result = transformed(100, rng=rng)
         assert np.all(result >= 8.0)
         assert np.all(result <= 12.0)
 
@@ -359,7 +353,7 @@ class TestPipeOperation:
         rng = np.random.default_rng(42)
         init = SimpleInit(5.0) | (lambda x: x * 2)
 
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.all(result == 10.0)
 
     def test_pipe_with_multiple_functions(self):
@@ -367,7 +361,7 @@ class TestPipeOperation:
         rng = np.random.default_rng(42)
         init = SimpleInit(5.0) | (lambda x: x * 2) | (lambda x: x + 3)
 
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.all(result == 13.0)
 
     def test_pipe_with_numpy_functions(self):
@@ -375,7 +369,7 @@ class TestPipeOperation:
         rng = np.random.default_rng(42)
         init = RandomInit(0.0, 1.0) | np.abs | np.sqrt
 
-        result = init(rng, 100)
+        result = init(100, rng=rng)
         assert np.all(result >= 0.0)
 
     def test_pipe_with_quantity_function(self):
@@ -383,7 +377,7 @@ class TestPipeOperation:
         rng = np.random.default_rng(42)
         init = QuantityInit(2.0 * u.nS) | (lambda x: u.math.maximum(x, 1.0 * u.nS))
 
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.all(result.to(u.nS).mantissa == 2.0)
 
     def test_pipe_error_handling(self):
@@ -392,7 +386,7 @@ class TestPipeOperation:
         with pytest.raises(TypeError):
             result_init = init | 5.0
             rng = np.random.default_rng(42)
-            result_init(rng, 10)
+            result_init(10, rng=rng)
 
 
 class TestComposeClass:
@@ -403,7 +397,7 @@ class TestComposeClass:
         rng = np.random.default_rng(42)
         init = Compose(SimpleInit(5.0))
 
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.all(result == 5.0)
 
     def test_compose_multiple_functions(self):
@@ -415,7 +409,7 @@ class TestComposeClass:
             lambda x: x + 3
         )
 
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.all(result == 13.0)
 
     def test_compose_mixed_init_and_functions(self):
@@ -427,7 +421,7 @@ class TestComposeClass:
             lambda x: x * 10
         )
 
-        result = init(rng, 100)
+        result = init(100, rng=rng)
         assert np.all(result >= 0.0)
 
     def test_compose_with_quantities(self):
@@ -439,7 +433,7 @@ class TestComposeClass:
             lambda x: x * 2.0
         )
 
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.all(result.to(u.nS).mantissa == 4.0)
 
     def test_compose_empty_error(self):
@@ -462,32 +456,32 @@ class TestInitCall:
         rng = np.random.default_rng(42)
         init = SimpleInit(5.0)
 
-        result = init_call(init, rng, 10)
+        result = init_call(init, 10, rng=rng)
         assert result.shape == (10,)
         assert np.all(result == 5.0)
 
     def test_init_call_with_none(self):
         """Test init_call with None returns None."""
         rng = np.random.default_rng(42)
-        result = init_call(None, rng, 10)
+        result = init_call(None, 10, rng=rng)
         assert result is None
 
     def test_init_call_with_float(self):
         """Test init_call with float scalar."""
         rng = np.random.default_rng(42)
-        result = init_call(5.0, rng, 10)
+        result = init_call(5.0, 10, rng=rng)
         assert result == 5.0
 
     def test_init_call_with_int(self):
         """Test init_call with int scalar."""
         rng = np.random.default_rng(42)
-        result = init_call(5, rng, 10)
+        result = init_call(5, 10, rng=rng)
         assert result == 5
 
     def test_init_call_with_scalar_quantity(self):
         """Test init_call with scalar quantity."""
         rng = np.random.default_rng(42)
-        result = init_call(5.0 * u.nS, rng, 10)
+        result = init_call(5.0 * u.nS, 10, rng=rng)
         assert isinstance(result, u.Quantity)
         assert result.to(u.nS).mantissa == 5.0
 
@@ -495,14 +489,14 @@ class TestInitCall:
         """Test init_call with array of correct size."""
         rng = np.random.default_rng(42)
         arr = np.ones(10)
-        result = init_call(arr, rng, 10)
+        result = init_call(arr, 10, rng=rng)
         assert np.array_equal(result, arr)
 
     def test_init_call_with_quantity_array_correct_size(self):
         """Test init_call with quantity array of correct size."""
         rng = np.random.default_rng(42)
         arr = np.ones(10) * u.nS
-        result = init_call(arr, rng, 10)
+        result = init_call(arr, 10, rng=rng)
         assert u.math.allclose(result, arr)
 
     def test_init_call_with_array_wrong_size(self):
@@ -510,26 +504,26 @@ class TestInitCall:
         rng = np.random.default_rng(42)
         arr = np.ones(5)
         with pytest.raises(ValueError, match="must be scalar or match number of connections"):
-            init_call(arr, rng, 10)
+            init_call(arr, 10, rng=rng)
 
     def test_init_call_with_invalid_type(self):
         """Test init_call raises error for invalid type."""
         rng = np.random.default_rng(42)
         with pytest.raises(TypeError, match="Initialization must be"):
-            init_call("invalid", rng, 10)
+            init_call("invalid", 10, rng=rng)
 
     def test_init_call_passes_kwargs(self):
         """Test that init_call passes kwargs to initialization."""
 
         class KwargsInit(Initialization):
-            def __call__(self, rng, size, custom_param=None, **kwargs):
+            def __call__(self, size, custom_param=None, **kwargs):
                 if custom_param is not None:
                     return np.full(size, custom_param)
                 return np.zeros(size)
 
         rng = np.random.default_rng(42)
         init = KwargsInit()
-        result = init_call(init, rng, 10, custom_param=7.0)
+        result = init_call(init, 10, custom_param=7.0, rng=rng)
         assert np.all(result == 7.0)
 
 
@@ -578,14 +572,14 @@ class TestEdgeCases:
         """Test initialization with size 0."""
         rng = np.random.default_rng(42)
         init = SimpleInit(5.0)
-        result = init(rng, 0)
+        result = init(0, rng=rng)
         assert result.shape == (0,)
 
     def test_large_array(self):
         """Test initialization with large size."""
         rng = np.random.default_rng(42)
         init = SimpleInit(5.0)
-        result = init(rng, 100000)
+        result = init(100000, rng=rng)
         assert result.shape == (100000,)
         assert np.all(result == 5.0)
 
@@ -593,7 +587,7 @@ class TestEdgeCases:
         """Test initialization with tuple size."""
         rng = np.random.default_rng(42)
         init = SimpleInit(5.0)
-        result = init(rng, (10, 5))
+        result = init((10, 5), rng=rng)
         assert result.shape == (10, 5)
         assert np.all(result == 5.0)
 
@@ -601,21 +595,21 @@ class TestEdgeCases:
         """Test initialization with negative values."""
         rng = np.random.default_rng(42)
         init = SimpleInit(-5.0)
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.all(result == -5.0)
 
     def test_very_small_values(self):
         """Test initialization with very small values."""
         rng = np.random.default_rng(42)
         init = SimpleInit(1e-10)
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.allclose(result, 1e-10)
 
     def test_very_large_values(self):
         """Test initialization with very large values."""
         rng = np.random.default_rng(42)
         init = SimpleInit(1e10)
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.allclose(result, 1e10)
 
     def test_complex_nested_operations(self):
@@ -625,7 +619,7 @@ class TestEdgeCases:
         complex_init = ((init + 1) * 2 - 3) / 4
         complex_init = complex_init.clip(-10, 10).add(5).multiply(0.5)
 
-        result = complex_init(rng, 10)
+        result = complex_init(10, rng=rng)
         assert result.shape == (10,)
 
     def test_operations_preserve_units(self):
@@ -633,13 +627,13 @@ class TestEdgeCases:
         rng = np.random.default_rng(42)
         init = QuantityInit(2.0 * u.nS)
 
-        result1 = (init * 2.0)(rng, 10)
+        result1 = (init * 2.0)(10, rng=rng)
         assert result1.unit == u.nS
 
-        result2 = (init + 1.0 * u.nS)(rng, 10)
+        result2 = (init + 1.0 * u.nS)(10, rng=rng)
         assert result2.unit == u.nS
 
-        result3 = init.clip(1.0 * u.nS, 5.0 * u.nS)(rng, 10)
+        result3 = init.clip(1.0 * u.nS, 5.0 * u.nS)(10, rng=rng)
         assert result3.unit == u.nS
 
 
@@ -651,7 +645,7 @@ class TestDocumentationExamples:
         rng = np.random.default_rng(42)
 
         init = SimpleInit(1.0) * 2.0 + 0.1
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.allclose(result, 2.1)
 
     def test_pipe_example(self):
@@ -661,7 +655,7 @@ class TestDocumentationExamples:
         init = (SimpleInit(1.0)
                 | (lambda x: x * 2)
                 | (lambda x: x + 1))
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.allclose(result, 3.0)
 
     def test_compose_example(self):
@@ -672,7 +666,7 @@ class TestDocumentationExamples:
             SimpleInit(1.0),
             lambda x: x * 10
         )
-        result = init(rng, 10)
+        result = init(10, rng=rng)
         assert np.allclose(result, 10.0)
 
 

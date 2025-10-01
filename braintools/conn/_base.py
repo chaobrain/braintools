@@ -26,6 +26,7 @@ generation across different neuron model types:
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple, Union, Dict, Any, Sequence
 
+import brainevent
 import brainunit as u
 import numpy as np
 
@@ -33,7 +34,6 @@ __all__ = [
     'ConnectionResult',
     'Connectivity',
     'PointNeuronConnectivity',
-    'PopulationRateConnectivity',
     'MultiCompartmentConnectivity'
 ]
 
@@ -172,7 +172,7 @@ class ConnectionResult:
         """Convert to sparse connectivity matrix in CSR format."""
         indices, indptr = compute_csr_indices_indptr(self.pre_indices, self.post_indices, self.shape)
         weights = 1.0 if self.weights is None else self.weights
-        csr = u.sparse.CSR((weights, indices, indptr), shape=self.shape)
+        csr = brainevent.CSR((weights, indices, indptr), shape=self.shape)
         return csr
 
     def delay2matrix(self):
@@ -187,7 +187,7 @@ class ConnectionResult:
         """Convert delays to sparse connectivity matrix in CSR format."""
         indices, indptr = compute_csr_indices_indptr(self.pre_indices, self.post_indices, self.shape)
         delays = 0.0 if self.delays is None else self.delays
-        csr = u.sparse.CSR((delays, indices, indptr), shape=self.shape)
+        csr = brainevent.CSR((delays, indices, indptr), shape=self.shape)
         return csr
 
     def get_distances(self) -> Optional[u.Quantity]:
@@ -328,25 +328,6 @@ class PointNeuronConnectivity(Connectivity):
     @abstractmethod
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate point neuron specific connections."""
-        pass
-
-
-class PopulationRateConnectivity(Connectivity):
-    """Base class for population rate model connectivity patterns.
-
-    Population rate models represent the average firing rate of neuron populations.
-    Connections represent coupling between population activities.
-    """
-
-    def _generate(self, **kwargs) -> ConnectionResult:
-        """Generate population rate connectivity."""
-        result = self.generate(**kwargs)
-        result.model_type = 'population_rate'
-        return result
-
-    @abstractmethod
-    def generate(self, **kwargs) -> ConnectionResult:
-        """Generate population rate specific connections."""
         pass
 
 

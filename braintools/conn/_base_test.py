@@ -29,11 +29,10 @@ import unittest
 import brainunit as u
 import numpy as np
 
-from braintools.conn._conn_base import (
+from braintools.conn._base import (
     ConnectionResult,
     Connectivity,
     PointNeuronConnectivity,
-    PopulationRateConnectivity,
     MultiCompartmentConnectivity,
     CompositeConnectivity,
     ScaledConnectivity,
@@ -347,7 +346,7 @@ class TestConnectionResult(unittest.TestCase):
             pre_size=2,
             post_size=2,
             weights=0.5 * u.nS,  # Scalar weight
-            delays=1.0 * u.ms    # Scalar delay
+            delays=1.0 * u.ms  # Scalar delay
         )
 
         self.assertEqual(conn.n_connections, 2)
@@ -1022,21 +1021,6 @@ class TestSubclassImplementations(unittest.TestCase):
         result = conn(pre_size=2, post_size=2)
 
         self.assertEqual(result.model_type, 'point')
-
-    def test_population_rate_connectivity(self):
-        class TestPopConn(PopulationRateConnectivity):
-            def generate(self, pre_size, post_size, **kwargs):
-                return ConnectionResult(
-                    pre_indices=np.array([0]),
-                    post_indices=np.array([1]),
-                    pre_size=pre_size,
-                    post_size=post_size
-                )
-
-        conn = TestPopConn()
-        result = conn(pre_size=2, post_size=2)
-
-        self.assertEqual(result.model_type, 'population_rate')
 
     def test_multi_compartment_connectivity(self):
         class TestMultiConn(MultiCompartmentConnectivity):

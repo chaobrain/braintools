@@ -33,13 +33,10 @@ from typing import Optional, Tuple, Union, Dict, List, Callable
 
 import brainunit as u
 import numpy as np
-from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._conn_base import MultiCompartmentConnectivity, ConnectionResult
-from ._init_base import init_call
-from ._init_delay import DelayInit
-from ._init_weight import WeightInit
+from braintools.init._init_base import init_call, Initializer
+from ._base import MultiCompartmentConnectivity, ConnectionResult
 
 __all__ = [
     'SOMA',
@@ -172,8 +169,8 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         self,
         compartment_mapping: Dict[Union[int, str], Union[int, str, List[Union[int, str]]]],
         connection_prob: Union[float, Dict] = 0.1,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         morphology_info: Optional[Dict] = None,
         **kwargs
     ):
@@ -283,8 +280,8 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         n_connections = len(pre_indices)
 
         # Generate weights and delays using init_call
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -521,8 +518,8 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         decay_function: str = 'gaussian',
         compartment_mapping: Dict = None,
         morphology_positions: Optional[Dict] = None,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -635,8 +632,8 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         post_compartments = np.concatenate(all_post_compartments)
         n_connections = len(pre_indices)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -699,8 +696,8 @@ class DendriticTree(MultiCompartmentConnectivity):
         tree_structure: Dict,
         branch_targeting: Dict,
         distance_dependence: bool = True,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -775,8 +772,8 @@ class DendriticTree(MultiCompartmentConnectivity):
         post_compartments = np.concatenate(all_post_compartments)
         n_connections = len(pre_indices)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -843,8 +840,8 @@ class AxonalProjection(MultiCompartmentConnectivity):
         topographic_map: Optional[Callable] = None,
         arborization_pattern: str = 'diffuse',
         connection_prob: float = 0.05,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -917,8 +914,8 @@ class AxonalProjection(MultiCompartmentConnectivity):
         pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
         post_compartments = np.full(n_connections, BASAL_DENDRITE, dtype=np.int64)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -984,8 +981,8 @@ class BranchSpecific(MultiCompartmentConnectivity):
         self,
         branch_indices: List[int] = None,
         connection_prob: float = 0.3,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1050,8 +1047,8 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         self,
         cluster_size: int = 5,
         n_clusters: int = 10,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1115,8 +1112,8 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         post_compartments = np.concatenate(all_post_compartments)
         n_connections = len(pre_indices)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -1163,8 +1160,8 @@ class AxonalBranching(MultiCompartmentConnectivity):
         self,
         branches_per_axon: int = 5,
         branch_spread: float = 100.0,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1226,8 +1223,8 @@ class AxonalBranching(MultiCompartmentConnectivity):
             size=n_connections
         ).astype(np.int64)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -1273,8 +1270,8 @@ class AxonalArborization(MultiCompartmentConnectivity):
         self,
         arborization_radius: Union[float, u.Quantity] = 150.0,
         density: float = 0.3,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1341,8 +1338,8 @@ class AxonalArborization(MultiCompartmentConnectivity):
             size=n_connections
         ).astype(np.int64)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -1385,8 +1382,8 @@ class TopographicProjection(MultiCompartmentConnectivity):
     def __init__(
         self,
         topographic_map: Callable,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1434,8 +1431,8 @@ class SynapticPlacement(MultiCompartmentConnectivity):
         self,
         placement_rule: str = 'uniform',
         compartment_preferences: Optional[Dict[int, float]] = None,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1497,8 +1494,8 @@ class SynapticClustering(MultiCompartmentConnectivity):
         self,
         cluster_size: int = 5,
         n_clusters_per_neuron: int = 10,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)

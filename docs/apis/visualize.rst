@@ -2,6 +2,7 @@
 ===============================
 
 .. currentmodule:: braintools.visualize
+.. automodule:: braintools.visualize
 
 The visualization toolkit spans quick exploratory plots, rich publication
 figures, and interactive dashboards tailored to neural data analysis. The

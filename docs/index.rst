@@ -51,7 +51,7 @@ Installation
 See also the ecosystem
 ^^^^^^^^^^^^^^^^^^^^^^
 
-BrainTools is part of our `brain simulation ecosystem <https://brainmodeling.readthedocs.io/>`_.
+BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling.readthedocs.io/>`_.
 
 
 ----
@@ -62,11 +62,12 @@ BrainTools is part of our `brain simulation ecosystem <https://brainmodeling.rea
     :caption: Tutorials
 
     toc_conn.md
-    toc_file.md
+    toc_init.md
     toc_input.md
     toc_metric.md
     toc_optim.md
     toc_quad.md
+    toc_file.md
     toc_visualize.md
     toc_spike_encoding.md
 
@@ -80,9 +81,9 @@ BrainTools is part of our `brain simulation ecosystem <https://brainmodeling.rea
     apis/braintools.rst
     apis/conn.rst
     apis/file.rst
+    apis/init.rst
     apis/input.rst
     apis/metric.rst
     apis/optim.rst
     apis/quad.rst
     apis/visualize.rst
-    apis/tree.rst

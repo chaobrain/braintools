@@ -26,13 +26,10 @@ from typing import Optional, Union, Callable
 
 import brainunit as u
 import numpy as np
-from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from ._conn_base import PointNeuronConnectivity, ConnectionResult
-from ._init_base import init_call
-from ._init_delay import DelayInit
-from ._init_weight import WeightInit
+from braintools.init import init_call, Initializer
+from ._base import PointNeuronConnectivity, ConnectionResult
 
 __all__ = [
     'ConvKernel',
@@ -85,7 +82,7 @@ class ConvKernel(PointNeuronConnectivity):
         ...     threshold=0.1,
         ...     weight=1.0 * u.nS
         ... )
-        >>> result = conn.generate(
+        >>> result = conn(
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
@@ -96,8 +93,8 @@ class ConvKernel(PointNeuronConnectivity):
         kernel: np.ndarray,
         kernel_size: Union[float, u.Quantity],
         threshold: float = 0.0,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -191,9 +188,14 @@ class ConvKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.weight_init,
+            n_connections,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            rng=self.rng
         )
 
         # Multiply by kernel weights
@@ -213,9 +215,14 @@ class ConvKernel(PointNeuronConnectivity):
             weights = kernel_weights
 
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.delay_init,
+            n_connections,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            rng=self.rng
         )
 
         return ConnectionResult(
@@ -260,7 +267,7 @@ class GaussianKernel(PointNeuronConnectivity):
         ...     max_distance=150 * u.um,
         ...     weight=2.0 * u.nS
         ... )
-        >>> result = gauss.generate(
+        >>> result = gauss(
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
@@ -271,8 +278,8 @@ class GaussianKernel(PointNeuronConnectivity):
         sigma: Union[float, u.Quantity],
         max_distance: Optional[Union[float, u.Quantity]] = None,
         normalize: bool = True,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -291,16 +298,6 @@ class GaussianKernel(PointNeuronConnectivity):
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gaussian kernel connectivity")
-
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
-
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
 
         # Calculate distances
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
@@ -347,9 +344,14 @@ class GaussianKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.weight_init,
+            n_connections,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            rng=self.rng
         )
 
         # Multiply by Gaussian weights
@@ -370,10 +372,11 @@ class GaussianKernel(PointNeuronConnectivity):
 
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
-            pre_size=pre_size, post_size=post_size,
+            pre_size=pre_size,
+            post_size=post_size,
             pre_positions=pre_positions,
             post_positions=post_positions
         )
@@ -429,7 +432,7 @@ class GaborKernel(PointNeuronConnectivity):
         ...     theta=np.pi / 4,  # 45 degrees
         ...     weight=1.0 * u.nS
         ... )
-        >>> result = gabor.generate(
+        >>> result = gabor(
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
@@ -442,8 +445,8 @@ class GaborKernel(PointNeuronConnectivity):
         theta: float,
         phase: float = 0.0,
         max_distance: Optional[Union[float, u.Quantity]] = None,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -552,8 +555,8 @@ class GaborKernel(PointNeuronConnectivity):
         # Generate base weights
         weights = init_call(
             self.weight_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -579,8 +582,8 @@ class GaborKernel(PointNeuronConnectivity):
 
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
@@ -637,7 +640,7 @@ class DoGKernel(PointNeuronConnectivity):
         ...     amplitude_surround=0.8,
         ...     weight=1.0 * u.nS
         ... )
-        >>> result = dog.generate(
+        >>> result = dog(
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
@@ -650,8 +653,8 @@ class DoGKernel(PointNeuronConnectivity):
         amplitude_center: float = 1.0,
         amplitude_surround: float = 0.8,
         max_distance: Optional[Union[float, u.Quantity]] = None,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -735,9 +738,10 @@ class DoGKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
+            self.weight_init, n_connections,
             param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         # Multiply by DoG weights
@@ -757,16 +761,25 @@ class DoGKernel(PointNeuronConnectivity):
             weights = dog_weights
 
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.delay_init,
+            n_connections,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            rng=self.rng
         )
 
         return ConnectionResult(
-            pre_indices, post_indices,
-            pre_size=pre_size, post_size=post_size,
-            weights=weights, delays=delays,
-            pre_positions=pre_positions, post_positions=post_positions,
+            pre_indices,
+            post_indices,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=weights,
+            delays=delays,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'dog_kernel',
                 'sigma_center': self.sigma_center,
@@ -801,7 +814,7 @@ class MexicanHat(DoGKernel):
         ...     sigma=40 * u.um,
         ...     weight=1.0 * u.nS
         ... )
-        >>> result = mexican.generate(
+        >>> result = mexican(
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
@@ -811,8 +824,8 @@ class MexicanHat(DoGKernel):
         self,
         sigma: Union[float, u.Quantity],
         max_distance: Optional[Union[float, u.Quantity]] = None,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         # Mexican hat is DoG with sigma_surround = sqrt(2) * sigma_center
@@ -867,7 +880,7 @@ class SobelKernel(PointNeuronConnectivity):
         ...     kernel_size=60 * u.um,
         ...     weight=1.0 * u.nS
         ... )
-        >>> result = sobel.generate(
+        >>> result = sobel(
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
@@ -877,8 +890,8 @@ class SobelKernel(PointNeuronConnectivity):
         self,
         direction: str = 'horizontal',
         kernel_size: Union[float, u.Quantity] = 1.0,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -943,7 +956,7 @@ class SobelKernel(PointNeuronConnectivity):
                 seed=self.seed + 1 if self.seed is not None else None
             )
             # Union of both
-            from ._conn_base import CompositeConnectivity
+            from ._base import CompositeConnectivity
             composite = CompositeConnectivity(conv_h, conv_v, 'union')
             result = composite.generate(**kwargs)
             result.metadata['pattern'] = 'sobel_kernel'
@@ -978,7 +991,7 @@ class LaplacianKernel(PointNeuronConnectivity):
         ...     kernel_size=60 * u.um,
         ...     weight=1.0 * u.nS
         ... )
-        >>> result = laplacian.generate(
+        >>> result = laplacian(
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
@@ -988,8 +1001,8 @@ class LaplacianKernel(PointNeuronConnectivity):
         self,
         kernel_type: str = '4-connected',
         kernel_size: Union[float, u.Quantity] = 1.0,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1066,7 +1079,7 @@ class CustomKernel(PointNeuronConnectivity):
         ...     threshold=0.1,
         ...     weight=1.0 * u.nS
         ... )
-        >>> result = custom.generate(
+        >>> result = custom(
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
@@ -1077,8 +1090,8 @@ class CustomKernel(PointNeuronConnectivity):
         kernel_func: Callable,
         kernel_size: Union[float, u.Quantity],
         threshold: float = 0.0,
-        weight: Optional[Union[ArrayLike, WeightInit]] = None,
-        delay: Optional[Union[ArrayLike, DelayInit]] = None,
+        weight: Optional[Initializer] = None,
+        delay: Optional[Initializer] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -1168,9 +1181,10 @@ class CustomKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
+            self.weight_init, n_connections,
             param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         # Multiply by kernel weights
@@ -1190,9 +1204,14 @@ class CustomKernel(PointNeuronConnectivity):
             weights = kernel_weights
 
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
-            param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            self.delay_init,
+            n_connections,
+            param_type='delay',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            rng=self.rng
         )
 
         return ConnectionResult(

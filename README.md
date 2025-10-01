@@ -54,7 +54,7 @@ The full documentation is available at https://braintools.readthedocs.io
 
 ## Ecosystem
 
-`braintools` is part of our brain simulation ecosystem: https://brainmodeling.readthedocs.io/
+`braintools` is one part of our brain simulation ecosystem: https://brainmodeling.readthedocs.io/
 
 ## Contributing
 

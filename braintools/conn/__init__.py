@@ -22,7 +22,6 @@ complete decoupling between model types to ensure clean, specialized implementat
 
 **Supported Model Types:**
 - **Point Neurons**: Single-compartment integrate-and-fire models
-- **Population Rate Models**: Mean-field population dynamics
 - **Multi-Compartment Models**: Detailed morphological neuron models
 
 **Key Features:**
@@ -105,33 +104,6 @@ Point Neuron Connectivity:
         inh_weight=-0.8 * u.nS
     )
 
-Population Rate Model Connectivity:
-
-.. code-block:: python
-
-    from braintools.conn import population
-
-    # Explicit coupling matrix
-    coupling_matrix = np.array([
-        [0.5, 0.8],   # Excitatory -> [E, I]
-        [-1.2, -0.3]  # Inhibitory -> [E, I]
-    ])
-    pop_coupling = population.PopulationCoupling(coupling_matrix)
-
-    # Hierarchical visual processing
-    visual_hierarchy = population.HierarchicalPopulations(
-        hierarchy_levels=[4, 2, 1],  # V1, V2, IT
-        feedforward_strength=[0.6, 0.8],
-        feedback_strength=[0.1, 0.2],
-        lateral_strength=0.05
-    )
-
-    # Wilson-Cowan dynamics
-    wc_network = population.WilsonCowanNetwork(
-        w_ee=1.25, w_ei=1.0,
-        w_ie=-1.0, w_ii=-0.75,
-        tau_e=10 * u.ms, tau_i=20 * u.ms
-    )
 
 Multi-Compartment Model Connectivity:
 
@@ -252,14 +224,6 @@ Available Patterns:
 - **DendriteToSoma**: Dendrite-to-soma connections
 - **MultiCompartmentRandom**: Random with compartment-specific probabilities
 
-**Population Rate Patterns:**
-- **PopulationCoupling**: Direct population-to-population coupling
-- **MeanField**: Mean-field connectivity approximations
-- **HierarchicalPopulations**: Multi-level population hierarchies
-- **ExcitatoryInhibitory**: Standard E-I network patterns
-- **FeedforwardInhibition**: Feedforward inhibition patterns
-- **RecurrentAmplification**: Recurrent amplification networks
-
 Operations and Transformations:
 ------------------------------
 - **Arithmetic**: +, -, *, / for combining patterns
@@ -269,24 +233,14 @@ Operations and Transformations:
 - **Transformations**: .add_noise(), .add_plasticity(), .apply_transform()
 """
 
-from ._conn_base import *
-from ._conn_base import __all__ as base_all
-from ._conn_compartment import *
-from ._conn_compartment import __all__ as comp_all
-from ._conn_kernel import *
-from ._conn_kernel import __all__ as kernel_all
-from ._conn_point import *
-from ._conn_point import __all__ as point_all
-from ._conn_population import *
-from ._conn_population import __all__ as pop_all
-from ._init_base import *
-from ._init_base import __all__ as init_all
-from ._init_delay import *
-from ._init_delay import __all__ as delay_all
-from ._init_distance import *
-from ._init_distance import __all__ as distance_all
-from ._init_weight import *
-from ._init_weight import __all__ as weight_all
+from ._base import *
+from ._base import __all__ as base_all
+from ._compartment import *
+from ._compartment import __all__ as comp_all
+from ._kernel import *
+from ._kernel import __all__ as kernel_all
+from ._point import *
+from ._point import __all__ as point_all
 
-__all__ = base_all + comp_all + init_all + weight_all + delay_all + distance_all + kernel_all + point_all + pop_all
-del init_all, weight_all, delay_all, distance_all, base_all, comp_all, kernel_all, point_all, pop_all
+__all__ = base_all + comp_all + kernel_all + point_all
+del base_all, comp_all, kernel_all, point_all

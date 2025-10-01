@@ -30,7 +30,7 @@ import unittest
 import brainunit as u
 import numpy as np
 
-from braintools.conn._conn_compartment import (
+from braintools.conn._compartment import (
     # Constants
     SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON, COMPARTMENT_NAMES,
 
@@ -72,7 +72,7 @@ from braintools.conn._conn_compartment import (
     # Custom patterns
     CustomCompartment,
 )
-from braintools.conn import ConstantWeight, UniformDelay
+from braintools.init import Constant, Uniform
 
 
 class TestCompartmentConstants(unittest.TestCase):
@@ -246,8 +246,8 @@ class TestCompartmentSpecific(unittest.TestCase):
         self.assertTrue(np.all(result.pre_compartments == AXON))
 
     def test_weights_and_delays(self):
-        weight_init = ConstantWeight(0.5 * u.nS)
-        delay_init = UniformDelay(1.0 * u.ms, 3.0 * u.ms)
+        weight_init = Constant(0.5 * u.nS)
+        delay_init = Uniform(1.0 * u.ms, 3.0 * u.ms)
 
         conn = CompartmentSpecific(
             compartment_mapping={AXON: SOMA},
@@ -1366,8 +1366,8 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_unit_consistency(self):
         # Test that units are handled consistently across different patterns
-        weight_init = ConstantWeight(1.5 * u.nS)
-        delay_init = UniformDelay(0.5 * u.ms, 2.5 * u.ms)
+        weight_init = Constant(1.5 * u.nS)
+        delay_init = Uniform(0.5 * u.ms, 2.5 * u.ms)
 
         patterns = [
             CompartmentSpecific(compartment_mapping={AXON: SOMA}, connection_prob=0.1),
