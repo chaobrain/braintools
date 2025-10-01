@@ -281,8 +281,8 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         n_connections = len(pre_indices)
 
         # Generate weights and delays using init_call
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -633,8 +633,8 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         post_compartments = np.concatenate(all_post_compartments)
         n_connections = len(pre_indices)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -773,8 +773,8 @@ class DendriticTree(MultiCompartmentConnectivity):
         post_compartments = np.concatenate(all_post_compartments)
         n_connections = len(pre_indices)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -915,8 +915,8 @@ class AxonalProjection(MultiCompartmentConnectivity):
         pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
         post_compartments = np.full(n_connections, BASAL_DENDRITE, dtype=np.int64)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -1113,8 +1113,8 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         post_compartments = np.concatenate(all_post_compartments)
         n_connections = len(pre_indices)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -1224,8 +1224,8 @@ class AxonalBranching(MultiCompartmentConnectivity):
             size=n_connections
         ).astype(np.int64)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -1339,8 +1339,8 @@ class AxonalArborization(MultiCompartmentConnectivity):
             size=n_connections
         ).astype(np.int64)
 
-        weights = init_call(self.weight_init, self.rng, n_connections)
-        delays = init_call(self.delay_init, self.rng, n_connections)
+        weights = init_call(self.weight_init, n_connections, rng=self.rng)
+        delays = init_call(self.delay_init, n_connections, rng=self.rng)
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms

@@ -214,25 +214,25 @@ class Random(PointNeuronConnectivity):
         # Generate weights using the initialization class
         weights = init_call(
             self.weight_init,
-            self.rng,
             n_connections,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
             pre_positions=pre_positions,
-            post_positions=post_positions
+            post_positions=post_positions,
+            rng=self.rng
         )
 
         # Generate delays using the initialization class
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
             pre_positions=pre_positions,
-            post_positions=post_positions
+            post_positions=post_positions,
+            rng=self.rng
         )
 
         return ConnectionResult(

@@ -27,26 +27,26 @@ import unittest
 import brainunit as u
 import numpy as np
 
-from braintools.conn import (
-    ConstantWeight,
-    UniformWeight,
-    NormalWeight,
-    LogNormalWeight,
-    GammaWeight,
-    ExponentialWeight,
-    ExponentialDecayWeight,
-    TruncatedNormalWeight,
-    BetaWeight,
-    WeibullWeight,
-    MixtureWeight,
-    ConditionalWeight,
-    ScaledWeight,
-    ClippedWeight,
+from braintools.init import (
+    Constant,
+    Uniform,
+    Normal,
+    LogNormal,
+    Gamma,
+    Exponential,
+    ExponentialDecay,
+    TruncatedNormal,
+    Beta,
+    Weibull,
+    Mixture,
+    Conditional,
+    Scaled,
+    Clipped,
     init_call,
 )
 
 
-class TestConstantWeight(unittest.TestCase):
+class TestConstant(unittest.TestCase):
     """
     Test Constant initialization.
 
@@ -60,7 +60,7 @@ class TestConstantWeight(unittest.TestCase):
 
         init = Constant(0.5 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 100)
+        weights = init(100, rng=rng)
         assert np.all(weights == 0.5 * u.siemens)
     """
 
@@ -68,25 +68,25 @@ class TestConstantWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_constant_value(self):
-        init = ConstantWeight(0.5 * u.siemens)
-        weights = init(self.rng, 100)
+        init = Constant(0.5 * u.siemens)
+        weights = init(100, rng=self.rng)
         self.assertEqual(weights.shape, (100,))
         self.assertTrue(np.all(weights == 0.5 * u.siemens))
 
     def test_constant_with_tuple_size(self):
-        init = ConstantWeight(1.0 * u.siemens)
-        weights = init(self.rng, (10, 20))
+        init = Constant(1.0 * u.siemens)
+        weights = init((10, 20), rng=self.rng)
         self.assertEqual(weights.shape, (10, 20))
         self.assertTrue(np.all(weights == 1.0 * u.siemens))
 
     def test_repr(self):
-        init = ConstantWeight(0.5 * u.siemens)
+        init = Constant(0.5 * u.siemens)
         repr_str = repr(init)
         self.assertIn('Constant', repr_str)
         self.assertIn('0.5', repr_str)
 
 
-class TestUniformWeight(unittest.TestCase):
+class TestUniform(unittest.TestCase):
     """
     Test Uniform initialization.
 
@@ -100,7 +100,7 @@ class TestUniformWeight(unittest.TestCase):
 
         init = Uniform(0.1 * u.siemens, 1.0 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all((weights >= 0.1 * u.siemens) & (weights < 1.0 * u.siemens))
     """
 
@@ -108,25 +108,25 @@ class TestUniformWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_uniform_distribution(self):
-        init = UniformWeight(0.1 * u.siemens, 1.0 * u.siemens)
-        weights = init(self.rng, 10000)
+        init = Uniform(0.1 * u.siemens, 1.0 * u.siemens)
+        weights = init(10000, rng=self.rng)
         self.assertEqual(weights.shape, (10000,))
         self.assertTrue(np.all(weights >= 0.1 * u.siemens))
         self.assertTrue(np.all(weights < 1.0 * u.siemens))
 
     def test_uniform_statistics(self):
-        init = UniformWeight(0.0 * u.siemens, 1.0 * u.siemens)
-        weights = init(self.rng, 100000)
+        init = Uniform(0.0 * u.siemens, 1.0 * u.siemens)
+        weights = init(100000, rng=self.rng)
         mean = np.mean(weights.mantissa)
         self.assertAlmostEqual(mean, 0.5, delta=0.01)
 
     def test_repr(self):
-        init = UniformWeight(0.1 * u.siemens, 1.0 * u.siemens)
+        init = Uniform(0.1 * u.siemens, 1.0 * u.siemens)
         repr_str = repr(init)
         self.assertIn('Uniform', repr_str)
 
 
-class TestNormalWeight(unittest.TestCase):
+class TestNormal(unittest.TestCase):
     """
     Test Normal initialization.
 
@@ -140,7 +140,7 @@ class TestNormalWeight(unittest.TestCase):
 
         init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert abs(np.mean(weights.mantissa) - 0.5) < 0.05
     """
 
@@ -148,25 +148,25 @@ class TestNormalWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_normal_distribution(self):
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
-        weights = init(self.rng, 100000)
+        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
+        weights = init(100000, rng=self.rng)
         self.assertEqual(weights.shape, (100000,))
 
     def test_normal_statistics(self):
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
-        weights = init(self.rng, 100000)
+        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
+        weights = init(100000, rng=self.rng)
         mean = np.mean(weights.mantissa)
         std = np.std(weights.mantissa)
         self.assertAlmostEqual(mean, 0.5, delta=0.01)
         self.assertAlmostEqual(std, 0.1, delta=0.01)
 
     def test_repr(self):
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
+        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
         repr_str = repr(init)
         self.assertIn('Normal', repr_str)
 
 
-class TestLogNormalWeight(unittest.TestCase):
+class TestLogNormal(unittest.TestCase):
     """
     Test LogNormal initialization.
 
@@ -180,7 +180,7 @@ class TestLogNormalWeight(unittest.TestCase):
 
         init = LogNormal(0.5 * u.siemens, 0.2 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all(weights > 0 * u.siemens)
     """
 
@@ -188,23 +188,23 @@ class TestLogNormalWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_lognormal_positive(self):
-        init = LogNormalWeight(0.5 * u.siemens, 0.2 * u.siemens)
-        weights = init(self.rng, 1000)
+        init = LogNormal(0.5 * u.siemens, 0.2 * u.siemens)
+        weights = init(1000, rng=self.rng)
         self.assertTrue(np.all(weights > 0 * u.siemens))
 
     def test_lognormal_statistics(self):
-        init = LogNormalWeight(1.0 * u.siemens, 0.5 * u.siemens)
-        weights = init(self.rng, 100000)
+        init = LogNormal(1.0 * u.siemens, 0.5 * u.siemens)
+        weights = init(100000, rng=self.rng)
         mean = np.mean(weights.mantissa)
         self.assertAlmostEqual(mean, 1.0, delta=0.05)
 
     def test_repr(self):
-        init = LogNormalWeight(0.5 * u.siemens, 0.2 * u.siemens)
+        init = LogNormal(0.5 * u.siemens, 0.2 * u.siemens)
         repr_str = repr(init)
         self.assertIn('LogNormal', repr_str)
 
 
-class TestGammaWeight(unittest.TestCase):
+class TestGamma(unittest.TestCase):
     """
     Test Gamma initialization.
 
@@ -218,7 +218,7 @@ class TestGammaWeight(unittest.TestCase):
 
         init = Gamma(shape=2.0, scale=0.5 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all(weights >= 0 * u.siemens)
     """
 
@@ -226,26 +226,26 @@ class TestGammaWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_gamma_positive(self):
-        init = GammaWeight(shape=2.0, scale=0.5 * u.siemens)
-        weights = init(self.rng, 1000)
+        init = Gamma(shape=2.0, scale=0.5 * u.siemens)
+        weights = init(1000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0 * u.siemens))
 
     def test_gamma_statistics(self):
         shape = 2.0
         scale = 0.5
-        init = GammaWeight(shape=shape, scale=scale * u.siemens)
-        weights = init(self.rng, 100000)
+        init = Gamma(shape=shape, scale=scale * u.siemens)
+        weights = init(100000, rng=self.rng)
         expected_mean = shape * scale
         mean = np.mean(weights.mantissa)
         self.assertAlmostEqual(mean, expected_mean, delta=0.05)
 
     def test_repr(self):
-        init = GammaWeight(shape=2.0, scale=0.5 * u.siemens)
+        init = Gamma(shape=2.0, scale=0.5 * u.siemens)
         repr_str = repr(init)
         self.assertIn('Gamma', repr_str)
 
 
-class TestExponentialWeight(unittest.TestCase):
+class TestExponential(unittest.TestCase):
     """
     Test Exponential initialization.
 
@@ -259,7 +259,7 @@ class TestExponentialWeight(unittest.TestCase):
 
         init = Exponential(0.5 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all(weights >= 0 * u.siemens)
     """
 
@@ -267,24 +267,24 @@ class TestExponentialWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_exponential_positive(self):
-        init = ExponentialWeight(0.5 * u.siemens)
-        weights = init(self.rng, 1000)
+        init = Exponential(0.5 * u.siemens)
+        weights = init(1000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0 * u.siemens))
 
     def test_exponential_statistics(self):
         scale = 0.5
-        init = ExponentialWeight(scale * u.siemens)
-        weights = init(self.rng, 100000)
+        init = Exponential(scale * u.siemens)
+        weights = init(100000, rng=self.rng)
         mean = np.mean(weights.mantissa)
         self.assertAlmostEqual(mean, scale, delta=0.01)
 
     def test_repr(self):
-        init = ExponentialWeight(0.5 * u.siemens)
+        init = Exponential(0.5 * u.siemens)
         repr_str = repr(init)
         self.assertIn('Exponential', repr_str)
 
 
-class TestExponentialDecayWeight(unittest.TestCase):
+class TestExponentialDecay(unittest.TestCase):
     """
     Test ExponentialDecay initialization.
 
@@ -303,7 +303,7 @@ class TestExponentialDecayWeight(unittest.TestCase):
         )
         rng = np.random.default_rng(0)
         distances = np.array([0, 50, 100, 200]) * u.um
-        weights = init(rng, 4, distances=distances)
+        weights = init(4, distances=distances, rng=rng)
         assert weights[0] == 1.0 * u.siemens
         assert weights[-1] >= 0.01 * u.siemens
     """
@@ -312,43 +312,43 @@ class TestExponentialDecayWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_exponential_decay_without_distances(self):
-        init = ExponentialDecayWeight(
+        init = ExponentialDecay(
             max_weight=1.0 * u.siemens,
             decay_constant=100.0 * u.um
         )
-        weights = init(self.rng, 10)
+        weights = init(10, rng=self.rng)
         self.assertTrue(np.all(weights == 1.0 * u.siemens))
 
     def test_exponential_decay_with_distances(self):
-        init = ExponentialDecayWeight(
+        init = ExponentialDecay(
             max_weight=1.0 * u.siemens,
             decay_constant=100.0 * u.um,
             min_weight=0.0 * u.siemens
         )
         distances = np.array([0, 100, 200, 300]) * u.um
-        weights = init(self.rng, 4, distances=distances)
+        weights = init(4, distances=distances, rng=self.rng)
 
         self.assertAlmostEqual(weights[0].mantissa, 1.0, delta=0.001)
         self.assertAlmostEqual(weights[1].mantissa, 1.0 / np.e, delta=0.001)
         self.assertTrue(weights[0] > weights[1] > weights[2] > weights[3])
 
     def test_exponential_decay_min_weight(self):
-        init = ExponentialDecayWeight(
+        init = ExponentialDecay(
             max_weight=1.0 * u.siemens,
             decay_constant=10.0 * u.um,
             min_weight=0.1 * u.siemens
         )
         distances = np.array([0, 100, 1000]) * u.um
-        weights = init(self.rng, 3, distances=distances)
+        weights = init(3, distances=distances, rng=self.rng)
         self.assertTrue(np.all(weights >= 0.1 * u.siemens))
 
     def test_repr(self):
-        init = ExponentialDecayWeight(1.0 * u.siemens, 100.0 * u.um)
+        init = ExponentialDecay(1.0 * u.siemens, 100.0 * u.um)
         repr_str = repr(init)
         self.assertIn('ExponentialDecay', repr_str)
 
 
-class TestTruncatedNormalWeight(unittest.TestCase):
+class TestTruncatedNormal(unittest.TestCase):
     """
     Test TruncatedNormal initialization.
 
@@ -367,7 +367,7 @@ class TestTruncatedNormalWeight(unittest.TestCase):
             high=1.0 * u.siemens
         )
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all((weights >= 0.0 * u.siemens) & (weights <= 1.0 * u.siemens))
     """
 
@@ -376,13 +376,13 @@ class TestTruncatedNormalWeight(unittest.TestCase):
 
     def test_truncated_normal_bounds(self):
         try:
-            init = TruncatedNormalWeight(
+            init = TruncatedNormal(
                 mean=0.5 * u.siemens,
                 std=0.2 * u.siemens,
                 low=0.0 * u.siemens,
                 high=1.0 * u.siemens
             )
-            weights = init(self.rng, 1000)
+            weights = init(1000, rng=self.rng)
             self.assertTrue(np.all(weights >= 0.0 * u.siemens))
             self.assertTrue(np.all(weights <= 1.0 * u.siemens))
         except ImportError:
@@ -390,38 +390,38 @@ class TestTruncatedNormalWeight(unittest.TestCase):
 
     def test_truncated_normal_statistics(self):
         try:
-            init = TruncatedNormalWeight(
+            init = TruncatedNormal(
                 mean=0.5 * u.siemens,
                 std=0.1 * u.siemens,
                 low=0.0 * u.siemens,
                 high=1.0 * u.siemens
             )
-            weights = init(self.rng, 100000)
+            weights = init(100000, rng=self.rng)
             mean = np.mean(weights.mantissa)
             self.assertAlmostEqual(mean, 0.5, delta=0.05)
         except ImportError:
             self.skipTest("scipy not installed")
 
     def test_scipy_import_error(self):
-        init = TruncatedNormalWeight(
+        init = TruncatedNormal(
             mean=0.5 * u.siemens,
             std=0.2 * u.siemens
         )
         try:
             import scipy
-            weights = init(self.rng, 100)
+            weights = init(100, rng=self.rng)
             self.assertEqual(weights.shape, (100,))
         except ImportError:
             with self.assertRaises(ImportError):
-                init(self.rng, 100)
+                init(100, rng=self.rng)
 
     def test_repr(self):
-        init = TruncatedNormalWeight(0.5 * u.siemens, 0.2 * u.siemens)
+        init = TruncatedNormal(0.5 * u.siemens, 0.2 * u.siemens)
         repr_str = repr(init)
         self.assertIn('TruncatedNormal', repr_str)
 
 
-class TestBetaWeight(unittest.TestCase):
+class TestBeta(unittest.TestCase):
     """
     Test Beta initialization.
 
@@ -435,7 +435,7 @@ class TestBetaWeight(unittest.TestCase):
 
         init = Beta(alpha=2.0, beta=5.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all((weights >= 0.0 * u.siemens) & (weights <= 1.0 * u.siemens))
     """
 
@@ -443,36 +443,36 @@ class TestBetaWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_beta_bounds(self):
-        init = BetaWeight(
+        init = Beta(
             alpha=2.0,
             beta=5.0,
             low=0.0 * u.siemens,
             high=1.0 * u.siemens
         )
-        weights = init(self.rng, 1000)
+        weights = init(1000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0.0 * u.siemens))
         self.assertTrue(np.all(weights <= 1.0 * u.siemens))
 
     def test_beta_statistics(self):
         alpha, beta = 2.0, 5.0
-        init = BetaWeight(
+        init = Beta(
             alpha=alpha,
             beta=beta,
             low=0.0 * u.siemens,
             high=1.0 * u.siemens
         )
-        weights = init(self.rng, 100000)
+        weights = init(100000, rng=self.rng)
         expected_mean = alpha / (alpha + beta)
         mean = np.mean(weights.mantissa)
         self.assertAlmostEqual(mean, expected_mean, delta=0.01)
 
     def test_repr(self):
-        init = BetaWeight(2.0, 5.0, 0.0 * u.siemens, 1.0 * u.siemens)
+        init = Beta(2.0, 5.0, 0.0 * u.siemens, 1.0 * u.siemens)
         repr_str = repr(init)
         self.assertIn('Beta', repr_str)
 
 
-class TestWeibullWeight(unittest.TestCase):
+class TestWeibull(unittest.TestCase):
     """
     Test Weibull initialization.
 
@@ -486,7 +486,7 @@ class TestWeibullWeight(unittest.TestCase):
 
         init = Weibull(shape=1.5, scale=0.5 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all(weights >= 0 * u.siemens)
     """
 
@@ -494,17 +494,17 @@ class TestWeibullWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_weibull_positive(self):
-        init = WeibullWeight(shape=1.5, scale=0.5 * u.siemens)
-        weights = init(self.rng, 1000)
+        init = Weibull(shape=1.5, scale=0.5 * u.siemens)
+        weights = init(1000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0 * u.siemens))
 
     def test_repr(self):
-        init = WeibullWeight(1.5, 0.5 * u.siemens)
+        init = Weibull(1.5, 0.5 * u.siemens)
         repr_str = repr(init)
         self.assertIn('Weibull', repr_str)
 
 
-class TestMixtureWeight(unittest.TestCase):
+class TestMixture(unittest.TestCase):
     """
     Test Mixture composite distribution.
 
@@ -524,7 +524,7 @@ class TestMixtureWeight(unittest.TestCase):
             weights=[0.7, 0.3]
         )
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert len(weights) == 1000
     """
 
@@ -532,36 +532,36 @@ class TestMixtureWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_mixture_basic(self):
-        init = MixtureWeight(
+        init = Mixture(
             distributions=[
-                ConstantWeight(0.5 * u.siemens),
-                ConstantWeight(1.0 * u.siemens)
+                Constant(0.5 * u.siemens),
+                Constant(1.0 * u.siemens)
             ],
             weights=[0.5, 0.5]
         )
-        weights = init(self.rng, 10000)
+        weights = init(10000, rng=self.rng)
         count_low = np.sum(np.abs(weights.mantissa - 0.5) < 0.01)
         count_high = np.sum(np.abs(weights.mantissa - 1.0) < 0.01)
         self.assertAlmostEqual(count_low / 10000, 0.5, delta=0.05)
         self.assertAlmostEqual(count_high / 10000, 0.5, delta=0.05)
 
     def test_mixture_equal_weights(self):
-        init = MixtureWeight(
+        init = Mixture(
             distributions=[
-                ConstantWeight(0.3 * u.siemens),
-                ConstantWeight(0.6 * u.siemens),
-                ConstantWeight(0.9 * u.siemens)
+                Constant(0.3 * u.siemens),
+                Constant(0.6 * u.siemens),
+                Constant(0.9 * u.siemens)
             ]
         )
-        weights = init(self.rng, 3000)
+        weights = init(3000, rng=self.rng)
         self.assertEqual(len(weights), 3000)
 
     def test_repr(self):
-        init = MixtureWeight([ConstantWeight(0.5 * u.siemens)])
+        init = Mixture([Constant(0.5 * u.siemens)])
         self.assertIn('Mixture', repr(init))
 
 
-class TestConditionalWeight(unittest.TestCase):
+class TestConditional(unittest.TestCase):
     """
     Test Conditional composite distribution.
 
@@ -582,7 +582,7 @@ class TestConditionalWeight(unittest.TestCase):
             false_dist=Normal(-0.3 * u.siemens, 0.05 * u.siemens)
         )
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000, neuron_indices=np.arange(1000))
+        weights = init(1000, neuron_indices=np.arange(1000), rng=rng)
         assert len(weights) == 1000
     """
 
@@ -593,12 +593,12 @@ class TestConditionalWeight(unittest.TestCase):
         def is_even(indices):
             return indices % 2 == 0
 
-        init = ConditionalWeight(
+        init = Conditional(
             condition_fn=is_even,
-            true_dist=ConstantWeight(0.5 * u.siemens),
-            false_dist=ConstantWeight(1.0 * u.siemens)
+            true_dist=Constant(0.5 * u.siemens),
+            false_dist=Constant(1.0 * u.siemens)
         )
-        weights = init(self.rng, 100, neuron_indices=np.arange(100))
+        weights = init(100, neuron_indices=np.arange(100), rng=self.rng)
 
         for i in range(100):
             if i % 2 == 0:
@@ -610,27 +610,27 @@ class TestConditionalWeight(unittest.TestCase):
         def all_true(indices):
             return np.ones(len(indices), dtype=bool)
 
-        init = ConditionalWeight(
+        init = Conditional(
             condition_fn=all_true,
-            true_dist=ConstantWeight(0.5 * u.siemens),
-            false_dist=ConstantWeight(1.0 * u.siemens)
+            true_dist=Constant(0.5 * u.siemens),
+            false_dist=Constant(1.0 * u.siemens)
         )
-        weights = init(self.rng, 50)
+        weights = init(50, rng=self.rng)
         self.assertTrue(np.all(np.abs(weights.mantissa - 0.5) < 0.001))
 
     def test_repr(self):
         def dummy(x):
             return x > 0
 
-        init = ConditionalWeight(
+        init = Conditional(
             dummy,
-            ConstantWeight(0.5 * u.siemens),
-            ConstantWeight(1.0 * u.siemens)
+            Constant(0.5 * u.siemens),
+            Constant(1.0 * u.siemens)
         )
         self.assertIn('Conditional', repr(init))
 
 
-class TestScaledWeight(unittest.TestCase):
+class TestScaled(unittest.TestCase):
     """
     Test Scaled composite distribution.
 
@@ -645,7 +645,7 @@ class TestScaledWeight(unittest.TestCase):
         base = Normal(1.0 * u.siemens, 0.2 * u.siemens)
         init = Scaled(base, scale_factor=0.5)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.mean(weights.mantissa) < 1.0
     """
 
@@ -653,31 +653,31 @@ class TestScaledWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_scaled_basic(self):
-        base = ConstantWeight(1.0 * u.siemens)
-        init = ScaledWeight(base, scale_factor=0.5)
-        weights = init(self.rng, 100)
+        base = Constant(1.0 * u.siemens)
+        init = Scaled(base, scale_factor=0.5)
+        weights = init(100, rng=self.rng)
         self.assertTrue(np.all(np.abs(weights.mantissa - 0.5) < 0.001))
 
     def test_scaled_with_quantity(self):
-        base = ConstantWeight(1.0 * u.siemens)
-        init = ScaledWeight(base, scale_factor=2.0)
-        weights = init(self.rng, 100)
+        base = Constant(1.0 * u.siemens)
+        init = Scaled(base, scale_factor=2.0)
+        weights = init(100, rng=self.rng)
         self.assertTrue(np.all(np.abs(weights.mantissa - 2.0) < 0.001))
 
     def test_scaled_statistics(self):
-        base = NormalWeight(1.0 * u.siemens, 0.1 * u.siemens)
-        init = ScaledWeight(base, scale_factor=2.0)
-        weights = init(self.rng, 100000)
+        base = Normal(1.0 * u.siemens, 0.1 * u.siemens)
+        init = Scaled(base, scale_factor=2.0)
+        weights = init(100000, rng=self.rng)
         mean = np.mean(weights.mantissa)
         self.assertAlmostEqual(mean, 2.0, delta=0.01)
 
     def test_repr(self):
-        base = ConstantWeight(1.0 * u.siemens)
-        init = ScaledWeight(base, 0.5)
+        base = Constant(1.0 * u.siemens)
+        init = Scaled(base, 0.5)
         self.assertIn('Scaled', repr(init))
 
 
-class TestClippedWeight(unittest.TestCase):
+class TestClipped(unittest.TestCase):
     """
     Test Clipped composite distribution.
 
@@ -692,7 +692,7 @@ class TestClippedWeight(unittest.TestCase):
         base = Normal(0.5 * u.siemens, 0.3 * u.siemens)
         init = Clipped(base, min_val=0.0 * u.siemens, max_val=1.0 * u.siemens)
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all((weights >= 0.0 * u.siemens) & (weights <= 1.0 * u.siemens))
     """
 
@@ -700,34 +700,34 @@ class TestClippedWeight(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_clipped_min(self):
-        base = NormalWeight(0.0 * u.siemens, 1.0 * u.siemens)
-        init = ClippedWeight(base, min_val=0.0 * u.siemens)
-        weights = init(self.rng, 10000)
+        base = Normal(0.0 * u.siemens, 1.0 * u.siemens)
+        init = Clipped(base, min_val=0.0 * u.siemens)
+        weights = init(10000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0.0 * u.siemens))
 
     def test_clipped_max(self):
-        base = NormalWeight(1.0 * u.siemens, 1.0 * u.siemens)
-        init = ClippedWeight(base, max_val=1.0 * u.siemens)
-        weights = init(self.rng, 10000)
+        base = Normal(1.0 * u.siemens, 1.0 * u.siemens)
+        init = Clipped(base, max_val=1.0 * u.siemens)
+        weights = init(10000, rng=self.rng)
         self.assertTrue(np.all(weights <= 1.0 * u.siemens))
 
     def test_clipped_both(self):
-        base = NormalWeight(0.5 * u.siemens, 1.0 * u.siemens)
-        init = ClippedWeight(base, min_val=0.0 * u.siemens, max_val=1.0 * u.siemens)
-        weights = init(self.rng, 10000)
+        base = Normal(0.5 * u.siemens, 1.0 * u.siemens)
+        init = Clipped(base, min_val=0.0 * u.siemens, max_val=1.0 * u.siemens)
+        weights = init(10000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0.0 * u.siemens))
         self.assertTrue(np.all(weights <= 1.0 * u.siemens))
 
     def test_clipped_statistics(self):
-        base = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
-        init = ClippedWeight(base, min_val=0.4 * u.siemens, max_val=0.6 * u.siemens)
-        weights = init(self.rng, 100000)
+        base = Normal(0.5 * u.siemens, 0.1 * u.siemens)
+        init = Clipped(base, min_val=0.4 * u.siemens, max_val=0.6 * u.siemens)
+        weights = init(100000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0.4 * u.siemens))
         self.assertTrue(np.all(weights <= 0.6 * u.siemens))
 
     def test_repr(self):
-        base = ConstantWeight(1.0 * u.siemens)
-        init = ClippedWeight(base, min_val=0.0 * u.siemens)
+        base = Constant(1.0 * u.siemens)
+        init = Clipped(base, min_val=0.0 * u.siemens)
         self.assertIn('Clipped', repr(init))
 
 
@@ -745,13 +745,13 @@ class TestInitCall(unittest.TestCase):
 
         rng = np.random.default_rng(0)
 
-        weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), rng, 100)
+        weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), 100, rng=rng)
         assert len(weights) == 100
 
-        scalar_weights = init_call(0.5, rng, 100)
+        scalar_weights = init_call(0.5, 100, rng=rng)
         assert scalar_weights == 0.5
 
-        none_weights = init_call(None, rng, 100)
+        none_weights = init_call(None, 100, rng=rng)
         assert none_weights is None
     """
 
@@ -759,40 +759,40 @@ class TestInitCall(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_init_call_with_initialization(self):
-        init = ConstantWeight(0.5 * u.siemens)
-        result = init_call(init, self.rng, 100)
+        init = Constant(0.5 * u.siemens)
+        result = init_call(init, 100, rng=self.rng)
         self.assertEqual(len(result), 100)
         self.assertTrue(np.all(result == 0.5 * u.siemens))
 
     def test_init_call_with_scalar_float(self):
-        result = init_call(0.5, self.rng, 100)
+        result = init_call(0.5, 100, rng=self.rng)
         self.assertEqual(result, 0.5)
 
     def test_init_call_with_scalar_int(self):
-        result = init_call(5, self.rng, 100)
+        result = init_call(5, 100, rng=self.rng)
         self.assertEqual(result, 5)
 
     def test_init_call_with_none(self):
-        result = init_call(None, self.rng, 100)
+        result = init_call(None, 100, rng=self.rng)
         self.assertIsNone(result)
 
     def test_init_call_with_quantity_scalar(self):
-        result = init_call(0.5 * u.siemens, self.rng, 100)
+        result = init_call(0.5 * u.siemens, 100, rng=self.rng)
         self.assertEqual(result, 0.5 * u.siemens)
 
     def test_init_call_with_quantity_array(self):
         arr = np.array([0.1, 0.2, 0.3, 0.4, 0.5]) * u.siemens
-        result = init_call(arr, self.rng, 5)
+        result = init_call(arr, 5, rng=self.rng)
         self.assertEqual(len(result), 5)
 
     def test_init_call_with_invalid_array_size(self):
         arr = np.array([0.1, 0.2, 0.3]) * u.siemens
         with self.assertRaises(ValueError):
-            init_call(arr, self.rng, 100)
+            init_call(arr, 100, rng=self.rng)
 
     def test_init_call_with_invalid_type(self):
         with self.assertRaises(TypeError):
-            init_call("invalid", self.rng, 100)
+            init_call("invalid", 100, rng=self.rng)
 
 
 class TestEdgeCases(unittest.TestCase):
@@ -816,7 +816,7 @@ class TestEdgeCases(unittest.TestCase):
         weights_2d = init(rng, (10, 20))
         assert weights_2d.shape == (10, 20)
 
-        weights_zero = init(rng, 0)
+        weights_zero = init(0, rng=rng)
         assert len(weights_zero) == 0
     """
 
@@ -824,29 +824,29 @@ class TestEdgeCases(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_zero_size(self):
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
-        weights = init(self.rng, 0)
+        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
+        weights = init(0, rng=self.rng)
         self.assertEqual(len(weights), 0)
 
     def test_large_size(self):
-        init = ConstantWeight(0.5 * u.siemens)
-        weights = init(self.rng, 1000000)
+        init = Constant(0.5 * u.siemens)
+        weights = init(1000000, rng=self.rng)
         self.assertEqual(len(weights), 1000000)
 
     def test_tuple_size(self):
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
-        weights = init(self.rng, (10, 20, 30))
+        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
+        weights = init((10, 20, 30), rng=self.rng)
         self.assertEqual(weights.shape, (10, 20, 30))
 
     def test_different_units(self):
-        init = UniformWeight(100.0 * u.uS, 1000.0 * u.uS)
-        weights = init(self.rng, 100)
+        init = Uniform(100.0 * u.uS, 1000.0 * u.uS)
+        weights = init(100, rng=self.rng)
         self.assertTrue(np.all(weights >= 100.0 * u.uS))
         self.assertTrue(np.all(weights < 1000.0 * u.uS))
 
     def test_unit_consistency(self):
-        init = NormalWeight(0.5 * u.siemens, 0.1 * u.siemens)
-        weights = init(self.rng, 100)
+        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
+        weights = init(100, rng=self.rng)
         self.assertEqual(weights.unit, u.siemens)
 
 
@@ -879,7 +879,7 @@ class TestCompositeScenarios(unittest.TestCase):
             max_val=1.5 * u.siemens
         )
         rng = np.random.default_rng(0)
-        weights = init(rng, 1000)
+        weights = init(1000, rng=rng)
         assert np.all((weights >= 0.0 * u.siemens) & (weights <= 1.5 * u.siemens))
     """
 
@@ -887,10 +887,10 @@ class TestCompositeScenarios(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_scaled_clipped_combination(self):
-        base = NormalWeight(0.5 * u.siemens, 0.2 * u.siemens)
-        scaled = ScaledWeight(base, scale_factor=2.0)
-        clipped = ClippedWeight(scaled, min_val=0.0 * u.siemens, max_val=1.5 * u.siemens)
-        weights = clipped(self.rng, 10000)
+        base = Normal(0.5 * u.siemens, 0.2 * u.siemens)
+        scaled = Scaled(base, scale_factor=2.0)
+        clipped = Clipped(scaled, min_val=0.0 * u.siemens, max_val=1.5 * u.siemens)
+        weights = clipped(10000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0.0 * u.siemens))
         self.assertTrue(np.all(weights <= 1.5 * u.siemens))
 
@@ -898,13 +898,13 @@ class TestCompositeScenarios(unittest.TestCase):
         def is_even(indices):
             return indices % 2 == 0
 
-        cond1 = ConditionalWeight(
+        cond1 = Conditional(
             is_even,
-            ConstantWeight(0.3 * u.siemens),
-            ConstantWeight(0.7 * u.siemens)
+            Constant(0.3 * u.siemens),
+            Constant(0.7 * u.siemens)
         )
 
-        weights = cond1(self.rng, 1000, neuron_indices=np.arange(1000))
+        weights = cond1(1000, neuron_indices=np.arange(1000), rng=self.rng)
         self.assertEqual(len(weights), 1000)
         for i in range(100):
             if i % 2 == 0:
@@ -913,16 +913,16 @@ class TestCompositeScenarios(unittest.TestCase):
                 self.assertAlmostEqual(weights[i].mantissa, 0.7, delta=0.001)
 
     def test_clipped_mixture_scaled(self):
-        mix = MixtureWeight(
+        mix = Mixture(
             distributions=[
-                NormalWeight(0.5 * u.siemens, 0.1 * u.siemens),
-                UniformWeight(0.3 * u.siemens, 0.7 * u.siemens)
+                Normal(0.5 * u.siemens, 0.1 * u.siemens),
+                Uniform(0.3 * u.siemens, 0.7 * u.siemens)
             ],
             weights=[0.6, 0.4]
         )
-        scaled = ScaledWeight(mix, scale_factor=2.0)
-        clipped = ClippedWeight(scaled, min_val=0.0 * u.siemens, max_val=1.5 * u.siemens)
-        weights = clipped(self.rng, 10000)
+        scaled = Scaled(mix, scale_factor=2.0)
+        clipped = Clipped(scaled, min_val=0.0 * u.siemens, max_val=1.5 * u.siemens)
+        weights = clipped(10000, rng=self.rng)
         self.assertTrue(np.all(weights >= 0.0 * u.siemens))
         self.assertTrue(np.all(weights <= 1.5 * u.siemens))
 

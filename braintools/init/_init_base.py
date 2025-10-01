@@ -69,7 +69,7 @@ class Initialization(ABC):
         ...     def __init__(self, value):
         ...         self.value = value
         ...
-        ...     def __call__(self, rng, size, **kwargs):
+        ...     def __call__(self, size, **kwargs):
         ...         return np.full(size, self.value)
 
     Compose initializations:
@@ -88,18 +88,18 @@ class Initialization(ABC):
     """
 
     @abstractmethod
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
         """
         Generate parameter values.
 
         Parameters
         ----------
-        rng : numpy.random.Generator
-            Random number generator.
         size : int or tuple
             Shape of the output array.
         **kwargs :
-            Additional keyword arguments (e.g., distances, neuron_indices).
+            Additional keyword arguments (e.g., rng, distances, neuron_indices).
+            rng : numpy.random.Generator, optional
+                Random number generator (default: np.random).
 
         Returns
         -------
@@ -172,7 +172,7 @@ Initializer = Union[Initialization, float, int, np.ndarray, jax.Array, u.Quantit
 # Helper Functions
 # =============================================================================
 
-def init_call(init: Optional[Initialization], rng: np.random.Generator, n: int, **kwargs):
+def init_call(init: Optional[Initialization], n: int, **kwargs):
     """
     Helper function to call initialization functions.
 
@@ -183,12 +183,12 @@ def init_call(init: Optional[Initialization], rng: np.random.Generator, n: int, 
     ----------
     init : Initialization, float, int, array, or None
         The initialization strategy or value.
-    rng : numpy.random.Generator
-        Random number generator.
     n : int
         Number of connections or parameters to generate.
     **kwargs :
         Additional keyword arguments passed to the initialization.
+        rng : numpy.random.Generator, optional
+            Random number generator (default: np.random).
 
     Returns
     -------
@@ -210,16 +210,18 @@ def init_call(init: Optional[Initialization], rng: np.random.Generator, n: int, 
         >>> import brainunit as u
         >>> from braintools.init import init_call, Normal
         >>>
+        >>> weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), 100)
+        >>>
+        >>> # With custom rng
         >>> rng = np.random.default_rng(0)
+        >>> weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), 100, rng=rng)
         >>>
-        >>> weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), rng, 100)
-        >>>
-        >>> scalar_weights = init_call(0.5, rng, 100)
+        >>> scalar_weights = init_call(0.5, 100)
     """
     if init is None:
         return None
     elif isinstance(init, Initialization):
-        return init(rng, n, **kwargs)
+        return init(n, **kwargs)
     elif isinstance(init, (float, int)):
         return init
     elif isinstance(init, (u.Quantity, np.ndarray, jax.Array)):
@@ -244,10 +246,10 @@ class BinaryOpInit(Initialization):
         self.left = left
         self.right = right
 
-    def _get_value(self, obj, rng, size, **kwargs):
+    def _get_value(self, obj, size, **kwargs):
         """Helper to extract value from Initialization or scalar."""
         if isinstance(obj, Initialization):
-            return obj(rng, size, **kwargs)
+            return obj(size, **kwargs)
         elif isinstance(obj, (float, int)):
             return obj
         elif isinstance(obj, (u.Quantity, np.ndarray, jax.Array)):
@@ -259,9 +261,9 @@ class BinaryOpInit(Initialization):
 class AddInit(BinaryOpInit):
     """Addition of two initializations."""
 
-    def __call__(self, rng, size, **kwargs):
-        left_val = self._get_value(self.left, rng, size, **kwargs)
-        right_val = self._get_value(self.right, rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        left_val = self._get_value(self.left, size, **kwargs)
+        right_val = self._get_value(self.right, size, **kwargs)
         return left_val + right_val
 
     def __repr__(self):
@@ -271,9 +273,9 @@ class AddInit(BinaryOpInit):
 class SubInit(BinaryOpInit):
     """Subtraction of two initializations."""
 
-    def __call__(self, rng, size, **kwargs):
-        left_val = self._get_value(self.left, rng, size, **kwargs)
-        right_val = self._get_value(self.right, rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        left_val = self._get_value(self.left, size, **kwargs)
+        right_val = self._get_value(self.right, size, **kwargs)
         return left_val - right_val
 
     def __repr__(self):
@@ -283,9 +285,9 @@ class SubInit(BinaryOpInit):
 class MulInit(BinaryOpInit):
     """Multiplication of two initializations."""
 
-    def __call__(self, rng, size, **kwargs):
-        left_val = self._get_value(self.left, rng, size, **kwargs)
-        right_val = self._get_value(self.right, rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        left_val = self._get_value(self.left, size, **kwargs)
+        right_val = self._get_value(self.right, size, **kwargs)
         return left_val * right_val
 
     def __repr__(self):
@@ -295,9 +297,9 @@ class MulInit(BinaryOpInit):
 class DivInit(BinaryOpInit):
     """Division of two initializations."""
 
-    def __call__(self, rng, size, **kwargs):
-        left_val = self._get_value(self.left, rng, size, **kwargs)
-        right_val = self._get_value(self.right, rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        left_val = self._get_value(self.left, size, **kwargs)
+        right_val = self._get_value(self.right, size, **kwargs)
         return left_val / right_val
 
     def __repr__(self):
@@ -312,8 +314,8 @@ class ClipInit(Initialization):
         self.min_val = min_val
         self.max_val = max_val
 
-    def __call__(self, rng, size, **kwargs):
-        values = self.base(rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        values = self.base(size, **kwargs)
 
         if self.min_val is not None:
             if isinstance(values, u.Quantity):
@@ -342,8 +344,8 @@ class ApplyInit(Initialization):
         self.base = base
         self.func = func
 
-    def __call__(self, rng, size, **kwargs):
-        values = self.base(rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        values = self.base(size, **kwargs)
         return self.func(values)
 
     def __repr__(self):
@@ -357,10 +359,10 @@ class PipeInit(Initialization):
         self.base = base
         self.func = func
 
-    def __call__(self, rng, size, **kwargs):
-        values = self.base(rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        values = self.base(size, **kwargs)
         if isinstance(self.func, Initialization):
-            return self.func(rng, size, **kwargs)
+            return self.func(size, **kwargs)
         elif callable(self.func):
             return self.func(values)
         else:
@@ -402,7 +404,7 @@ class Compose(Initialization):
         ... )
         >>>
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(self, *inits):
@@ -410,11 +412,11 @@ class Compose(Initialization):
             raise ValueError("Compose requires at least one initialization")
         self.inits = inits
 
-    def __call__(self, rng, size, **kwargs):
-        result = self.inits[0](rng, size, **kwargs) if isinstance(self.inits[0], Initialization) else self.inits[0]
+    def __call__(self, size, **kwargs):
+        result = self.inits[0](size, **kwargs) if isinstance(self.inits[0], Initialization) else self.inits[0]
         for init in self.inits[1:]:
             if isinstance(init, Initialization):
-                result = init(rng, size if isinstance(result, (int, float)) else len(result), **kwargs)
+                result = init(size if isinstance(result, (int, float)) else len(result), **kwargs)
             elif callable(init):
                 result = init(result)
             else:

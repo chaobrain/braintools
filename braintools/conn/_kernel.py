@@ -190,9 +190,10 @@ class ConvKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
+            self.weight_init, n_connections,
             param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         # Multiply by kernel weights
@@ -212,9 +213,10 @@ class ConvKernel(PointNeuronConnectivity):
             weights = kernel_weights
 
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
+            self.delay_init, n_connections,
             param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         return ConnectionResult(
@@ -336,9 +338,10 @@ class GaussianKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
+            self.weight_init, n_connections,
             param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         # Multiply by Gaussian weights
@@ -724,9 +727,10 @@ class DoGKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
+            self.weight_init, n_connections,
             param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         # Multiply by DoG weights
@@ -746,9 +750,10 @@ class DoGKernel(PointNeuronConnectivity):
             weights = dog_weights
 
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
+            self.delay_init, n_connections,
             param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         return ConnectionResult(
@@ -1157,9 +1162,10 @@ class CustomKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, self.rng, n_connections,
+            self.weight_init, n_connections,
             param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         # Multiply by kernel weights
@@ -1179,9 +1185,10 @@ class CustomKernel(PointNeuronConnectivity):
             weights = kernel_weights
 
         delays = init_call(
-            self.delay_init, self.rng, n_connections,
+            self.delay_init, n_connections,
             param_type='delay', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions
+            pre_positions=pre_positions, post_positions=post_positions,
+            rng=self.rng
         )
 
         return ConnectionResult(

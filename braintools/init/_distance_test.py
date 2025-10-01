@@ -29,7 +29,7 @@ import unittest
 import brainunit as u
 import numpy as np
 
-from braintools.conn import (
+from braintools.init import (
     GaussianProfile,
     ExponentialProfile,
     PowerLawProfile,

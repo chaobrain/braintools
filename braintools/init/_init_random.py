@@ -74,14 +74,13 @@ class Constant(Initialization):
         >>> from braintools.init import Constant
         >>>
         >>> init = Constant(0.5 * u.siemens)
-        >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 100)
+        >>> weights = init(100)
     """
 
     def __init__(self, value: ArrayLike):
         self.value = value
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
         if isinstance(size, int):
             return u.math.full(size, self.value)
         return u.math.full(size, self.value)
@@ -113,14 +112,15 @@ class Uniform(Initialization):
         >>>
         >>> init = Uniform(0.1 * u.siemens, 1.0 * u.siemens)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(self, low: ArrayLike, high: ArrayLike):
         self.low = low
         self.high = high
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         low, unit = u.split_mantissa_unit(self.low)
         high = u.Quantity(self.high).to(unit).mantissa
         samples = rng.uniform(low, high, size)
@@ -153,14 +153,15 @@ class Normal(Initialization):
         >>>
         >>> init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(self, mean: ArrayLike, std: ArrayLike):
         self.mean = mean
         self.std = std
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
         samples = rng.normal(mean, std, size)
@@ -194,14 +195,15 @@ class LogNormal(Initialization):
         >>>
         >>> init = LogNormal(0.5 * u.siemens, 0.2 * u.siemens)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(self, mean: ArrayLike, std: ArrayLike):
         self.mean = mean
         self.std = std
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
 
@@ -238,14 +240,15 @@ class Gamma(Initialization):
         >>>
         >>> init = Gamma(shape=2.0, scale=0.5 * u.siemens)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(self, shape: float, scale: ArrayLike):
         self.shape = shape
         self.scale = scale
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.gamma(self.shape, scale, size)
         return u.maybe_decimal(samples * unit)
@@ -275,13 +278,14 @@ class Exponential(Initialization):
         >>>
         >>> init = Exponential(0.5 * u.siemens)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(self, scale: ArrayLike):
         self.scale = scale
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.exponential(scale, size)
         return u.maybe_decimal(samples * unit)
@@ -318,9 +322,8 @@ class ExponentialDecay(Initialization):
         ...     decay_constant=100.0 * u.um,
         ...     min_weight=0.01 * u.siemens
         ... )
-        >>> rng = np.random.default_rng(0)
         >>> distances = np.array([0, 50, 100, 200]) * u.um
-        >>> weights = init(rng, 4, distances=distances)
+        >>> weights = init(4, distances=distances)
     """
 
     def __init__(
@@ -333,7 +336,7 @@ class ExponentialDecay(Initialization):
         self.decay_constant = decay_constant
         self.min_weight = min_weight if min_weight is not None else 0.0 * max_weight.unit
 
-    def __call__(self, rng, size, distances: Optional[ArrayLike] = None, **kwargs):
+    def __call__(self, size, distances: Optional[ArrayLike] = None, **kwargs):
         if distances is None:
             return u.math.full(size, self.max_weight)
 
@@ -384,7 +387,7 @@ class TruncatedNormal(Initialization):
         ...     high=1.0 * u.siemens
         ... )
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(
@@ -399,7 +402,8 @@ class TruncatedNormal(Initialization):
         self.low = low
         self.high = high
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
 
@@ -440,7 +444,7 @@ class Beta(Initialization):
         >>>
         >>> init = Beta(alpha=2.0, beta=5.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(
@@ -455,7 +459,8 @@ class Beta(Initialization):
         self.low = low
         self.high = high
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         samples = rng.beta(self.alpha, self.beta, size)
         low, unit = u.split_mantissa_unit(self.low)
         high = u.Quantity(self.high).to(unit).mantissa
@@ -488,14 +493,15 @@ class Weibull(Initialization):
         >>>
         >>> init = Weibull(shape=1.5, scale=0.5 * u.siemens)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(self, shape: float, scale: ArrayLike):
         self.shape = shape
         self.scale = scale
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.weibull(self.shape, size) * scale
         return u.maybe_decimal(samples * unit)
@@ -538,14 +544,15 @@ class Mixture(Initialization):
         ...     weights=[0.7, 0.3]
         ... )
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(self, distributions: list, weights: Optional[list] = None):
         self.distributions = distributions
         self.weights = weights if weights is not None else [1.0 / len(distributions)] * len(distributions)
 
-    def __call__(self, rng, size, **kwargs):
+    def __call__(self, size, **kwargs):
+        rng = kwargs.get('rng', np.random)
         choices = rng.choice(len(self.distributions), size=size, p=self.weights)
 
         if isinstance(size, int):
@@ -558,7 +565,7 @@ class Mixture(Initialization):
         for i, dist in enumerate(self.distributions):
             mask = (choices == i)
             if np.any(mask):
-                dist_samples = dist(rng, np.sum(mask), **kwargs)
+                dist_samples = dist(np.sum(mask), **kwargs)
                 if unit is None:
                     unit = dist_samples.unit
                 samples[mask] = dist_samples.to(unit).mantissa
@@ -601,7 +608,7 @@ class Conditional(Initialization):
         ...     false_dist=Normal(-0.3 * u.siemens, 0.05 * u.siemens)
         ... )
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000, neuron_indices=np.arange(1000))
+        >>> weights = init(1000, neuron_indices=np.arange(1000), rng=rng)
     """
 
     def __init__(
@@ -614,14 +621,14 @@ class Conditional(Initialization):
         self.true_dist = true_dist
         self.false_dist = false_dist
 
-    def __call__(self, rng, size, neuron_indices: Optional[np.ndarray] = None, **kwargs):
+    def __call__(self, size, neuron_indices: Optional[np.ndarray] = None, **kwargs):
         if neuron_indices is None:
             neuron_indices = np.arange(size if isinstance(size, int) else np.prod(size))
 
         conditions = self.condition_fn(neuron_indices)
 
-        true_samples = self.true_dist(rng, np.sum(conditions), **kwargs)
-        false_samples = self.false_dist(rng, np.sum(~conditions), **kwargs)
+        true_samples = self.true_dist(np.sum(conditions), **kwargs)
+        false_samples = self.false_dist(np.sum(~conditions), **kwargs)
 
         if isinstance(size, int):
             samples = np.zeros(size)
@@ -662,7 +669,7 @@ class Scaled(Initialization):
         >>> base = Normal(1.0 * u.siemens, 0.2 * u.siemens)
         >>> init = Scaled(base, scale_factor=0.5)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(
@@ -673,8 +680,8 @@ class Scaled(Initialization):
         self.base_dist = base_dist
         self.scale_factor = scale_factor
 
-    def __call__(self, rng, size, **kwargs):
-        base_samples = self.base_dist(rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        base_samples = self.base_dist(size, **kwargs)
         return base_samples * self.scale_factor
 
     def __repr__(self):
@@ -707,7 +714,7 @@ class Clipped(Initialization):
         >>> base = Normal(0.5 * u.siemens, 0.3 * u.siemens)
         >>> init = Clipped(base, min_val=0.0 * u.siemens, max_val=1.0 * u.siemens)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init(rng, 1000)
+        >>> weights = init(1000, rng=rng)
     """
 
     def __init__(
@@ -720,8 +727,8 @@ class Clipped(Initialization):
         self.min_val = min_val
         self.max_val = max_val
 
-    def __call__(self, rng, size, **kwargs):
-        samples = self.base_dist(rng, size, **kwargs)
+    def __call__(self, size, **kwargs):
+        samples = self.base_dist(size, **kwargs)
 
         if self.min_val is not None:
             min_val = u.Quantity(self.min_val).to(samples.unit).mantissa
@@ -776,7 +783,7 @@ class DistanceModulated(Initialization):
         >>>
         >>> rng = np.random.default_rng(0)
         >>> distances = np.linspace(0, 300, 100) * u.um
-        >>> weights = init(rng, 100, distances=distances)
+        >>> weights = init(100, distances=distances, rng=rng)
     """
 
     def __init__(
@@ -805,8 +812,8 @@ class DistanceModulated(Initialization):
         else:
             raise TypeError("distance_profile must be a string or callable")
 
-    def __call__(self, rng, size, distances: Optional[ArrayLike] = None, **kwargs):
-        base_weights = self.base_dist(rng, size, **kwargs)
+    def __call__(self, size, distances: Optional[ArrayLike] = None, **kwargs):
+        base_weights = self.base_dist(size, **kwargs)
 
         if distances is None:
             return base_weights
@@ -865,9 +872,8 @@ class DistanceProportional(Initialization):
         ...     max_delay=10.0 * u.ms
         ... )
         >>>
-        >>> rng = np.random.default_rng(0)
         >>> distances = np.array([0, 100, 500, 1000]) * u.um
-        >>> delays = init(rng, 4, distances=distances)
+        >>> delays = init(4, distances=distances)
     """
 
     def __init__(
@@ -880,7 +886,7 @@ class DistanceProportional(Initialization):
         self.velocity = velocity
         self.max_delay = max_delay
 
-    def __call__(self, rng, size, distances: Optional[ArrayLike] = None, **kwargs):
+    def __call__(self, size, distances: Optional[ArrayLike] = None, **kwargs):
         if distances is None:
             return u.math.full(size, self.base_delay)
 
