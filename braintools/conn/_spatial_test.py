@@ -307,7 +307,7 @@ class TestSpatialPatterns(unittest.TestCase):
         positions = np.array([[0, 0], [10, 10], [20, 20]]) * u.um
 
         conn = RadialPatches(
-            patch_radius=15.0,  # Scalar, no units
+            patch_radius=15.0 * u.um,  # Scalar, no units
             n_patches=1,
             prob=1.0,
             seed=42
