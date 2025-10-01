@@ -28,6 +28,7 @@ import brainunit as u
 import numpy as np
 from scipy.spatial.distance import cdist
 
+from brainstate.typing import ArrayLike
 from braintools.init import init_call, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
@@ -91,7 +92,7 @@ class Conv2dKernel(PointConnectivity):
     def __init__(
         self,
         kernel: np.ndarray,
-        kernel_size: Union[float, u.Quantity],
+        kernel_size: ArrayLike,
         threshold: float = 0.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -275,8 +276,8 @@ class GaussianKernel(PointConnectivity):
 
     def __init__(
         self,
-        sigma: Union[float, u.Quantity],
-        max_distance: Optional[Union[float, u.Quantity]] = None,
+        sigma: ArrayLike,
+        max_distance: Optional[ArrayLike] = None,
         normalize: bool = True,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -440,11 +441,11 @@ class GaborKernel(PointConnectivity):
 
     def __init__(
         self,
-        sigma: Union[float, u.Quantity],
+        sigma: ArrayLike,
         frequency: float,
         theta: float,
         phase: float = 0.0,
-        max_distance: Optional[Union[float, u.Quantity]] = None,
+        max_distance: Optional[ArrayLike] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -648,11 +649,11 @@ class DoGKernel(PointConnectivity):
 
     def __init__(
         self,
-        sigma_center: Union[float, u.Quantity],
-        sigma_surround: Union[float, u.Quantity],
+        sigma_center: ArrayLike,
+        sigma_surround: ArrayLike,
         amplitude_center: float = 1.0,
         amplitude_surround: float = 0.8,
-        max_distance: Optional[Union[float, u.Quantity]] = None,
+        max_distance: Optional[ArrayLike] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -801,8 +802,8 @@ class MexicanHat(DoGKernel):
 
     def __init__(
         self,
-        sigma: Union[float, u.Quantity],
-        max_distance: Optional[Union[float, u.Quantity]] = None,
+        sigma: ArrayLike,
+        max_distance: Optional[ArrayLike] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -868,7 +869,7 @@ class SobelKernel(PointConnectivity):
     def __init__(
         self,
         direction: str = 'horizontal',
-        kernel_size: Union[float, u.Quantity] = 1.0,
+        kernel_size: ArrayLike = 1.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -979,7 +980,7 @@ class LaplacianKernel(PointConnectivity):
     def __init__(
         self,
         kernel_type: str = '4-connected',
-        kernel_size: Union[float, u.Quantity] = 1.0,
+        kernel_size: ArrayLike = 1.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -1067,7 +1068,7 @@ class CustomKernel(PointConnectivity):
     def __init__(
         self,
         kernel_func: Callable,
-        kernel_size: Union[float, u.Quantity],
+        kernel_size: ArrayLike,
         threshold: float = 0.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,

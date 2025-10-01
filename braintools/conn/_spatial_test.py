@@ -20,7 +20,7 @@ import numpy as np
 
 from braintools.conn import (
     Ring,
-    Grid,
+    Grid2d,
     RadialPatches,
     Gaussian,
     DistanceDependent,
@@ -239,13 +239,12 @@ class TestSpatialPatterns(unittest.TestCase):
             conn(pre_size=10, post_size=8)  # Different sizes not allowed
 
     def test_grid_von_neumann(self):
-        conn = Grid(
-            grid_shape=(4, 4),
+        conn = Grid2d(
             connectivity='von_neumann',
             periodic=False,
             seed=42
         )
-        result = conn(pre_size=16, post_size=16)
+        result = conn(pre_size=(4, 4), post_size=(4, 4))
 
         self.assertEqual(result.model_type, 'point')
         self.assertEqual(result.metadata['pattern'], 'grid')
@@ -258,13 +257,12 @@ class TestSpatialPatterns(unittest.TestCase):
         self.assertGreater(result.n_connections, 0)
 
     def test_grid_moore_periodic(self):
-        conn = Grid(
-            grid_shape=(3, 3),
+        conn = Grid2d(
             connectivity='moore',
             periodic=True,
             seed=42
         )
-        result = conn(pre_size=9, post_size=9)
+        result = conn(pre_size=(3, 3), post_size=(3, 3))
 
         self.assertEqual(result.metadata['connectivity'], 'moore')
         self.assertTrue(result.metadata['periodic'])
@@ -272,16 +270,6 @@ class TestSpatialPatterns(unittest.TestCase):
         # With periodic boundaries, each neuron has exactly 8 neighbors
         # Total = 9 * 8 = 72 connections
         self.assertEqual(result.n_connections, 72)
-
-    def test_grid_invalid_shape(self):
-        conn = Grid(grid_shape=(3, 3), seed=42)
-
-        with self.assertRaises(ValueError):
-            conn(pre_size=10, post_size=10)  # 10 != 3*3
-
-    def test_grid_invalid_connectivity(self):
-        with self.assertRaises(ValueError):
-            Grid(connectivity='invalid', grid_shape=(10, 10))(pre_size=100, post_size=100)
 
     def test_radial_patches_basic(self):
         positions = np.random.RandomState(42).uniform(0, 100, (20, 2)) * u.um

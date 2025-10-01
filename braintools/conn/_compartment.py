@@ -443,9 +443,7 @@ class AxonToDendrite(CompartmentSpecific):
         ... )
     """
 
-    def __init__(self,
-                 target_dendrites: List[int] = None,
-                 **kwargs):
+    def __init__(self,  target_dendrites: List[int] = None, **kwargs):
         if target_dendrites is None:
             target_dendrites = [BASAL_DENDRITE, APICAL_DENDRITE]
 
