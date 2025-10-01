@@ -72,6 +72,7 @@ class Constant(Initialization):
         >>> init = Constant(0.5 * u.siemens)
         >>> weights = init(100)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, value: ArrayLike):
         self.value = value
@@ -110,6 +111,7 @@ class Uniform(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, low: ArrayLike, high: ArrayLike):
         self.low = low
@@ -151,6 +153,7 @@ class Normal(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, mean: ArrayLike, std: ArrayLike):
         self.mean = mean
@@ -193,6 +196,7 @@ class LogNormal(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, mean: ArrayLike, std: ArrayLike):
         self.mean = mean
@@ -238,6 +242,7 @@ class Gamma(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, shape: float, scale: ArrayLike):
         self.shape = shape
@@ -276,6 +281,7 @@ class Exponential(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, scale: ArrayLike):
         self.scale = scale
@@ -325,6 +331,7 @@ class TruncatedNormal(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -382,6 +389,7 @@ class Beta(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -431,6 +439,7 @@ class Weibull(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, shape: float, scale: ArrayLike):
         self.shape = shape

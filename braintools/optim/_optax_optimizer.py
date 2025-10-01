@@ -177,6 +177,7 @@ class OptaxOptimizer(Optimizer):
     AdamW : AdamW optimizer with decoupled weight decay
     StepLR : Learning rate scheduler with step decay
     """
+    __module__ = 'braintools.optim'
 
     param_states: UniqueStateManager  # Container for PyTree of brainstate.State objects
     opt_state: Optional[LongTermState]
@@ -690,6 +691,7 @@ class SGD(OptaxOptimizer):
     RMSprop : RMSprop optimizer
     Momentum : Pure momentum optimizer
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -844,6 +846,7 @@ class Adam(OptaxOptimizer):
     Nadam : Adam with Nesterov momentum
     SGD : Stochastic gradient descent
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -957,6 +960,7 @@ class AdamW(OptaxOptimizer):
     Adam : Standard Adam optimizer
     SGD : Stochastic gradient descent
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1082,6 +1086,7 @@ class Adagrad(OptaxOptimizer):
     RMSprop : Root Mean Square Propagation, similar to Adagrad but with exponential decay
     Adam : Combines ideas from Adagrad and RMSprop
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1208,6 +1213,7 @@ class Adadelta(OptaxOptimizer):
     RMSprop : Similar to Adadelta but simpler
     Adam : Combines ideas from RMSprop and momentum
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1346,6 +1352,7 @@ class RMSprop(OptaxOptimizer):
     Adadelta : Extension of Adagrad
     Adam : Combines RMSprop with momentum
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1463,6 +1470,7 @@ class Adamax(OptaxOptimizer):
     Adam : Standard Adam optimizer
     Nadam : Adam with Nesterov momentum
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1623,6 +1631,7 @@ class Nadam(OptaxOptimizer):
     RAdam : Rectified Adam with variance adaptation
     SGD : Stochastic gradient descent with Nesterov momentum option
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1807,6 +1816,7 @@ class RAdam(OptaxOptimizer):
     Nadam : Adam with Nesterov momentum
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -2021,6 +2031,7 @@ class Lamb(OptaxOptimizer):
     AdamW : Adam with decoupled weight decay
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -2259,6 +2270,7 @@ class Lars(OptaxOptimizer):
     Adam : Adaptive moment estimation
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -2494,6 +2506,7 @@ class Lookahead(OptaxOptimizer):
     RAdam : Rectified Adam (works well with Lookahead)
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -2712,6 +2725,7 @@ class Yogi(OptaxOptimizer):
     RAdam : Rectified Adam with variance rectification
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -3026,6 +3040,7 @@ class LBFGS(OptaxOptimizer):
     Adagrad : Adaptive gradient algorithm
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -3328,6 +3343,7 @@ class Rprop(OptaxOptimizer):
     LBFGS : Limited-memory BFGS for batch optimization
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -3560,6 +3576,7 @@ class Adafactor(OptaxOptimizer):
     SM3 : Another memory-efficient adaptive optimizer
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -3795,6 +3812,7 @@ class AdaBelief(OptaxOptimizer):
     AdamW : Adam with decoupled weight decay
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -4026,6 +4044,7 @@ class Lion(OptaxOptimizer):
     SGD : Stochastic gradient descent with momentum
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -4263,6 +4282,7 @@ class SM3(OptaxOptimizer):
     Adagrad : Adaptive learning rates for sparse features
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -4507,6 +4527,7 @@ class Novograd(OptaxOptimizer):
     Lars : Layer-wise adaptive rate scaling
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -4735,6 +4756,7 @@ class Fromage(OptaxOptimizer):
     Adagrad : Adaptive learning rates for sparse features
 
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,

@@ -24,6 +24,7 @@ import jax.numpy as jnp
 import numpy as np
 from brainstate._compatible_import import safe_zip, unzip2
 from scipy.optimize import minimize
+
 from ._base import Optimizer
 
 __all__ = [
@@ -32,6 +33,8 @@ __all__ = [
 
 
 class HashablePartial:
+    __module__ = 'braintools.optim'
+
     def __init__(self, f, *args, **kwargs):
         self.f = f
         self.args = args

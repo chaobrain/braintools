@@ -102,6 +102,7 @@ class TestBasicInitialization:
         """Test that kwargs are properly passed to initialization."""
 
         class KwargsInit(Initialization):
+
             def __call__(self, size, custom_param=None, **kwargs):
                 if custom_param is not None:
                     return np.full(size, custom_param)
@@ -516,6 +517,7 @@ class TestInitCall:
         """Test that init_call passes kwargs to initialization."""
 
         class KwargsInit(Initialization):
+
             def __call__(self, size, custom_param=None, **kwargs):
                 if custom_param is not None:
                     return np.full(size, custom_param)

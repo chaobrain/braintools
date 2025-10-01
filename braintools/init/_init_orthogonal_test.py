@@ -18,6 +18,7 @@ Tests for orthogonal weight initialization strategies.
 """
 
 import unittest
+
 import numpy as np
 
 from braintools.init import (

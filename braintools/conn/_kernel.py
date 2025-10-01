@@ -28,11 +28,12 @@ import brainunit as u
 import numpy as np
 from scipy.spatial.distance import cdist
 
+from brainstate.typing import ArrayLike
 from braintools.init import init_call, Initializer
-from ._base import PointNeuronConnectivity, ConnectionResult
+from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
-    'ConvKernel',
+    'Conv2dKernel',
     'GaussianKernel',
     'GaborKernel',
     'DoGKernel',
@@ -43,7 +44,7 @@ __all__ = [
 ]
 
 
-class ConvKernel(PointNeuronConnectivity):
+class Conv2dKernel(PointConnectivity):
     """Convolutional kernel connectivity for spatially arranged point neurons.
 
     Applies a 2D convolution kernel to neuron positions, creating connections
@@ -76,7 +77,7 @@ class ConvKernel(PointNeuronConnectivity):
         ...     [0.04, 0.12, 0.18, 0.12, 0.04]
         ... ])
         >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
-        >>> conn = ConvKernel(
+        >>> conn = Conv2dKernel(
         ...     kernel=kernel,
         ...     kernel_size=100 * u.um,
         ...     threshold=0.1,
@@ -87,11 +88,12 @@ class ConvKernel(PointNeuronConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
         kernel: np.ndarray,
-        kernel_size: Union[float, u.Quantity],
+        kernel_size: ArrayLike,
         threshold: float = 0.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -110,8 +112,8 @@ class ConvKernel(PointNeuronConnectivity):
         """Generate convolutional kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for kernel connectivity")
@@ -238,7 +240,7 @@ class ConvKernel(PointNeuronConnectivity):
         )
 
 
-class GaussianKernel(PointNeuronConnectivity):
+class GaussianKernel(PointConnectivity):
     """Gaussian kernel connectivity for center-surround receptive fields.
 
     Creates connections weighted by a 2D Gaussian function of distance,
@@ -272,11 +274,12 @@ class GaussianKernel(PointNeuronConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        sigma: Union[float, u.Quantity],
-        max_distance: Optional[Union[float, u.Quantity]] = None,
+        sigma: ArrayLike,
+        max_distance: Optional[ArrayLike] = None,
         normalize: bool = True,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -293,8 +296,8 @@ class GaussianKernel(PointNeuronConnectivity):
         """Generate Gaussian kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gaussian kernel connectivity")
@@ -398,7 +401,7 @@ class GaussianKernel(PointNeuronConnectivity):
         )
 
 
-class GaborKernel(PointNeuronConnectivity):
+class GaborKernel(PointConnectivity):
     """Gabor kernel connectivity for orientation-selective receptive fields.
 
     Implements Gabor filters in spatial connectivity, useful for creating
@@ -437,14 +440,15 @@ class GaborKernel(PointNeuronConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        sigma: Union[float, u.Quantity],
+        sigma: ArrayLike,
         frequency: float,
         theta: float,
         phase: float = 0.0,
-        max_distance: Optional[Union[float, u.Quantity]] = None,
+        max_distance: Optional[ArrayLike] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -462,8 +466,8 @@ class GaborKernel(PointNeuronConnectivity):
         """Generate Gabor kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gabor kernel connectivity")
@@ -605,7 +609,7 @@ class GaborKernel(PointNeuronConnectivity):
         )
 
 
-class DoGKernel(PointNeuronConnectivity):
+class DoGKernel(PointConnectivity):
     """Difference of Gaussians (DoG) kernel for center-surround receptive fields.
 
     Implements DoG filters commonly found in retinal ganglion cells and LGN neurons,
@@ -645,14 +649,15 @@ class DoGKernel(PointNeuronConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        sigma_center: Union[float, u.Quantity],
-        sigma_surround: Union[float, u.Quantity],
+        sigma_center: ArrayLike,
+        sigma_surround: ArrayLike,
         amplitude_center: float = 1.0,
         amplitude_surround: float = 0.8,
-        max_distance: Optional[Union[float, u.Quantity]] = None,
+        max_distance: Optional[ArrayLike] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -670,21 +675,11 @@ class DoGKernel(PointNeuronConnectivity):
         """Generate DoG kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for DoG kernel connectivity")
-
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
-
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
 
         # Calculate distances
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
@@ -692,21 +687,10 @@ class DoGKernel(PointNeuronConnectivity):
         distances = cdist(pre_pos_val, post_pos_val)
 
         # Get sigma values in position units
-        if isinstance(self.sigma_center, u.Quantity):
-            sigma_c_val = u.Quantity(self.sigma_center).to(pos_unit).mantissa
-        else:
-            sigma_c_val = self.sigma_center
-
-        if isinstance(self.sigma_surround, u.Quantity):
-            sigma_s_val = u.Quantity(self.sigma_surround).to(pos_unit).mantissa
-        else:
-            sigma_s_val = self.sigma_surround
-
+        sigma_c_val = u.Quantity(self.sigma_center).to(pos_unit).mantissa
+        sigma_s_val = u.Quantity(self.sigma_surround).to(pos_unit).mantissa
         if self.max_distance is not None:
-            if isinstance(self.max_distance, u.Quantity):
-                max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
-            else:
-                max_dist_val = self.max_distance
+            max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
         else:
             max_dist_val = 3 * sigma_s_val
 
@@ -819,11 +803,12 @@ class MexicanHat(DoGKernel):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        sigma: Union[float, u.Quantity],
-        max_distance: Optional[Union[float, u.Quantity]] = None,
+        sigma: ArrayLike,
+        max_distance: Optional[ArrayLike] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -853,7 +838,7 @@ class MexicanHat(DoGKernel):
         )
 
 
-class SobelKernel(PointNeuronConnectivity):
+class SobelKernel(PointConnectivity):
     """Sobel edge detection kernel for orientation-selective connectivity.
 
     Implements Sobel operators for detecting edges at specific orientations,
@@ -885,11 +870,12 @@ class SobelKernel(PointNeuronConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
         direction: str = 'horizontal',
-        kernel_size: Union[float, u.Quantity] = 1.0,
+        kernel_size: ArrayLike = 1.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -923,9 +909,9 @@ class SobelKernel(PointNeuronConnectivity):
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate Sobel kernel connections."""
-        # Delegate to ConvKernel
+        # Delegate to Conv2dKernel
         if self.kernel is not None:
-            conv = ConvKernel(
+            conv = Conv2dKernel(
                 kernel=self.kernel,
                 kernel_size=self.kernel_size,
                 threshold=0.1,
@@ -939,7 +925,7 @@ class SobelKernel(PointNeuronConnectivity):
             return result
         else:
             # Both directions - compute magnitude
-            conv_h = ConvKernel(
+            conv_h = Conv2dKernel(
                 kernel=self.kernel_h,
                 kernel_size=self.kernel_size,
                 threshold=0.1,
@@ -947,7 +933,7 @@ class SobelKernel(PointNeuronConnectivity):
                 delay=self.delay_init,
                 seed=self.seed
             )
-            conv_v = ConvKernel(
+            conv_v = Conv2dKernel(
                 kernel=self.kernel_v,
                 kernel_size=self.kernel_size,
                 threshold=0.1,
@@ -964,7 +950,7 @@ class SobelKernel(PointNeuronConnectivity):
             return result
 
 
-class LaplacianKernel(PointNeuronConnectivity):
+class LaplacianKernel(PointConnectivity):
     """Laplacian kernel for edge detection connectivity.
 
     Implements Laplacian operators for detecting discontinuities and edges,
@@ -996,11 +982,12 @@ class LaplacianKernel(PointNeuronConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
         kernel_type: str = '4-connected',
-        kernel_size: Union[float, u.Quantity] = 1.0,
+        kernel_size: ArrayLike = 1.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -1029,8 +1016,8 @@ class LaplacianKernel(PointNeuronConnectivity):
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate Laplacian kernel connections."""
-        # Delegate to ConvKernel
-        conv = ConvKernel(
+        # Delegate to Conv2dKernel
+        conv = Conv2dKernel(
             kernel=self.kernel,
             kernel_size=self.kernel_size,
             threshold=0.1,
@@ -1044,7 +1031,7 @@ class LaplacianKernel(PointNeuronConnectivity):
         return result
 
 
-class CustomKernel(PointNeuronConnectivity):
+class CustomKernel(PointConnectivity):
     """Custom kernel connectivity using user-defined kernel function.
 
     Allows implementing arbitrary spatial kernel functions for connectivity.
@@ -1084,11 +1071,12 @@ class CustomKernel(PointNeuronConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
         kernel_func: Callable,
-        kernel_size: Union[float, u.Quantity],
+        kernel_size: ArrayLike,
         threshold: float = 0.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -1105,8 +1093,8 @@ class CustomKernel(PointNeuronConnectivity):
         """Generate custom kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for custom kernel connectivity")
@@ -1181,9 +1169,13 @@ class CustomKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions,
+            self.weight_init,
+            n_connections,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             rng=self.rng
         )
 

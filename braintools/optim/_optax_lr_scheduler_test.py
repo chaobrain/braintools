@@ -15,6 +15,7 @@
 
 
 import unittest
+
 import brainstate as bst
 
 import braintools as bts

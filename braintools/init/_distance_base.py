@@ -102,6 +102,7 @@ class DistanceProfile(ABC):
         >>> # Chain transformations with pipe operator
         >>> chained = GaussianProfile(50.0 * u.um) | (lambda x: x * 2) | (lambda x: np.minimum(x, 1.0))
     """
+    __module__ = 'braintools.init'
 
     @abstractmethod
     def probability(self, distances: ArrayLike) -> np.ndarray:
@@ -120,7 +121,6 @@ class DistanceProfile(ABC):
         """
         pass
 
-    @abstractmethod
     def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         """
         Calculate weight scaling factor based on distance.
@@ -135,7 +135,7 @@ class DistanceProfile(ABC):
         scaling : ndarray
             Weight scaling factors (typically between 0 and 1).
         """
-        pass
+        return self.probability(distances)
 
     def __call__(self, distances: ArrayLike) -> np.ndarray:
         """
@@ -208,6 +208,7 @@ class ComposedProfile(DistanceProfile):
 
     Allows composing two profiles using arithmetic operations.
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -252,6 +253,7 @@ class ClipProfile(DistanceProfile):
     """
     Clip a distance profile's output to a specified range.
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -287,6 +289,7 @@ class ApplyProfile(DistanceProfile):
     """
     Apply an arbitrary function to a distance profile's output.
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -312,6 +315,7 @@ class PipeProfile(DistanceProfile):
     """
     Pipe/compose distance profiles or functions.
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,

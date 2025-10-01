@@ -17,7 +17,7 @@
 Comprehensive tests for kernel-based connectivity classes.
 
 This test suite covers:
-- ConvKernel (general convolution kernel connectivity)
+- Conv2dKernel (general convolution kernel connectivity)
 - GaussianKernel (Gaussian receptive field connectivity)
 - GaborKernel (orientation-selective Gabor filter connectivity)
 - DoGKernel (difference of Gaussians for center-surround)
@@ -33,7 +33,7 @@ import brainunit as u
 import numpy as np
 
 from braintools.conn import (
-    ConvKernel,
+    Conv2dKernel,
     GaussianKernel,
     GaborKernel,
     DoGKernel,
@@ -47,7 +47,7 @@ from braintools.init import Constant, Uniform
 
 class TestConvKernel(unittest.TestCase):
     """
-    Test ConvKernel connectivity pattern.
+    Test Conv2dKernel connectivity pattern.
 
     Examples
     --------
@@ -55,7 +55,7 @@ class TestConvKernel(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import ConvKernel
+        from braintools.conn._conn_kernel import Conv2dKernel
 
         # Create a simple 3x3 Gaussian-like kernel
         kernel = np.array([
@@ -67,7 +67,7 @@ class TestConvKernel(unittest.TestCase):
         # Create grid positions
         positions = np.random.uniform(0, 100, (25, 2)) * u.um
 
-        conn = ConvKernel(
+        conn = Conv2dKernel(
             kernel=kernel,
             kernel_size=30 * u.um,
             threshold=0.15,
@@ -96,7 +96,7 @@ class TestConvKernel(unittest.TestCase):
 
         positions = np.random.RandomState(42).uniform(0, 100, (16, 2)) * u.um
 
-        conn = ConvKernel(
+        conn = Conv2dKernel(
             kernel=kernel,
             kernel_size=40 * u.um,
             threshold=0.15,
@@ -122,7 +122,7 @@ class TestConvKernel(unittest.TestCase):
         weight_init = Constant(2.0 * u.nS)
         delay_init = Uniform(1.0 * u.ms, 3.0 * u.ms)
 
-        conn = ConvKernel(
+        conn = Conv2dKernel(
             kernel=kernel,
             kernel_size=30 * u.um,
             threshold=0.0,
@@ -157,7 +157,7 @@ class TestConvKernel(unittest.TestCase):
         positions = np.array([[0, 0], [1, 1]]) * u.um
 
         # High threshold should filter out low kernel values
-        conn = ConvKernel(
+        conn = Conv2dKernel(
             kernel=kernel,
             kernel_size=5 * u.um,
             threshold=0.5,  # High threshold
@@ -176,7 +176,7 @@ class TestConvKernel(unittest.TestCase):
     def test_conv_kernel_no_positions_error(self):
         kernel = np.array([[1]])
 
-        conn = ConvKernel(
+        conn = Conv2dKernel(
             kernel=kernel,
             kernel_size=10 * u.um,
             seed=42
@@ -188,7 +188,7 @@ class TestConvKernel(unittest.TestCase):
     def test_conv_kernel_invalid_kernel_shape(self):
         # 1D kernel should raise error
         with self.assertRaises(ValueError):
-            ConvKernel(
+            Conv2dKernel(
                 kernel=np.array([1, 2, 3]),  # 1D array
                 kernel_size=10 * u.um
             )
@@ -199,7 +199,7 @@ class TestConvKernel(unittest.TestCase):
         # Positions far apart so no connections
         positions = np.array([[0, 0], [1000, 1000]]) * u.um
 
-        conn = ConvKernel(
+        conn = Conv2dKernel(
             kernel=kernel,
             kernel_size=1 * u.um,  # Small kernel size
             threshold=0.2,  # Higher threshold to filter out weak connections
@@ -218,7 +218,7 @@ class TestConvKernel(unittest.TestCase):
         kernel = np.array([[1]])
         positions = np.array([[0, 0], [5, 5]])  # No units
 
-        conn = ConvKernel(
+        conn = Conv2dKernel(
             kernel=kernel,
             kernel_size=10.0,  # Scalar, no units
             threshold=0.0,
@@ -237,7 +237,7 @@ class TestConvKernel(unittest.TestCase):
         kernel = np.array([[1]])
         positions = np.random.RandomState(42).uniform(0, 10, (6, 2)) * u.um
 
-        conn = ConvKernel(
+        conn = Conv2dKernel(
             kernel=kernel,
             kernel_size=15 * u.um,
             threshold=0.0,

@@ -56,6 +56,7 @@ class UniqueStateManager:
         >>> # Recover to pytree structure
         >>> recovered = manager.to_pytree()
     """
+    __module__ = 'braintools.optim'
 
     def __init__(self, pytree: PyTree[State] = None):
         """Initialize the UniqueStateManager."""

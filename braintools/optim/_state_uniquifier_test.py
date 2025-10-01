@@ -9,14 +9,15 @@ Demonstrates various use cases for managing unique State objects in PyTrees.
 import brainstate
 import jax.numpy as jnp
 from brainstate import ParamState
+
 from braintools.optim._state_uniquifier import UniqueStateManager
 
 
 def test_1_basic_uniquification():
     """Test Case 1: Basic deduplication of State objects"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Test Case 1: Basic State Deduplication")
-    print("="*60)
+    print("=" * 60)
 
     # Create some State objects
     state1 = ParamState(jnp.ones((2, 3)))
@@ -58,9 +59,9 @@ def test_1_basic_uniquification():
 
 def test_2_nested_structure():
     """Test Case 2: Deeply nested PyTree structures"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Test Case 2: Deeply Nested PyTree")
-    print("="*60)
+    print("=" * 60)
 
     # Create States
     shared_weight = ParamState(jnp.ones((10, 10)))
@@ -96,9 +97,9 @@ def test_2_nested_structure():
 
 def test_3_state_updates():
     """Test Case 3: Updating states within the manager"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Test Case 3: State Updates")
-    print("="*60)
+    print("=" * 60)
 
     # Initial pytree
     state1 = ParamState(jnp.ones((3, 3)))
@@ -133,9 +134,9 @@ def test_3_state_updates():
 
 def test_4_pytree_recovery():
     """Test Case 4: Recovering PyTree from unique states"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Test Case 4: PyTree Recovery")
-    print("="*60)
+    print("=" * 60)
 
     # Create original pytree
     states = {
@@ -162,6 +163,7 @@ def test_4_pytree_recovery():
     recovered = manager.to_pytree()
 
     print("Recovered PyTree structure:")
+
     def print_structure(tree, indent=0):
         for key, value in tree.items():
             if isinstance(value, dict):
@@ -178,9 +180,9 @@ def test_4_pytree_recovery():
 
 def test_5_merging_pytrees():
     """Test Case 5: Merging multiple PyTrees"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Test Case 5: Merging PyTrees")
-    print("="*60)
+    print("=" * 60)
 
     # First pytree
     state1 = ParamState(jnp.ones((5, 5)))
@@ -196,7 +198,7 @@ def test_5_merging_pytrees():
 
     pytree2 = {
         'component3': {'param': state1},  # Shared with pytree1
-        'component4': {'param': state3}   # New state
+        'component4': {'param': state3}  # New state
     }
 
     print("Creating manager with first PyTree")
@@ -217,9 +219,9 @@ def test_5_merging_pytrees():
 
 def test_6_optimizer_integration():
     """Test Case 6: Integration with optimizer workflow"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Test Case 6: Optimizer Integration (Tied Parameters)")
-    print("="*60)
+    print("=" * 60)
 
     # Simulate a model with tied parameters (e.g., embedding and output weights)
     embedding_weight = ParamState(brainstate.random.normal(size=(1000, 128)))
@@ -266,9 +268,9 @@ def test_6_optimizer_integration():
 
 def test_7_clear_and_reuse():
     """Test Case 7: Clearing and reusing the manager"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Test Case 7: Clear and Reuse")
-    print("="*60)
+    print("=" * 60)
 
     manager = UniqueStateManager()
 
@@ -296,9 +298,9 @@ def test_7_clear_and_reuse():
 
 def run_all_tests():
     """Run all test cases"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("COMPREHENSIVE UNIQUESTATEMANAGER TEST SUITE")
-    print("="*60)
+    print("=" * 60)
 
     results = []
 
@@ -312,9 +314,9 @@ def run_all_tests():
         results.append(("Optimizer Integration", test_6_optimizer_integration()))
         results.append(("Clear and Reuse", test_7_clear_and_reuse()))
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("TEST SUMMARY")
-        print("="*60)
+        print("=" * 60)
         print(f"All {len(results)} test cases completed successfully!")
 
         for name, manager in results:
@@ -325,9 +327,9 @@ def run_all_tests():
         import traceback
         traceback.print_exc()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST SUITE COMPLETE")
-    print("="*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

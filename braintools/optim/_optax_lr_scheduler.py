@@ -55,6 +55,7 @@ class LRScheduler:
     Can be used either standalone (passed to optimizer at initialization)
     or attached to an optimizer later.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(self, base_lr: Union[float, List[float]] = 1e-3, last_epoch: int = 0):
         """
@@ -330,6 +331,7 @@ class StepLR(LRScheduler):
            Proceedings of the IEEE conference on computer vision and pattern
            recognition, 770-778.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -528,6 +530,7 @@ class MultiStepLR(LRScheduler):
            "Wide residual networks."
            arXiv preprint arXiv:1605.07146.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -740,6 +743,7 @@ class ExponentialLR(LRScheduler):
            "Practical recommendations for gradient-based training of deep architectures."
            Neural networks: Tricks of the trade, 437-478.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1013,6 +1017,7 @@ class CosineAnnealingLR(LRScheduler):
            "An image is worth 16x16 words: Transformers for image recognition at scale."
            arXiv preprint arXiv:2010.11929.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1290,6 +1295,7 @@ class PolynomialLR(LRScheduler):
            "Focal loss for dense object detection."
            Proceedings of the IEEE international conference on computer vision, 2980-2988.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1579,6 +1585,7 @@ class WarmupScheduler(LRScheduler):
            "An image is worth 16x16 words: Transformers for image recognition at scale."
            arXiv preprint arXiv:2010.11929.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -1864,6 +1871,7 @@ class CyclicLR(LRScheduler):
            "Super-convergence: Very fast training of neural networks using large learning rates."
            Artificial Intelligence and Machine Learning for Multi-Domain Operations Applications.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -2246,6 +2254,7 @@ class OneCycleLR(LRScheduler):
            "Fastai: A layered API for deep learning."
            Information, 11(2), 108.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -2631,6 +2640,7 @@ class ReduceLROnPlateau(LRScheduler):
     .. [3] PyTorch documentation on ReduceLROnPlateau.
            https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.ReduceLROnPlateau.html
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -2994,6 +3004,7 @@ class LinearLR(LRScheduler):
            Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
            Recognition, 558-567.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -3214,6 +3225,7 @@ class ConstantLR(LRScheduler):
            "Cyclical learning rates for training neural networks."
            2017 IEEE winter conference on applications of computer vision (WACV), 464-472.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -3439,6 +3451,7 @@ class ChainedScheduler(LRScheduler):
            Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
            Recognition, 558-567.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(self, schedulers: List[LRScheduler]):
         self.schedulers = schedulers
@@ -3697,6 +3710,7 @@ class SequentialLR(LRScheduler):
            "Large batch optimization for deep learning: Training BERT in 76 minutes."
            International Conference on Learning Representations.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -4054,6 +4068,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
            "Super-convergence: Very fast training of neural networks using large learning rates."
            Artificial Intelligence and Machine Learning for Multi-Domain Operations Applications.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -4402,6 +4417,7 @@ class WarmupCosineSchedule(LRScheduler):
            "A Simple Framework for Contrastive Learning of Visual Representations."
            International Conference on Machine Learning.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,
@@ -4768,6 +4784,7 @@ class PiecewiseConstantSchedule(LRScheduler):
            "Bag of Tricks for Image Classification with Convolutional Neural Networks."
            Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition.
     """
+    __module__ = 'braintools.optim'
 
     def __init__(
         self,

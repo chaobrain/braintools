@@ -33,8 +33,10 @@ import numpy as np
 __all__ = [
     'ConnectionResult',
     'Connectivity',
-    'PointNeuronConnectivity',
-    'MultiCompartmentConnectivity'
+    'PointConnectivity',
+    'MultiCompartmentConnectivity',
+    'ScaledConnectivity',
+    'CompositeConnectivity',
 ]
 
 
@@ -50,6 +52,10 @@ class ConnectionResult:
         Presynaptic element indices (neurons, populations, or compartments).
     post_indices : np.ndarray
         Postsynaptic element indices (neurons, populations, or compartments).
+    pre_size : int or tuple of int, optional
+        Size of the presynaptic population (number of elements or shape).
+    post_size : int or tuple of int, optional
+        Size of the postsynaptic population (number of elements or shape).
     weights : np.ndarray or Quantity, optional
         Connection weights with appropriate units for the model type.
     delays : np.ndarray or Quantity, optional
@@ -60,15 +66,15 @@ class ConnectionResult:
         Positions of presynaptic elements (for distance calculations).
     post_positions: np.ndarray, optional
         Positions of postsynaptic elements (for distance calculations).
-    pre_size : int or tuple of int, optional
-        Size of the presynaptic population (number of elements or shape).
-    post_size : int or tuple of int, optional
-        Size of the postsynaptic population (number of elements or shape).
+    pre_compartments: np.ndarray, optional
+        Presynaptic compartment indices (for multi-compartment models).
+    post_compartments: np.ndarray, optional
+        Postsynaptic compartment indices (for multi-compartment models).
     metadata : dict, optional
         Model-specific metadata and parameters.
-    **type_specific_fields
-        Additional fields specific to each model type.
     """
+
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -78,13 +84,13 @@ class ConnectionResult:
         post_size: Optional[int | Sequence[int]],
         pre_positions: Optional[np.ndarray] = None,
         post_positions: Optional[np.ndarray] = None,
+        pre_compartments: Optional[np.ndarray] = None,
+        post_compartments: Optional[np.ndarray] = None,
         weights: Optional[Union[np.ndarray, u.Quantity]] = None,
         delays: Optional[Union[np.ndarray, u.Quantity]] = None,
         model_type: str = 'point',
         metadata: Optional[Dict[str, Any]] = None,
-        **type_specific_fields
     ):
-
         # Core connectivity data
         self.pre_indices = np.asarray(pre_indices, dtype=np.int64)
         self.post_indices = np.asarray(post_indices, dtype=np.int64)
@@ -102,8 +108,8 @@ class ConnectionResult:
         self.delays = delays
 
         # Store type-specific fields
-        for key, value in type_specific_fields.items():
-            setattr(self, key, value)
+        self.pre_compartments = pre_compartments
+        self.post_compartments = post_compartments
 
         # Validate consistency
         self._validate()
@@ -218,6 +224,8 @@ class Connectivity(ABC):
     all neuron model types while allowing for type-specific implementations.
     """
 
+    __module__ = 'braintools.conn'
+
     def __init__(
         self,
         pre_size: Optional[Union[int, Tuple[int, ...]]] = None,
@@ -312,12 +320,14 @@ class Connectivity(ABC):
         return ScaledConnectivity(self, delay_factor=factor)
 
 
-class PointNeuronConnectivity(Connectivity):
+class PointConnectivity(Connectivity):
     """Base class for point neuron connectivity patterns.
 
     Point neurons are single-compartment models where each connection
     represents a synapse between two neurons.
     """
+
+    __module__ = 'braintools.conn'
 
     def _generate(self, **kwargs) -> ConnectionResult:
         """Generate point neuron connectivity."""
@@ -338,6 +348,8 @@ class MultiCompartmentConnectivity(Connectivity):
     (soma, dendrites, axon). Connections can target specific compartments.
     """
 
+    __module__ = 'braintools.conn'
+
     def _generate(self, **kwargs) -> ConnectionResult:
         """Generate multi-compartment connectivity."""
         result = self.generate(**kwargs)
@@ -353,6 +365,8 @@ class MultiCompartmentConnectivity(Connectivity):
 # Composite connectivity for combining patterns
 class CompositeConnectivity(Connectivity):
     """Composite connectivity created by combining patterns."""
+
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -406,22 +420,22 @@ class CompositeConnectivity(Connectivity):
         if is_multicompartment:
             pre_comp1 = (
                 result1.pre_compartments
-                if hasattr(result1, 'pre_compartments') and result1.pre_compartments is not None else
+                if result1.pre_compartments is not None else
                 np.zeros(len(result1.pre_indices), dtype=np.int64)
             )
             pre_comp2 = (
                 result2.pre_compartments
-                if hasattr(result2, 'pre_compartments') and result2.pre_compartments is not None else
+                if result2.pre_compartments is not None else
                 np.zeros(len(result2.pre_indices), dtype=np.int64)
             )
             post_comp1 = (
                 result1.post_compartments
-                if hasattr(result1, 'post_compartments') and result1.post_compartments is not None
+                if result1.post_compartments is not None
                 else np.zeros(len(result1.post_indices), dtype=np.int64)
             )
             post_comp2 = (
                 result2.post_compartments
-                if hasattr(result2, 'post_compartments') and result2.post_compartments is not None else
+                if result2.post_compartments is not None else
                 np.zeros(len(result2.post_indices), dtype=np.int64)
             )
             all_pre_comp = np.concatenate([pre_comp1, pre_comp2])
@@ -620,22 +634,22 @@ class CompositeConnectivity(Connectivity):
             max_comp = 10
             pre_comp1 = (
                 result1.pre_compartments
-                if hasattr(result1, 'pre_compartments') and result1.pre_compartments is not None else
+                if result1.pre_compartments is not None else
                 np.zeros(len(result1.pre_indices), dtype=np.int64)
             )
             pre_comp2 = (
                 result2.pre_compartments
-                if hasattr(result2, 'pre_compartments') and result2.pre_compartments is not None else
+                if result2.pre_compartments is not None else
                 np.zeros(len(result2.pre_indices), dtype=np.int64)
             )
             post_comp1 = (
                 result1.post_compartments
-                if hasattr(result1, 'post_compartments') and result1.post_compartments is not None
+                if result1.post_compartments is not None
                 else np.zeros(len(result1.post_indices), dtype=np.int64)
             )
             post_comp2 = (
                 result2.post_compartments
-                if hasattr(result2, 'post_compartments') and result2.post_compartments is not None else
+                if result2.post_compartments is not None else
                 np.zeros(len(result2.post_indices), dtype=np.int64)
             )
 
@@ -813,22 +827,22 @@ class CompositeConnectivity(Connectivity):
             max_comp = 10
             pre_comp1 = (
                 result1.pre_compartments
-                if hasattr(result1, 'pre_compartments') and result1.pre_compartments is not None else
+                if result1.pre_compartments is not None else
                 np.zeros(len(result1.pre_indices), dtype=np.int64)
             )
             pre_comp2 = (
                 result2.pre_compartments
-                if hasattr(result2, 'pre_compartments') and result2.pre_compartments is not None else
+                if result2.pre_compartments is not None else
                 np.zeros(len(result2.pre_indices), dtype=np.int64)
             )
             post_comp1 = (
                 result1.post_compartments
-                if hasattr(result1, 'post_compartments') and result1.post_compartments is not None
+                if result1.post_compartments is not None
                 else np.zeros(len(result1.post_indices), dtype=np.int64)
             )
             post_comp2 = (
                 result2.post_compartments
-                if hasattr(result2, 'post_compartments') and result2.post_compartments is not None else
+                if result2.post_compartments is not None else
                 np.zeros(len(result2.post_indices), dtype=np.int64)
             )
 
@@ -944,6 +958,8 @@ class CompositeConnectivity(Connectivity):
 
 class ScaledConnectivity(Connectivity):
     """Connectivity with scaled weights or delays."""
+
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,

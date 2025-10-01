@@ -13,11 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Optional
-
 import brainunit as u
-import numpy as np
-from brainstate.typing import ArrayLike
+from scipy.spatial.distance import cdist
 
 from ._distance_base import DistanceProfile
 from ._init_base import Initialization
@@ -29,7 +26,7 @@ __all__ = [
 
 class DistanceModulated(Initialization):
     """
-    Weight distribution modulated by distance.
+    Initialization modulated by distance.
 
     Generates weights from a base distribution and then modulates them based on
     distance using a specified function (e.g., exponential decay, gaussian).
@@ -40,8 +37,6 @@ class DistanceModulated(Initialization):
         Base weight distribution.
     distance_profile : DistanceProfile
         Distance modulation function.
-    min_weight : Quantity, optional
-        Minimum weight floor (default: 0).
 
     Examples
     --------
@@ -54,36 +49,35 @@ class DistanceModulated(Initialization):
         >>> init = DistanceModulated(
         ...     base_dist=Normal(1.0 * u.nS, 0.2 * u.nS),
         ...     distance_profile=profile,
-        ...     min_weight=0.01 * u.nS
         ... )
         >>> weights = init(100, distances=distances, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
         base_dist: Initialization,
         distance_profile: DistanceProfile,
-        min_weight: Optional[ArrayLike] = None
     ):
         self.base_dist = base_dist
-        self.min_weight = min_weight
         self.distance_profile = distance_profile
 
-    def __call__(self, size, distances: Optional[ArrayLike] = None, **kwargs):
+    def __call__(self, size, **kwargs):
         base_weights = self.base_dist(size, **kwargs)
 
-        if distances is None:
-            return base_weights
+        if 'distances' in kwargs:
+            distances = kwargs['distances']
+        else:
+            if 'pre_positions' not in kwargs or 'post_positions' not in kwargs:
+                raise ValueError("Must provide 'distances' or both 'pre_positions' and 'post_positions'.")
+            pre_positions = kwargs['pre_positions']
+            post_positions = kwargs['post_positions']
+            pre_positions, pos_unit = u.split_mantissa_unit(pre_positions)
+            post_positions = u.Quantity(post_positions).to(pos_unit).mantissa
+            distances = u.maybe_decimal(cdist(pre_positions, post_positions) * pos_unit)
 
-        modulation = self.distance_profile.weight_scaling(distances)
-        weight_vals, weight_unit = u.split_mantissa_unit(base_weights)
-        modulated = weight_vals * modulation
-        if self.min_weight is not None:
-            min_val = u.Quantity(self.min_weight).to(weight_unit).mantissa
-            modulated = np.maximum(modulated, min_val)
-        return u.maybe_decimal(modulated * weight_unit)
+        return base_weights * self.distance_profile(distances)
 
     def __repr__(self):
         return (f'DistanceModulated(base_dist={self.base_dist}, '
-                f'distance_profile={self.distance_profile}, '
-                f'min_weight={self.min_weight})')
+                f'distance_profile={self.distance_profile})')

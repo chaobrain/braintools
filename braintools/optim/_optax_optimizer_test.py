@@ -3443,4 +3443,3 @@ class test_basic(unittest.TestCase):
         for optimizer in optimizers:
             optimizer.register_trainable_weights(model.states(brainstate.ParamState))
             assert optimizer.weight_decay == 0.01
-

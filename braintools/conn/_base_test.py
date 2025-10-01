@@ -32,7 +32,7 @@ import numpy as np
 from braintools.conn._base import (
     ConnectionResult,
     Connectivity,
-    PointNeuronConnectivity,
+    PointConnectivity,
     MultiCompartmentConnectivity,
     CompositeConnectivity,
     ScaledConnectivity,
@@ -392,21 +392,6 @@ class TestConnectionResult(unittest.TestCase):
 
         self.assertEqual(conn.shape, (0, 0))
 
-    def test_metadata_and_type_specific_fields(self):
-        conn = ConnectionResult(
-            pre_indices=np.array([0, 1]),
-            post_indices=np.array([1, 0]),
-            pre_size=2,
-            post_size=2,
-            model_type='multi_compartment',
-            metadata={'test': 'value'},
-            custom_field='custom_value'
-        )
-
-        self.assertEqual(conn.model_type, 'multi_compartment')
-        self.assertEqual(conn.metadata['test'], 'value')
-        self.assertEqual(conn.custom_field, 'custom_value')
-
 
 class MockConnectivity(Connectivity):
     """Mock connectivity class for testing Connectivity."""
@@ -433,7 +418,9 @@ class MockConnectivity(Connectivity):
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,
-            delays=delays
+            delays=delays,
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
         )
 
 
@@ -988,9 +975,9 @@ class TestSubclassImplementations(unittest.TestCase):
     .. code-block:: python
 
         import numpy as np
-        from braintools.conn._conn_base import PointNeuronConnectivity
+        from braintools.conn._conn_base import PointConnectivity
 
-        class SimplePointConn(PointNeuronConnectivity):
+        class SimplePointConn(PointConnectivity):
             def generate(self, pre_size, post_size, **kwargs):
                 return ConnectionResult(
                     pre_indices=np.array([0]),
@@ -1008,7 +995,7 @@ class TestSubclassImplementations(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_point_neuron_connectivity(self):
-        class TestPointConn(PointNeuronConnectivity):
+        class TestPointConn(PointConnectivity):
             def generate(self, pre_size, post_size, **kwargs):
                 return ConnectionResult(
                     pre_indices=np.array([0]),

@@ -46,7 +46,6 @@ __all__ = [
 
     # Basic compartment patterns
     'CompartmentSpecific',
-    'RandomCompartment',
     'AllToAllCompartments',
 
     # Anatomical targeting patterns
@@ -77,7 +76,6 @@ __all__ = [
     # Synaptic patterns
     'SynapticPlacement',
     'SynapticClustering',
-    'ActivityDependentSynapses',
 
     # Custom patterns
     'CustomCompartment',
@@ -95,6 +93,29 @@ COMPARTMENT_NAMES = {
     APICAL_DENDRITE: 'apical_dendrite',
     AXON: 'axon'
 }
+
+
+def _normalize_positions(positions, unit=None):
+    """Normalize position arrays to numpy arrays with consistent units.
+
+    Parameters
+    ----------
+    positions : array-like or Quantity
+        Position data to normalize.
+    unit : Unit, optional
+        Target unit for conversion. If None, maintains original unit.
+
+    Returns
+    -------
+    tuple
+        (normalized_array, unit) where normalized_array is a numpy array
+        and unit is the associated brainunit Unit or None.
+    """
+    if positions is None:
+        return None, None
+    if unit is not None:
+        positions = u.Quantity(positions).to(unit).mantissa
+    return positions, unit
 
 
 class CompartmentSpecific(MultiCompartmentConnectivity):
@@ -164,6 +185,7 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         ...     connection_prob=0.1
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -176,37 +198,74 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
     ):
         super().__init__(**kwargs)
         self.compartment_mapping = self._normalize_compartment_mapping(compartment_mapping)
+        self._validate_connection_prob(connection_prob)
         self.connection_prob = connection_prob
         self.weight_init = weight
         self.delay_init = delay
         self.morphology_info = morphology_info or {}
 
+    @staticmethod
+    def _validate_compartment_index(idx: int, context: str = "compartment") -> None:
+        """Validate that a compartment index is in valid range."""
+        if not isinstance(idx, (int, np.integer)):
+            raise TypeError(f"{context} index must be an integer, got {type(idx)}")
+        if idx < 0 or idx > 3:
+            raise ValueError(
+                f"{context} index must be in range [0, 3] (SOMA=0, BASAL_DENDRITE=1, APICAL_DENDRITE=2, AXON=3), got {idx}")
+
+    def _validate_connection_prob(self, prob: Union[float, Dict]) -> None:
+        """Validate connection probability values."""
+        if isinstance(prob, dict):
+            for key, value in prob.items():
+                if not isinstance(value, (int, float, np.number)):
+                    raise TypeError(f"Connection probability must be numeric, got {type(value)} for key {key}")
+                if value < 0 or value > 1:
+                    raise ValueError(f"Connection probability must be in [0, 1], got {value} for key {key}")
+        else:
+            if not isinstance(prob, (int, float, np.number)):
+                raise TypeError(f"Connection probability must be numeric, got {type(prob)}")
+            if prob < 0 or prob > 1:
+                raise ValueError(f"Connection probability must be in [0, 1], got {prob}")
+
     def _normalize_compartment_mapping(self, mapping):
-        """Convert compartment names to indices if needed."""
+        """Convert compartment names to indices if needed and validate."""
         name_to_idx = {v: k for k, v in COMPARTMENT_NAMES.items()}
         normalized = {}
 
         for source, targets in mapping.items():
             # Convert source
             if isinstance(source, str):
-                source_idx = name_to_idx.get(source, source)
+                if source not in name_to_idx:
+                    raise ValueError(f"Unknown compartment name: '{source}'. Valid names: {list(name_to_idx.keys())}")
+                source_idx = name_to_idx[source]
             else:
                 source_idx = source
+                self._validate_compartment_index(source_idx, f"Source compartment")
 
             # Convert targets
             if isinstance(targets, (list, tuple)):
                 target_indices = []
                 for target in targets:
                     if isinstance(target, str):
-                        target_indices.append(name_to_idx.get(target, target))
+                        if target not in name_to_idx:
+                            raise ValueError(
+                                f"Unknown compartment name: '{target}'. Valid names: {list(name_to_idx.keys())}")
+                        target_idx = name_to_idx[target]
                     else:
-                        target_indices.append(target)
+                        target_idx = target
+                        self._validate_compartment_index(target_idx, f"Target compartment")
+                    target_indices.append(target_idx)
                 normalized[source_idx] = target_indices
             else:
                 if isinstance(targets, str):
-                    normalized[source_idx] = name_to_idx.get(targets, targets)
+                    if targets not in name_to_idx:
+                        raise ValueError(
+                            f"Unknown compartment name: '{targets}'. Valid names: {list(name_to_idx.keys())}")
+                    target_idx = name_to_idx[targets]
                 else:
-                    normalized[source_idx] = targets
+                    target_idx = targets
+                    self._validate_compartment_index(target_idx, f"Target compartment")
+                normalized[source_idx] = target_idx
 
         return normalized
 
@@ -234,7 +293,8 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         all_pre_compartments = []
         all_post_compartments = []
 
-        # Generate connections for each compartment mapping
+        # Pre-filter compartment pairs with non-zero probabilities
+        active_pairs = []
         for source_comp, target_comps in self.compartment_mapping.items():
             if not isinstance(target_comps, (list, tuple)):
                 target_comps = [target_comps]
@@ -246,20 +306,22 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
                 else:
                     prob = self.connection_prob
 
-                if prob <= 0:
-                    continue
+                if prob > 0:
+                    active_pairs.append((source_comp, target_comp, prob))
 
-                # Vectorized connection generation
-                random_matrix = self.rng.random((pre_num, post_num))
-                connection_mask = random_matrix < prob
-                pre_idx, post_idx = np.where(connection_mask)
+        # Generate connections only for active pairs
+        for source_comp, target_comp, prob in active_pairs:
+            # Vectorized connection generation
+            random_matrix = self.rng.random((pre_num, post_num))
+            connection_mask = random_matrix < prob
+            pre_idx, post_idx = np.where(connection_mask)
 
-                n_conns = len(pre_idx)
-                if n_conns > 0:
-                    all_pre_indices.append(pre_idx)
-                    all_post_indices.append(post_idx)
-                    all_pre_compartments.append(np.full(n_conns, source_comp, dtype=np.int64))
-                    all_post_compartments.append(np.full(n_conns, target_comp, dtype=np.int64))
+            n_conns = len(pre_idx)
+            if n_conns > 0:
+                all_pre_indices.append(pre_idx)
+                all_post_indices.append(post_idx)
+                all_pre_compartments.append(np.full(n_conns, source_comp, dtype=np.int64))
+                all_post_compartments.append(np.full(n_conns, target_comp, dtype=np.int64))
 
         if len(all_pre_indices) == 0:
             return ConnectionResult(
@@ -343,6 +405,7 @@ class SomaToDendrite(CompartmentSpecific):
         ...     }
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -385,6 +448,7 @@ class AxonToSoma(CompartmentSpecific):
         ...     weight_params={'mean': 1.0, 'sigma': 0.3}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {AXON: SOMA}
@@ -411,6 +475,7 @@ class DendriteToSoma(CompartmentSpecific):
         ...     connection_prob=0.6
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -442,10 +507,9 @@ class AxonToDendrite(CompartmentSpecific):
         ...     weight_params={'mean': 2.0 * u.nS, 'sigma': 0.5}
         ... )
     """
+    __module__ = 'braintools.conn'
 
-    def __init__(self,
-                 target_dendrites: List[int] = None,
-                 **kwargs):
+    def __init__(self, target_dendrites: List[int] = None, **kwargs):
         if target_dendrites is None:
             target_dendrites = [BASAL_DENDRITE, APICAL_DENDRITE]
 
@@ -469,6 +533,7 @@ class DendriteToDendrite(CompartmentSpecific):
         ...     weight_params={'mean': 0.5, 'std': 0.1}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {
@@ -511,6 +576,7 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         ...     compartment_mapping={AXON: [BASAL_DENDRITE, APICAL_DENDRITE]}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -548,15 +614,45 @@ class MorphologyDistance(MultiCompartmentConnectivity):
                 seed=self.seed
             ).generate(pre_size, post_size, pre_positions, post_positions, **kwargs)
 
-        # Extract sigma value and unit
+        # Validate and normalize sizes FIRST
+        if isinstance(pre_size, tuple):
+            pre_num = int(np.prod(pre_size))
+        else:
+            pre_num = pre_size
+
+        if isinstance(post_size, tuple):
+            post_num = int(np.prod(post_size))
+        else:
+            post_num = post_size
+
+        # Normalize positions using helper
         if isinstance(self.sigma, u.Quantity):
             sigma_val, sigma_unit = u.split_mantissa_unit(self.sigma)
-            pre_pos_val = u.Quantity(pre_positions).to(sigma_unit).mantissa
-            post_pos_val = u.Quantity(post_positions).to(sigma_unit).mantissa
+            pre_pos_val, _ = _normalize_positions(pre_positions, sigma_unit)
+            post_pos_val, _ = _normalize_positions(post_positions, sigma_unit)
         else:
             sigma_val = self.sigma
-            pre_pos_val = pre_positions
-            post_pos_val = post_positions
+            pre_pos_val, _ = _normalize_positions(pre_positions)
+            post_pos_val, _ = _normalize_positions(post_positions)
+
+        # Check position sizes and adjust before distance calculation
+        if len(pre_pos_val) != pre_num:
+            warnings.warn(
+                f'Pre positions length {len(pre_pos_val)} does not match pre_size {pre_num}. Using min value.',
+                UserWarning,
+            )
+            pre_num = min(len(pre_pos_val), pre_num)
+
+        if len(post_pos_val) != post_num:
+            warnings.warn(
+                f'Post positions length {len(post_pos_val)} does not match post_size {post_num}. Using min value.',
+                UserWarning,
+            )
+            post_num = min(len(post_pos_val), post_num)
+
+        # Trim positions to actual sizes being used
+        pre_pos_val = pre_pos_val[:pre_num]
+        post_pos_val = post_pos_val[:post_num]
 
         # Calculate distances
         distances = cdist(pre_pos_val, post_pos_val)
@@ -570,28 +666,6 @@ class MorphologyDistance(MultiCompartmentConnectivity):
             probs = np.maximum(0, 1 - distances / sigma_val)
         else:
             raise ValueError(f"Unknown decay function: {self.decay_function}")
-
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
-        if len(pre_pos_val) != pre_num:
-            warnings.warn(
-                f'Pre positions length {len(pre_pos_val)} does not match pre_size {pre_num}. Using min value.',
-                UserWarning,
-            )
-            pre_num = len(pre_pos_val)
-
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-        if len(post_pos_val) != post_num:
-            warnings.warn(
-                f'Post positions length {len(post_pos_val)} does not match post_size {post_num}. Using min value.',
-                UserWarning,
-            )
-            post_num = len(post_pos_val)
 
         all_pre_indices = []
         all_post_indices = []
@@ -690,6 +764,7 @@ class DendriticTree(MultiCompartmentConnectivity):
         ...     branch_targeting={'proximal': 0.8, 'distal': 0.2}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -814,6 +889,9 @@ class AxonalProjection(MultiCompartmentConnectivity):
         Pattern of axonal arborization ('diffuse', 'clustered', 'columnar').
     connection_prob : float
         Base connection probability.
+    spatial_scale : float
+        Spatial scale for clustered arborization pattern (default 10000.0).
+        Controls how distance affects clustering: smaller values = tighter clustering.
     weight : Initializer, optional
         Weight initialization.
     delay : Initializer, optional
@@ -833,6 +911,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
         ...     arborization_pattern='clustered'
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -840,6 +919,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
         topographic_map: Optional[Callable] = None,
         arborization_pattern: str = 'diffuse',
         connection_prob: float = 0.05,
+        spatial_scale: float = 10000.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -849,6 +929,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
         self.topographic_map = topographic_map
         self.arborization_pattern = arborization_pattern
         self.connection_prob = connection_prob
+        self.spatial_scale = spatial_scale
         self.weight_init = weight
         self.delay_init = delay
 
@@ -871,28 +952,31 @@ class AxonalProjection(MultiCompartmentConnectivity):
         else:
             post_num = post_size
 
-        # Calculate connection probabilities
-        if self.topographic_map is not None and pre_positions is not None and post_positions is not None:
-            # Use custom topographic mapping
-            probs = np.zeros((pre_num, post_num))
-            # Extract mantissa values for topographic map function
-            pre_pos_vals = pre_positions.mantissa if hasattr(pre_positions, 'mantissa') else pre_positions
-            post_pos_vals = post_positions.mantissa if hasattr(post_positions, 'mantissa') else post_positions
-            for i in range(pre_num):
-                for j in range(post_num):
-                    probs[i, j] = self.topographic_map(pre_pos_vals[i], post_pos_vals[j])
+        if pre_positions is not None and post_positions is not None:
+
+            # Normalize positions
+            pre_pos_vals, pos_unit = u.split_mantissa_unit(pre_positions)
+            post_pos_vals = u.Quantity(post_positions).to(pos_unit).mantissa
+
+            # Calculate connection probabilities
+            if self.topographic_map is not None:
+                # Use custom topographic mapping
+                probs = np.zeros((pre_num, post_num))
+                for i in range(pre_num):
+                    for j in range(post_num):
+                        probs[i, j] = self.topographic_map(pre_pos_vals[i], post_pos_vals[j])
+            else:
+                # Use uniform probability
+                probs = np.full((pre_num, post_num), self.connection_prob)
+
+            # Modify based on arborization pattern
+            if self.arborization_pattern == 'clustered':
+                distances = cdist(pre_pos_vals, post_pos_vals)
+                spatial_factor = np.exp(-distances ** 2 / self.spatial_scale)
+                probs = probs * spatial_factor
         else:
             # Use uniform probability
             probs = np.full((pre_num, post_num), self.connection_prob)
-
-        # Modify based on arborization pattern
-        if self.arborization_pattern == 'clustered' and pre_positions is not None and post_positions is not None:
-            # Extract mantissa values for distance calculation
-            pre_pos_vals = pre_positions.mantissa if hasattr(pre_positions, 'mantissa') else pre_positions
-            post_pos_vals = post_positions.mantissa if hasattr(post_positions, 'mantissa') else post_positions
-            distances = cdist(pre_pos_vals, post_pos_vals)
-            spatial_factor = np.exp(-distances ** 2 / 10000)
-            probs = probs * spatial_factor
 
         # Generate connections
         random_matrix = self.rng.random((pre_num, post_num))
@@ -943,6 +1027,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
 # Additional specialized patterns
 class ProximalTargeting(CompartmentSpecific):
     """Connectivity targeting proximal dendritic compartments."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         # Proximal dendrites are closer to soma
@@ -952,6 +1037,7 @@ class ProximalTargeting(CompartmentSpecific):
 
 class DistalTargeting(CompartmentSpecific):
     """Connectivity targeting distal dendritic compartments."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         # Distal dendrites are farther from soma
@@ -968,14 +1054,23 @@ class BranchSpecific(MultiCompartmentConnectivity):
     Parameters
     ----------
     branch_indices : list of int
-        Specific branch indices to target.
+        Specific branch indices to target. These map to compartment types.
+        Default targets basal and apical dendrites.
     connection_prob : float
         Connection probability per branch.
     weight : Initializer, optional
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+
+    Notes
+    -----
+    Branch indices are mapped to dendritic compartment types. By default:
+    - Index 0, 1: BASAL_DENDRITE
+    - Index 2+: APICAL_DENDRITE
+    This can be extended with full morphological information.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1000,8 +1095,22 @@ class BranchSpecific(MultiCompartmentConnectivity):
         **kwargs
     ) -> ConnectionResult:
         """Generate branch-specific connections."""
+        # Map branch indices to compartment types
+        # Simple mapping: lower indices -> basal, higher -> apical
+        target_compartments = []
+        for idx in self.branch_indices:
+            if idx < 2:  # Lower branch indices map to basal dendrites
+                if BASAL_DENDRITE not in target_compartments:
+                    target_compartments.append(BASAL_DENDRITE)
+            else:  # Higher branch indices map to apical dendrites
+                if APICAL_DENDRITE not in target_compartments:
+                    target_compartments.append(APICAL_DENDRITE)
+
+        if not target_compartments:
+            target_compartments = [BASAL_DENDRITE, APICAL_DENDRITE]
+
         return CompartmentSpecific(
-            compartment_mapping={AXON: [BASAL_DENDRITE, APICAL_DENDRITE]},
+            compartment_mapping={AXON: target_compartments},
             connection_prob=self.connection_prob,
             weight=self.weight_init,
             delay=self.delay_init,
@@ -1011,6 +1120,7 @@ class BranchSpecific(MultiCompartmentConnectivity):
 
 class BasalDendriteTargeting(CompartmentSpecific):
     """Specific targeting of basal dendrites."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {AXON: BASAL_DENDRITE}
@@ -1019,6 +1129,7 @@ class BasalDendriteTargeting(CompartmentSpecific):
 
 class ApicalDendriteTargeting(CompartmentSpecific):
     """Specific targeting of apical dendrites."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {AXON: APICAL_DENDRITE}
@@ -1042,6 +1153,7 @@ class DendriticIntegration(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1155,6 +1267,7 @@ class AxonalBranching(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1265,6 +1378,7 @@ class AxonalArborization(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1298,15 +1412,15 @@ class AxonalArborization(MultiCompartmentConnectivity):
                 seed=self.seed
             ).generate(pre_size, post_size, pre_positions, post_positions, **kwargs)
 
-        # Extract radius value and unit
+        # Normalize positions using helper
         if isinstance(self.arborization_radius, u.Quantity):
             radius_val, radius_unit = u.split_mantissa_unit(self.arborization_radius)
-            pre_pos_val = u.Quantity(pre_positions).to(radius_unit).mantissa
-            post_pos_val = u.Quantity(post_positions).to(radius_unit).mantissa
+            pre_pos_val, _ = _normalize_positions(pre_positions, radius_unit)
+            post_pos_val, _ = _normalize_positions(post_positions, radius_unit)
         else:
             radius_val = self.arborization_radius
-            pre_pos_val = pre_positions
-            post_pos_val = post_positions
+            pre_pos_val, _ = _normalize_positions(pre_positions)
+            post_pos_val, _ = _normalize_positions(post_positions)
 
         # Calculate distances
         distances = cdist(pre_pos_val, post_pos_val)
@@ -1378,6 +1492,7 @@ class TopographicProjection(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1426,6 +1541,7 @@ class SynapticPlacement(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1489,6 +1605,7 @@ class SynapticClustering(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1522,76 +1639,9 @@ class SynapticClustering(MultiCompartmentConnectivity):
         ).generate(pre_size, post_size, pre_positions, post_positions, **kwargs)
 
 
-class ActivityDependentSynapses(MultiCompartmentConnectivity):
-    """Activity-dependent synaptic patterns.
-
-    Wrapper that adds activity-dependent metadata to connections.
-
-    Parameters
-    ----------
-    base_pattern : MultiCompartmentConnectivity
-        Base connectivity pattern to wrap.
-    plasticity_type : str
-        Type of plasticity ('stdp', 'bcm', 'homeostatic').
-    learning_rate : float
-        Learning rate for plasticity.
-    """
-
-    def __init__(
-        self,
-        base_pattern: MultiCompartmentConnectivity,
-        plasticity_type: str = 'stdp',
-        learning_rate: float = 0.01,
-        **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.base_pattern = base_pattern
-        self.plasticity_type = plasticity_type
-        self.learning_rate = learning_rate
-
-    def generate(
-        self,
-        pre_size: Union[int, Tuple[int, ...]],
-        post_size: Union[int, Tuple[int, ...]],
-        pre_positions: Optional[np.ndarray] = None,
-        post_positions: Optional[np.ndarray] = None,
-        **kwargs
-    ) -> ConnectionResult:
-        """Generate activity-dependent connections."""
-        result = self.base_pattern.generate(
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions,
-            **kwargs
-        )
-
-        result.metadata.update({
-            'plasticity_type': self.plasticity_type,
-            'learning_rate': self.learning_rate,
-            'activity_dependent': True
-        })
-
-        return result
-
-
-class RandomCompartment(CompartmentSpecific):
-    """Random compartment connectivity."""
-
-    def __init__(self, compartments: List[int] = None, **kwargs):
-        if compartments is None:
-            compartments = [SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON]
-
-        # Create all-to-all compartment mapping
-        compartment_mapping = {}
-        for source in compartments:
-            compartment_mapping[source] = compartments
-
-        super().__init__(compartment_mapping=compartment_mapping, **kwargs)
-
-
 class AllToAllCompartments(CompartmentSpecific):
     """All-to-all compartment connectivity."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartments = [SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON]
@@ -1608,6 +1658,7 @@ class AllToAllCompartments(CompartmentSpecific):
 
 class CustomCompartment(MultiCompartmentConnectivity):
     """Custom compartment connectivity using user-defined function."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, connection_func: Callable, **kwargs):
         super().__init__(**kwargs)
@@ -1615,6 +1666,12 @@ class CustomCompartment(MultiCompartmentConnectivity):
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate custom compartment connections."""
+        # Validate required kwargs
+        if 'pre_size' not in kwargs:
+            raise ValueError("CustomCompartment.generate() requires 'pre_size' parameter")
+        if 'post_size' not in kwargs:
+            raise ValueError("CustomCompartment.generate() requires 'post_size' parameter")
+
         result_data = self.connection_func(**kwargs)
 
         if len(result_data) == 4:
@@ -1627,7 +1684,7 @@ class CustomCompartment(MultiCompartmentConnectivity):
         elif len(result_data) == 6:
             pre_indices, post_indices, pre_compartments, post_compartments, weights, delays = result_data
         else:
-            raise ValueError("Custom function must return 4-6 values")
+            raise ValueError(f"Custom function must return 4-6 values, got {len(result_data)}")
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms
@@ -1640,8 +1697,8 @@ class CustomCompartment(MultiCompartmentConnectivity):
             model_type='multi_compartment',
             pre_size=kwargs['pre_size'],
             post_size=kwargs['post_size'],
-            pre_positions=kwargs['pre_positions'],
-            post_positions=kwargs['post_positions'],
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             pre_compartments=np.array(pre_compartments, dtype=np.int64),
             post_compartments=np.array(post_compartments, dtype=np.int64),
             metadata={'pattern': 'custom_compartment'}

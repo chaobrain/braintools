@@ -6,8 +6,8 @@
 
 Modular connectivity system for building neural network connection patterns
 across different types of neural models. The system provides specialized
-implementations for point neurons, population rate models, and multi-compartment
-models with a unified API.
+implementations for point neurons and multi-compartment models with direct
+class access.
 
 
 Base Classes and Results
@@ -22,8 +22,10 @@ Core infrastructure for connectivity patterns and results.
 
    ConnectionResult
    Connectivity
-   CompositeConnectivity
+   PointConnectivity
+   MultiCompartmentConnectivity
    ScaledConnectivity
+   CompositeConnectivity
 
 
 Point Neuron Connectivity
@@ -31,8 +33,10 @@ Point Neuron Connectivity
 
 Connectivity patterns for single-compartment point neuron models.
 
-Basic patterns
+Basic Patterns
 ~~~~~~~~~~~~~~
+
+Simple connectivity patterns including random and deterministic connections.
 
 .. autosummary::
    :toctree: generated/
@@ -40,11 +44,14 @@ Basic patterns
    :template: classtemplate.rst
 
    Random
+   FixedProb
    AllToAll
    OneToOne
 
-Spatial patterns
+Spatial Patterns
 ~~~~~~~~~~~~~~~~
+
+Distance-dependent and spatially-structured connectivity patterns.
 
 .. autosummary::
    :toctree: generated/
@@ -52,11 +59,35 @@ Spatial patterns
    :template: classtemplate.rst
 
    DistanceDependent
-   Grid
+   Gaussian
+   Exponential
+   Ring
+   Grid2d
    RadialPatches
+   ClusteredRandom
 
-Network patterns
-~~~~~~~~~~~~~~~~
+Topological Patterns
+~~~~~~~~~~~~~~~~~~~~
+
+Complex network topology patterns based on graph theory.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   SmallWorld
+   ScaleFree
+   Regular
+   ModularRandom
+   ModularGeneral
+   HierarchicalRandom
+   CorePeripheryRandom
+
+Biological Patterns
+~~~~~~~~~~~~~~~~~~~
+
+Biologically-inspired connectivity patterns following neural principles.
 
 .. autosummary::
    :toctree: generated/
@@ -64,20 +95,19 @@ Network patterns
    :template: classtemplate.rst
 
    ExcitatoryInhibitory
-   Custom
 
 
-Kernel patterns
-~~~~~~~~~~~~~~~
+Kernel-Based Connectivity
+--------------------------
 
-Connectivity patterns using convolution kernels for spatial processing.
+Connectivity patterns using convolution kernels for spatial receptive fields.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   ConvKernel
+   Conv2dKernel
    GaussianKernel
    GaborKernel
    DoGKernel
@@ -93,8 +123,24 @@ Multi-Compartment Connectivity
 Connectivity patterns for detailed multi-compartment neuron models with
 compartment-specific targeting.
 
-Compartment-specific patterns
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Compartment Constants
+~~~~~~~~~~~~~~~~~~~~~
+
+Predefined constants for identifying neural compartments.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   SOMA
+   BASAL_DENDRITE
+   APICAL_DENDRITE
+   AXON
+
+Basic Compartment Patterns
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fundamental patterns for compartment-specific connectivity.
 
 .. autosummary::
    :toctree: generated/
@@ -102,127 +148,79 @@ Compartment-specific patterns
    :template: classtemplate.rst
 
    CompartmentSpecific
-   SomaToDendrite
-   AxonToSoma
-   AxonToDendrite
-   DendriteToSoma
-
-Morphology-aware patterns
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   MorphologyDistance
-   DendriticTree
-   AxonalProjection
+   AllToAllCompartments
    CustomCompartment
 
-Compartment constants
-~~~~~~~~~~~~~~~~~~~~~
+Anatomical Targeting Patterns
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Connectivity patterns based on anatomical organization.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   SOMA
-   BASAL_DENDRITE
-   APICAL_DENDRITE
-   AXON
+   SomaToDendrite
+   AxonToSoma
+   DendriteToSoma
+   AxonToDendrite
+   DendriteToDendrite
 
+Morphology-Aware Patterns
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-
-Population Rate Connectivity
------------------------------
-
-Connectivity patterns for population rate models and mean-field dynamics.
-
-Population coupling
-~~~~~~~~~~~~~~~~~~~
+Patterns that utilize detailed morphological information.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   PopulationCoupling
-   MeanField
-   ExcitatoryInhibitoryPopulation
+   ProximalTargeting
+   DistalTargeting
+   BranchSpecific
+   MorphologyDistance
 
-Network architectures
-~~~~~~~~~~~~~~~~~~~~~
+Dendritic Patterns
+~~~~~~~~~~~~~~~~~~
 
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   HierarchicalPopulations
-   WilsonCowanNetwork
-
-
-Initialization Classes
-----------------------
-
-Classes for initializing connection weights, delays, and distance-dependent profiles.
-
-Weight initialization
-~~~~~~~~~~~~~~~~~~~~~
+Specialized patterns for dendritic targeting and integration.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   WeightInit
-   ConstantWeight
-   UniformWeight
-   NormalWeight
-   LogNormalWeight
-   ExponentialWeight
-   GammaWeight
-   BetaWeight
-   OrthogonalWeight
-   XavierUniformWeight
-   XavierNormalWeight
-   HeUniformWeight
-   HeNormalWeight
-   LeCunUniformWeight
-   LeCunNormalWeight
-   DistanceModulatedWeight
+   DendriticTree
+   BasalDendriteTargeting
+   ApicalDendriteTargeting
+   DendriticIntegration
 
-Delay initialization
-~~~~~~~~~~~~~~~~~~~~~
+Axonal Patterns
+~~~~~~~~~~~~~~~
+
+Patterns for axonal projection and arborization.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   DelayInit
-   ConstantDelay
-   UniformDelay
-   NormalDelay
-   GammaDelay
-   DistanceProportionalDelay
-   DistanceModulatedDelay
+   AxonalProjection
+   AxonalBranching
+   AxonalArborization
+   TopographicProjection
 
-Distance profiles
+Synaptic Patterns
 ~~~~~~~~~~~~~~~~~
 
+Patterns for synaptic placement and organization.
+
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   DistanceProfile
-   GaussianProfile
-   ExponentialProfile
-   PowerLawProfile
-   LinearProfile
-   StepProfile
-
+   SynapticPlacement
+   SynapticClustering

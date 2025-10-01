@@ -73,6 +73,7 @@ class Mixture(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, distributions: list, weights: Optional[list] = None):
         self.distributions = distributions
@@ -137,6 +138,7 @@ class Conditional(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, neuron_indices=np.arange(1000), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -198,6 +200,7 @@ class Scaled(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -243,6 +246,7 @@ class Clipped(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,

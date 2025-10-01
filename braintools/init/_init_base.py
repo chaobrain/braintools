@@ -86,6 +86,7 @@ class Initialization(ABC):
         ...             lambda x: x.clip(0, 2 * u.nS) |
         ...             lambda x: x * 0.5)
     """
+    __module__ = 'braintools.init'
 
     @abstractmethod
     def __call__(self, size, **kwargs):
@@ -241,6 +242,7 @@ def init_call(init: Optional[Initialization], n: int, **kwargs):
 
 class BinaryOpInit(Initialization):
     """Base class for binary operations on initializations."""
+    __module__ = 'braintools.init'
 
     def __init__(self, left, right):
         self.left = left
@@ -260,6 +262,7 @@ class BinaryOpInit(Initialization):
 
 class AddInit(BinaryOpInit):
     """Addition of two initializations."""
+    __module__ = 'braintools.init'
 
     def __call__(self, size, **kwargs):
         left_val = self._get_value(self.left, size, **kwargs)
@@ -272,6 +275,7 @@ class AddInit(BinaryOpInit):
 
 class SubInit(BinaryOpInit):
     """Subtraction of two initializations."""
+    __module__ = 'braintools.init'
 
     def __call__(self, size, **kwargs):
         left_val = self._get_value(self.left, size, **kwargs)
@@ -284,6 +288,7 @@ class SubInit(BinaryOpInit):
 
 class MulInit(BinaryOpInit):
     """Multiplication of two initializations."""
+    __module__ = 'braintools.init'
 
     def __call__(self, size, **kwargs):
         left_val = self._get_value(self.left, size, **kwargs)
@@ -296,6 +301,7 @@ class MulInit(BinaryOpInit):
 
 class DivInit(BinaryOpInit):
     """Division of two initializations."""
+    __module__ = 'braintools.init'
 
     def __call__(self, size, **kwargs):
         left_val = self._get_value(self.left, size, **kwargs)
@@ -308,6 +314,7 @@ class DivInit(BinaryOpInit):
 
 class ClipInit(Initialization):
     """Clip values to a range."""
+    __module__ = 'braintools.init'
 
     def __init__(self, base, min_val, max_val):
         self.base = base
@@ -339,6 +346,7 @@ class ClipInit(Initialization):
 
 class ApplyInit(Initialization):
     """Apply arbitrary function to initialization output."""
+    __module__ = 'braintools.init'
 
     def __init__(self, base, func):
         self.base = base
@@ -354,6 +362,7 @@ class ApplyInit(Initialization):
 
 class PipeInit(Initialization):
     """Pipe/compose two initializations or functions."""
+    __module__ = 'braintools.init'
 
     def __init__(self, base, func):
         self.base = base
@@ -406,6 +415,7 @@ class Compose(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init(1000, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, *inits):
         if len(inits) == 0:
