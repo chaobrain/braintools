@@ -36,7 +36,6 @@ from braintools.conn._compartment import (
 
     # Basic compartment patterns
     CompartmentSpecific,
-    RandomCompartment,
     AllToAllCompartments,
 
     # Anatomical targeting patterns
@@ -67,7 +66,6 @@ from braintools.conn._compartment import (
     # Synaptic patterns
     SynapticPlacement,
     SynapticClustering,
-    ActivityDependentSynapses,
 
     # Custom patterns
     CustomCompartment,
@@ -1017,37 +1015,6 @@ class TestSynapticPatterns(unittest.TestCase):
         self.assertEqual(result.model_type, 'multi_compartment')
         self.assertTrue(np.all(result.pre_compartments == AXON))
 
-    def test_activity_dependent_synapses(self):
-        base_pattern = AxonToDendrite(connection_prob=0.1, seed=42)
-
-        conn = ActivityDependentSynapses(
-            base_pattern=base_pattern,
-            plasticity_type='stdp',
-            learning_rate=0.01
-        )
-
-        result = conn(pre_size=20, post_size=20)
-
-        self.assertEqual(result.model_type, 'multi_compartment')
-
-        # Check that plasticity metadata was added
-        self.assertEqual(result.metadata['plasticity_type'], 'stdp')
-        self.assertEqual(result.metadata['learning_rate'], 0.01)
-        self.assertTrue(result.metadata['activity_dependent'])
-
-    def test_activity_dependent_synapses_different_types(self):
-        base_pattern = AxonToSoma(connection_prob=0.1, seed=42)
-
-        for plasticity_type in ['stdp', 'bcm', 'homeostatic']:
-            conn = ActivityDependentSynapses(
-                base_pattern=base_pattern,
-                plasticity_type=plasticity_type,
-                learning_rate=0.02
-            )
-
-            result = conn(pre_size=10, post_size=10)
-            self.assertEqual(result.metadata['plasticity_type'], plasticity_type)
-
 
 class TestRandomAndAllToAllPatterns(unittest.TestCase):
     """
@@ -1074,40 +1041,6 @@ class TestRandomAndAllToAllPatterns(unittest.TestCase):
 
     def setUp(self):
         self.rng = np.random.default_rng(42)
-
-    def test_random_compartment_default(self):
-        conn = RandomCompartment(connection_prob=0.1, seed=42)
-        result = conn(pre_size=10, post_size=10)
-
-        self.assertEqual(result.model_type, 'multi_compartment')
-        self.assertGreater(result.n_connections, 0)
-
-        # Should connect between all compartment types
-        all_compartments = {SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON}
-        unique_pre = set(result.pre_compartments)
-        unique_post = set(result.post_compartments)
-
-        # May not have all types due to randomness, but should be valid types
-        self.assertTrue(unique_pre.issubset(all_compartments))
-        self.assertTrue(unique_post.issubset(all_compartments))
-
-    def test_random_compartment_custom(self):
-        custom_compartments = [BASAL_DENDRITE, APICAL_DENDRITE]
-
-        conn = RandomCompartment(
-            compartments=custom_compartments,
-            connection_prob=0.2,
-            seed=42
-        )
-
-        result = conn(pre_size=20, post_size=20)
-
-        # Should only use specified compartments
-        unique_pre = set(result.pre_compartments)
-        unique_post = set(result.post_compartments)
-
-        self.assertTrue(unique_pre.issubset(set(custom_compartments)))
-        self.assertTrue(unique_post.issubset(set(custom_compartments)))
 
     def test_all_to_all_compartments(self):
         conn = AllToAllCompartments(seed=42)
