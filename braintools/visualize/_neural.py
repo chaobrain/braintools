@@ -274,6 +274,8 @@ def connectivity_matrix(
     pre_labels: Optional[List[str]] = None,
     post_labels: Optional[List[str]] = None,
     cmap: str = 'RdBu_r',
+xlabel : Optional[str] = None,
+ylabel : Optional[str] = None,
     center_zero: bool = True,
     ax: Optional[plt.Axes] = None,
     figsize: Tuple[float, float] = (8, 8),
@@ -354,8 +356,8 @@ def connectivity_matrix(
         ax.set_xticks(range(len(post_labels)))
         ax.set_xticklabels(post_labels)
 
-    ax.set_xlabel('Post-synaptic')
-    ax.set_ylabel('Pre-synaptic')
+    ax.set_xlabel('Post-synaptic' if xlabel is None else xlabel)
+    ax.set_ylabel('Pre-synaptic' if ylabel is None else ylabel)
     if title:
         ax.set_title(title)
 
