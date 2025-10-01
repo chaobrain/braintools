@@ -237,7 +237,7 @@ class GaussianProfile(DistanceProfile):
 
     def probability(self, distances: ArrayLike) -> np.ndarray:
         sigma, unit = u.split_mantissa_unit(self.sigma)
-        dist_vals = distances.to(unit).mantissa
+        dist_vals = u.Quantity(distances).to(unit).mantissa
 
         prob = np.exp(-0.5 * (dist_vals / sigma) ** 2)
 
@@ -293,7 +293,7 @@ class ExponentialProfile(DistanceProfile):
 
     def probability(self, distances: ArrayLike) -> np.ndarray:
         decay, unit = u.split_mantissa_unit(self.decay_constant)
-        dist_vals = distances.to(unit).mantissa
+        dist_vals = u.Quantity(distances).to(unit).mantissa
 
         prob = np.exp(-dist_vals / decay)
 
@@ -353,16 +353,16 @@ class PowerLawProfile(DistanceProfile):
         self.max_distance = max_distance
 
     def probability(self, distances: ArrayLike) -> np.ndarray:
-        dist_vals = distances.mantissa
+        dist_vals, dist_unit = u.split_mantissa_unit(distances)
 
-        min_val = 1e-6 if self.min_distance is None else u.Quantity(self.min_distance).to(distances.unit).mantissa
+        min_val = 1e-6 if self.min_distance is None else u.Quantity(self.min_distance).to(dist_unit).mantissa
         dist_vals = np.maximum(dist_vals, min_val)
 
         prob = dist_vals ** (-self.exponent)
 
         if self.max_distance is not None:
-            max_val = u.Quantity(self.max_distance).to(distances.unit).mantissa
-            prob[distances.mantissa > max_val] = 0.0
+            max_val = u.Quantity(self.max_distance).to(dist_unit).mantissa
+            prob[dist_vals > max_val] = 0.0
 
         return prob
 
@@ -402,7 +402,7 @@ class LinearProfile(DistanceProfile):
 
     def probability(self, distances: ArrayLike) -> np.ndarray:
         max_val, unit = u.split_mantissa_unit(self.max_distance)
-        dist_vals = distances.to(unit).mantissa
+        dist_vals = u.Quantity(distances).to(unit).mantissa
 
         prob = np.maximum(0, 1 - dist_vals / max_val)
         return prob
@@ -457,7 +457,7 @@ class StepProfile(DistanceProfile):
 
     def probability(self, distances: ArrayLike) -> np.ndarray:
         threshold, unit = u.split_mantissa_unit(self.threshold)
-        dist_vals = distances.to(unit).mantissa
+        dist_vals = u.Quantity(distances).to(unit).mantissa
 
         prob = np.where(dist_vals <= threshold, self.inside_prob, self.outside_prob)
         return prob
