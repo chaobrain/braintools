@@ -29,5 +29,6 @@ from braintools.init._init_variance_scaling import __all__ as variance_scaling_a
 from braintools.init._init_orthogonal import *
 from braintools.init._init_orthogonal import __all__ as orthogonal_all
 
-__all__ = init_all + _init_basic_all + distance_all + distance_impl_all + composite_all + variance_scaling_all + orthogonal_all
+__all__ = init_all + _init_basic_all + distance_all + distance_impl_all + composite_all + variance_scaling_all
+__all__ = __all__ + orthogonal_all
 del init_all, _init_basic_all, distance_all, distance_impl_all, composite_all, variance_scaling_all, orthogonal_all

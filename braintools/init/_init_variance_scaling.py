@@ -25,10 +25,11 @@ These methods scale the initial weights based on the number of input/output unit
 to maintain stable gradients during training.
 """
 
-import brainstate
 from typing import Literal
-import jax.numpy as jnp
+
+import brainstate
 import brainunit as u
+import jax.numpy as jnp
 from brainstate.typing import ArrayLike
 
 from ._init_base import Initialization
@@ -272,7 +273,7 @@ class XavierUniform(VarianceScaling):
         >>> weights = init((100, 50), rng=rng)
     """
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS,):
+    def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
         super().__init__(scale=scale, mode='fan_avg', distribution='uniform', unit=unit)
 
     def __repr__(self):

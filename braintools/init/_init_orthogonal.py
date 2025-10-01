@@ -26,7 +26,6 @@ import brainstate
 import brainunit as u
 import jax.numpy as jnp
 import numpy as np
-from numpy.matrixlib.defmatrix import matrix
 
 from ._init_base import Initialization
 
