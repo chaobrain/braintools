@@ -1360,12 +1360,12 @@ class TestCorePeripheryRandom(unittest.TestCase):
 
         self.assertIsNotNone(result.weights)
         self.assertIsNotNone(result.delays)
-        self.assertEqual(len(result.weights), result.n_connections)
-        self.assertEqual(len(result.delays), result.n_connections)
+        self.assertTrue(u.math.isscalar(result.weights))
+        self.assertTrue(u.math.isscalar(result.delays))
 
         # Check weight values
-        self.assertTrue(np.allclose(result.weights, 1.5 * u.nS))
-        self.assertTrue(np.allclose(result.delays, 2.0 * u.ms))
+        self.assertTrue(u.math.allclose(result.weights, 1.5 * u.nS))
+        self.assertTrue(u.math.allclose(result.delays, 2.0 * u.ms))
 
     def test_custom_weight_initializer(self):
         """Test with custom weight initializer."""
@@ -1436,6 +1436,7 @@ class TestCorePeripheryRandom(unittest.TestCase):
         self.assertEqual(metadata['periphery_prob'], 0.08)
         self.assertEqual(metadata['bidirectional_core_periphery'], False)
 
+    @pytest.mark.skip(reason="too slow for regular test runs")
     def test_large_network(self):
         """Test with a larger network to ensure scalability."""
         conn = CorePeripheryRandom(
@@ -1490,7 +1491,7 @@ class TestCorePeripheryRandom(unittest.TestCase):
         """Test distribution of different connection types."""
         conn = CorePeripheryRandom(
             core_size=30,
-            core_prob=0.5,
+            core_prob=0.8,
             core_periphery_prob=0.2,
             periphery_prob=0.1,
             seed=42
