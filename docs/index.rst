@@ -62,11 +62,12 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     :caption: Tutorials
 
     toc_conn.md
-    toc_file.md
+    toc_init.md
     toc_input.md
     toc_metric.md
     toc_optim.md
     toc_quad.md
+    toc_file.md
     toc_visualize.md
     toc_spike_encoding.md
 
