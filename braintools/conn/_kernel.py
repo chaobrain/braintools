@@ -50,8 +50,6 @@ class ConvKernel(PointNeuronConnectivity):
     where the kernel weight exceeds a threshold. This allows implementing
     receptive field structures in spiking neural networks.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     kernel : np.ndarray
@@ -246,8 +244,6 @@ class GaussianKernel(PointNeuronConnectivity):
     Creates connections weighted by a 2D Gaussian function of distance,
     useful for implementing smooth spatial receptive fields.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     sigma : float or Quantity
@@ -407,8 +403,6 @@ class GaborKernel(PointNeuronConnectivity):
 
     Implements Gabor filters in spatial connectivity, useful for creating
     orientation-selective neurons similar to V1 simple cells.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -617,8 +611,6 @@ class DoGKernel(PointNeuronConnectivity):
     Implements DoG filters commonly found in retinal ganglion cells and LGN neurons,
     with excitatory center and inhibitory surround (or vice versa).
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     sigma_center : float or Quantity
@@ -802,8 +794,6 @@ class MexicanHat(DoGKernel):
     A special case of DoG with specific amplitude ratios to approximate
     the Laplacian of Gaussian. Creates strong lateral inhibition patterns.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     sigma : float or Quantity
@@ -868,8 +858,6 @@ class SobelKernel(PointNeuronConnectivity):
 
     Implements Sobel operators for detecting edges at specific orientations,
     useful for implementing orientation-selective connectivity patterns.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -982,8 +970,6 @@ class LaplacianKernel(PointNeuronConnectivity):
     Implements Laplacian operators for detecting discontinuities and edges,
     useful for lateral inhibition and edge enhancement.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     kernel_type : str
@@ -1062,8 +1048,6 @@ class CustomKernel(PointNeuronConnectivity):
     """Custom kernel connectivity using user-defined kernel function.
 
     Allows implementing arbitrary spatial kernel functions for connectivity.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------

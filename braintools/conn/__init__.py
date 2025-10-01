@@ -150,12 +150,21 @@ complete decoupling between model types to ensure clean, specialized implementat
 
 from ._base import *
 from ._base import __all__ as base_all
+from ._biological import *
+from ._biological import __all__ as biological_all
 from ._compartment import *
 from ._compartment import __all__ as comp_all
 from ._kernel import *
 from ._kernel import __all__ as kernel_all
-from ._point import *
-from ._point import __all__ as point_all
+from ._random import *
+from ._random import __all__ as point_all
+from ._regular import *
+from ._regular import __all__ as regular_all
+from ._spatial import *
+from ._spatial import __all__ as spatial_all
+from ._topological import *
+from ._topological import __all__ as topological_all
 
-__all__ = base_all + comp_all + kernel_all + point_all
-del base_all, comp_all, kernel_all, point_all
+__all__ = base_all + comp_all + kernel_all + point_all + spatial_all + topological_all + biological_all + regular_all
+del base_all, comp_all, kernel_all, point_all, spatial_all, topological_all, biological_all
+del regular_all

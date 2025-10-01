@@ -104,8 +104,6 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
     neurons. It provides flexible mapping from source compartments to target
     compartments with customizable connection rules.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     compartment_mapping : dict
@@ -315,8 +313,6 @@ class SomaToDendrite(CompartmentSpecific):
     compartments, commonly used for modeling antidromic activation or
     backpropagating action potentials.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     target_dendrites : list, optional
@@ -379,8 +375,6 @@ class AxonToSoma(CompartmentSpecific):
     This creates connections specifically from axon compartments to soma
     compartments, representing direct synaptic input to the cell body.
 
-    __module__ = 'braintools.conn'
-
     Examples
     --------
     .. code-block:: python
@@ -402,8 +396,6 @@ class DendriteToSoma(CompartmentSpecific):
 
     This creates connections from dendritic compartments to soma compartments,
     modeling dendritic integration and signal propagation to the cell body.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -438,8 +430,6 @@ class AxonToDendrite(CompartmentSpecific):
     This represents the most common type of synaptic connection where
     axons form synapses on dendritic branches.
 
-    __module__ = 'braintools.conn'
-
     Examples
     --------
     .. code-block:: python
@@ -469,8 +459,6 @@ class DendriteToDendrite(CompartmentSpecific):
     This models lateral connections between dendritic branches,
     important for dendritic computation and integration.
 
-    __module__ = 'braintools.conn'
-
     Examples
     --------
     .. code-block:: python
@@ -496,8 +484,6 @@ class MorphologyDistance(MultiCompartmentConnectivity):
     This pattern uses the actual morphological structure of neurons
     to determine connection probabilities and strengths based on
     distances between specific compartments.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -678,8 +664,6 @@ class DendriticTree(MultiCompartmentConnectivity):
     This models realistic dendritic connectivity considering the branching
     structure of dendritic trees and branch-specific connection rules.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     tree_structure : dict
@@ -819,8 +803,6 @@ class AxonalProjection(MultiCompartmentConnectivity):
 
     This models long-range axonal projections with topographic mapping
     and realistic axonal arborization patterns.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -962,8 +944,6 @@ class AxonalProjection(MultiCompartmentConnectivity):
 class ProximalTargeting(CompartmentSpecific):
     """Connectivity targeting proximal dendritic compartments."""
 
-    __module__ = 'braintools.conn'
-
     def __init__(self, **kwargs):
         # Proximal dendrites are closer to soma
         compartment_mapping = {AXON: BASAL_DENDRITE}  # Basal dendrites are typically more proximal
@@ -972,8 +952,6 @@ class ProximalTargeting(CompartmentSpecific):
 
 class DistalTargeting(CompartmentSpecific):
     """Connectivity targeting distal dendritic compartments."""
-
-    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         # Distal dendrites are farther from soma
@@ -986,8 +964,6 @@ class BranchSpecific(MultiCompartmentConnectivity):
 
     Targets specific branches within the dendritic tree based on branch indices
     or branch-specific rules.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1036,8 +1012,6 @@ class BranchSpecific(MultiCompartmentConnectivity):
 class BasalDendriteTargeting(CompartmentSpecific):
     """Specific targeting of basal dendrites."""
 
-    __module__ = 'braintools.conn'
-
     def __init__(self, **kwargs):
         compartment_mapping = {AXON: BASAL_DENDRITE}
         super().__init__(compartment_mapping=compartment_mapping, **kwargs)
@@ -1045,8 +1019,6 @@ class BasalDendriteTargeting(CompartmentSpecific):
 
 class ApicalDendriteTargeting(CompartmentSpecific):
     """Specific targeting of apical dendrites."""
-
-    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {AXON: APICAL_DENDRITE}
@@ -1058,8 +1030,6 @@ class DendriticIntegration(MultiCompartmentConnectivity):
 
     Models connectivity that supports dendritic integration, with clustered
     synapses on the same dendritic branches for nonlinear integration.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1174,8 +1144,6 @@ class AxonalBranching(MultiCompartmentConnectivity):
     Models realistic axonal branching where each presynaptic axon makes
     multiple synaptic contacts following branching structure.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     branches_per_axon : int
@@ -1285,8 +1253,6 @@ class AxonalArborization(MultiCompartmentConnectivity):
 
     Models spatial axonal arborization with local clustering of synaptic
     contacts around branch points.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1403,8 +1369,6 @@ class TopographicProjection(MultiCompartmentConnectivity):
 
     Alias for AxonalProjection with topographic mapping enabled.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     topographic_map : callable
@@ -1450,8 +1414,6 @@ class SynapticPlacement(MultiCompartmentConnectivity):
 
     Controls where synapses are placed on compartments based on rules
     like distance from soma, compartment type preferences, etc.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1516,8 +1478,6 @@ class SynapticClustering(MultiCompartmentConnectivity):
     Creates clusters of synapses on dendritic branches, important for
     nonlinear dendritic integration.
 
-    __module__ = 'braintools.conn'
-
     Parameters
     ----------
     cluster_size : int
@@ -1566,8 +1526,6 @@ class ActivityDependentSynapses(MultiCompartmentConnectivity):
     """Activity-dependent synaptic patterns.
 
     Wrapper that adds activity-dependent metadata to connections.
-
-    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1622,8 +1580,6 @@ class ActivityDependentSynapses(MultiCompartmentConnectivity):
 class RandomCompartment(CompartmentSpecific):
     """Random compartment connectivity."""
 
-    __module__ = 'braintools.conn'
-
     def __init__(self, compartments: List[int] = None, **kwargs):
         if compartments is None:
             compartments = [SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON]
@@ -1638,8 +1594,6 @@ class RandomCompartment(CompartmentSpecific):
 
 class AllToAllCompartments(CompartmentSpecific):
     """All-to-all compartment connectivity."""
-
-    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartments = [SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON]
@@ -1656,8 +1610,6 @@ class AllToAllCompartments(CompartmentSpecific):
 
 class CustomCompartment(MultiCompartmentConnectivity):
     """Custom compartment connectivity using user-defined function."""
-
-    __module__ = 'braintools.conn'
 
     def __init__(self, connection_func: Callable, **kwargs):
         super().__init__(**kwargs)

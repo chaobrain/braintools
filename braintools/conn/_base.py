@@ -34,7 +34,9 @@ __all__ = [
     'ConnectionResult',
     'Connectivity',
     'PointNeuronConnectivity',
-    'MultiCompartmentConnectivity'
+    'MultiCompartmentConnectivity',
+    'ScaledConnectivity',
+    'CompositeConnectivity',
 ]
 
 
@@ -50,6 +52,10 @@ class ConnectionResult:
         Presynaptic element indices (neurons, populations, or compartments).
     post_indices : np.ndarray
         Postsynaptic element indices (neurons, populations, or compartments).
+    pre_size : int or tuple of int, optional
+        Size of the presynaptic population (number of elements or shape).
+    post_size : int or tuple of int, optional
+        Size of the postsynaptic population (number of elements or shape).
     weights : np.ndarray or Quantity, optional
         Connection weights with appropriate units for the model type.
     delays : np.ndarray or Quantity, optional
@@ -60,14 +66,12 @@ class ConnectionResult:
         Positions of presynaptic elements (for distance calculations).
     post_positions: np.ndarray, optional
         Positions of postsynaptic elements (for distance calculations).
-    pre_size : int or tuple of int, optional
-        Size of the presynaptic population (number of elements or shape).
-    post_size : int or tuple of int, optional
-        Size of the postsynaptic population (number of elements or shape).
+    pre_compartments: np.ndarray, optional
+        Presynaptic compartment indices (for multi-compartment models).
+    post_compartments: np.ndarray, optional
+        Postsynaptic compartment indices (for multi-compartment models).
     metadata : dict, optional
         Model-specific metadata and parameters.
-    **type_specific_fields
-        Additional fields specific to each model type.
     """
 
     __module__ = 'braintools.conn'
@@ -87,7 +91,6 @@ class ConnectionResult:
         model_type: str = 'point',
         metadata: Optional[Dict[str, Any]] = None,
     ):
-
         # Core connectivity data
         self.pre_indices = np.asarray(pre_indices, dtype=np.int64)
         self.post_indices = np.asarray(post_indices, dtype=np.int64)
