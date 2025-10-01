@@ -32,7 +32,7 @@ from braintools.init import init_call, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
-    'ConvKernel',
+    'Conv2dKernel',
     'GaussianKernel',
     'GaborKernel',
     'DoGKernel',
@@ -43,7 +43,7 @@ __all__ = [
 ]
 
 
-class ConvKernel(PointConnectivity):
+class Conv2dKernel(PointConnectivity):
     """Convolutional kernel connectivity for spatially arranged point neurons.
 
     Applies a 2D convolution kernel to neuron positions, creating connections
@@ -76,7 +76,7 @@ class ConvKernel(PointConnectivity):
         ...     [0.04, 0.12, 0.18, 0.12, 0.04]
         ... ])
         >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
-        >>> conn = ConvKernel(
+        >>> conn = Conv2dKernel(
         ...     kernel=kernel,
         ...     kernel_size=100 * u.um,
         ...     threshold=0.1,
@@ -676,37 +676,16 @@ class DoGKernel(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for DoG kernel connectivity")
 
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
-
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
         # Calculate distances
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
         post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
         distances = cdist(pre_pos_val, post_pos_val)
 
         # Get sigma values in position units
-        if isinstance(self.sigma_center, u.Quantity):
-            sigma_c_val = u.Quantity(self.sigma_center).to(pos_unit).mantissa
-        else:
-            sigma_c_val = self.sigma_center
-
-        if isinstance(self.sigma_surround, u.Quantity):
-            sigma_s_val = u.Quantity(self.sigma_surround).to(pos_unit).mantissa
-        else:
-            sigma_s_val = self.sigma_surround
-
+        sigma_c_val = u.Quantity(self.sigma_center).to(pos_unit).mantissa
+        sigma_s_val = u.Quantity(self.sigma_surround).to(pos_unit).mantissa
         if self.max_distance is not None:
-            if isinstance(self.max_distance, u.Quantity):
-                max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
-            else:
-                max_dist_val = self.max_distance
+            max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
         else:
             max_dist_val = 3 * sigma_s_val
 
@@ -923,9 +902,9 @@ class SobelKernel(PointConnectivity):
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate Sobel kernel connections."""
-        # Delegate to ConvKernel
+        # Delegate to Conv2dKernel
         if self.kernel is not None:
-            conv = ConvKernel(
+            conv = Conv2dKernel(
                 kernel=self.kernel,
                 kernel_size=self.kernel_size,
                 threshold=0.1,
@@ -939,7 +918,7 @@ class SobelKernel(PointConnectivity):
             return result
         else:
             # Both directions - compute magnitude
-            conv_h = ConvKernel(
+            conv_h = Conv2dKernel(
                 kernel=self.kernel_h,
                 kernel_size=self.kernel_size,
                 threshold=0.1,
@@ -947,7 +926,7 @@ class SobelKernel(PointConnectivity):
                 delay=self.delay_init,
                 seed=self.seed
             )
-            conv_v = ConvKernel(
+            conv_v = Conv2dKernel(
                 kernel=self.kernel_v,
                 kernel_size=self.kernel_size,
                 threshold=0.1,
@@ -1029,8 +1008,8 @@ class LaplacianKernel(PointConnectivity):
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate Laplacian kernel connections."""
-        # Delegate to ConvKernel
-        conv = ConvKernel(
+        # Delegate to Conv2dKernel
+        conv = Conv2dKernel(
             kernel=self.kernel,
             kernel_size=self.kernel_size,
             threshold=0.1,

@@ -20,7 +20,7 @@ from braintools.conn import (
     SmallWorld,
     ScaleFree,
     Regular,
-    RandomModular,
+    ModularRandom,
 )
 
 
@@ -124,7 +124,7 @@ class TestTopologicalPatterns(unittest.TestCase):
             conn(pre_size=10, post_size=8)  # Different sizes not allowed
 
     def test_modular_basic(self):
-        conn = RandomModular(
+        conn = ModularRandom(
             n_modules=3,
             intra_prob=0.4,
             inter_prob=0.05,
@@ -142,14 +142,14 @@ class TestTopologicalPatterns(unittest.TestCase):
         self.assertGreater(result.n_connections, 0)
 
     def test_modular_different_sizes_error(self):
-        conn = RandomModular(n_modules=2, seed=42)
+        conn = ModularRandom(n_modules=2, seed=42)
 
         with self.assertRaises(ValueError):
             conn(pre_size=10, post_size=8)  # Different sizes not allowed
 
     def test_modular_uneven_module_assignment(self):
         # Test when population size doesn't divide evenly by number of modules
-        conn = RandomModular(
+        conn = ModularRandom(
             n_modules=3,
             intra_prob=0.3,
             inter_prob=0.01,

@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Sequence
 
 import brainunit as u
 import numpy as np
@@ -26,8 +26,8 @@ __all__ = [
     'SmallWorld',
     'ScaleFree',
     'Regular',
-    'RandomModular',
-    'ModularPattern',
+    'ModularRandom',
+    'ModularGeneral',
     'ClusteredRandom',
 ]
 
@@ -363,7 +363,7 @@ class Regular(PointConnectivity):
         )
 
 
-class RandomModular(PointConnectivity):
+class ModularRandom(PointConnectivity):
     """Modular network with intra-module and inter-module random connectivity.
 
     Parameters
@@ -383,7 +383,7 @@ class RandomModular(PointConnectivity):
     --------
     .. code-block:: python
 
-        >>> mod = RandomModular(n_modules=5, intra_prob=0.3, inter_prob=0.01)
+        >>> mod = ModularRandom(n_modules=5, intra_prob=0.3, inter_prob=0.01)
         >>> result = mod(pre_size=1000, post_size=1000)
     """
 
@@ -492,80 +492,121 @@ class RandomModular(PointConnectivity):
         )
 
 
-class ModularPattern(PointConnectivity):
-    """Modular network using a Connectivity instance for intra-module patterns.
+class ModularGeneral(PointConnectivity):
+    """Modular network using Connectivity instances for both intra and inter-module patterns.
 
     This class creates a modular network structure where:
-    - Intra-module connectivity is defined by a Connectivity instance or list of instances
-    - Inter-module connectivity is defined by probability and optional weight/delay
+
+    - Intra-module connectivity is defined by a sequence of Connectivity instances
+    - Inter-module connectivity is defined by either a single PointConnectivity instance
+      or a dict mapping (pre_mod, post_mod) tuples to PointConnectivity instances
 
     Parameters
     ----------
-    n_modules : int
-        Number of modules in the network.
-    intra_conn : PointConnectivity or list of PointConnectivity
-        Connectivity instance(s) for generating connections within each module.
-        If a single instance, the same connectivity pattern is used for all modules.
-        If a list, must have length equal to n_modules, with one connectivity per module.
-    inter_prob : float
-        Connection probability between different modules.
-    inter_weight : Initializer, optional
-        Weight initialization for inter-module connections.
-        If None, uses the same initialization as intra_conn.
-    inter_delay : Initializer, optional
-        Delay initialization for inter-module connections.
-        If None, uses the same initialization as intra_conn.
+    intra_conn : Sequence of PointConnectivity
+        Sequence of connectivity instances for generating connections within each module.
+        The length of the sequence determines the number of modules.
+    inter_conn : PointConnectivity, optional
+        Default connectivity instance for inter-module connections.
+        Applied to all module pairs not specified in inter_conn_pair.
+        If None and a pair is not in inter_conn_pair, that pair is skipped.
+    inter_conn_pair : dict, optional
+        Dict mapping (pre_module_id, post_module_id) tuples to PointConnectivity instances
+        for specific inter-module connections. Overrides inter_conn for specified pairs.
+    module_ratios : Sequence of int or float, optional
+        Ratios or sizes for the first n_modules-1 modules. Length must be n_modules-1.
+        Each element can be:
+
+        - int: Fixed size for that module
+        - float: Proportion of total size (e.g., 0.3 means 30% of total)
+
+        The last module gets the remaining neurons.
+        If None, modules are evenly divided.
 
     Examples
     --------
+
     .. code-block:: python
 
-        >>> from braintools.conn import Random, ModularPattern
+        >>> from braintools.conn import Random, ModularGeneral
         >>> import brainunit as u
-        >>> # Create intra-module connectivity with 30% connection probability
-        >>> intra = Random(prob=0.3, weight=1.0 * u.nS)
-        >>> # Create modular network with 5 modules and 1% inter-module probability
-        >>> mod = ModularPattern(
-        ...     n_modules=5,
-        ...     intra_conn=intra,
-        ...     inter_prob=0.01,
-        ...     inter_weight=0.1 * u.nS  # Weaker inter-module connections
-        ... )
-        >>> result = mod(pre_size=1000, post_size=1000)
 
-        >>> # Different connectivity per module
+        >>> # Different connectivity per module with uniform inter-module connectivity
         >>> intra_list = [
         ...     Random(prob=0.3, weight=1.0 * u.nS),
         ...     Random(prob=0.5, weight=1.5 * u.nS),
         ...     SmallWorld(k=6, p=0.3, weight=2.0 * u.nS)
         ... ]
-        >>> mod = ModularPattern(n_modules=3, intra_conn=intra_list, inter_prob=0.01)
+        >>> inter = Random(prob=0.01, weight=0.1 * u.nS)
+        >>> mod = ModularGeneral(intra_conn=intra_list, inter_conn=inter)
+        >>> result = mod(pre_size=900, post_size=900)
+
+        >>> # Different inter-module connectivity for specific module pairs
+        >>> default_inter = Random(prob=0.01, weight=0.1 * u.nS)
+        >>> specific_inter = {
+        ...     (0, 1): Random(prob=0.05, weight=0.2 * u.nS),
+        ...     (1, 2): Random(prob=0.03, weight=0.15 * u.nS),
+        ... }
+        >>> mod = ModularGeneral(
+        ...     intra_conn=intra_list,
+        ...     inter_conn=default_inter,
+        ...     inter_conn_pair=specific_inter
+        ... )
+        >>> result = mod(pre_size=900, post_size=900)
+
+        >>> # Custom module sizes with fixed sizes
+        >>> mod = ModularGeneral(
+        ...     intra_conn=intra_list,
+        ...     inter_conn=inter,
+        ...     module_ratios=[200, 300]  # Last module gets remaining 400
+        ... )
+        >>> result = mod(pre_size=900, post_size=900)
+
+        >>> # Custom module sizes with ratios
+        >>> mod = ModularGeneral(
+        ...     intra_conn=intra_list,
+        ...     inter_conn=inter,
+        ...     module_ratios=[0.2, 0.3]  # 20%, 30%, and remaining 50%
+        ... )
+        >>> result = mod(pre_size=900, post_size=900)
+
+        >>> # Mixed fixed and ratio sizes
+        >>> mod = ModularGeneral(
+        ...     intra_conn=intra_list,
+        ...     inter_conn=inter,
+        ...     module_ratios=[100, 0.5]  # 100 neurons, 50% of total, and remainder
+        ... )
         >>> result = mod(pre_size=900, post_size=900)
     """
 
     def __init__(
         self,
-        n_modules: int,
-        intra_conn: Union[PointConnectivity, list[PointConnectivity]],
-        inter_prob: float = 0.01,
-        inter_weight: Optional[Initializer] = None,
-        inter_delay: Optional[Initializer] = None,
+        intra_conn: Sequence[PointConnectivity],
+        inter_conn: Optional[PointConnectivity] = None,
+        inter_conn_pair: Optional[Dict[tuple[int, int], PointConnectivity]] = None,
+        module_ratios: Optional[Sequence[int | float]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.n_modules = n_modules
 
-        # Handle both single connectivity and list of connectivities
-        if isinstance(intra_conn, list):
-            if len(intra_conn) != n_modules:
-                raise ValueError(f"Length of intra_conn list ({len(intra_conn)}) must equal n_modules ({n_modules})")
-            self.intra_conn = intra_conn
-        else:
-            self.intra_conn = [intra_conn] * n_modules
+        if not isinstance(intra_conn, (list, tuple)):
+            raise TypeError("intra_conn must be a list/tuple of PointConnectivity instances")
 
-        self.inter_prob = inter_prob
-        self.inter_weight_init = inter_weight
-        self.inter_delay_init = inter_delay
+        self.intra_conn = intra_conn
+        self.n_modules = len(intra_conn)
+        self.inter_conn = inter_conn
+        self.module_ratios = module_ratios
+        if inter_conn_pair is None:
+            inter_conn_pair = dict()
+        if not isinstance(inter_conn_pair, dict):
+            raise TypeError("inter_conn_pair must be a dict mapping (pre_mod, post_mod) to PointConnectivity")
+        self.inter_conn_pair = inter_conn_pair
+
+        if module_ratios is not None:
+            if len(module_ratios) != self.n_modules - 1:
+                raise ValueError(
+                    f"Length of module_ratios ({len(module_ratios)}) must be n_modules-1 ({self.n_modules - 1})"
+                )
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate modular network with custom intra-module connectivity."""
@@ -580,11 +621,47 @@ class ModularPattern(PointConnectivity):
         if pre_size != post_size:
             raise ValueError("Modular networks require pre_size == post_size")
 
-        # Assign neurons to modules
-        module_size = n // self.n_modules
-        modules = np.repeat(np.arange(self.n_modules), module_size)
-        if len(modules) < n:
-            modules = np.concatenate([modules, np.full(n - len(modules), self.n_modules - 1)])
+        # Determine module sizes and boundaries
+        if self.module_ratios is not None:
+            mod_sizes = []
+            remaining = n
+
+            # Process first n_modules-1 sizes
+            for ratio in self.module_ratios:
+                if isinstance(ratio, int):
+                    # Fixed size
+                    size = ratio
+                else:
+                    # Proportional size
+                    size = int(ratio * n)
+
+                if size < 0:
+                    raise ValueError(f"Module size cannot be negative: {size}")
+                if size > remaining:
+                    raise ValueError(
+                        f"Module size {size} exceeds remaining neurons {remaining}. "
+                        f"Check your module_ratios configuration."
+                    )
+
+                mod_sizes.append(size)
+                remaining -= size
+
+            # Last module gets all remaining neurons
+            if remaining < 0:
+                raise ValueError(
+                    f"Module sizes exceed total size: sum={n - remaining}, total={n}"
+                )
+            mod_sizes.append(remaining)
+        else:
+            # Evenly divide neurons across modules
+            base_size = n // self.n_modules
+            remainder = n % self.n_modules
+            mod_sizes = [base_size + (1 if i < remainder else 0) for i in range(self.n_modules)]
+
+        # Calculate module boundaries for fast indexing
+        mod_boundaries = [0]
+        for size in mod_sizes:
+            mod_boundaries.append(mod_boundaries[-1] + size)
 
         all_pre_indices = []
         all_post_indices = []
@@ -596,8 +673,9 @@ class ModularPattern(PointConnectivity):
 
         # Generate intra-module connections using the provided connectivity
         for mod_id in range(self.n_modules):
-            module_neurons = np.where(modules == mod_id)[0]
-            mod_n = len(module_neurons)
+            mod_start = mod_boundaries[mod_id]
+            mod_end = mod_boundaries[mod_id + 1]
+            mod_n = mod_end - mod_start
 
             if mod_n == 0:
                 continue
@@ -609,17 +687,24 @@ class ModularPattern(PointConnectivity):
             conn.rng = self.rng
 
             # Generate connections within this module
+            if pre_positions is not None:
+                mod_pre_pos = pre_positions[mod_start:mod_end]
+                mod_post_pos = post_positions[mod_start:mod_end]
+            else:
+                mod_pre_pos = None
+                mod_post_pos = None
+
             intra_result = conn(
                 pre_size=mod_n,
                 post_size=mod_n,
-                pre_positions=pre_positions[module_neurons] if pre_positions is not None else None,
-                post_positions=post_positions[module_neurons] if post_positions is not None else None
+                pre_positions=mod_pre_pos,
+                post_positions=mod_post_pos
             )
 
             # Map local indices to global indices
             if len(intra_result.pre_indices) > 0:
-                global_pre = module_neurons[intra_result.pre_indices]
-                global_post = module_neurons[intra_result.post_indices]
+                global_pre = intra_result.pre_indices + mod_start
+                global_post = intra_result.post_indices + mod_start
                 all_pre_indices.append(global_pre)
                 all_post_indices.append(global_post)
 
@@ -629,52 +714,63 @@ class ModularPattern(PointConnectivity):
                     all_delays.append(intra_result.delays)
 
         # Generate inter-module connections
-        inter_pre = []
-        inter_post = []
-
-        for i in range(n):
-            for j in range(n):
-                if i == j or modules[i] == modules[j]:
+        for pre_mod in range(self.n_modules):
+            for post_mod in range(self.n_modules):
+                if pre_mod == post_mod:
                     continue
 
-                if self.rng.random() < self.inter_prob:
-                    inter_pre.append(i)
-                    inter_post.append(j)
+                # Get the appropriate connectivity instance
+                # First check inter_conn_pair, then fall back to default inter_conn
+                if (pre_mod, post_mod) in self.inter_conn_pair:
+                    conn = self.inter_conn_pair.get((pre_mod, post_mod))
+                    if conn is None:
+                        # Skip this pair if no connectivity is specified
+                        continue
+                else:
+                    conn = self.intra_conn
+                    if conn is None:
+                        continue
 
-        if len(inter_pre) > 0:
-            inter_pre = np.array(inter_pre, dtype=np.int64)
-            inter_post = np.array(inter_post, dtype=np.int64)
-            n_inter = len(inter_pre)
+                pre_start = mod_boundaries[pre_mod]
+                pre_end = mod_boundaries[pre_mod + 1]
+                post_start = mod_boundaries[post_mod]
+                post_end = mod_boundaries[post_mod + 1]
 
-            all_pre_indices.append(inter_pre)
-            all_post_indices.append(inter_post)
+                pre_n = pre_end - pre_start
+                post_n = post_end - post_start
 
-            # Generate inter-module weights and delays
-            inter_weights = init_call(
-                self.inter_weight_init,
-                n_inter,
-                rng=self.rng,
-                param_type='weight',
-                pre_size=pre_size,
-                post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None)
-            )
-            inter_delays = init_call(
-                self.inter_delay_init,
-                n_inter,
-                rng=self.rng,
-                param_type='delay',
-                pre_size=pre_size,
-                post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None)
-            )
+                if pre_n == 0 or post_n == 0:
+                    continue
 
-            if inter_weights is not None:
-                all_weights.append(inter_weights)
-            if inter_delays is not None:
-                all_delays.append(inter_delays)
+                # Set the RNG for inter_conn to match this instance
+                conn.rng = self.rng
+
+                # Generate connections between these two modules
+                if pre_positions is not None:
+                    pre_mod_pos = pre_positions[pre_start:pre_end]
+                    post_mod_pos = post_positions[post_start:post_end]
+                else:
+                    pre_mod_pos = None
+                    post_mod_pos = None
+
+                inter_result = conn(
+                    pre_size=pre_n,
+                    post_size=post_n,
+                    pre_positions=pre_mod_pos,
+                    post_positions=post_mod_pos
+                )
+
+                # Map local indices to global indices
+                if len(inter_result.pre_indices) > 0:
+                    global_pre = inter_result.pre_indices + pre_start
+                    global_post = inter_result.post_indices + post_start
+                    all_pre_indices.append(global_pre)
+                    all_post_indices.append(global_post)
+
+                    if inter_result.weights is not None:
+                        all_weights.append(inter_result.weights)
+                    if inter_result.delays is not None:
+                        all_delays.append(inter_result.delays)
 
         # Combine all connections
         if len(all_pre_indices) == 0:
@@ -704,9 +800,12 @@ class ModularPattern(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None),
             metadata={
-                'pattern': 'modular_pattern',
+                'pattern': 'modular_general',
                 'n_modules': self.n_modules,
-                'inter_prob': self.inter_prob,
+                'module_sizes': mod_sizes,
+                'module_ratios': self.module_ratios,
+                'inter_conn': type(self.inter_conn).__name__ if self.inter_conn is not None else None,
+                'inter_conn_pair': {k: type(v).__name__ for k, v in self.inter_conn_pair.items()},
                 'intra_conn': [type(conn).__name__ for conn in self.intra_conn]
             }
         )
