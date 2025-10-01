@@ -17,7 +17,7 @@ from typing import Optional, Union, Dict, Sequence
 
 import brainunit as u
 import numpy as np
-from scipy.spatial.distance import cdist
+
 
 from braintools.init._init_base import init_call, Initializer
 from ._base import PointConnectivity, ConnectionResult
@@ -28,31 +28,81 @@ __all__ = [
     'Regular',
     'ModularRandom',
     'ModularGeneral',
-    'ClusteredRandom',
 ]
 
 
 class SmallWorld(PointConnectivity):
     """Watts-Strogatz small-world network topology.
 
+    This class implements the Watts-Strogatz model for generating small-world networks,
+    which exhibit both high clustering coefficient (like regular lattices) and short
+    average path length (like random graphs). The algorithm starts with a regular ring
+    lattice where each node connects to its k nearest neighbors, then randomly rewires
+    each edge with probability p.
+
+    The small-world property is characteristic of many real-world networks, including
+    neural networks, social networks, and power grids, making this a biologically
+    plausible connectivity pattern for neural simulations.
+
     Parameters
     ----------
-    k : int
-        Number of nearest neighbors each node connects to.
-    p : float
-        Probability of rewiring each edge.
-    weight : Initialization, optional
-        Weight initialization for each connection.
+    k : int, default=6
+        Number of nearest neighbors each node connects to in the initial ring lattice.
+        Must be an even number. Higher values create more local connections and increase
+        the clustering coefficient.
+    p : float, default=0.3
+        Rewiring probability for each edge. Valid range is [0, 1].
+        - p=0: Regular ring lattice with high clustering, long path length
+        - p=1: Random graph with low clustering, short path length
+        - 0<p<1: Small-world network with high clustering and short path length
+    weight : Initializer, optional
+        Weight initialization for each connection. Can be a scalar value, array,
+        or an Initializer instance for more complex initialization patterns.
         If None, no weights are generated.
-    delay : Initialization, optional
-        Delay initialization for each connection.
+    delay : Initializer, optional
+        Delay initialization for each connection. Can be a scalar value, array,
+        or an Initializer instance for more complex initialization patterns.
         If None, no delays are generated.
+    **kwargs
+        Additional keyword arguments passed to the parent PointConnectivity class,
+        such as 'seed' for random number generation.
+
+    Notes
+    -----
+    - This connectivity pattern requires pre_size == post_size (recurrent connectivity)
+    - Self-connections are automatically avoided during rewiring
+    - The resulting network maintains exactly n*k connections where n is the network size
+    - The algorithm is vectorized for efficient generation of large networks
+
+    References
+    ----------
+    .. [1] Watts, D. J., & Strogatz, S. H. (1998). Collective dynamics of 'small-world'
+           networks. Nature, 393(6684), 440-442.
 
     Examples
     --------
+    Create a small-world network with default parameters:
+
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.conn import SmallWorld
         >>> sw = SmallWorld(k=6, p=0.3, weight=0.8 * u.nS)
+        >>> result = sw(pre_size=1000, post_size=1000)
+
+    Create a small-world network with higher rewiring probability:
+
+    .. code-block:: python
+
+        >>> sw = SmallWorld(k=10, p=0.5, weight=1.0 * u.nS, delay=2.0 * u.ms)
+        >>> result = sw(pre_size=500, post_size=500)
+
+    Use with a custom weight initializer:
+
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>> sw = SmallWorld(k=8, p=0.2, weight=Normal(mean=1.0, std=0.1))
         >>> result = sw(pre_size=1000, post_size=1000)
     """
 
@@ -154,20 +204,75 @@ class SmallWorld(PointConnectivity):
 class ScaleFree(PointConnectivity):
     """Barabási-Albert scale-free network with preferential attachment.
 
+    This class implements the Barabási-Albert model for generating scale-free networks,
+    which exhibit a power-law degree distribution where P(k) ~ k^(-γ). The algorithm uses
+    preferential attachment: new nodes preferentially connect to existing nodes with higher
+    degree, following the principle of "rich get richer".
+
+    Scale-free networks are ubiquitous in real-world systems including the Internet, social
+    networks, protein interaction networks, and neural connectivity patterns in the brain.
+    These networks are characterized by the presence of highly connected "hub" nodes and
+    are remarkably robust to random failures but vulnerable to targeted attacks on hubs.
+
     Parameters
     ----------
-    m : int
-        Number of edges to attach from a new node to existing nodes.
-    weight : Initialization, optional
-        Weight initialization.
-    delay : Initialization, optional
-        Delay initialization.
+    m : int, default=3
+        Number of edges to attach from each new node to existing nodes. This parameter
+        controls the minimum degree of nodes and affects the network density. Must be
+        at least 1 and at most equal to the initial complete graph size.
+        Higher values create denser networks with more connections.
+    weight : Initializer, optional
+        Weight initialization for each connection. Can be a scalar value, array,
+        or an Initializer instance for more complex initialization patterns.
+        If None, no weights are generated.
+    delay : Initializer, optional
+        Delay initialization for each connection. Can be a scalar value, array,
+        or an Initializer instance for more complex initialization patterns.
+        If None, no delays are generated.
+    **kwargs
+        Additional keyword arguments passed to the parent PointConnectivity class,
+        such as 'seed' for random number generation.
+
+    Notes
+    -----
+    - This connectivity pattern requires pre_size == post_size (recurrent connectivity)
+    - The algorithm starts with a complete graph of max(m, 2) nodes
+    - Connections are bidirectional (undirected network)
+    - The resulting degree distribution follows approximately P(k) ~ k^(-3)
+    - Average degree increases logarithmically with network size
+    - The algorithm complexity is O(n*m) where n is the network size
+
+    References
+    ----------
+    .. [1] Barabási, A. L., & Albert, R. (1999). Emergence of scaling in random networks.
+           Science, 286(5439), 509-512.
+    .. [2] Albert, R., & Barabási, A. L. (2002). Statistical mechanics of complex networks.
+           Reviews of Modern Physics, 74(1), 47.
 
     Examples
     --------
+    Create a scale-free network with default parameters:
+
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.conn import ScaleFree
         >>> sf = ScaleFree(m=3, weight=1.0 * u.nS)
+        >>> result = sf(pre_size=1000, post_size=1000)
+
+    Create a denser scale-free network with more attachments:
+
+    .. code-block:: python
+
+        >>> sf = ScaleFree(m=5, weight=0.5 * u.nS, delay=1.5 * u.ms)
+        >>> result = sf(pre_size=500, post_size=500)
+
+    Use with a custom weight initializer:
+
+    .. code-block:: python
+
+        >>> from braintools.init import Uniform
+        >>> sf = ScaleFree(m=4, weight=Uniform(min=0.5, max=2.0))
         >>> result = sf(pre_size=1000, post_size=1000)
     """
 
@@ -268,23 +373,69 @@ class ScaleFree(PointConnectivity):
 
 
 class Regular(PointConnectivity):
-    """
-    Regular network where all neurons have the same degree.
+    """Regular network where all neurons have the same degree.
+
+    This class creates a regular random network where every node has exactly the same
+    number of outgoing connections (out-degree). The targets for each node are chosen
+    randomly without replacement, excluding self-connections. This topology is useful
+    for creating homogeneous networks where all neurons have equal influence.
+
+    Regular networks provide a baseline for comparing other network topologies and are
+    particularly useful in studies of network dynamics where uniform connectivity is
+    desired. Unlike regular lattices (e.g., ring or grid), connections are random rather
+    than following a spatial pattern.
 
     Parameters
     ----------
     degree : int
-        Number of connections per neuron.
-    weight : Initialization, optional
-        Weight initialization.
-    delay : Initialization, optional
-        Delay initialization.
+        Number of outgoing connections per neuron. Must be less than the network size
+        (since self-connections are excluded). All neurons will have exactly this many
+        outgoing connections, creating a perfectly regular out-degree distribution.
+    weight : Initializer, optional
+        Weight initialization for each connection. Can be a scalar value, array,
+        or an Initializer instance for more complex initialization patterns.
+        If None, no weights are generated.
+    delay : Initializer, optional
+        Delay initialization for each connection. Can be a scalar value, array,
+        or an Initializer instance for more complex initialization patterns.
+        If None, no delays are generated.
+    **kwargs
+        Additional keyword arguments passed to the parent PointConnectivity class,
+        such as 'seed' for random number generation.
+
+    Notes
+    -----
+    - This connectivity pattern requires pre_size == post_size (recurrent connectivity)
+    - All nodes have the same out-degree (number of outgoing connections)
+    - In-degree (incoming connections) may vary across nodes
+    - Self-connections are automatically excluded
+    - The total number of connections is exactly n * degree, where n is the network size
+    - Targets are selected randomly without replacement for each source neuron
 
     Examples
     --------
+    Create a regular network where each neuron connects to 10 others:
+
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.conn import Regular
         >>> reg = Regular(degree=10, weight=1.0 * u.nS)
+        >>> result = reg(pre_size=1000, post_size=1000)
+
+    Create a regular network with delays:
+
+    .. code-block:: python
+
+        >>> reg = Regular(degree=20, weight=0.8 * u.nS, delay=2.0 * u.ms)
+        >>> result = reg(pre_size=500, post_size=500)
+
+    Use with a custom weight initializer:
+
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>> reg = Regular(degree=15, weight=Normal(mean=1.0, std=0.2))
         >>> result = reg(pre_size=1000, post_size=1000)
     """
 
@@ -366,25 +517,109 @@ class Regular(PointConnectivity):
 class ModularRandom(PointConnectivity):
     """Modular network with intra-module and inter-module random connectivity.
 
+    This class creates a modular network structure where neurons are divided into
+    distinct modules (communities) with different connection probabilities within
+    and between modules. Intra-module connections (within the same module) typically
+    have higher probability than inter-module connections (between different modules),
+    creating a community structure.
+
+    Modular organization is a fundamental feature of brain networks, observed across
+    multiple scales from cortical columns to large-scale brain areas. This topology
+    enables specialized local processing within modules while maintaining global
+    integration through sparse inter-module connections. It balances functional
+    segregation with integration, supporting both specialized and distributed
+    information processing.
+
     Parameters
     ----------
     n_modules : int
-        Number of modules.
-    intra_prob : float
-        Connection probability within modules.
-    inter_prob : float
-        Connection probability between modules.
-    weight : Initialization, optional
-        Weight initialization.
-    delay : Initialization, optional
-        Delay initialization.
+        Number of modules (communities) to divide the network into. Neurons are
+        distributed approximately evenly across modules, with any remainder assigned
+        to the last module.
+    intra_prob : float, default=0.3
+        Connection probability for neuron pairs within the same module. Valid range
+        is [0, 1]. Higher values create denser intra-module connectivity and stronger
+        community structure.
+    inter_prob : float, default=0.01
+        Connection probability for neuron pairs in different modules. Valid range
+        is [0, 1]. Typically much smaller than intra_prob to create distinct modules.
+        The ratio intra_prob/inter_prob determines the strength of modularity.
+    weight : Initializer, optional
+        Weight initialization for all connections (both intra and inter-module).
+        Can be a scalar value, array, or an Initializer instance for more complex
+        initialization patterns. If None, no weights are generated.
+    delay : Initializer, optional
+        Delay initialization for all connections (both intra and inter-module).
+        Can be a scalar value, array, or an Initializer instance for more complex
+        initialization patterns. If None, no delays are generated.
+    **kwargs
+        Additional keyword arguments passed to the parent PointConnectivity class,
+        such as 'seed' for random number generation.
+
+    Notes
+    -----
+    - This connectivity pattern requires pre_size == post_size (recurrent connectivity)
+    - Neurons are assigned to modules in sequential order (first n/m neurons to module 0, etc.)
+    - Self-connections are automatically excluded
+    - The same weight and delay initialization is used for all connections
+    - For module-specific connectivity patterns, use ModularGeneral instead
+    - Expected number of connections: n² * ((intra_prob + (n_modules-1)*inter_prob) / n_modules)
+    - Modularity strength can be quantified by the Q-statistic (Newman, 2006)
+
+    References
+    ----------
+    .. [1] Girvan, M., & Newman, M. E. (2002). Community structure in social and
+           biological networks. PNAS, 99(12), 7821-7826.
+    .. [2] Sporns, O., & Betzel, R. F. (2016). Modular brain networks. Annual Review
+           of Psychology, 67, 613-640.
+
+    See Also
+    --------
+    ModularGeneral : Modular network with custom connectivity patterns per module
 
     Examples
     --------
+    Create a modular network with 5 modules:
+
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.conn import ModularRandom
         >>> mod = ModularRandom(n_modules=5, intra_prob=0.3, inter_prob=0.01)
         >>> result = mod(pre_size=1000, post_size=1000)
+
+    Create a strongly modular network with sparse inter-module connections:
+
+    .. code-block:: python
+
+        >>> mod = ModularRandom(
+        ...     n_modules=10,
+        ...     intra_prob=0.4,
+        ...     inter_prob=0.005,
+        ...     weight=1.0 * u.nS,
+        ...     delay=2.0 * u.ms
+        ... )
+        >>> result = mod(pre_size=500, post_size=500)
+
+    Create a weakly modular network:
+
+    .. code-block:: python
+
+        >>> mod = ModularRandom(n_modules=3, intra_prob=0.2, inter_prob=0.1)
+        >>> result = mod(pre_size=1000, post_size=1000)
+
+    Use with custom initializers:
+
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>> mod = ModularRandom(
+        ...     n_modules=8,
+        ...     intra_prob=0.25,
+        ...     inter_prob=0.02,
+        ...     weight=Normal(mean=1.0, std=0.1)
+        ... )
+        >>> result = mod(pre_size=800, post_size=800)
     """
 
     def __init__(
@@ -528,7 +763,7 @@ class ModularGeneral(PointConnectivity):
 
     .. code-block:: python
 
-        >>> from braintools.conn import Random, ModularGeneral
+        >>> from braintools.conn import Random, ModularGeneral, SmallWorld
         >>> import brainunit as u
 
         >>> # Different connectivity per module with uniform inter-module connectivity
@@ -722,12 +957,12 @@ class ModularGeneral(PointConnectivity):
                 # Get the appropriate connectivity instance
                 # First check inter_conn_pair, then fall back to default inter_conn
                 if (pre_mod, post_mod) in self.inter_conn_pair:
-                    conn = self.inter_conn_pair.get((pre_mod, post_mod))
+                    conn = self.inter_conn_pair[(pre_mod, post_mod)]
                     if conn is None:
                         # Skip this pair if no connectivity is specified
                         continue
                 else:
-                    conn = self.intra_conn
+                    conn = self.inter_conn
                     if conn is None:
                         continue
 
@@ -741,9 +976,6 @@ class ModularGeneral(PointConnectivity):
 
                 if pre_n == 0 or post_n == 0:
                     continue
-
-                # Set the RNG for inter_conn to match this instance
-                conn.rng = self.rng
 
                 # Generate connections between these two modules
                 if pre_positions is not None:
@@ -810,141 +1042,3 @@ class ModularGeneral(PointConnectivity):
             }
         )
 
-
-class ClusteredRandom(PointConnectivity):
-    """Random connectivity with spatial clustering.
-
-    Parameters
-    ----------
-    prob : float
-        Base connection probability.
-    cluster_radius : float or Quantity
-        Radius for enhanced clustering.
-    cluster_factor : float
-        Multiplication factor for probability within cluster radius.
-    weight : Initialization, optional
-        Weight initialization.
-    delay : Initialization, optional
-        Delay initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
-        >>> clustered = ClusteredRandom(
-        ...     prob=0.05,
-        ...     cluster_radius=100 * u.um,
-        ...     cluster_factor=5.0
-        ... )
-        >>> result = clustered(
-        ...     pre_size=500, post_size=500,
-        ...     pre_positions=positions, post_positions=positions
-        ... )
-    """
-
-    def __init__(
-        self,
-        prob: float,
-        cluster_radius: Union[float, u.Quantity],
-        cluster_factor: float = 2.0,
-        weight: Optional[Initializer] = None,
-        delay: Optional[Initializer] = None,
-        **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.prob = prob
-        self.cluster_radius = cluster_radius
-        self.cluster_factor = cluster_factor
-        self.weight_init = weight
-        self.delay_init = delay
-
-    def generate(self, **kwargs) -> ConnectionResult:
-        """Generate clustered random connectivity."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
-
-        if pre_positions is None or post_positions is None:
-            raise ValueError("Positions required for clustered random connectivity")
-
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
-
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
-        # Calculate distances
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        distances = cdist(pre_pos_val, post_pos_val)
-
-        # Get radius value
-        if isinstance(self.cluster_radius, u.Quantity):
-            radius_val = u.Quantity(self.cluster_radius).to(pos_unit).mantissa
-        else:
-            radius_val = self.cluster_radius
-
-        # Calculate connection probabilities
-        probs = np.full((pre_num, post_num), self.prob)
-        within_cluster = distances <= radius_val
-        probs[within_cluster] *= self.cluster_factor
-        probs = np.clip(probs, 0, 1)
-
-        # Vectorized connection generation
-        random_vals = self.rng.random((pre_num, post_num))
-        connection_mask = random_vals < probs
-
-        pre_indices, post_indices = np.where(connection_mask)
-
-        if len(pre_indices) == 0:
-            return ConnectionResult(
-                np.array([], dtype=np.int64),
-                np.array([], dtype=np.int64),
-                pre_size=pre_size,
-                post_size=post_size,
-                pre_positions=pre_positions,
-                post_positions=post_positions,
-                model_type='point'
-            )
-
-        n_connections = len(pre_indices)
-
-        weights = init_call(
-            self.weight_init,
-            n_connections,
-            rng=self.rng,
-            param_type='weight',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions
-        )
-        delays = init_call(
-            self.delay_init,
-            n_connections,
-            rng=self.rng,
-            param_type='delay',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions
-        )
-
-        return ConnectionResult(
-            pre_indices,
-            post_indices,
-            pre_size=pre_size,
-            post_size=post_size,
-            weights=weights,
-            delays=delays,
-            model_type='point',
-            pre_positions=pre_positions,
-            post_positions=post_positions,
-            metadata={'pattern': 'clustered_random', 'prob': self.prob, 'cluster_radius': self.cluster_radius}
-        )
