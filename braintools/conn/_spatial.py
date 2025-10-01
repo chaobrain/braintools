@@ -167,6 +167,7 @@ class DistanceDependent(PointConnectivity):
         ...     distances=distances
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -442,6 +443,7 @@ class Gaussian(DistanceDependent):
         ...     post_positions=column_positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -645,6 +647,7 @@ class Exponential(DistanceDependent):
         ...     post_positions=positions_1d
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -797,6 +800,7 @@ class Ring(PointConnectivity):
         ...     post_size=n_orientations
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1051,6 +1055,7 @@ class Grid2d(PointConnectivity):
         ... )
         >>> result = retina_grid(pre_size=(30, 40), post_size=(30, 40))
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1374,6 +1379,7 @@ class RadialPatches(PointConnectivity):
         ...     post_positions=positions_3d
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,

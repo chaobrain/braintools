@@ -185,6 +185,7 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         ...     connection_prob=0.1
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -404,6 +405,7 @@ class SomaToDendrite(CompartmentSpecific):
         ...     }
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -446,6 +448,7 @@ class AxonToSoma(CompartmentSpecific):
         ...     weight_params={'mean': 1.0, 'sigma': 0.3}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {AXON: SOMA}
@@ -472,6 +475,7 @@ class DendriteToSoma(CompartmentSpecific):
         ...     connection_prob=0.6
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -503,6 +507,7 @@ class AxonToDendrite(CompartmentSpecific):
         ...     weight_params={'mean': 2.0 * u.nS, 'sigma': 0.5}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(self, target_dendrites: List[int] = None, **kwargs):
         if target_dendrites is None:
@@ -528,6 +533,7 @@ class DendriteToDendrite(CompartmentSpecific):
         ...     weight_params={'mean': 0.5, 'std': 0.1}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {
@@ -570,6 +576,7 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         ...     compartment_mapping={AXON: [BASAL_DENDRITE, APICAL_DENDRITE]}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -757,6 +764,7 @@ class DendriticTree(MultiCompartmentConnectivity):
         ...     branch_targeting={'proximal': 0.8, 'distal': 0.2}
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -903,6 +911,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
         ...     arborization_pattern='clustered'
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1018,6 +1027,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
 # Additional specialized patterns
 class ProximalTargeting(CompartmentSpecific):
     """Connectivity targeting proximal dendritic compartments."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         # Proximal dendrites are closer to soma
@@ -1027,6 +1037,7 @@ class ProximalTargeting(CompartmentSpecific):
 
 class DistalTargeting(CompartmentSpecific):
     """Connectivity targeting distal dendritic compartments."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         # Distal dendrites are farther from soma
@@ -1059,6 +1070,7 @@ class BranchSpecific(MultiCompartmentConnectivity):
     - Index 2+: APICAL_DENDRITE
     This can be extended with full morphological information.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1108,6 +1120,7 @@ class BranchSpecific(MultiCompartmentConnectivity):
 
 class BasalDendriteTargeting(CompartmentSpecific):
     """Specific targeting of basal dendrites."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {AXON: BASAL_DENDRITE}
@@ -1116,6 +1129,7 @@ class BasalDendriteTargeting(CompartmentSpecific):
 
 class ApicalDendriteTargeting(CompartmentSpecific):
     """Specific targeting of apical dendrites."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartment_mapping = {AXON: APICAL_DENDRITE}
@@ -1139,6 +1153,7 @@ class DendriticIntegration(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1252,6 +1267,7 @@ class AxonalBranching(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1362,6 +1378,7 @@ class AxonalArborization(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1475,6 +1492,7 @@ class TopographicProjection(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1523,6 +1541,7 @@ class SynapticPlacement(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1586,6 +1605,7 @@ class SynapticClustering(MultiCompartmentConnectivity):
     delay : Initializer, optional
         Delay initialization.
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1621,6 +1641,7 @@ class SynapticClustering(MultiCompartmentConnectivity):
 
 class AllToAllCompartments(CompartmentSpecific):
     """All-to-all compartment connectivity."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
         compartments = [SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON]
@@ -1637,6 +1658,7 @@ class AllToAllCompartments(CompartmentSpecific):
 
 class CustomCompartment(MultiCompartmentConnectivity):
     """Custom compartment connectivity using user-defined function."""
+    __module__ = 'braintools.conn'
 
     def __init__(self, connection_func: Callable, **kwargs):
         super().__init__(**kwargs)

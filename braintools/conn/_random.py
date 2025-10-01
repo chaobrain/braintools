@@ -492,6 +492,7 @@ class ClusteredRandom(PointConnectivity):
         ... )
         >>> # clustered_result will have more connections due to spatial enhancement
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,

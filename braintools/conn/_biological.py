@@ -119,6 +119,7 @@ class ExcitatoryInhibitory(PointConnectivity):
         ... )
         >>> result = ei_net(pre_size=1000, post_size=1000)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,

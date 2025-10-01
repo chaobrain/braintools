@@ -53,6 +53,7 @@ class AllToAll(PointConnectivity):
         ... )
         >>> result = all_to_all(pre_size=50, post_size=50)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -156,6 +157,7 @@ class OneToOne(PointConnectivity):
         >>> one_to_one = OneToOne(weight=1.5 * u.nS)
         >>> result = one_to_one(pre_size=100, post_size=100)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,

@@ -106,6 +106,7 @@ class SmallWorld(PointConnectivity):
         >>> sw = SmallWorld(k=8, p=0.2, weight=Normal(mean=1.0, std=0.1))
         >>> result = sw(pre_size=1000, post_size=1000)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -276,6 +277,7 @@ class ScaleFree(PointConnectivity):
         >>> sf = ScaleFree(m=4, weight=Uniform(min=0.5, max=2.0))
         >>> result = sf(pre_size=1000, post_size=1000)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -439,6 +441,7 @@ class Regular(PointConnectivity):
         >>> reg = Regular(degree=15, weight=Normal(mean=1.0, std=0.2))
         >>> result = reg(pre_size=1000, post_size=1000)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -622,6 +625,7 @@ class ModularRandom(PointConnectivity):
         ... )
         >>> result = mod(pre_size=800, post_size=800)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -814,6 +818,7 @@ class ModularGeneral(PointConnectivity):
         ... )
         >>> result = mod(pre_size=900, post_size=900)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1180,6 +1185,7 @@ class HierarchicalRandom(PointConnectivity):
         ... )
         >>> result = hier(pre_size=900, post_size=900)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1488,6 +1494,7 @@ class CorePeripheryRandom(PointConnectivity):
         ... )
         >>> result = cp(pre_size=1000, post_size=1000)
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,

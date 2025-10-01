@@ -88,6 +88,7 @@ class Conv2dKernel(PointConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -273,6 +274,7 @@ class GaussianKernel(PointConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -438,6 +440,7 @@ class GaborKernel(PointConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -646,6 +649,7 @@ class DoGKernel(PointConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -799,6 +803,7 @@ class MexicanHat(DoGKernel):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -865,6 +870,7 @@ class SobelKernel(PointConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -976,6 +982,7 @@ class LaplacianKernel(PointConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
@@ -1064,6 +1071,7 @@ class CustomKernel(PointConnectivity):
         ...     pre_positions=positions, post_positions=positions
         ... )
     """
+    __module__ = 'braintools.conn'
 
     def __init__(
         self,
