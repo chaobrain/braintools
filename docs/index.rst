@@ -85,4 +85,3 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     apis/optim.rst
     apis/quad.rst
     apis/visualize.rst
-    apis/tree.rst
