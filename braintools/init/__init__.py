@@ -14,12 +14,12 @@
 # ==============================================================================
 
 
-from braintools.init._init import *
-from braintools.init._init import __all__ as init_all
+from braintools.init._init_base import *
+from braintools.init._init_base import __all__ as init_all
 from braintools.init._distance import *
 from braintools.init._distance import __all__ as distance_all
-from braintools.init._random import *
-from braintools.init._random import __all__ as weight_all
+from braintools.init._init_random import *
+from braintools.init._init_random import __all__ as weight_all
 
 __all__ = init_all + weight_all + distance_all
 del init_all, weight_all, distance_all

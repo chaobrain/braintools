@@ -27,7 +27,7 @@ import numpy as np
 from scipy.stats import truncnorm
 from brainstate.typing import ArrayLike
 
-from ._init import Initialization
+from ._init_base import Initialization
 
 __all__ = [
     'Initialization',

@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import brainunit as u
 
-from braintools.init._init import (
+from braintools.init._init_base import (
     Initialization,
     init_call,
     Compose,

@@ -31,7 +31,7 @@ from scipy.spatial.distance import cdist
 
 from ._base import PointNeuronConnectivity, ConnectionResult
 from braintools.init import init_call
-from braintools.init._init import Initializer
+from braintools.init._init_base import Initializer
 
 __all__ = [
     'ConvKernel',

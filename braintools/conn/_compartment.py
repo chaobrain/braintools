@@ -37,7 +37,7 @@ from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
 from ._base import MultiCompartmentConnectivity, ConnectionResult
-from braintools.init._init import init_call, Initializer
+from braintools.init._init_base import init_call, Initializer
 
 __all__ = [
     'SOMA',
