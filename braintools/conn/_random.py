@@ -35,7 +35,7 @@ import brainunit as u
 import numpy as np
 
 from braintools.init._init_base import init_call, Initializer
-from ._base import PointNeuronConnectivity, ConnectionResult
+from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
     # Basic connectivity patterns
@@ -44,7 +44,7 @@ __all__ = [
 ]
 
 
-class Random(PointNeuronConnectivity):
+class Random(PointConnectivity):
     """Random connectivity with fixed connection probability.
 
     This is the fundamental random connectivity pattern for point neurons,

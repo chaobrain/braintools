@@ -20,7 +20,7 @@ import brainunit as u
 import numpy as np
 
 from braintools.init._init_base import init_call, Initializer
-from ._base import PointNeuronConnectivity, ConnectionResult
+from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
     # Basic connectivity patterns
@@ -29,7 +29,7 @@ __all__ = [
 ]
 
 
-class AllToAll(PointNeuronConnectivity):
+class AllToAll(PointConnectivity):
     """Fully connected network where every neuron connects to every other neuron.
 
     Parameters
@@ -136,7 +136,7 @@ class AllToAll(PointNeuronConnectivity):
         )
 
 
-class OneToOne(PointNeuronConnectivity):
+class OneToOne(PointConnectivity):
     """One-to-one connectivity where neuron i connects to neuron i.
 
     Parameters

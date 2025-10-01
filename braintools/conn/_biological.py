@@ -19,7 +19,7 @@ import brainunit as u
 import numpy as np
 
 from braintools.init._init_base import init_call, Initializer
-from ._base import PointNeuronConnectivity, ConnectionResult
+from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
 
@@ -29,7 +29,7 @@ __all__ = [
 ]
 
 
-class ExcitatoryInhibitory(PointNeuronConnectivity):
+class ExcitatoryInhibitory(PointConnectivity):
     """Standard excitatory-inhibitory network following Dale's principle.
 
     Parameters

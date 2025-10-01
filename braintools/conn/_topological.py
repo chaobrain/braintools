@@ -20,18 +20,19 @@ import numpy as np
 from scipy.spatial.distance import cdist
 
 from braintools.init._init_base import init_call, Initializer
-from ._base import PointNeuronConnectivity, ConnectionResult
+from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
     'SmallWorld',
     'ScaleFree',
     'Regular',
-    'Modular',
+    'RandomModular',
+    'ModularPattern',
     'ClusteredRandom',
 ]
 
 
-class SmallWorld(PointNeuronConnectivity):
+class SmallWorld(PointConnectivity):
     """Watts-Strogatz small-world network topology.
 
     Parameters
@@ -150,7 +151,7 @@ class SmallWorld(PointNeuronConnectivity):
         )
 
 
-class ScaleFree(PointNeuronConnectivity):
+class ScaleFree(PointConnectivity):
     """Barabási-Albert scale-free network with preferential attachment.
 
     Parameters
@@ -266,7 +267,7 @@ class ScaleFree(PointNeuronConnectivity):
         )
 
 
-class Regular(PointNeuronConnectivity):
+class Regular(PointConnectivity):
     """
     Regular network where all neurons have the same degree.
 
@@ -346,7 +347,8 @@ class Regular(PointNeuronConnectivity):
         )
 
         return ConnectionResult(
-            pre_indices, post_indices,
+            pre_indices=pre_indices,
+            post_indices=post_indices,
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,
@@ -361,8 +363,8 @@ class Regular(PointNeuronConnectivity):
         )
 
 
-class Modular(PointNeuronConnectivity):
-    """Modular network with intra-module and inter-module connectivity.
+class RandomModular(PointConnectivity):
+    """Modular network with intra-module and inter-module random connectivity.
 
     Parameters
     ----------
@@ -381,7 +383,7 @@ class Modular(PointNeuronConnectivity):
     --------
     .. code-block:: python
 
-        >>> mod = Modular(n_modules=5, intra_prob=0.3, inter_prob=0.01)
+        >>> mod = RandomModular(n_modules=5, intra_prob=0.3, inter_prob=0.01)
         >>> result = mod(pre_size=1000, post_size=1000)
     """
 
@@ -490,7 +492,227 @@ class Modular(PointNeuronConnectivity):
         )
 
 
-class ClusteredRandom(PointNeuronConnectivity):
+class ModularPattern(PointConnectivity):
+    """Modular network using a Connectivity instance for intra-module patterns.
+
+    This class creates a modular network structure where:
+    - Intra-module connectivity is defined by a Connectivity instance or list of instances
+    - Inter-module connectivity is defined by probability and optional weight/delay
+
+    Parameters
+    ----------
+    n_modules : int
+        Number of modules in the network.
+    intra_conn : PointConnectivity or list of PointConnectivity
+        Connectivity instance(s) for generating connections within each module.
+        If a single instance, the same connectivity pattern is used for all modules.
+        If a list, must have length equal to n_modules, with one connectivity per module.
+    inter_prob : float
+        Connection probability between different modules.
+    inter_weight : Initializer, optional
+        Weight initialization for inter-module connections.
+        If None, uses the same initialization as intra_conn.
+    inter_delay : Initializer, optional
+        Delay initialization for inter-module connections.
+        If None, uses the same initialization as intra_conn.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> from braintools.conn import Random, ModularPattern
+        >>> import brainunit as u
+        >>> # Create intra-module connectivity with 30% connection probability
+        >>> intra = Random(prob=0.3, weight=1.0 * u.nS)
+        >>> # Create modular network with 5 modules and 1% inter-module probability
+        >>> mod = ModularPattern(
+        ...     n_modules=5,
+        ...     intra_conn=intra,
+        ...     inter_prob=0.01,
+        ...     inter_weight=0.1 * u.nS  # Weaker inter-module connections
+        ... )
+        >>> result = mod(pre_size=1000, post_size=1000)
+
+        >>> # Different connectivity per module
+        >>> intra_list = [
+        ...     Random(prob=0.3, weight=1.0 * u.nS),
+        ...     Random(prob=0.5, weight=1.5 * u.nS),
+        ...     SmallWorld(k=6, p=0.3, weight=2.0 * u.nS)
+        ... ]
+        >>> mod = ModularPattern(n_modules=3, intra_conn=intra_list, inter_prob=0.01)
+        >>> result = mod(pre_size=900, post_size=900)
+    """
+
+    def __init__(
+        self,
+        n_modules: int,
+        intra_conn: Union[PointConnectivity, list[PointConnectivity]],
+        inter_prob: float = 0.01,
+        inter_weight: Optional[Initializer] = None,
+        inter_delay: Optional[Initializer] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.n_modules = n_modules
+
+        # Handle both single connectivity and list of connectivities
+        if isinstance(intra_conn, list):
+            if len(intra_conn) != n_modules:
+                raise ValueError(f"Length of intra_conn list ({len(intra_conn)}) must equal n_modules ({n_modules})")
+            self.intra_conn = intra_conn
+        else:
+            self.intra_conn = [intra_conn] * n_modules
+
+        self.inter_prob = inter_prob
+        self.inter_weight_init = inter_weight
+        self.inter_delay_init = inter_delay
+
+    def generate(self, **kwargs) -> ConnectionResult:
+        """Generate modular network with custom intra-module connectivity."""
+        pre_size = kwargs['pre_size']
+        post_size = kwargs['post_size']
+
+        if isinstance(pre_size, tuple):
+            n = int(np.prod(pre_size))
+        else:
+            n = pre_size
+
+        if pre_size != post_size:
+            raise ValueError("Modular networks require pre_size == post_size")
+
+        # Assign neurons to modules
+        module_size = n // self.n_modules
+        modules = np.repeat(np.arange(self.n_modules), module_size)
+        if len(modules) < n:
+            modules = np.concatenate([modules, np.full(n - len(modules), self.n_modules - 1)])
+
+        all_pre_indices = []
+        all_post_indices = []
+        all_weights = []
+        all_delays = []
+
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
+
+        # Generate intra-module connections using the provided connectivity
+        for mod_id in range(self.n_modules):
+            module_neurons = np.where(modules == mod_id)[0]
+            mod_n = len(module_neurons)
+
+            if mod_n == 0:
+                continue
+
+            # Get the connectivity instance for this module
+            conn = self.intra_conn[mod_id]
+
+            # Set the RNG for the intra_conn to match this instance
+            conn.rng = self.rng
+
+            # Generate connections within this module
+            intra_result = conn(
+                pre_size=mod_n,
+                post_size=mod_n,
+                pre_positions=pre_positions[module_neurons] if pre_positions is not None else None,
+                post_positions=post_positions[module_neurons] if post_positions is not None else None
+            )
+
+            # Map local indices to global indices
+            if len(intra_result.pre_indices) > 0:
+                global_pre = module_neurons[intra_result.pre_indices]
+                global_post = module_neurons[intra_result.post_indices]
+                all_pre_indices.append(global_pre)
+                all_post_indices.append(global_post)
+
+                if intra_result.weights is not None:
+                    all_weights.append(intra_result.weights)
+                if intra_result.delays is not None:
+                    all_delays.append(intra_result.delays)
+
+        # Generate inter-module connections
+        inter_pre = []
+        inter_post = []
+
+        for i in range(n):
+            for j in range(n):
+                if i == j or modules[i] == modules[j]:
+                    continue
+
+                if self.rng.random() < self.inter_prob:
+                    inter_pre.append(i)
+                    inter_post.append(j)
+
+        if len(inter_pre) > 0:
+            inter_pre = np.array(inter_pre, dtype=np.int64)
+            inter_post = np.array(inter_post, dtype=np.int64)
+            n_inter = len(inter_pre)
+
+            all_pre_indices.append(inter_pre)
+            all_post_indices.append(inter_post)
+
+            # Generate inter-module weights and delays
+            inter_weights = init_call(
+                self.inter_weight_init,
+                n_inter,
+                rng=self.rng,
+                param_type='weight',
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=kwargs.get('pre_positions', None),
+                post_positions=kwargs.get('post_positions', None)
+            )
+            inter_delays = init_call(
+                self.inter_delay_init,
+                n_inter,
+                rng=self.rng,
+                param_type='delay',
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=kwargs.get('pre_positions', None),
+                post_positions=kwargs.get('post_positions', None)
+            )
+
+            if inter_weights is not None:
+                all_weights.append(inter_weights)
+            if inter_delays is not None:
+                all_delays.append(inter_delays)
+
+        # Combine all connections
+        if len(all_pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=kwargs.get('pre_positions', None),
+                post_positions=kwargs.get('post_positions', None),
+                model_type='point'
+            )
+
+        final_pre = np.concatenate(all_pre_indices)
+        final_post = np.concatenate(all_post_indices)
+        final_weights = np.concatenate(all_weights) if len(all_weights) > 0 else None
+        final_delays = np.concatenate(all_delays) if len(all_delays) > 0 else None
+
+        return ConnectionResult(
+            final_pre,
+            final_post,
+            pre_size=pre_size,
+            post_size=post_size,
+            weights=final_weights,
+            delays=final_delays,
+            model_type='point',
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
+            metadata={
+                'pattern': 'modular_pattern',
+                'n_modules': self.n_modules,
+                'inter_prob': self.inter_prob,
+                'intra_conn': [type(conn).__name__ for conn in self.intra_conn]
+            }
+        )
+
+
+class ClusteredRandom(PointConnectivity):
     """Random connectivity with spatial clustering.
 
     Parameters

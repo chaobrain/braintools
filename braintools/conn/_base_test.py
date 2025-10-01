@@ -32,7 +32,7 @@ import numpy as np
 from braintools.conn._base import (
     ConnectionResult,
     Connectivity,
-    PointNeuronConnectivity,
+    PointConnectivity,
     MultiCompartmentConnectivity,
     CompositeConnectivity,
     ScaledConnectivity,
@@ -975,9 +975,9 @@ class TestSubclassImplementations(unittest.TestCase):
     .. code-block:: python
 
         import numpy as np
-        from braintools.conn._conn_base import PointNeuronConnectivity
+        from braintools.conn._conn_base import PointConnectivity
 
-        class SimplePointConn(PointNeuronConnectivity):
+        class SimplePointConn(PointConnectivity):
             def generate(self, pre_size, post_size, **kwargs):
                 return ConnectionResult(
                     pre_indices=np.array([0]),
@@ -995,7 +995,7 @@ class TestSubclassImplementations(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_point_neuron_connectivity(self):
-        class TestPointConn(PointNeuronConnectivity):
+        class TestPointConn(PointConnectivity):
             def generate(self, pre_size, post_size, **kwargs):
                 return ConnectionResult(
                     pre_indices=np.array([0]),

@@ -22,7 +22,7 @@ from scipy.spatial.distance import cdist
 
 from braintools.init._distance_base import DistanceProfile
 from braintools.init._init_base import init_call, Initializer
-from ._base import PointNeuronConnectivity, ConnectionResult
+from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
     # Spatial patterns
@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 
-class DistanceDependent(PointNeuronConnectivity):
+class DistanceDependent(PointConnectivity):
     """Distance-dependent connectivity for spatially arranged point neurons.
 
     Parameters
@@ -210,7 +210,7 @@ class Exponential(DistanceDependent):
     pass
 
 
-class Ring(PointNeuronConnectivity):
+class Ring(PointConnectivity):
     """Ring connectivity pattern where each neuron connects to its neighbors.
 
     Parameters
@@ -318,7 +318,7 @@ class Ring(PointNeuronConnectivity):
         )
 
 
-class Grid(PointNeuronConnectivity):
+class Grid(PointConnectivity):
     """2D grid connectivity pattern where neurons connect to their grid neighbors.
 
     Parameters
@@ -454,7 +454,7 @@ class Grid(PointNeuronConnectivity):
         )
 
 
-class RadialPatches(PointNeuronConnectivity):
+class RadialPatches(PointConnectivity):
     """Radial patch connectivity where connections form radial patches around neurons.
 
     Parameters

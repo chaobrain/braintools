@@ -33,7 +33,7 @@ import numpy as np
 __all__ = [
     'ConnectionResult',
     'Connectivity',
-    'PointNeuronConnectivity',
+    'PointConnectivity',
     'MultiCompartmentConnectivity',
     'ScaledConnectivity',
     'CompositeConnectivity',
@@ -320,7 +320,7 @@ class Connectivity(ABC):
         return ScaledConnectivity(self, delay_factor=factor)
 
 
-class PointNeuronConnectivity(Connectivity):
+class PointConnectivity(Connectivity):
     """Base class for point neuron connectivity patterns.
 
     Point neurons are single-compartment models where each connection

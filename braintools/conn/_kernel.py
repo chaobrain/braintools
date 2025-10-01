@@ -29,7 +29,7 @@ import numpy as np
 from scipy.spatial.distance import cdist
 
 from braintools.init import init_call, Initializer
-from ._base import PointNeuronConnectivity, ConnectionResult
+from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
     'ConvKernel',
@@ -43,7 +43,7 @@ __all__ = [
 ]
 
 
-class ConvKernel(PointNeuronConnectivity):
+class ConvKernel(PointConnectivity):
     """Convolutional kernel connectivity for spatially arranged point neurons.
 
     Applies a 2D convolution kernel to neuron positions, creating connections
@@ -238,7 +238,7 @@ class ConvKernel(PointNeuronConnectivity):
         )
 
 
-class GaussianKernel(PointNeuronConnectivity):
+class GaussianKernel(PointConnectivity):
     """Gaussian kernel connectivity for center-surround receptive fields.
 
     Creates connections weighted by a 2D Gaussian function of distance,
@@ -398,7 +398,7 @@ class GaussianKernel(PointNeuronConnectivity):
         )
 
 
-class GaborKernel(PointNeuronConnectivity):
+class GaborKernel(PointConnectivity):
     """Gabor kernel connectivity for orientation-selective receptive fields.
 
     Implements Gabor filters in spatial connectivity, useful for creating
@@ -605,7 +605,7 @@ class GaborKernel(PointNeuronConnectivity):
         )
 
 
-class DoGKernel(PointNeuronConnectivity):
+class DoGKernel(PointConnectivity):
     """Difference of Gaussians (DoG) kernel for center-surround receptive fields.
 
     Implements DoG filters commonly found in retinal ganglion cells and LGN neurons,
@@ -853,7 +853,7 @@ class MexicanHat(DoGKernel):
         )
 
 
-class SobelKernel(PointNeuronConnectivity):
+class SobelKernel(PointConnectivity):
     """Sobel edge detection kernel for orientation-selective connectivity.
 
     Implements Sobel operators for detecting edges at specific orientations,
@@ -964,7 +964,7 @@ class SobelKernel(PointNeuronConnectivity):
             return result
 
 
-class LaplacianKernel(PointNeuronConnectivity):
+class LaplacianKernel(PointConnectivity):
     """Laplacian kernel for edge detection connectivity.
 
     Implements Laplacian operators for detecting discontinuities and edges,
@@ -1044,7 +1044,7 @@ class LaplacianKernel(PointNeuronConnectivity):
         return result
 
 
-class CustomKernel(PointNeuronConnectivity):
+class CustomKernel(PointConnectivity):
     """Custom kernel connectivity using user-defined kernel function.
 
     Allows implementing arbitrary spatial kernel functions for connectivity.
