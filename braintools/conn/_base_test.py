@@ -433,7 +433,9 @@ class MockConnectivity(Connectivity):
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,
-            delays=delays
+            delays=delays,
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
         )
 
 

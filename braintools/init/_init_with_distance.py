@@ -58,6 +58,7 @@ class DistanceModulated(Initialization):
         ... )
         >>> weights = init(100, distances=distances, rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,

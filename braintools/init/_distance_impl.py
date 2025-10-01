@@ -73,6 +73,7 @@ class GaussianProfile(DistanceProfile):
         >>> distances = np.array([0, 25, 50, 100, 200]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -129,6 +130,7 @@ class ExponentialProfile(DistanceProfile):
         >>> distances = np.array([0, 50, 100, 200, 500]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -188,6 +190,7 @@ class PowerLawProfile(DistanceProfile):
         >>> distances = np.array([1, 10, 100, 1000]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -243,6 +246,7 @@ class LinearProfile(DistanceProfile):
         >>> distances = np.array([0, 50, 100, 150, 200]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, max_distance: ArrayLike):
         self.max_distance = max_distance
@@ -293,6 +297,7 @@ class StepProfile(DistanceProfile):
         >>> distances = np.array([50, 100, 150]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self,
                  threshold: ArrayLike,
@@ -348,6 +353,7 @@ class SigmoidProfile(DistanceProfile):
         >>> distances = np.array([0, 50, 100, 150, 200, 300]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -415,6 +421,7 @@ class DoGProfile(DistanceProfile):
         >>> distances = np.array([0, 30, 60, 90, 120]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -489,6 +496,7 @@ class LogisticProfile(DistanceProfile):
         >>> distances = np.array([0, 50, 100, 200, 500]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -562,6 +570,7 @@ class BimodalProfile(DistanceProfile):
         >>> distances = np.array([0, 50, 100, 200, 300]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -645,6 +654,7 @@ class MexicanHatProfile(DistanceProfile):
         >>> distances = np.array([0, 25, 50, 100, 200]) * u.um
         >>> probs = profile.probability(distances)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,

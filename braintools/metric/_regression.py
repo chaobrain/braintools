@@ -37,6 +37,7 @@ __all__ = [
 ]
 
 
+@set_module_as('braintools.metric')
 def safe_norm(x: brainstate.typing.ArrayLike,
               min_norm,
               ord: Optional[Union[int, float, str]] = None,  # pylint: disable=redefined-builtin

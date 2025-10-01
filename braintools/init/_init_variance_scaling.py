@@ -64,6 +64,7 @@ class VarianceScaling(Initialization):
     distribution : {'uniform', 'normal', 'truncated_normal'}
         Distribution to sample from.
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -167,6 +168,7 @@ class KaimingUniform(VarianceScaling):
         >>> rng = np.random.default_rng(0)
         >>> weights = init((100, 50), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -222,6 +224,7 @@ class KaimingNormal(VarianceScaling):
         >>> rng = np.random.default_rng(0)
         >>> weights = init((100, 50), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(
         self,
@@ -272,6 +275,7 @@ class XavierUniform(VarianceScaling):
         >>> rng = np.random.default_rng(0)
         >>> weights = init((100, 50), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
         super().__init__(scale=scale, mode='fan_avg', distribution='uniform', unit=unit)
@@ -306,6 +310,7 @@ class XavierNormal(VarianceScaling):
         >>> rng = np.random.default_rng(0)
         >>> weights = init((100, 50), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
         super().__init__(scale=scale, mode='fan_avg', distribution='normal', unit=unit)
@@ -340,6 +345,7 @@ class LecunUniform(VarianceScaling):
         >>> rng = np.random.default_rng(0)
         >>> weights = init((100, 50), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
         super().__init__(scale=scale, mode='fan_in', distribution='uniform', unit=unit)
@@ -374,6 +380,7 @@ class LecunNormal(VarianceScaling):
         >>> rng = np.random.default_rng(0)
         >>> weights = init((100, 50), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
         super().__init__(scale=scale, mode='fan_in', distribution='normal', unit=unit)

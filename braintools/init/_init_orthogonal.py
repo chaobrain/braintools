@@ -69,6 +69,7 @@ class Orthogonal(Initialization):
         >>> init_recurrent = Orthogonal(scale=np.sqrt(2))
         >>> weights = init_recurrent((50, 50), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
         self.scale = scale
@@ -136,6 +137,7 @@ class DeltaOrthogonal(Initialization):
         >>> rng = np.random.default_rng(0)
         >>> weights = init((128, 64, 3, 3), rng=rng)
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
         self.scale = scale
@@ -195,6 +197,7 @@ class Identity(Initialization):
         >>> # For rectangular matrices
         >>> weights = init((100, 50))  # Will create identity-like matrix
     """
+    __module__ = 'braintools.init'
 
     def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
         self.scale = scale

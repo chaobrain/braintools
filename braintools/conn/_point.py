@@ -155,6 +155,8 @@ class Random(PointNeuronConnectivity):
         ... )
     """
 
+    __module__ = 'braintools.conn'
+
     def __init__(
         self,
         prob: float,
@@ -257,6 +259,8 @@ class Random(PointNeuronConnectivity):
 
 class AllToAll(PointNeuronConnectivity):
     """Fully connected network where every neuron connects to every other neuron.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -365,6 +369,8 @@ class AllToAll(PointNeuronConnectivity):
 class OneToOne(PointNeuronConnectivity):
     """One-to-one connectivity where neuron i connects to neuron i.
 
+    __module__ = 'braintools.conn'
+
     Parameters
     ----------
     weight : Initialization, optional
@@ -458,6 +464,8 @@ class OneToOne(PointNeuronConnectivity):
 
 class DistanceDependent(PointNeuronConnectivity):
     """Distance-dependent connectivity for spatially arranged point neurons.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -608,6 +616,8 @@ class DistanceDependent(PointNeuronConnectivity):
 class SmallWorld(PointNeuronConnectivity):
     """Watts-Strogatz small-world network topology.
 
+    __module__ = 'braintools.conn'
+
     Parameters
     ----------
     k : int
@@ -722,6 +732,8 @@ class SmallWorld(PointNeuronConnectivity):
 
 class ExcitatoryInhibitory(PointNeuronConnectivity):
     """Standard excitatory-inhibitory network following Dale's principle.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -928,6 +940,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
 class Custom(PointNeuronConnectivity):
     """Custom connectivity pattern using user-defined function.
 
+    __module__ = 'braintools.conn'
+
     Parameters
     ----------
     connection_func : callable
@@ -983,11 +997,14 @@ class Custom(PointNeuronConnectivity):
 # Convenience aliases for common patterns
 class FixedProbability(Random):
     """Alias for Random connectivity with fixed probability."""
+    __module__ = 'braintools.conn'
     pass
 
 
 class Gaussian(DistanceDependent):
     """Gaussian distance-dependent connectivity.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1002,6 +1019,8 @@ class Gaussian(DistanceDependent):
 class Exponential(DistanceDependent):
     """Exponential distance-dependent connectivity.
 
+    __module__ = 'braintools.conn'
+
     Parameters
     ----------
     distance_profile : DistanceProfile
@@ -1014,6 +1033,8 @@ class Exponential(DistanceDependent):
 
 class Ring(PointNeuronConnectivity):
     """Ring connectivity pattern where each neuron connects to its neighbors.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1122,6 +1143,8 @@ class Ring(PointNeuronConnectivity):
 
 class Grid(PointNeuronConnectivity):
     """2D grid connectivity pattern where neurons connect to their grid neighbors.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1258,6 +1281,8 @@ class Grid(PointNeuronConnectivity):
 
 class RadialPatches(PointNeuronConnectivity):
     """Radial patch connectivity where connections form radial patches around neurons.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1416,6 +1441,8 @@ class RadialPatches(PointNeuronConnectivity):
 class ScaleFree(PointNeuronConnectivity):
     """Barabási-Albert scale-free network with preferential attachment.
 
+    __module__ = 'braintools.conn'
+
     Parameters
     ----------
     m : int
@@ -1529,6 +1556,8 @@ class ScaleFree(PointNeuronConnectivity):
 class Regular(PointNeuronConnectivity):
     """Regular network where all neurons have the same degree.
 
+    __module__ = 'braintools.conn'
+
     Parameters
     ----------
     degree : int
@@ -1619,6 +1648,8 @@ class Regular(PointNeuronConnectivity):
 
 class Modular(PointNeuronConnectivity):
     """Modular network with intra-module and inter-module connectivity.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1746,6 +1777,8 @@ class Modular(PointNeuronConnectivity):
 
 class ClusteredRandom(PointNeuronConnectivity):
     """Random connectivity with spatial clustering.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
@@ -1888,6 +1921,8 @@ class SynapticPlasticity(PointNeuronConnectivity):
 
     This class stores plasticity parameters in metadata for use during simulation.
 
+    __module__ = 'braintools.conn'
+
     Parameters
     ----------
     base_connectivity : PointNeuronConnectivity
@@ -1938,6 +1973,8 @@ class ActivityDependent(PointNeuronConnectivity):
 
     This class generates initial connectivity and stores activity-dependent
     parameters in metadata for use during simulation.
+
+    __module__ = 'braintools.conn'
 
     Parameters
     ----------
