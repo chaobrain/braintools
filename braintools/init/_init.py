@@ -98,7 +98,7 @@ class Initialization(ABC):
             Random number generator.
         size : int or tuple
             Shape of the output array.
-        **kwargs : dict
+        **kwargs :
             Additional keyword arguments (e.g., distances, neuron_indices).
 
         Returns

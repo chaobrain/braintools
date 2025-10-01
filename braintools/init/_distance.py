@@ -492,13 +492,15 @@ class ComposedProfile(DistanceProfile):
         self.op = op
         self.op_symbol = op_symbol
 
-    def _evaluate(self, obj: Union[DistanceProfile, ArrayLike], distances: ArrayLike) -> np.ndarray:
+    def _evaluate(
+        self,
+        obj: Union[DistanceProfile, ArrayLike],
+        distances: ArrayLike,
+    ) -> np.ndarray:
         """Helper to evaluate a profile or return a constant."""
         if isinstance(obj, DistanceProfile):
             return obj.weight_scaling(distances)
-        elif isinstance(obj, (float, int)):
-            return obj
-        elif isinstance(obj, (u.Quantity, u.Unit)):
+        elif isinstance(obj, ArrayLike):
             return obj
         elif hasattr(obj, '__array__'):
             return obj
