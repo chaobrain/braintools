@@ -29,6 +29,7 @@ class Optimizer(Node):
     """
     Base Optimizer Class.
     """
+    __module__ = 'braintools.optim'
 
     def register_trainable_weights(self, param_states: Dict[Hashable, State]):
         """

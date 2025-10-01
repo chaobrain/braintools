@@ -20,10 +20,12 @@ from unittest.mock import patch
 
 import brainunit as u
 import jax.numpy as jnp
+
 import braintools
 
 
 class TestNevergradOptimizer(unittest.TestCase):
+
     def setUp(self):
         # Define a simple quadratic loss function for testing
         def loss_fun(x):
