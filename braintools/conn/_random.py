@@ -348,135 +348,149 @@ class ClusteredRandom(PointConnectivity):
     --------
     Basic clustered random connectivity:
 
-    >>> import brainunit as u
-    >>> import numpy as np
-    >>> from braintools.conn import ClusteredRandom
-    >>> from braintools.init import Constant
-    >>>
-    >>> # Create random 2D positions
-    >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
-    >>>
-    >>> # 5% baseline, enhanced 5× within 100um
-    >>> clustered = ClusteredRandom(
-    ...     prob=0.05,
-    ...     cluster_radius=100 * u.um,
-    ...     cluster_factor=5.0,
-    ...     weight=Constant(1.0 * u.nS),
-    ...     seed=42
-    ... )
-    >>>
-    >>> result = clustered(
-    ...     pre_size=500,
-    ...     post_size=500,
-    ...     pre_positions=positions,
-    ...     post_positions=positions
-    ... )
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import ClusteredRandom
+        >>> from braintools.init import Constant
+        >>>
+        >>> # Create random 2D positions
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>>
+        >>> # 5% baseline, enhanced 5× within 100um
+        >>> clustered = ClusteredRandom(
+        ...     prob=0.05,
+        ...     cluster_radius=100 * u.um,
+        ...     cluster_factor=5.0,
+        ...     weight=Constant(1.0 * u.nS),
+        ...     seed=42
+        ... )
+        >>>
+        >>> result = clustered(
+        ...     pre_size=500,
+        ...     post_size=500,
+        ...     pre_positions=positions,
+        ...     post_positions=positions
+        ... )
 
     Strong local clustering:
 
-    >>> # Very strong enhancement for nearby neurons
-    >>> strong_cluster = ClusteredRandom(
-    ...     prob=0.02,  # Sparse baseline
-    ...     cluster_radius=75 * u.um,
-    ...     cluster_factor=20.0,  # 20× enhancement within clusters
-    ...     weight=Constant(1.5 * u.nS),
-    ...     delay=Constant(1.0 * u.ms)
-    ... )
+    .. code-block:: python
+
+        >>> # Very strong enhancement for nearby neurons
+        >>> strong_cluster = ClusteredRandom(
+        ...     prob=0.02,  # Sparse baseline
+        ...     cluster_radius=75 * u.um,
+        ...     cluster_factor=20.0,  # 20× enhancement within clusters
+        ...     weight=Constant(1.5 * u.nS),
+        ...     delay=Constant(1.0 * u.ms)
+        ... )
 
     Moderate clustering with stochastic weights:
 
-    >>> from braintools.init import Normal
-    >>>
-    >>> moderate_cluster = ClusteredRandom(
-    ...     prob=0.1,
-    ...     cluster_radius=150 * u.um,
-    ...     cluster_factor=3.0,
-    ...     weight=Normal(mean=2.0*u.nS, std=0.4*u.nS),
-    ...     delay=Constant(1.0 * u.ms),
-    ...     seed=42
-    ... )
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>>
+        >>> moderate_cluster = ClusteredRandom(
+        ...     prob=0.1,
+        ...     cluster_radius=150 * u.um,
+        ...     cluster_factor=3.0,
+        ...     weight=Normal(mean=2.0*u.nS, std=0.4*u.nS),
+        ...     delay=Constant(1.0 * u.ms),
+        ...     seed=42
+        ... )
 
     Modeling local cortical connectivity:
 
-    >>> # Model cortical microcircuit with local clustering
-    >>> cortical_positions = np.random.randn(400, 2) * 150 * u.um
-    >>>
-    >>> cortical_conn = ClusteredRandom(
-    ...     prob=0.08,  # 8% baseline connectivity
-    ...     cluster_radius=100 * u.um,  # Local neighborhood
-    ...     cluster_factor=4.0,  # 4× higher within 100um
-    ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
-    ...     delay=Constant(1.5 * u.ms),
-    ...     seed=42
-    ... )
-    >>>
-    >>> result = cortical_conn(
-    ...     pre_size=400,
-    ...     post_size=400,
-    ...     pre_positions=cortical_positions,
-    ...     post_positions=cortical_positions
-    ... )
+    .. code-block:: python
+
+        >>> # Model cortical microcircuit with local clustering
+        >>> cortical_positions = np.random.randn(400, 2) * 150 * u.um
+        >>>
+        >>> cortical_conn = ClusteredRandom(
+        ...     prob=0.08,  # 8% baseline connectivity
+        ...     cluster_radius=100 * u.um,  # Local neighborhood
+        ...     cluster_factor=4.0,  # 4× higher within 100um
+        ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
+        ...     delay=Constant(1.5 * u.ms),
+        ...     seed=42
+        ... )
+        >>>
+        >>> result = cortical_conn(
+        ...     pre_size=400,
+        ...     post_size=400,
+        ...     pre_positions=cortical_positions,
+        ...     post_positions=cortical_positions
+        ... )
 
     Different pre and post populations:
 
-    >>> # Clustered connectivity between different populations
-    >>> pre_pos = np.random.uniform(0, 500, (200, 2)) * u.um
-    >>> post_pos = np.random.uniform(0, 500, (300, 2)) * u.um
-    >>>
-    >>> inter_cluster = ClusteredRandom(
-    ...     prob=0.03,
-    ...     cluster_radius=80 * u.um,
-    ...     cluster_factor=6.0,
-    ...     weight=Constant(0.8 * u.nS)
-    ... )
-    >>>
-    >>> result = inter_cluster(
-    ...     pre_size=200,
-    ...     post_size=300,
-    ...     pre_positions=pre_pos,
-    ...     post_positions=post_pos
-    ... )
+    .. code-block:: python
+
+        >>> # Clustered connectivity between different populations
+        >>> pre_pos = np.random.uniform(0, 500, (200, 2)) * u.um
+        >>> post_pos = np.random.uniform(0, 500, (300, 2)) * u.um
+        >>>
+        >>> inter_cluster = ClusteredRandom(
+        ...     prob=0.03,
+        ...     cluster_radius=80 * u.um,
+        ...     cluster_factor=6.0,
+        ...     weight=Constant(0.8 * u.nS)
+        ... )
+        >>>
+        >>> result = inter_cluster(
+        ...     pre_size=200,
+        ...     post_size=300,
+        ...     pre_positions=pre_pos,
+        ...     post_positions=post_pos
+        ... )
 
     3D spatial clustering:
 
-    >>> # Clustering in 3D space (e.g., cortical volume)
-    >>> positions_3d = np.random.randn(300, 3) * np.array([100, 100, 200]) * u.um
-    >>>
-    >>> cluster_3d = ClusteredRandom(
-    ...     prob=0.04,
-    ...     cluster_radius=120 * u.um,  # Spherical clustering
-    ...     cluster_factor=8.0,
-    ...     weight=Constant(1.2 * u.nS)
-    ... )
-    >>>
-    >>> result = cluster_3d(
-    ...     pre_size=300,
-    ...     post_size=300,
-    ...     pre_positions=positions_3d,
-    ...     post_positions=positions_3d
-    ... )
+    .. code-block:: python
+
+        >>> # Clustering in 3D space (e.g., cortical volume)
+        >>> positions_3d = np.random.randn(300, 3) * np.array([100, 100, 200]) * u.um
+        >>>
+        >>> cluster_3d = ClusteredRandom(
+        ...     prob=0.04,
+        ...     cluster_radius=120 * u.um,  # Spherical clustering
+        ...     cluster_factor=8.0,
+        ...     weight=Constant(1.2 * u.nS)
+        ... )
+        >>>
+        >>> result = cluster_3d(
+        ...     pre_size=300,
+        ...     post_size=300,
+        ...     pre_positions=positions_3d,
+        ...     post_positions=positions_3d
+        ... )
 
     Comparing with pure random connectivity:
 
-    >>> from braintools.conn import FixedProb
-    >>>
-    >>> # Pure random (no clustering)
-    >>> random_conn = FixedProb(prob=0.1)
-    >>> random_result = random_conn(pre_size=500, post_size=500)
-    >>>
-    >>> # Clustered random (same baseline probability)
-    >>> clustered_conn = ClusteredRandom(
-    ...     prob=0.1,
-    ...     cluster_radius=100 * u.um,
-    ...     cluster_factor=3.0
-    ... )
-    >>> clustered_result = clustered_conn(
-    ...     pre_size=500,
-    ...     post_size=500,
-    ...     pre_positions=positions,
-    ...     post_positions=positions
-    ... )
-    >>> # clustered_result will have more connections due to spatial enhancement
+    .. code-block:: python
+
+        >>> from braintools.conn import FixedProb
+        >>>
+        >>> # Pure random (no clustering)
+        >>> random_conn = FixedProb(prob=0.1)
+        >>> random_result = random_conn(pre_size=500, post_size=500)
+        >>>
+        >>> # Clustered random (same baseline probability)
+        >>> clustered_conn = ClusteredRandom(
+        ...     prob=0.1,
+        ...     cluster_radius=100 * u.um,
+        ...     cluster_factor=3.0
+        ... )
+        >>> clustered_result = clustered_conn(
+        ...     pre_size=500,
+        ...     post_size=500,
+        ...     pre_positions=positions,
+        ...     post_positions=positions
+        ... )
+        >>> # clustered_result will have more connections due to spatial enhancement
     """
 
     def __init__(

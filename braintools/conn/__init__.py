@@ -96,56 +96,6 @@ complete decoupling between model types to ensure clean, specialized implementat
         inh_weight=-0.8 * u.nS
     )
 
-**Multi-Compartment Model Connectivity:**
-
-.. code-block:: python
-
-    from braintools.conn import (
-        AxonToDendrite, CompartmentSpecific, MorphologyDistance,
-        AXON, SOMA, BASAL_DENDRITE, APICAL_DENDRITE
-    )
-
-    # Axon-to-dendrite synapses
-    axon_dend = AxonToDendrite(
-        connection_prob=0.1,
-        weight_distribution='lognormal',
-        weight_params={'mean': 2.0 * u.nS, 'sigma': 0.5}
-    )
-
-    # Specific compartment targeting
-    soma_targeting = CompartmentSpecific(
-        compartment_mapping={
-            AXON: SOMA,
-            BASAL_DENDRITE: SOMA
-        },
-        connection_prob=0.15
-    )
-
-    # Morphology-aware connectivity
-    morph_conn = MorphologyDistance(
-        sigma=50 * u.um,
-        decay_function='gaussian',
-        compartment_mapping={
-            AXON: [BASAL_DENDRITE, APICAL_DENDRITE]
-        }
-    )
-
-
-**Custom Patterns:**
-
-.. code-block:: python
-
-    from braintools.conn import Custom, ConnectionResult
-
-    def my_connectivity(pre_size, post_size, pre_pos=None, post_pos=None):
-        # Custom connectivity logic here
-        pre_indices = [...]
-        post_indices = [...]
-        weights = [...]
-        return ConnectionResult(pre_indices, post_indices, weights=weights)
-
-    custom_conn = Custom(my_connectivity)
-    result = custom_conn(pre_size=100, post_size=100)
 """
 
 from ._base import *

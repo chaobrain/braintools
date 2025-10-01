@@ -110,56 +110,62 @@ class DistanceDependent(PointConnectivity):
     --------
     Basic usage with Gaussian distance profile:
 
-    >>> import brainunit as u
-    >>> import numpy as np
-    >>> from braintools.conn import DistanceDependent
-    >>> from braintools.init import GaussianProfile, Normal, Constant
-    >>>
-    >>> # Create neuron positions in 2D space
-    >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
-    >>>
-    >>> # Define Gaussian distance-dependent connectivity
-    >>> conn = DistanceDependent(
-    ...     distance_profile=GaussianProfile(
-    ...         sigma=100 * u.um,
-    ...         max_distance=300 * u.um
-    ...     ),
-    ...     weight=Normal(mean=1.5*u.nS, std=0.3*u.nS),
-    ...     delay=Constant(1.0 * u.ms),
-    ...     seed=42
-    ... )
-    >>>
-    >>> # Generate connections
-    >>> result = conn(
-    ...     pre_size=500,
-    ...     post_size=500,
-    ...     pre_positions=positions,
-    ...     post_positions=positions
-    ... )
-    >>> print(f"Generated {len(result.pre_indices)} connections")
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import DistanceDependent
+        >>> from braintools.init import GaussianProfile, Normal, Constant
+        >>>
+        >>> # Create neuron positions in 2D space
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>>
+        >>> # Define Gaussian distance-dependent connectivity
+        >>> conn = DistanceDependent(
+        ...     distance_profile=GaussianProfile(
+        ...         sigma=100 * u.um,
+        ...         max_distance=300 * u.um
+        ...     ),
+        ...     weight=Normal(mean=1.5*u.nS, std=0.3*u.nS),
+        ...     delay=Constant(1.0 * u.ms),
+        ...     seed=42
+        ... )
+        >>>
+        >>> # Generate connections
+        >>> result = conn(
+        ...     pre_size=500,
+        ...     post_size=500,
+        ...     pre_positions=positions,
+        ...     post_positions=positions
+        ... )
+        >>> print(f"Generated {len(result.pre_indices)} connections")
 
     Using exponential distance profile:
 
-    >>> from braintools.init import ExponentialProfile
-    >>>
-    >>> conn = DistanceDependent(
-    ...     distance_profile=ExponentialProfile(
-    ...         scale=150 * u.um,
-    ...         max_distance=500 * u.um
-    ...     ),
-    ...     weight=Constant(2.0 * u.nS)
-    ... )
+    .. code-block:: python
+
+        >>> from braintools.init import ExponentialProfile
+        >>>
+        >>> conn = DistanceDependent(
+        ...     distance_profile=ExponentialProfile(
+        ...         scale=150 * u.um,
+        ...         max_distance=500 * u.um
+        ...     ),
+        ...     weight=Constant(2.0 * u.nS)
+        ... )
 
     Pre-computed distances:
 
-    >>> # Use pre-computed distance matrix instead of positions
-    >>> from scipy.spatial.distance import cdist
-    >>> distances = cdist(positions.mantissa, positions.mantissa) * u.um
-    >>> result = conn(
-    ...     pre_size=500,
-    ...     post_size=500,
-    ...     distances=distances
-    ... )
+    .. code-block:: python
+
+        >>> # Use pre-computed distance matrix instead of positions
+        >>> from scipy.spatial.distance import cdist
+        >>> distances = cdist(positions.mantissa, positions.mantissa) * u.um
+        >>> result = conn(
+        ...     pre_size=500,
+        ...     post_size=500,
+        ...     distances=distances
+        ... )
     """
 
     def __init__(
@@ -357,76 +363,84 @@ class Gaussian(DistanceDependent):
     --------
     Simple Gaussian connectivity in a 2D population:
 
-    >>> import brainunit as u
-    >>> import numpy as np
-    >>> from braintools.conn import Gaussian
-    >>> from braintools.init import GaussianProfile, Constant
-    >>>
-    >>> # Create 2D positions
-    >>> positions = np.random.uniform(0, 1000, (400, 2)) * u.um
-    >>>
-    >>> # Gaussian connectivity with sigma=100um
-    >>> conn = Gaussian(
-    ...     distance_profile=GaussianProfile(
-    ...         sigma=100 * u.um,
-    ...         max_distance=300 * u.um
-    ...     ),
-    ...     weight=Constant(1.0 * u.nS),
-    ...     delay=Constant(1.0 * u.ms)
-    ... )
-    >>>
-    >>> result = conn(
-    ...     pre_size=400,
-    ...     post_size=400,
-    ...     pre_positions=positions,
-    ...     post_positions=positions
-    ... )
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import Gaussian
+        >>> from braintools.init import GaussianProfile, Constant
+        >>>
+        >>> # Create 2D positions
+        >>> positions = np.random.uniform(0, 1000, (400, 2)) * u.um
+        >>>
+        >>> # Gaussian connectivity with sigma=100um
+        >>> conn = Gaussian(
+        ...     distance_profile=GaussianProfile(
+        ...         sigma=100 * u.um,
+        ...         max_distance=300 * u.um
+        ...     ),
+        ...     weight=Constant(1.0 * u.nS),
+        ...     delay=Constant(1.0 * u.ms)
+        ... )
+        >>>
+        >>> result = conn(
+        ...     pre_size=400,
+        ...     post_size=400,
+        ...     pre_positions=positions,
+        ...     post_positions=positions
+        ... )
 
     Local connectivity with narrow Gaussian:
 
-    >>> # Narrow Gaussian for highly local connections
-    >>> local_conn = Gaussian(
-    ...     distance_profile=GaussianProfile(
-    ...         sigma=50 * u.um,  # Narrow spread
-    ...         max_distance=150 * u.um
-    ...     ),
-    ...     weight=Constant(2.0 * u.nS)
-    ... )
+    .. code-block:: python
+
+        >>> # Narrow Gaussian for highly local connections
+        >>> local_conn = Gaussian(
+        ...     distance_profile=GaussianProfile(
+        ...         sigma=50 * u.um,  # Narrow spread
+        ...         max_distance=150 * u.um
+        ...     ),
+        ...     weight=Constant(2.0 * u.nS)
+        ... )
 
     Broad connectivity with distance-dependent weights:
 
-    >>> from braintools.init import DistanceModulated as DDWeight, Normal
-    >>>
-    >>> broad_conn = Gaussian(
-    ...     distance_profile=GaussianProfile(
-    ...         sigma=200 * u.um,  # Broader spread
-    ...         max_distance=600 * u.um
-    ...     ),
-    ...     weight=DDWeight(lambda d: (3.0 * u.nS) * np.exp(-d/(100*u.um)))
-    ... )
+    .. code-block:: python
+
+        >>> from braintools.init import DistanceModulated as DDWeight, Normal
+        >>>
+        >>> broad_conn = Gaussian(
+        ...     distance_profile=GaussianProfile(
+        ...         sigma=200 * u.um,  # Broader spread
+        ...         max_distance=600 * u.um
+        ...     ),
+        ...     weight=DDWeight(lambda d: (3.0 * u.nS) * np.exp(-d/(100*u.um)))
+        ... )
 
     Modeling cortical column connectivity:
 
-    >>> # Model local connectivity within a cortical column
-    >>> # Positions in 3D (x, y for horizontal, z for layer depth)
-    >>> column_positions = np.random.randn(500, 3) * np.array([50, 50, 200]) * u.um
-    >>>
-    >>> # Anisotropic connectivity using custom Gaussian profile
-    >>> column_conn = Gaussian(
-    ...     distance_profile=GaussianProfile(
-    ...         sigma=75 * u.um,
-    ...         max_distance=250 * u.um
-    ...     ),
-    ...     weight=Normal(mean=1.5*u.nS, std=0.3*u.nS),
-    ...     seed=42
-    ... )
-    >>>
-    >>> result = column_conn(
-    ...     pre_size=500,
-    ...     post_size=500,
-    ...     pre_positions=column_positions,
-    ...     post_positions=column_positions
-    ... )
+    .. code-block:: python
+
+        >>> # Model local connectivity within a cortical column
+        >>> # Positions in 3D (x, y for horizontal, z for layer depth)
+        >>> column_positions = np.random.randn(500, 3) * np.array([50, 50, 200]) * u.um
+        >>>
+        >>> # Anisotropic connectivity using custom Gaussian profile
+        >>> column_conn = Gaussian(
+        ...     distance_profile=GaussianProfile(
+        ...         sigma=75 * u.um,
+        ...         max_distance=250 * u.um
+        ...     ),
+        ...     weight=Normal(mean=1.5*u.nS, std=0.3*u.nS),
+        ...     seed=42
+        ... )
+        >>>
+        >>> result = column_conn(
+        ...     pre_size=500,
+        ...     post_size=500,
+        ...     pre_positions=column_positions,
+        ...     post_positions=column_positions
+        ... )
     """
 
     def __init__(
@@ -536,90 +550,100 @@ class Exponential(DistanceDependent):
     --------
     Basic exponential connectivity:
 
-    >>> import brainunit as u
-    >>> import numpy as np
-    >>> from braintools.conn import Exponential
-    >>> from braintools.init import ExponentialProfile, Constant
-    >>>
-    >>> # Create random 2D positions
-    >>> positions = np.random.uniform(0, 1000, (300, 2)) * u.um
-    >>>
-    >>> # Exponential connectivity with scale=150um
-    >>> conn = Exponential(
-    ...     distance_profile=ExponentialProfile(
-    ...         scale=150 * u.um,
-    ...         max_distance=500 * u.um
-    ...     ),
-    ...     weight=Constant(1.5 * u.nS),
-    ...     delay=Constant(1.0 * u.ms)
-    ... )
-    >>>
-    >>> result = conn(
-    ...     pre_size=300,
-    ...     post_size=300,
-    ...     pre_positions=positions,
-    ...     post_positions=positions
-    ... )
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import Exponential
+        >>> from braintools.init import ExponentialProfile, Constant
+        >>>
+        >>> # Create random 2D positions
+        >>> positions = np.random.uniform(0, 1000, (300, 2)) * u.um
+        >>>
+        >>> # Exponential connectivity with scale=150um
+        >>> conn = Exponential(
+        ...     distance_profile=ExponentialProfile(
+        ...         scale=150 * u.um,
+        ...         max_distance=500 * u.um
+        ...     ),
+        ...     weight=Constant(1.5 * u.nS),
+        ...     delay=Constant(1.0 * u.ms)
+        ... )
+        >>>
+        >>> result = conn(
+        ...     pre_size=300,
+        ...     post_size=300,
+        ...     pre_positions=positions,
+        ...     post_positions=positions
+        ... )
 
     Short-range exponential connectivity:
 
-    >>> # Rapid decay for highly local connections
-    >>> local_conn = Exponential(
-    ...     distance_profile=ExponentialProfile(
-    ...         scale=75 * u.um,  # Short decay length
-    ...         max_distance=225 * u.um
-    ...     ),
-    ...     weight=Constant(2.5 * u.nS)
-    ... )
+    .. code-block:: python
+
+        >>> # Rapid decay for highly local connections
+        >>> local_conn = Exponential(
+        ...     distance_profile=ExponentialProfile(
+        ...         scale=75 * u.um,  # Short decay length
+        ...         max_distance=225 * u.um
+        ...     ),
+        ...     weight=Constant(2.5 * u.nS)
+        ... )
 
     Long-range connections with variable weights:
 
-    >>> from braintools.init import Normal
-    >>>
-    >>> # Longer-range connectivity with stochastic weights
-    >>> long_range_conn = Exponential(
-    ...     distance_profile=ExponentialProfile(
-    ...         scale=300 * u.um,  # Long decay length
-    ...         max_distance=900 * u.um
-    ...     ),
-    ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
-    ...     seed=42
-    ... )
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>>
+        >>> # Longer-range connectivity with stochastic weights
+        >>> long_range_conn = Exponential(
+        ...     distance_profile=ExponentialProfile(
+        ...         scale=300 * u.um,  # Long decay length
+        ...         max_distance=900 * u.um
+        ...     ),
+        ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
+        ...     seed=42
+        ... )
 
     Distance-dependent delays:
 
-    >>> from braintools.init import DistanceModulated as DDDelay, LogNormal
-    >>>
-    >>> # Model conduction delays proportional to distance
-    >>> conn_with_delays = Exponential(
-    ...     distance_profile=ExponentialProfile(
-    ...         scale=200 * u.um,
-    ...         max_distance=600 * u.um
-    ...     ),
-    ...     weight=Constant(1.0 * u.nS),
-    ...     delay=DDDelay(lambda d: (0.5 * u.ms) + d / (300 * u.um/u.ms))
-    ... )
+    .. code-block:: python
+
+        >>> from braintools.init import DistanceModulated as DDDelay, LogNormal
+        >>>
+        >>> # Model conduction delays proportional to distance
+        >>> conn_with_delays = Exponential(
+        ...     distance_profile=ExponentialProfile(
+        ...         scale=200 * u.um,
+        ...         max_distance=600 * u.um
+        ...     ),
+        ...     weight=Constant(1.0 * u.nS),
+        ...     delay=DDDelay(lambda d: (0.5 * u.ms) + d / (300 * u.um/u.ms))
+        ... )
 
     Modeling hippocampal connectivity:
 
-    >>> # Exponential connectivity pattern typical of hippocampal networks
-    >>> positions_1d = np.linspace(0, 2000, 200).reshape(-1, 1) * u.um
-    >>>
-    >>> hippo_conn = Exponential(
-    ...     distance_profile=ExponentialProfile(
-    ...         scale=250 * u.um,  # Moderate spatial extent
-    ...         max_distance=1000 * u.um
-    ...     ),
-    ...     weight=LogNormal(mean=1.5*u.nS, sigma=0.4),
-    ...     delay=Normal(mean=2.0*u.ms, std=0.3*u.ms)
-    ... )
-    >>>
-    >>> result = hippo_conn(
-    ...     pre_size=200,
-    ...     post_size=200,
-    ...     pre_positions=positions_1d,
-    ...     post_positions=positions_1d
-    ... )
+    .. code-block:: python
+
+        >>> # Exponential connectivity pattern typical of hippocampal networks
+        >>> positions_1d = np.linspace(0, 2000, 200).reshape(-1, 1) * u.um
+        >>>
+        >>> hippo_conn = Exponential(
+        ...     distance_profile=ExponentialProfile(
+        ...         scale=250 * u.um,  # Moderate spatial extent
+        ...         max_distance=1000 * u.um
+        ...     ),
+        ...     weight=LogNormal(mean=1.5*u.nS, sigma=0.4),
+        ...     delay=Normal(mean=2.0*u.ms, std=0.3*u.ms)
+        ... )
+        >>>
+        >>> result = hippo_conn(
+        ...     pre_size=200,
+        ...     post_size=200,
+        ...     pre_positions=positions_1d,
+        ...     post_positions=positions_1d
+        ... )
     """
 
     def __init__(
@@ -716,54 +740,62 @@ class Ring(PointConnectivity):
     --------
     Basic ring connectivity:
 
-    >>> import brainunit as u
-    >>> from braintools.conn import Ring
-    >>> from braintools.init import Constant
-    >>>
-    >>> # Each neuron connects to 2 neighbors on each side
-    >>> ring = Ring(neighbors=2, weight=Constant(1.0 * u.nS))
-    >>> result = ring(pre_size=100, post_size=100)
-    >>> print(f"Total connections: {len(result.pre_indices)}")  # 400 connections
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.conn import Ring
+        >>> from braintools.init import Constant
+        >>>
+        >>> # Each neuron connects to 2 neighbors on each side
+        >>> ring = Ring(neighbors=2, weight=Constant(1.0 * u.nS))
+        >>> result = ring(pre_size=100, post_size=100)
+        >>> print(f"Total connections: {len(result.pre_indices)}")  # 400 connections
 
     Unidirectional ring (feed-forward):
 
-    >>> # Only forward connections
-    >>> ff_ring = Ring(
-    ...     neighbors=1,
-    ...     weight=Constant(1.5 * u.nS),
-    ...     bidirectional=False
-    ... )
-    >>> result = ff_ring(pre_size=100, post_size=100)
-    >>> print(f"Total connections: {len(result.pre_indices)}")  # 100 connections
+    .. code-block:: python
+
+        >>> # Only forward connections
+        >>> ff_ring = Ring(
+        ...     neighbors=1,
+        ...     weight=Constant(1.5 * u.nS),
+        ...     bidirectional=False
+        ... )
+        >>> result = ff_ring(pre_size=100, post_size=100)
+        >>> print(f"Total connections: {len(result.pre_indices)}")  # 100 connections
 
     Ring with stochastic weights:
 
-    >>> from braintools.init import Normal
-    >>>
-    >>> ring = Ring(
-    ...     neighbors=3,
-    ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
-    ...     delay=Constant(1.0 * u.ms),
-    ...     seed=42
-    ... )
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>>
+        >>> ring = Ring(
+        ...     neighbors=3,
+        ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
+        ...     delay=Constant(1.0 * u.ms),
+        ...     seed=42
+        ... )
 
     Modeling orientation preference in visual cortex:
 
-    >>> # Ring of neurons representing orientation preferences
-    >>> n_orientations = 180  # One neuron per degree
-    >>>
-    >>> # Local connectivity in orientation space
-    >>> orientation_ring = Ring(
-    ...     neighbors=10,  # Connect to neurons with similar orientations
-    ...     weight=Constant(2.0 * u.nS),
-    ...     delay=Constant(0.5 * u.ms),
-    ...     bidirectional=True
-    ... )
-    >>>
-    >>> result = orientation_ring(
-    ...     pre_size=n_orientations,
-    ...     post_size=n_orientations
-    ... )
+    .. code-block:: python
+
+        >>> # Ring of neurons representing orientation preferences
+        >>> n_orientations = 180  # One neuron per degree
+        >>>
+        >>> # Local connectivity in orientation space
+        >>> orientation_ring = Ring(
+        ...     neighbors=10,  # Connect to neurons with similar orientations
+        ...     weight=Constant(2.0 * u.nS),
+        ...     delay=Constant(0.5 * u.ms),
+        ...     bidirectional=True
+        ... )
+        >>>
+        >>> result = orientation_ring(
+        ...     pre_size=n_orientations,
+        ...     post_size=n_orientations
+        ... )
     """
 
     def __init__(
@@ -948,66 +980,76 @@ class Grid2d(PointConnectivity):
     --------
     Basic 2D grid with Von Neumann connectivity:
 
-    >>> import brainunit as u
-    >>> from braintools.conn import Grid2d
-    >>> from braintools.init import Constant
-    >>>
-    >>> # 10×10 grid with 4-neighbor connectivity
-    >>> grid = Grid2d(
-    ...     connectivity='von_neumann',
-    ...     weight=Constant(1.0 * u.nS),
-    ...     periodic=False
-    ... )
-    >>> result = grid(pre_size=(10, 10), post_size=(10, 10))
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.conn import Grid2d
+        >>> from braintools.init import Constant
+        >>>
+        >>> # 10×10 grid with 4-neighbor connectivity
+        >>> grid = Grid2d(
+        ...     connectivity='von_neumann',
+        ...     weight=Constant(1.0 * u.nS),
+        ...     periodic=False
+        ... )
+        >>> result = grid(pre_size=(10, 10), post_size=(10, 10))
 
     Moore neighborhood with periodic boundaries:
 
-    >>> # 8-neighbor connectivity with wraparound
-    >>> moore_grid = Grid2d(
-    ...     connectivity='moore',
-    ...     weight=Constant(1.5 * u.nS),
-    ...     delay=Constant(1.0 * u.ms),
-    ...     periodic=True  # Torus topology
-    ... )
-    >>> result = moore_grid(pre_size=(20, 20), post_size=(20, 20))
-    >>> print(f"Connections per neuron: {len(result.pre_indices) // 400}")  # Should be 8
+    .. code-block:: python
+
+        >>> # 8-neighbor connectivity with wraparound
+        >>> moore_grid = Grid2d(
+        ...     connectivity='moore',
+        ...     weight=Constant(1.5 * u.nS),
+        ...     delay=Constant(1.0 * u.ms),
+        ...     periodic=True  # Torus topology
+        ... )
+        >>> result = moore_grid(pre_size=(20, 20), post_size=(20, 20))
+        >>> print(f"Connections per neuron: {len(result.pre_indices) // 400}")  # Should be 8
 
     Stochastic weights on grid:
 
-    >>> from braintools.init import Normal
-    >>>
-    >>> grid = Grid2d(
-    ...     connectivity='von_neumann',
-    ...     weight=Normal(mean=2.0*u.nS, std=0.4*u.nS),
-    ...     delay=Constant(0.5 * u.ms),
-    ...     seed=42
-    ... )
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>>
+        >>> grid = Grid2d(
+        ...     connectivity='von_neumann',
+        ...     weight=Normal(mean=2.0*u.nS, std=0.4*u.nS),
+        ...     delay=Constant(0.5 * u.ms),
+        ...     seed=42
+        ... )
 
     Modeling cortical sheet connectivity:
 
-    >>> # Model local connectivity in a cortical layer
-    >>> cortex_grid = Grid2d(
-    ...     connectivity='moore',  # Neurons connect to all immediate neighbors
-    ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
-    ...     delay=Constant(1.0 * u.ms),
-    ...     periodic=False  # Cortex has edges, not periodic
-    ... )
-    >>>
-    >>> # 50×50 grid representing a cortical microcircuit
-    >>> result = cortex_grid(pre_size=(50, 50), post_size=(50, 50))
-    >>>
-    >>> # Check edge vs. interior connectivity
-    >>> # Interior neurons have 8 connections, edge neurons have fewer
+    .. code-block:: python
+
+        >>> # Model local connectivity in a cortical layer
+        >>> cortex_grid = Grid2d(
+        ...     connectivity='moore',  # Neurons connect to all immediate neighbors
+        ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
+        ...     delay=Constant(1.0 * u.ms),
+        ...     periodic=False  # Cortex has edges, not periodic
+        ... )
+        >>>
+        >>> # 50×50 grid representing a cortical microcircuit
+        >>> result = cortex_grid(pre_size=(50, 50), post_size=(50, 50))
+        >>>
+        >>> # Check edge vs. interior connectivity
+        >>> # Interior neurons have 8 connections, edge neurons have fewer
 
     Retinal ganglion cell lattice with periodic boundaries:
 
-    >>> # Model retinotopic connectivity
-    >>> retina_grid = Grid2d(
-    ...     connectivity='von_neumann',
-    ...     weight=Constant(0.5 * u.nS),
-    ...     periodic=True  # Periodic for theoretical modeling
-    ... )
-    >>> result = retina_grid(pre_size=(30, 40), post_size=(30, 40))
+    .. code-block:: python
+
+        >>> # Model retinotopic connectivity
+        >>> retina_grid = Grid2d(
+        ...     connectivity='von_neumann',
+        ...     weight=Constant(0.5 * u.nS),
+        ...     periodic=True  # Periodic for theoretical modeling
+        ... )
+        >>> result = retina_grid(pre_size=(30, 40), post_size=(30, 40))
     """
 
     def __init__(
@@ -1209,116 +1251,128 @@ class RadialPatches(PointConnectivity):
     --------
     Basic radial patch connectivity:
 
-    >>> import brainunit as u
-    >>> import numpy as np
-    >>> from braintools.conn import RadialPatches
-    >>> from braintools.init import Constant
-    >>>
-    >>> # Create random 2D positions
-    >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
-    >>>
-    >>> # Three patches per neuron with 50um radius
-    >>> patches = RadialPatches(
-    ...     patch_radius=50 * u.um,
-    ...     n_patches=3,
-    ...     prob=0.5,
-    ...     weight=Constant(1.0 * u.nS),
-    ...     seed=42
-    ... )
-    >>>
-    >>> result = patches(
-    ...     pre_size=500,
-    ...     post_size=500,
-    ...     pre_positions=positions,
-    ...     post_positions=positions
-    ... )
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import RadialPatches
+        >>> from braintools.init import Constant
+        >>>
+        >>> # Create random 2D positions
+        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>>
+        >>> # Three patches per neuron with 50um radius
+        >>> patches = RadialPatches(
+        ...     patch_radius=50 * u.um,
+        ...     n_patches=3,
+        ...     prob=0.5,
+        ...     weight=Constant(1.0 * u.nS),
+        ...     seed=42
+        ... )
+        >>>
+        >>> result = patches(
+        ...     pre_size=500,
+        ...     post_size=500,
+        ...     pre_positions=positions,
+        ...     post_positions=positions
+        ... )
 
     Dense patches with deterministic connectivity:
 
-    >>> # Connect to all neurons within patch radius
-    >>> dense_patches = RadialPatches(
-    ...     patch_radius=75 * u.um,
-    ...     n_patches=2,
-    ...     prob=1.0,  # Deterministic connectivity
-    ...     weight=Constant(1.5 * u.nS),
-    ...     delay=Constant(1.0 * u.ms)
-    ... )
+    .. code-block:: python
+
+        >>> # Connect to all neurons within patch radius
+        >>> dense_patches = RadialPatches(
+        ...     patch_radius=75 * u.um,
+        ...     n_patches=2,
+        ...     prob=1.0,  # Deterministic connectivity
+        ...     weight=Constant(1.5 * u.nS),
+        ...     delay=Constant(1.0 * u.ms)
+        ... )
 
     Sparse, distributed patches:
 
-    >>> from braintools.init import Normal
-    >>>
-    >>> # Many small, sparse patches
-    >>> sparse_patches = RadialPatches(
-    ...     patch_radius=30 * u.um,
-    ...     n_patches=5,  # More patches
-    ...     prob=0.2,  # Sparse within each patch
-    ...     weight=Normal(mean=2.0*u.nS, std=0.4*u.nS),
-    ...     seed=42
-    ... )
+    .. code-block:: python
+
+        >>> from braintools.init import Normal
+        >>>
+        >>> # Many small, sparse patches
+        >>> sparse_patches = RadialPatches(
+        ...     patch_radius=30 * u.um,
+        ...     n_patches=5,  # More patches
+        ...     prob=0.2,  # Sparse within each patch
+        ...     weight=Normal(mean=2.0*u.nS, std=0.4*u.nS),
+        ...     seed=42
+        ... )
 
     Modeling cortical horizontal connections:
 
-    >>> # Model patchy long-range connections in visual cortex
-    >>> # Neurons at similar locations
-    >>> local_positions = np.random.randn(300, 2) * 100 * u.um
-    >>>
-    >>> # Create patchy connectivity pattern
-    >>> horizontal_conn = RadialPatches(
-    ...     patch_radius=80 * u.um,  # Size of patches
-    ...     n_patches=4,  # Multiple patches per neuron
-    ...     prob=0.6,  # Moderate connection probability
-    ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
-    ...     delay=Constant(2.0 * u.ms),  # Longer delay for horizontal connections
-    ...     seed=42
-    ... )
-    >>>
-    >>> result = horizontal_conn(
-    ...     pre_size=300,
-    ...     post_size=300,
-    ...     pre_positions=local_positions,
-    ...     post_positions=local_positions
-    ... )
+    .. code-block:: python
+
+        >>> # Model patchy long-range connections in visual cortex
+        >>> # Neurons at similar locations
+        >>> local_positions = np.random.randn(300, 2) * 100 * u.um
+        >>>
+        >>> # Create patchy connectivity pattern
+        >>> horizontal_conn = RadialPatches(
+        ...     patch_radius=80 * u.um,  # Size of patches
+        ...     n_patches=4,  # Multiple patches per neuron
+        ...     prob=0.6,  # Moderate connection probability
+        ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
+        ...     delay=Constant(2.0 * u.ms),  # Longer delay for horizontal connections
+        ...     seed=42
+        ... )
+        >>>
+        >>> result = horizontal_conn(
+        ...     pre_size=300,
+        ...     post_size=300,
+        ...     pre_positions=local_positions,
+        ...     post_positions=local_positions
+        ... )
 
     Projections between different populations:
 
-    >>> # Different source and target populations
-    >>> source_positions = np.random.uniform(0, 500, (200, 2)) * u.um
-    >>> target_positions = np.random.uniform(500, 1000, (300, 2)) * u.um
-    >>>
-    >>> # Cross-population patchy connectivity
-    >>> projection = RadialPatches(
-    ...     patch_radius=60 * u.um,
-    ...     n_patches=3,
-    ...     prob=0.4,
-    ...     weight=Constant(0.8 * u.nS)
-    ... )
-    >>>
-    >>> result = projection(
-    ...     pre_size=200,
-    ...     post_size=300,
-    ...     pre_positions=source_positions,
-    ...     post_positions=target_positions
-    ... )
+    .. code-block:: python
+
+        >>> # Different source and target populations
+        >>> source_positions = np.random.uniform(0, 500, (200, 2)) * u.um
+        >>> target_positions = np.random.uniform(500, 1000, (300, 2)) * u.um
+        >>>
+        >>> # Cross-population patchy connectivity
+        >>> projection = RadialPatches(
+        ...     patch_radius=60 * u.um,
+        ...     n_patches=3,
+        ...     prob=0.4,
+        ...     weight=Constant(0.8 * u.nS)
+        ... )
+        >>>
+        >>> result = projection(
+        ...     pre_size=200,
+        ...     post_size=300,
+        ...     pre_positions=source_positions,
+        ...     post_positions=target_positions
+        ... )
 
     3D spatial connectivity:
 
-    >>> # Patches in 3D space (e.g., cortical columns)
-    >>> positions_3d = np.random.randn(400, 3) * np.array([100, 100, 200]) * u.um
-    >>>
-    >>> patches_3d = RadialPatches(
-    ...     patch_radius=100 * u.um,  # Spherical patches in 3D
-    ...     n_patches=2,
-    ...     prob=0.7,
-    ...     weight=Constant(1.2 * u.nS)
-    ... )
-    >>>
-    >>> result = patches_3d(
-    ...     pre_size=400,
-    ...     post_size=400,
-    ...     pre_positions=positions_3d,
-    ...     post_positions=positions_3d
-    ... )
+    .. code-block:: python
+
+        >>> # Patches in 3D space (e.g., cortical columns)
+        >>> positions_3d = np.random.randn(400, 3) * np.array([100, 100, 200]) * u.um
+        >>>
+        >>> patches_3d = RadialPatches(
+        ...     patch_radius=100 * u.um,  # Spherical patches in 3D
+        ...     n_patches=2,
+        ...     prob=0.7,
+        ...     weight=Constant(1.2 * u.nS)
+        ... )
+        >>>
+        >>> result = patches_3d(
+        ...     pre_size=400,
+        ...     post_size=400,
+        ...     pre_positions=positions_3d,
+        ...     post_positions=positions_3d
+        ... )
     """
 
     def __init__(
