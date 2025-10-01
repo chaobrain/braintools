@@ -25,6 +25,7 @@ from typing import Optional, Union
 import brainunit as u
 import numpy as np
 from scipy.stats import truncnorm
+from brainstate.typing import ArrayLike
 
 from ._init import Initialization
 
@@ -77,7 +78,7 @@ class Constant(Initialization):
         >>> weights = init(rng, 100)
     """
 
-    def __init__(self, value: u.Quantity):
+    def __init__(self, value: ArrayLike):
         self.value = value
 
     def __call__(self, rng, size, **kwargs):
@@ -115,7 +116,7 @@ class Uniform(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, low: u.Quantity, high: u.Quantity):
+    def __init__(self, low: ArrayLike, high: ArrayLike):
         self.low = low
         self.high = high
 
@@ -155,7 +156,7 @@ class Normal(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, mean: u.Quantity, std: u.Quantity):
+    def __init__(self, mean: ArrayLike, std: ArrayLike):
         self.mean = mean
         self.std = std
 
@@ -196,7 +197,7 @@ class LogNormal(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, mean: u.Quantity, std: u.Quantity):
+    def __init__(self, mean: ArrayLike, std: ArrayLike):
         self.mean = mean
         self.std = std
 
@@ -240,7 +241,7 @@ class Gamma(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, shape: float, scale: u.Quantity):
+    def __init__(self, shape: float, scale: ArrayLike):
         self.shape = shape
         self.scale = scale
 
@@ -277,7 +278,7 @@ class Exponential(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, scale: u.Quantity):
+    def __init__(self, scale: ArrayLike):
         self.scale = scale
 
     def __call__(self, rng, size, **kwargs):
@@ -324,15 +325,15 @@ class ExponentialDecay(Initialization):
 
     def __init__(
         self,
-        max_weight: u.Quantity,
-        decay_constant: u.Quantity,
-        min_weight: Optional[u.Quantity] = None
+        max_weight: ArrayLike,
+        decay_constant: ArrayLike,
+        min_weight: Optional[ArrayLike] = None
     ):
         self.max_weight = max_weight
         self.decay_constant = decay_constant
         self.min_weight = min_weight if min_weight is not None else 0.0 * max_weight.unit
 
-    def __call__(self, rng, size, distances: Optional[u.Quantity] = None, **kwargs):
+    def __call__(self, rng, size, distances: Optional[ArrayLike] = None, **kwargs):
         if distances is None:
             return u.math.full(size, self.max_weight)
 
@@ -388,10 +389,10 @@ class TruncatedNormal(Initialization):
 
     def __init__(
         self,
-        mean: u.Quantity,
-        std: u.Quantity,
-        low: Optional[u.Quantity] = None,
-        high: Optional[u.Quantity] = None
+        mean: ArrayLike,
+        std: ArrayLike,
+        low: Optional[ArrayLike] = None,
+        high: Optional[ArrayLike] = None
     ):
         self.mean = mean
         self.std = std
@@ -446,8 +447,8 @@ class Beta(Initialization):
         self,
         alpha: float,
         beta: float,
-        low: u.Quantity,
-        high: u.Quantity
+        low: ArrayLike,
+        high: ArrayLike
     ):
         self.alpha = alpha
         self.beta = beta
@@ -490,7 +491,7 @@ class Weibull(Initialization):
         >>> weights = init(rng, 1000)
     """
 
-    def __init__(self, shape: float, scale: u.Quantity):
+    def __init__(self, shape: float, scale: ArrayLike):
         self.shape = shape
         self.scale = scale
 
@@ -667,7 +668,7 @@ class Scaled(Initialization):
     def __init__(
         self,
         base_dist: Initialization,
-        scale_factor: Union[float, u.Quantity]
+        scale_factor: ArrayLike
     ):
         self.base_dist = base_dist
         self.scale_factor = scale_factor
@@ -712,8 +713,8 @@ class Clipped(Initialization):
     def __init__(
         self,
         base_dist: Initialization,
-        min_val: Optional[u.Quantity] = None,
-        max_val: Optional[u.Quantity] = None
+        min_val: Optional[ArrayLike] = None,
+        max_val: Optional[ArrayLike] = None
     ):
         self.base_dist = base_dist
         self.min_val = min_val
@@ -782,8 +783,8 @@ class DistanceModulated(Initialization):
         self,
         base_dist: Initialization,
         distance_profile: Union[str, callable],
-        sigma: u.Quantity,
-        min_weight: Optional[u.Quantity] = None
+        sigma: ArrayLike,
+        min_weight: Optional[ArrayLike] = None
     ):
         self.base_dist = base_dist
         self.sigma = sigma
@@ -804,7 +805,7 @@ class DistanceModulated(Initialization):
         else:
             raise TypeError("distance_profile must be a string or callable")
 
-    def __call__(self, rng, size, distances: Optional[u.Quantity] = None, **kwargs):
+    def __call__(self, rng, size, distances: Optional[ArrayLike] = None, **kwargs):
         base_weights = self.base_dist(rng, size, **kwargs)
 
         if distances is None:
@@ -871,15 +872,15 @@ class DistanceProportional(Initialization):
 
     def __init__(
         self,
-        base_delay: u.Quantity,
-        velocity: u.Quantity,
-        max_delay: Optional[u.Quantity] = None
+        base_delay: ArrayLike,
+        velocity: ArrayLike,
+        max_delay: Optional[ArrayLike] = None
     ):
         self.base_delay = base_delay
         self.velocity = velocity
         self.max_delay = max_delay
 
-    def __call__(self, rng, size, distances: Optional[u.Quantity] = None, **kwargs):
+    def __call__(self, rng, size, distances: Optional[ArrayLike] = None, **kwargs):
         if distances is None:
             return u.math.full(size, self.base_delay)
 

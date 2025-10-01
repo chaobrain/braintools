@@ -26,6 +26,7 @@ from typing import Optional, Union, Callable
 
 import brainunit as u
 import numpy as np
+from brainstate.typing import ArrayLike
 
 __all__ = [
     'DistanceProfile',
@@ -101,9 +102,8 @@ class DistanceProfile(ABC):
         >>> chained = GaussianProfile(50.0 * u.um) | (lambda x: x * 2) | (lambda x: np.minimum(x, 1.0))
     """
 
-
     @abstractmethod
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         """
         Calculate connection probability based on distance.
 
@@ -120,7 +120,7 @@ class DistanceProfile(ABC):
         pass
 
     @abstractmethod
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         """
         Calculate weight scaling factor based on distance.
 
@@ -136,7 +136,7 @@ class DistanceProfile(ABC):
         """
         pass
 
-    def __call__(self, distances: u.Quantity) -> np.ndarray:
+    def __call__(self, distances: ArrayLike) -> np.ndarray:
         """
         Call the profile's weight_scaling method.
 
@@ -152,39 +152,39 @@ class DistanceProfile(ABC):
         """
         return self.weight_scaling(distances)
 
-    def __add__(self, other: Union['DistanceProfile', float, u.Quantity]) -> 'ComposedProfile':
+    def __add__(self, other: Union['DistanceProfile', ArrayLike]) -> 'ComposedProfile':
         """Add two profiles or add a scalar/quantity."""
         return ComposedProfile(self, other, lambda x, y: x + y, '+')
 
-    def __radd__(self, other: Union[float, u.Quantity]) -> 'ComposedProfile':
+    def __radd__(self, other: ArrayLike) -> 'ComposedProfile':
         """Right addition."""
         return ComposedProfile(other, self, lambda x, y: x + y, '+')
 
-    def __sub__(self, other: Union['DistanceProfile', float, u.Quantity]) -> 'ComposedProfile':
+    def __sub__(self, other: Union['DistanceProfile', ArrayLike]) -> 'ComposedProfile':
         """Subtract two profiles or subtract a scalar/quantity."""
         return ComposedProfile(self, other, lambda x, y: x - y, '-')
 
-    def __rsub__(self, other: Union[float, u.Quantity]) -> 'ComposedProfile':
+    def __rsub__(self, other: ArrayLike) -> 'ComposedProfile':
         """Right subtraction."""
         return ComposedProfile(other, self, lambda x, y: x - y, '-')
 
-    def __mul__(self, other: Union['DistanceProfile', float, u.Quantity]) -> 'ComposedProfile':
+    def __mul__(self, other: Union['DistanceProfile', ArrayLike]) -> 'ComposedProfile':
         """Multiply two profiles or multiply by a scalar."""
         return ComposedProfile(self, other, lambda x, y: x * y, '*')
 
-    def __rmul__(self, other: Union[float, u.Quantity]) -> 'ComposedProfile':
+    def __rmul__(self, other: ArrayLike) -> 'ComposedProfile':
         """Right multiplication."""
         return ComposedProfile(other, self, lambda x, y: x * y, '*')
 
-    def __truediv__(self, other: Union['DistanceProfile', float, u.Quantity]) -> 'ComposedProfile':
+    def __truediv__(self, other: Union['DistanceProfile', ArrayLike]) -> 'ComposedProfile':
         """Divide two profiles or divide by a scalar."""
         return ComposedProfile(self, other, lambda x, y: x / y, '/')
 
-    def __rtruediv__(self, other: Union[float, u.Quantity]) -> 'ComposedProfile':
+    def __rtruediv__(self, other: ArrayLike) -> 'ComposedProfile':
         """Right division."""
         return ComposedProfile(other, self, lambda x, y: x / y, '/')
 
-    def __or__(self, other: Union['DistanceProfile', Callable]) -> 'ComposedProfile':
+    def __or__(self, other: Union['DistanceProfile', Callable]) -> 'PipeProfile':
         """Pipe operator for functional composition."""
         return PipeProfile(self, other)
 
@@ -227,11 +227,15 @@ class GaussianProfile(DistanceProfile):
         >>> probs = profile.probability(distances)
     """
 
-    def __init__(self, sigma: u.Quantity, max_distance: Optional[u.Quantity] = None):
+    def __init__(
+        self,
+        sigma: ArrayLike,
+        max_distance: Optional[ArrayLike] = None
+    ):
         self.sigma = sigma
         self.max_distance = max_distance
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         sigma, unit = u.split_mantissa_unit(self.sigma)
         dist_vals = distances.to(unit).mantissa
 
@@ -243,7 +247,7 @@ class GaussianProfile(DistanceProfile):
 
         return prob
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         return self.probability(distances)
 
     def __repr__(self):
@@ -281,13 +285,13 @@ class ExponentialProfile(DistanceProfile):
 
     def __init__(
         self,
-        decay_constant: u.Quantity,
-        max_distance: Optional[u.Quantity] = None,
+        decay_constant: ArrayLike,
+        max_distance: Optional[ArrayLike] = None,
     ):
         self.decay_constant = decay_constant
         self.max_distance = max_distance
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         decay, unit = u.split_mantissa_unit(self.decay_constant)
         dist_vals = distances.to(unit).mantissa
 
@@ -299,7 +303,7 @@ class ExponentialProfile(DistanceProfile):
 
         return prob
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         return self.probability(distances)
 
     def __repr__(self):
@@ -338,13 +342,17 @@ class PowerLawProfile(DistanceProfile):
         >>> probs = profile.probability(distances)
     """
 
-    def __init__(self, exponent: float, min_distance: Optional[u.Quantity] = None,
-                 max_distance: Optional[u.Quantity] = None):
+    def __init__(
+        self,
+        exponent: float,
+        min_distance: Optional[ArrayLike] = None,
+        max_distance: Optional[ArrayLike] = None
+    ):
         self.exponent = exponent
         self.min_distance = min_distance
         self.max_distance = max_distance
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         dist_vals = distances.mantissa
 
         min_val = 1e-6 if self.min_distance is None else u.Quantity(self.min_distance).to(distances.unit).mantissa
@@ -358,7 +366,7 @@ class PowerLawProfile(DistanceProfile):
 
         return prob
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         return self.probability(distances)
 
     def __repr__(self):
@@ -389,17 +397,17 @@ class LinearProfile(DistanceProfile):
         >>> probs = profile.probability(distances)
     """
 
-    def __init__(self, max_distance: u.Quantity):
+    def __init__(self, max_distance: ArrayLike):
         self.max_distance = max_distance
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         max_val, unit = u.split_mantissa_unit(self.max_distance)
         dist_vals = distances.to(unit).mantissa
 
         prob = np.maximum(0, 1 - dist_vals / max_val)
         return prob
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         return self.probability(distances)
 
     def __repr__(self):
@@ -439,19 +447,22 @@ class StepProfile(DistanceProfile):
         >>> probs = profile.probability(distances)
     """
 
-    def __init__(self, threshold: u.Quantity, inside_prob: float = 1.0, outside_prob: float = 0.0):
+    def __init__(self,
+                 threshold: ArrayLike,
+                 inside_prob: float = 1.0,
+                 outside_prob: float = 0.0):
         self.threshold = threshold
         self.inside_prob = inside_prob
         self.outside_prob = outside_prob
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         threshold, unit = u.split_mantissa_unit(self.threshold)
         dist_vals = distances.to(unit).mantissa
 
         prob = np.where(dist_vals <= threshold, self.inside_prob, self.outside_prob)
         return prob
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         return self.probability(distances)
 
     def __repr__(self):
@@ -469,15 +480,19 @@ class ComposedProfile(DistanceProfile):
     Allows composing two profiles using arithmetic operations.
     """
 
-    def __init__(self, left: Union[DistanceProfile, float, u.Quantity],
-                 right: Union[DistanceProfile, float, u.Quantity],
-                 op: Callable, op_symbol: str):
+    def __init__(
+        self,
+        left: Union[DistanceProfile, ArrayLike],
+        right: Union[DistanceProfile, ArrayLike],
+        op: Callable,
+        op_symbol: str
+    ):
         self.left = left
         self.right = right
         self.op = op
         self.op_symbol = op_symbol
 
-    def _evaluate(self, obj: Union[DistanceProfile, float, u.Quantity], distances: u.Quantity) -> np.ndarray:
+    def _evaluate(self, obj: Union[DistanceProfile, ArrayLike], distances: ArrayLike) -> np.ndarray:
         """Helper to evaluate a profile or return a constant."""
         if isinstance(obj, DistanceProfile):
             return obj.weight_scaling(distances)
@@ -490,12 +505,12 @@ class ComposedProfile(DistanceProfile):
         else:
             raise TypeError(f"Operand must be DistanceProfile, scalar, or Quantity. Got {type(obj)}")
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         left_val = self._evaluate(self.left, distances)
         right_val = self._evaluate(self.right, distances)
         return self.op(left_val, right_val)
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         return self.probability(distances)
 
     def __repr__(self):
@@ -507,12 +522,17 @@ class ClipProfile(DistanceProfile):
     Clip a distance profile's output to a specified range.
     """
 
-    def __init__(self, base: DistanceProfile, min_val: Optional[float], max_val: Optional[float]):
+    def __init__(
+        self,
+        base: DistanceProfile,
+        min_val: Optional[float],
+        max_val: Optional[float]
+    ):
         self.base = base
         self.min_val = min_val
         self.max_val = max_val
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         values = self.base.probability(distances)
         if self.min_val is not None:
             values = np.maximum(values, self.min_val)
@@ -520,7 +540,7 @@ class ClipProfile(DistanceProfile):
             values = np.minimum(values, self.max_val)
         return values
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         values = self.base.weight_scaling(distances)
         if self.min_val is not None:
             values = np.maximum(values, self.min_val)
@@ -537,15 +557,19 @@ class ApplyProfile(DistanceProfile):
     Apply an arbitrary function to a distance profile's output.
     """
 
-    def __init__(self, base: DistanceProfile, func: Callable):
+    def __init__(
+        self,
+        base: DistanceProfile,
+        func: Callable
+    ):
         self.base = base
         self.func = func
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         values = self.base.probability(distances)
         return self.func(values)
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         values = self.base.weight_scaling(distances)
         return self.func(values)
 
@@ -558,11 +582,15 @@ class PipeProfile(DistanceProfile):
     Pipe/compose distance profiles or functions.
     """
 
-    def __init__(self, base: DistanceProfile, func: Union[DistanceProfile, Callable]):
+    def __init__(
+        self,
+        base: DistanceProfile,
+        func: Union[DistanceProfile, Callable]
+    ):
         self.base = base
         self.func = func
 
-    def probability(self, distances: u.Quantity) -> np.ndarray:
+    def probability(self, distances: ArrayLike) -> np.ndarray:
         values = self.base.probability(distances)
         if isinstance(self.func, DistanceProfile):
             # For chaining profiles, apply the second profile to the same distances
@@ -573,7 +601,7 @@ class PipeProfile(DistanceProfile):
         else:
             raise TypeError(f"Right operand must be DistanceProfile or callable. Got {type(self.func)}")
 
-    def weight_scaling(self, distances: u.Quantity) -> np.ndarray:
+    def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
         values = self.base.weight_scaling(distances)
         if isinstance(self.func, DistanceProfile):
             return self.func.weight_scaling(distances)
