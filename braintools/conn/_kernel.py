@@ -112,8 +112,8 @@ class ConvKernel(PointNeuronConnectivity):
         """Generate convolutional kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for kernel connectivity")
@@ -297,8 +297,8 @@ class GaussianKernel(PointNeuronConnectivity):
         """Generate Gaussian kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gaussian kernel connectivity")
@@ -468,8 +468,8 @@ class GaborKernel(PointNeuronConnectivity):
         """Generate Gabor kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gabor kernel connectivity")
@@ -678,8 +678,8 @@ class DoGKernel(PointNeuronConnectivity):
         """Generate DoG kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for DoG kernel connectivity")
@@ -1121,8 +1121,8 @@ class CustomKernel(PointNeuronConnectivity):
         """Generate custom kernel connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for custom kernel connectivity")
@@ -1197,9 +1197,13 @@ class CustomKernel(PointNeuronConnectivity):
 
         # Generate base weights
         weights = init_call(
-            self.weight_init, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions,
+            self.weight_init,
+            n_connections,
+            param_type='weight',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             rng=self.rng
         )
 

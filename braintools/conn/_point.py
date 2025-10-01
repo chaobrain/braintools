@@ -333,8 +333,8 @@ class AllToAll(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
         delays = init_call(
             self.delay_init,
@@ -343,8 +343,8 @@ class AllToAll(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -354,8 +354,8 @@ class AllToAll(PointNeuronConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             model_type='point',
             metadata={
                 'pattern': 'all_to_all',
@@ -434,8 +434,8 @@ class OneToOne(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
         delays = init_call(
             self.delay_init,
@@ -444,8 +444,8 @@ class OneToOne(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -455,8 +455,8 @@ class OneToOne(PointNeuronConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             model_type='point',
             metadata={'pattern': 'one_to_one', 'circular': self.circular}
         )
@@ -523,8 +523,8 @@ class DistanceDependent(PointNeuronConnectivity):
         """Generate distance-dependent connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for spatial connectivity")
@@ -702,8 +702,8 @@ class SmallWorld(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
         delays = init_call(
             self.delay_init,
@@ -712,8 +712,8 @@ class SmallWorld(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -724,8 +724,8 @@ class SmallWorld(PointNeuronConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             metadata={'pattern': 'small_world', 'k': self.k, 'p': self.p}
         )
 
@@ -827,8 +827,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
                 pre_size=pre_size,
                 post_size=post_size,
                 model_type='point',
-                pre_positions=kwargs.get('pre_positions'),
-                post_positions=kwargs.get('post_positions'),
+                pre_positions=kwargs.get('pre_positions', None),
+                post_positions=kwargs.get('post_positions', None),
             )
 
         n_connections = len(pre_indices)
@@ -843,8 +843,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         ) if n_exc_conn > 0 else None
 
         inh_weights = init_call(
@@ -854,8 +854,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         ) if n_inh_conn > 0 else None
 
         # Combine weights in correct order
@@ -914,8 +914,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -926,8 +926,8 @@ class ExcitatoryInhibitory(PointNeuronConnectivity):
             pre_size=pre_size,
             post_size=post_size,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             metadata={
                 'pattern': 'excitatory_inhibitory',
                 'exc_ratio': self.exc_ratio,
@@ -988,8 +988,8 @@ class Custom(PointNeuronConnectivity):
             pre_size=pre_size,
             post_size=post_size,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             metadata={'pattern': 'custom'}
         )
 
@@ -1109,8 +1109,8 @@ class Ring(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
         delays = init_call(
             self.delay_init,
@@ -1119,8 +1119,8 @@ class Ring(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -1131,8 +1131,8 @@ class Ring(PointNeuronConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             metadata={
                 'pattern': 'ring',
                 'neighbors': self.neighbors,
@@ -1246,8 +1246,8 @@ class Grid(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
         delays = init_call(
             self.delay_init,
@@ -1256,8 +1256,8 @@ class Grid(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -1268,8 +1268,8 @@ class Grid(PointNeuronConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             metadata={
                 'pattern': 'grid',
                 'grid_shape': self.grid_shape,
@@ -1334,8 +1334,8 @@ class RadialPatches(PointNeuronConnectivity):
         """Generate radial patch connections."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for radial patch connectivity")
@@ -1353,7 +1353,7 @@ class RadialPatches(PointNeuronConnectivity):
         # Calculate distances
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
         post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        distances = cdist(pre_pos_val, post_pos_val)
+        # distances = cdist(pre_pos_val, post_pos_val)
 
         # Get radius value
         if isinstance(self.patch_radius, u.Quantity):
@@ -1380,7 +1380,6 @@ class RadialPatches(PointNeuronConnectivity):
                 if len(candidates) > 0:
                     random_vals = self.rng.random(len(candidates))
                     selected = candidates[random_vals < self.prob]
-
                     pre_indices.extend([i] * len(selected))
                     post_indices.extend(selected)
 
@@ -1434,7 +1433,11 @@ class RadialPatches(PointNeuronConnectivity):
             model_type='point',
             pre_positions=pre_positions,
             post_positions=post_positions,
-            metadata={'pattern': 'radial_patches', 'patch_radius': self.patch_radius, 'n_patches': self.n_patches}
+            metadata={
+                'pattern': 'radial_patches',
+                'patch_radius': self.patch_radius,
+                'n_patches': self.n_patches,
+            }
         )
 
 
@@ -1526,8 +1529,8 @@ class ScaleFree(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
         delays = init_call(
             self.delay_init,
@@ -1536,8 +1539,8 @@ class ScaleFree(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -1547,8 +1550,8 @@ class ScaleFree(PointNeuronConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             metadata={'pattern': 'scale_free', 'm': self.m}
         )
 
@@ -1619,8 +1622,8 @@ class Regular(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
         delays = init_call(
             self.delay_init,
@@ -1629,8 +1632,8 @@ class Regular(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -1640,8 +1643,8 @@ class Regular(PointNeuronConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             metadata={'pattern': 'regular', 'degree': self.degree}
         )
 
@@ -1729,8 +1732,8 @@ class Modular(PointNeuronConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions'),
-                post_positions=kwargs.get('post_positions'),
+                pre_positions=kwargs.get('pre_positions', None),
+                post_positions=kwargs.get('post_positions', None),
                 model_type='point'
             )
 
@@ -1745,8 +1748,8 @@ class Modular(PointNeuronConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
         delays = init_call(
             self.delay_init,
@@ -1755,8 +1758,8 @@ class Modular(PointNeuronConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions')
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None)
         )
 
         return ConnectionResult(
@@ -1766,8 +1769,8 @@ class Modular(PointNeuronConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions'),
-            post_positions=kwargs.get('post_positions'),
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             metadata={'pattern': 'modular',
                       'n_modules': self.n_modules,
                       'intra_prob': self.intra_prob,
@@ -1829,8 +1832,8 @@ class ClusteredRandom(PointNeuronConnectivity):
         """Generate clustered random connectivity."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions')
-        post_positions = kwargs.get('post_positions')
+        pre_positions = kwargs.get('pre_positions', None)
+        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for clustered random connectivity")

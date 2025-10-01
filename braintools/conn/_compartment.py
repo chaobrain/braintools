@@ -1608,11 +1608,13 @@ class ActivityDependentSynapses(MultiCompartmentConnectivity):
             **kwargs
         )
 
-        result.metadata.update({
-            'plasticity_type': self.plasticity_type,
-            'learning_rate': self.learning_rate,
-            'activity_dependent': True
-        })
+        result.metadata.update(
+            {
+                'plasticity_type': self.plasticity_type,
+                'learning_rate': self.learning_rate,
+                'activity_dependent': True
+            }
+        )
 
         return result
 
@@ -1688,8 +1690,8 @@ class CustomCompartment(MultiCompartmentConnectivity):
             model_type='multi_compartment',
             pre_size=kwargs['pre_size'],
             post_size=kwargs['post_size'],
-            pre_positions=kwargs['pre_positions'],
-            post_positions=kwargs['post_positions'],
+            pre_positions=kwargs.get('pre_positions', None),
+            post_positions=kwargs.get('post_positions', None),
             pre_compartments=np.array(pre_compartments, dtype=np.int64),
             post_compartments=np.array(post_compartments, dtype=np.int64),
             metadata={'pattern': 'custom_compartment'}
