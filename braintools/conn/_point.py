@@ -324,8 +324,8 @@ class AllToAll(PointNeuronConnectivity):
         # Generate weights and delays using initialization classes
         weights = init_call(
             self.weight_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
@@ -334,8 +334,8 @@ class AllToAll(PointNeuronConnectivity):
         )
         delays = init_call(
             self.delay_init,
-            self.rng,
             n_connections,
+            rng=self.rng,
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
