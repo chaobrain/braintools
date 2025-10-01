@@ -281,6 +281,10 @@ Import these from ``braintools.init``:
    MexicanHatProfile
    DoGProfile
    SigmoidProfile
+   BimodalProfile
+   LogisticProfile
+
+
 
 Composition Profiles
 ~~~~~~~~~~~~~~~~~~~~
