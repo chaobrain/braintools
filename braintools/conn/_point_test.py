@@ -50,7 +50,7 @@ from braintools.conn._point import (
     ActivityDependent,
     Custom,
 )
-from braintools.conn import ConstantWeight, UniformDelay
+from braintools.init import Constant, Uniform
 
 
 class TestRandom(unittest.TestCase):
@@ -122,8 +122,8 @@ class TestRandom(unittest.TestCase):
         self.assertEqual(self_connections, 0)
 
     def test_random_with_weights_and_delays(self):
-        weight_init = ConstantWeight(1.5 * u.nS)
-        delay_init = UniformDelay(1.0 * u.ms, 3.0 * u.ms)
+        weight_init = Constant(1.5 * u.nS)
+        delay_init = Uniform(1.0 * u.ms, 3.0 * u.ms)
 
         conn = Random(
             prob=0.15,
@@ -282,8 +282,8 @@ class TestAllToAll(unittest.TestCase):
         self.assertEqual(expected_connections, actual_connections)
 
     def test_all_to_all_with_weights_and_delays(self):
-        weight_init = ConstantWeight(0.8 * u.nS)
-        delay_init = ConstantWeight(1.5 * u.ms)
+        weight_init = Constant(0.8 * u.nS)
+        delay_init = Constant(1.5 * u.ms)
 
         conn = AllToAll(
             include_self_connections=True,
@@ -412,8 +412,8 @@ class TestOneToOne(unittest.TestCase):
         np.testing.assert_array_equal(result2.post_indices, expected_post2)
 
     def test_one_to_one_with_weights_and_delays(self):
-        weight_init = ConstantWeight(2.5 * u.nS)
-        delay_init = ConstantWeight(0.8 * u.ms)
+        weight_init = Constant(2.5 * u.nS)
+        delay_init = Constant(0.8 * u.ms)
 
         conn = OneToOne(
             weight=weight_init,
@@ -544,8 +544,8 @@ class TestDistanceDependent(unittest.TestCase):
             def probability(self, distances):
                 return np.full(distances.shape, 0.8)
 
-        weight_init = ConstantWeight(1.2 * u.nS)
-        delay_init = ConstantWeight(2.0 * u.ms)
+        weight_init = Constant(1.2 * u.nS)
+        delay_init = Constant(2.0 * u.ms)
 
         conn = DistanceDependent(
             distance_profile=ConstantProfile(),
@@ -1036,8 +1036,8 @@ class TestExcitatoryInhibitory(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_basic_excitatory_inhibitory(self):
-        exc_weight_init = ConstantWeight(1.2 * u.nS)
-        inh_weight_init = ConstantWeight(-0.8 * u.nS)
+        exc_weight_init = Constant(1.2 * u.nS)
+        inh_weight_init = Constant(-0.8 * u.nS)
 
         conn = ExcitatoryInhibitory(
             exc_ratio=0.75,
@@ -1072,7 +1072,7 @@ class TestExcitatoryInhibitory(unittest.TestCase):
                 np.testing.assert_array_almost_equal(inh_weights, -0.8)
 
     def test_excitatory_inhibitory_only_excitatory(self):
-        exc_weight_init = ConstantWeight(1.0 * u.nS)
+        exc_weight_init = Constant(1.0 * u.nS)
 
         conn = ExcitatoryInhibitory(
             exc_ratio=1.0,  # All excitatory
@@ -1093,7 +1093,7 @@ class TestExcitatoryInhibitory(unittest.TestCase):
             self.assertTrue(np.all(weights > 0))
 
     def test_excitatory_inhibitory_only_inhibitory(self):
-        inh_weight_init = ConstantWeight(-1.5 * u.nS)
+        inh_weight_init = Constant(-1.5 * u.nS)
 
         conn = ExcitatoryInhibitory(
             exc_ratio=0.0,  # All inhibitory
@@ -1114,7 +1114,7 @@ class TestExcitatoryInhibitory(unittest.TestCase):
             self.assertTrue(np.all(weights < 0))
 
     def test_excitatory_inhibitory_with_delays(self):
-        delay_init = ConstantWeight(2.0 * u.ms)
+        delay_init = Constant(2.0 * u.ms)
 
         conn = ExcitatoryInhibitory(
             exc_ratio=0.6,

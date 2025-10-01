@@ -32,7 +32,7 @@ import unittest
 import brainunit as u
 import numpy as np
 
-from braintools.conn._kernel import (
+from braintools.conn import (
     ConvKernel,
     GaussianKernel,
     GaborKernel,
@@ -42,7 +42,7 @@ from braintools.conn._kernel import (
     LaplacianKernel,
     CustomKernel,
 )
-from braintools.conn import ConstantWeight, UniformDelay
+from braintools.init import Constant, Uniform
 
 
 class TestConvKernel(unittest.TestCase):
@@ -119,8 +119,8 @@ class TestConvKernel(unittest.TestCase):
 
         positions = np.array([[0, 0], [10, 0], [20, 0]]) * u.um
 
-        weight_init = ConstantWeight(2.0 * u.nS)
-        delay_init = UniformDelay(1.0 * u.ms, 3.0 * u.ms)
+        weight_init = Constant(2.0 * u.nS)
+        delay_init = Uniform(1.0 * u.ms, 3.0 * u.ms)
 
         conn = ConvKernel(
             kernel=kernel,
@@ -388,7 +388,7 @@ class TestGaussianKernel(unittest.TestCase):
     def test_gaussian_kernel_with_weights(self):
         positions = np.array([[0, 0], [10, 0]]) * u.um
 
-        weight_init = ConstantWeight(2.0 * u.nS)
+        weight_init = Constant(2.0 * u.nS)
 
         conn = GaussianKernel(
             sigma=15 * u.um,
@@ -609,7 +609,7 @@ class TestGaborKernel(unittest.TestCase):
     def test_gabor_kernel_with_weights(self):
         positions = np.array([[0, 0], [10, 0]]) * u.um
 
-        weight_init = ConstantWeight(1.5 * u.nS)
+        weight_init = Constant(1.5 * u.nS)
 
         conn = GaborKernel(
             sigma=15 * u.um,
@@ -830,7 +830,7 @@ class TestDoGKernel(unittest.TestCase):
     def test_dog_kernel_with_weights(self):
         positions = np.array([[0, 0], [10, 0]]) * u.um
 
-        weight_init = ConstantWeight(2.0 * u.nS)
+        weight_init = Constant(2.0 * u.nS)
 
         conn = DoGKernel(
             sigma_center=8 * u.um,
@@ -965,7 +965,7 @@ class TestMexicanHat(unittest.TestCase):
     def test_mexican_hat_with_weights(self):
         positions = np.array([[0, 0], [10, 0]]) * u.um
 
-        weight_init = ConstantWeight(1.5 * u.nS)
+        weight_init = Constant(1.5 * u.nS)
 
         conn = MexicanHat(
             sigma=12 * u.um,
@@ -1095,7 +1095,7 @@ class TestSobelKernel(unittest.TestCase):
     def test_sobel_with_weights(self):
         positions = np.array([[0, 0], [5, 5]]) * u.um
 
-        weight_init = ConstantWeight(1.2 * u.nS)
+        weight_init = Constant(1.2 * u.nS)
 
         conn = SobelKernel(
             direction='horizontal',
@@ -1205,7 +1205,7 @@ class TestLaplacianKernel(unittest.TestCase):
     def test_laplacian_with_weights(self):
         positions = np.array([[0, 0], [8, 0]]) * u.um
 
-        weight_init = ConstantWeight(0.8 * u.nS)
+        weight_init = Constant(0.8 * u.nS)
 
         conn = LaplacianKernel(
             kernel_type='4-connected',
@@ -1340,8 +1340,8 @@ class TestCustomKernel(unittest.TestCase):
 
         positions = np.array([[0, 0], [8, 0]]) * u.um
 
-        weight_init = ConstantWeight(1.5 * u.nS)
-        delay_init = UniformDelay(1.0 * u.ms, 2.0 * u.ms)
+        weight_init = Constant(1.5 * u.nS)
+        delay_init = Uniform(1.0 * u.ms, 2.0 * u.ms)
 
         conn = CustomKernel(
             kernel_func=simple_kernel,
