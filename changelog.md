@@ -2,6 +2,70 @@
 
 
 
+## Version 0.0.13
+
+### Major Features
+
+#### New Initialization Framework (`braintools.init`)
+- **Unified initialization API** consolidating all weight and parameter initialization strategies
+- **Distance-based initialization**: Support for distance-modulated weight patterns
+- **Variance scaling strategies**: Xavier, He, LeCun initialization methods
+- **Orthogonal initialization** for improved training stability
+- **Composite distributions** for complex initialization patterns
+- Simplified API with consistent parameter naming across all initializers
+
+#### Advanced Connectivity Patterns (`braintools.conn`)
+- **Topological network patterns**:
+  - Small-world and scale-free networks
+  - Hierarchical and core-periphery structures
+  - Modular and clustered random connectivity
+- **Enhanced biological connectivity**:
+  - Excitatory-inhibitory balanced networks
+  - Distance-dependent connectivity with multiple profiles
+  - Compartment-specific connectivity (dendrite, soma, axon)
+- **Spatial connectivity improvements**:
+  - 2D convolutional kernels for spatial networks
+  - Position-based connectivity with normalization
+  - Distance modulation using composable profiles
+
+#### Comprehensive Optax Integration (`braintools.optim`)
+- **Full Optax optimizer support**: Adam, SGD, RMSProp, AdaGrad, AdaDelta, and more
+- **Advanced learning rate schedulers**:
+  - Cosine annealing with warm restarts
+  - Polynomial decay with warmup
+  - Piecewise constant schedules
+  - Sequential and chained schedulers
+- **Improved optimizer state management** with unique state handling
+- **Parameter groups** with per-group learning rates
+
+### Improvements
+
+#### API Enhancements
+- Simplified `conn` module API with direct class access
+- Refactored initialization calls for consistency
+- Improved type annotations throughout
+- Better default parameter handling
+
+#### Documentation & Tutorials
+- Updated tutorial structure for connectivity patterns
+- New examples for topological networks
+- Enhanced API documentation with detailed examples
+- Improved code readability in tutorials
+
+### Code Quality
+- Comprehensive test coverage for new features
+- Better error handling and validation
+- Consistent naming conventions
+- Removed deprecated and redundant code
+
+### Breaking Changes
+- Renamed `PointNeuronConnectivity` to `PointConnectivity`
+- Renamed `ConvKernel` to `Conv2dKernel`
+- Unified initializer names (e.g., `ConstantWeight` → `Constant`)
+- Removed `PopulationRateConnectivity` class
+- Changed some parameter names for clarity (e.g., unified use of `rng` parameter)
+
+
 ## Version 0.0.12
 
 ### Major Features
