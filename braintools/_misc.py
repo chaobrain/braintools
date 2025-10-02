@@ -40,6 +40,3 @@ def randn_like(y):
 Initializer = Union[brainstate.typing.ArrayLike, Callable]
 InitializerOrNot = Optional[Union[brainstate.typing.ArrayLike, Callable]]
 
-
-def init(fn: Callable, rng, size):
-    return brainstate.init.param(lambda shape: fn(rng, shape), size)
