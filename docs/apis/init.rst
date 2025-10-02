@@ -66,6 +66,7 @@ Simple initialization strategies for constant values and uniform random sampling
    :template: classtemplate.rst
 
    Constant
+   ZeroInit
    Uniform
 
 Gaussian-like Distributions
