@@ -52,6 +52,8 @@ They provide a good balance between convergence speed and stability for most app
    :template: classtemplate.rst
 
    SGD
+   Momentum
+   MomentumNesterov
    Adam
    AdamW
    Adagrad
