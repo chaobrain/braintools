@@ -16,12 +16,14 @@
 
 from typing import Dict, Hashable
 
+import brainstate
 from brainstate import State
 from brainstate.graph import Node
 from brainstate.typing import PyTree
 
 __all__ = [
     'Optimizer',
+    'OptimState',
 ]
 
 
@@ -52,3 +54,7 @@ class Optimizer(Node):
             The weight gradients.
         """
         raise NotImplementedError
+
+
+class OptimState(brainstate.LongTermState):
+    pass

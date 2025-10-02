@@ -74,16 +74,15 @@ class Constant(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, value: ArrayLike):
+    def __init__(self, value: ArrayLike = 0., unit: u.Unit = u.UNITLESS):
         self.value = value
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
-        if isinstance(size, int):
-            return u.math.full(size, self.value)
-        return u.math.full(size, self.value)
+        return u.maybe_decimal(u.math.full(size, self.value) * self.unit)
 
     def __repr__(self):
-        return f'Constant(value={self.value})'
+        return f'Constant(value={self.value}, unit={self.unit})'
 
 
 class Uniform(Initialization):

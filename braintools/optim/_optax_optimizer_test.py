@@ -102,7 +102,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 
         # Check default param group is created
         self.assertEqual(len(optimizer.param_groups), 1)
-        self.assertEqual(optimizer.param_groups[0]['lr'], 0.01)
+        self.assertEqual(optimizer.param_groups[0]['lr'].value, 0.01)
 
     def test_step_updates_parameters(self):
         """Test that step() updates parameters."""

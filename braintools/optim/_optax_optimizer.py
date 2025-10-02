@@ -19,11 +19,11 @@ from typing import Dict, Optional, Union, Callable, Any, List, Tuple
 
 import jax.tree
 import optax
-from brainstate import LongTermState, State, maybe_state
+from brainstate import State, maybe_state
 from brainstate.typing import PyTree
 
 from braintools.file._msg_checkpoint import msgpack_from_state_dict
-from ._base import Optimizer
+from ._base import Optimizer, OptimState
 from ._optax_lr_scheduler import LRScheduler, ConstantLR
 from ._state_uniquifier import UniqueStateManager
 
@@ -31,6 +31,7 @@ MaskOrFn = Optional[Union[Any, Callable]]
 
 __all__ = [
     'OptaxOptimizer',
+
     # Main Optimizers
     'SGD',
     'Adam',
@@ -85,9 +86,9 @@ class OptaxOptimizer(Optimizer):
     ----------
     param_states : UniqueStateManager
         Container for PyTree of brainstate.State objects representing trainable parameters.
-    opt_state : LongTermState
+    opt_state : OptimState
         Optimizer state containing momentum, variance, and other optimizer-specific values.
-    step_count : LongTermState
+    step_count : OptimState
         Number of optimization steps taken.
     param_groups : list of dict
         List of parameter groups with their own hyperparameters. Each group is a dictionary
@@ -180,12 +181,12 @@ class OptaxOptimizer(Optimizer):
     __module__ = 'braintools.optim'
 
     param_states: UniqueStateManager  # Container for PyTree of brainstate.State objects
-    opt_state: Optional[LongTermState]
-    step_count: LongTermState
+    opt_state: Optional[OptimState]
+    step_count: OptimState
     base_lr: float
     current_lr: float
     param_groups: List[Dict[str, Any]]
-    param_groups_opt_states: List[LongTermState]
+    param_groups_opt_states: List[OptimState]
     schedulers: List[LRScheduler]
 
     def __init__(
@@ -217,7 +218,7 @@ class OptaxOptimizer(Optimizer):
         self.weight_decay = weight_decay
         self.grad_clip_norm = grad_clip_norm
         self.grad_clip_value = grad_clip_value
-        self.step_count = LongTermState(0)
+        self.step_count = OptimState(0)
         self.param_groups = []
         self.param_groups_opt_states = []  # Changed to list
         self._schedulers = []
@@ -227,7 +228,7 @@ class OptaxOptimizer(Optimizer):
         lr = ConstantLR(base_lr=lr, factor=1.0, total_iters=0) if not isinstance(lr, LRScheduler) else lr
         self._lr_scheduler = lr
         self._base_lr = lr.base_lrs[0] if lr.base_lrs else 1e-3
-        self._current_lr = LongTermState(self._base_lr)
+        self._current_lr = OptimState(self._base_lr)
         lr.attach_optimizer(self)
 
         tx = self.default_tx() if tx is None else tx
@@ -305,7 +306,7 @@ class OptaxOptimizer(Optimizer):
         manager = UniqueStateManager()
         manager.merge_with(params)
         param_values = manager.to_dict_value()
-        group_lr_state = LongTermState(kwargs.get('lr', self.base_lr))
+        group_lr_state = OptimState(kwargs.get('lr', self.base_lr))
 
         group = {
             'params': manager.to_dict(),
@@ -339,7 +340,7 @@ class OptaxOptimizer(Optimizer):
         group['tx'] = group_tx
 
         # Initialize and store the optimizer state for this group
-        group_opt_state = LongTermState(group_tx.init(param_values))
+        group_opt_state = OptimState(group_tx.init(param_values))
         self.param_groups_opt_states.append(group_opt_state)
 
     def register_trainable_weights(self, param_states: PyTree[State]):
@@ -355,7 +356,7 @@ class OptaxOptimizer(Optimizer):
 
         # Initialize optimizer state using values from State objects
         param_values = self.param_states.to_pytree_value()
-        self.opt_state = LongTermState(self.tx.init(param_values))
+        self.opt_state = OptimState(self.tx.init(param_values))
 
         # Create a default param group with all registered parameters
         # This maintains compatibility with PyTorch-like behavior
@@ -363,7 +364,7 @@ class OptaxOptimizer(Optimizer):
             self.param_groups = [
                 {
                     'params': self.param_states.to_pytree(),
-                    'lr': self.base_lr,
+                    'lr': self._current_lr,
                     'weight_decay': self.weight_decay,
                 }
             ]
@@ -574,7 +575,7 @@ class OptaxOptimizer(Optimizer):
 
         if 'opt_state' in state_dict:
             if self.opt_state is None:
-                self.opt_state = LongTermState(state_dict['opt_state'])
+                self.opt_state = OptimState(state_dict['opt_state'])
             else:
                 self.opt_state.value = state_dict['opt_state']
 
@@ -584,7 +585,7 @@ class OptaxOptimizer(Optimizer):
                 if i < len(self.param_groups_opt_states):
                     self.param_groups_opt_states[i].value = s
                 else:
-                    self.param_groups_opt_states.append(LongTermState(s))
+                    self.param_groups_opt_states.append(OptimState(s))
 
     def add_scheduler(self, scheduler: LRScheduler):
         """Add a learning rate scheduler."""

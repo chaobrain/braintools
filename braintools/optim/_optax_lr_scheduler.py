@@ -21,7 +21,8 @@ from typing import Dict, Optional, Union, Callable, Any, List, Sequence
 
 import brainstate.transform
 import jax.numpy as jnp
-from brainstate import LongTermState
+
+from ._base import OptimState
 
 __all__ = [
     # Learning Rate Schedulers
@@ -66,7 +67,7 @@ class LRScheduler:
           last_epoch: The index of the last epoch.
         """
         self.optimizer = None  # Will be set when attached to optimizer
-        self.last_epoch = LongTermState(last_epoch)
+        self.last_epoch = OptimState(last_epoch)
 
         # Support both single lr and multiple lrs for param groups
         if isinstance(base_lr, (list, tuple)):
@@ -75,7 +76,7 @@ class LRScheduler:
             self.base_lrs = [base_lr]
 
         # Current learning rates
-        self._current_lrs = LongTermState(list(self.base_lrs))
+        self._current_lrs = OptimState(list(self.base_lrs))
 
     @property
     def current_lrs(self):
@@ -120,10 +121,7 @@ class LRScheduler:
         # If attached to update its learning rates
         if self.optimizer is not None:
             for param_group, lr in zip(self.optimizer.param_groups, values):
-                if isinstance(param_group.get('lr'), LongTermState):
-                    param_group['lr'].value = lr
-                else:
-                    param_group['lr'] = lr
+                param_group['lr'].value = lr
 
             # Update the main optimizer lr
             self.optimizer.current_lr = values[0]
@@ -2673,9 +2671,9 @@ class ReduceLROnPlateau(LRScheduler):
         else:
             self.min_lrs = [min_lr]
 
-        self.cooldown_counter = LongTermState(0)
-        self.best = LongTermState(jnp.inf if self.mode == 'min' else -jnp.inf)
-        self.num_bad_epochs = LongTermState(0)
+        self.cooldown_counter = OptimState(0)
+        self.best = OptimState(jnp.inf if self.mode == 'min' else -jnp.inf)
+        self.num_bad_epochs = OptimState(0)
         self.mode_worse = float('inf') if mode == 'min' else -float('inf')
 
     def step(self, metric: float, epoch: Optional[int] = None):
@@ -3729,8 +3727,8 @@ class SequentialLR(LRScheduler):
         self.milestones = jnp.array(milestones)
         self.n_schedulers = len(schedulers)
 
-        # Store current scheduler index as LongTermState for JIT compatibility
-        self._current_scheduler_idx = LongTermState(0)
+        # Store current scheduler index as OptimState for JIT compatibility
+        self._current_scheduler_idx = OptimState(0)
         self._update_scheduler_idx(last_epoch)
 
     def _update_scheduler_idx(self, epoch):
@@ -4081,8 +4079,8 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         self.T_0 = T_0
         self.T_mult = T_mult
         self.eta_min = eta_min
-        self.T_cur = LongTermState(0)
-        self.T_i = LongTermState(T_0)
+        self.T_cur = OptimState(0)
+        self.T_i = OptimState(T_0)
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
