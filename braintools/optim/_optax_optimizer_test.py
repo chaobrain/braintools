@@ -102,7 +102,7 @@ class TestOptaxOptimizer(unittest.TestCase):
 
         # Check default param group is created
         self.assertEqual(len(optimizer.param_groups), 1)
-        self.assertEqual(optimizer.param_groups[0]['lr'], 0.01)
+        self.assertEqual(optimizer.param_groups[0]['lr'].value, 0.01)
 
     def test_step_updates_parameters(self):
         """Test that step() updates parameters."""
@@ -2214,6 +2214,112 @@ class TestOptimizerExample(unittest.TestCase):
 
         # Learning rate should have decayed
         assert optimizer.current_lr < 0.1
+
+    # ============================================================================
+    # Momentum Optimizer Examples
+    # ============================================================================
+
+    def test_momentum_basic(self):
+        """Test basic Momentum optimizer."""
+        model = SimpleModelV1()
+        optimizer = braintools.optim.Momentum(lr=0.01, momentum=0.9)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        assert optimizer.current_lr == 0.01
+        assert optimizer.momentum == 0.9
+
+    def test_momentum_with_weight_decay(self):
+        """Test Momentum optimizer with weight decay."""
+        model = SimpleModelV1()
+        optimizer = braintools.optim.Momentum(lr=0.01, momentum=0.9, weight_decay=0.0001)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        assert optimizer.weight_decay == 0.0001
+        assert optimizer.momentum == 0.9
+
+    def test_momentum_with_gradient_clipping(self):
+        """Test Momentum optimizer with gradient clipping."""
+        model = SimpleModelV1()
+        optimizer = braintools.optim.Momentum(
+            lr=0.01,
+            momentum=0.9,
+            grad_clip_norm=1.0,
+            grad_clip_value=0.5
+        )
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        assert optimizer.grad_clip_norm == 1.0
+        assert optimizer.grad_clip_value == 0.5
+
+    def test_momentum_with_scheduler(self):
+        """Test Momentum optimizer with learning rate scheduling."""
+        model = SimpleModelV1()
+        scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=28, gamma=0.1)
+        optimizer = braintools.optim.Momentum(lr=scheduler, momentum=0.9)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        # Verify initial learning rate
+        assert optimizer.current_lr == 0.1
+
+        # Step the scheduler multiple times
+        for _ in range(30):
+            scheduler.step()
+
+        # Learning rate should have decayed
+        assert optimizer.current_lr < 0.1
+
+    # ============================================================================
+    # MomentumNesterov Optimizer Examples
+    # ============================================================================
+
+    def test_momentum_nesterov_basic(self):
+        """Test basic MomentumNesterov optimizer."""
+        model = SimpleModelV1()
+        optimizer = braintools.optim.MomentumNesterov(lr=0.01, momentum=0.9)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        assert optimizer.current_lr == 0.01
+        assert optimizer.momentum == 0.9
+
+    def test_momentum_nesterov_with_weight_decay(self):
+        """Test MomentumNesterov optimizer with weight decay."""
+        model = SimpleModelV1()
+        optimizer = braintools.optim.MomentumNesterov(lr=0.01, momentum=0.9, weight_decay=0.0001)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        assert optimizer.weight_decay == 0.0001
+        assert optimizer.momentum == 0.9
+
+    def test_momentum_nesterov_with_gradient_clipping(self):
+        """Test MomentumNesterov optimizer with gradient clipping."""
+        model = SimpleModelV1()
+        optimizer = braintools.optim.MomentumNesterov(
+            lr=0.01,
+            momentum=0.9,
+            grad_clip_norm=1.0,
+            grad_clip_value=0.5
+        )
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        assert optimizer.grad_clip_norm == 1.0
+        assert optimizer.grad_clip_value == 0.5
+
+    def test_momentum_nesterov_with_scheduler(self):
+        """Test MomentumNesterov optimizer with learning rate scheduling."""
+        model = SimpleModelV1()
+        scheduler = braintools.optim.ExponentialLR(base_lr=0.01, gamma=0.95)
+        optimizer = braintools.optim.MomentumNesterov(lr=scheduler, momentum=0.9)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        # Verify initial learning rate
+        assert optimizer.current_lr == 0.01
+
+        # Step the scheduler multiple times
+        for _ in range(10):
+            scheduler.step()
+
+        # Learning rate should have decayed
+        assert optimizer.current_lr < 0.01
 
     # ============================================================================
     # Adam Optimizer Examples

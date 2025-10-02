@@ -2,6 +2,28 @@
 
 
 
+## Version 0.0.14
+
+### New Features
+
+#### Optimizer Enhancements (`braintools.optim`)
+- **Momentum optimizers**: Added `Momentum` and `MomentumNesterov` optimizers with gradient transformations
+- **Improved state management**: Refactored optimizer state handling with new `OptimState` class for better encapsulation
+
+#### Initialization Updates (`braintools.init`)
+- **ZeroInit initializer**: New zero initialization class for weights and parameters
+- **VarianceScaling export**: Added `VarianceScaling` to module exports for easier access
+
+### Improvements
+- Enhanced optimizer state management for better performance and maintainability
+- Simplified initialization API with additional export options
+- Updated documentation for new initialization methods
+
+### Internal Changes
+- Refactored test structure for initialization module
+- Improved learning rate scheduler implementation
+
+
 ## Version 0.0.13
 
 ### Major Features

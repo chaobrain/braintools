@@ -24,6 +24,7 @@ import numpy as np
 
 from braintools.init import (
     Constant,
+    ZeroInit,
     Uniform,
     Normal,
     LogNormal,
@@ -35,24 +36,60 @@ from braintools.init import (
 )
 
 
+class TestZeroInit(unittest.TestCase):
+    def setUp(self):
+        self.rng = np.random.default_rng(42)
+
+    def test_zero_values_with_unit(self):
+        """Test that all values are zero with specified unit."""
+        init = ZeroInit(u.siemens)
+        weights = init(100, rng=self.rng)
+        self.assertEqual(weights.shape, (100,))
+        self.assertTrue(np.all(weights == 0.0 * u.siemens))
+        self.assertEqual(weights.unit, u.siemens)
+
+    def test_zero_values_unitless(self):
+        """Test that all values are zero without unit."""
+        init = ZeroInit()
+        weights = init(100, rng=self.rng)
+        self.assertEqual(weights.shape, (100,))
+        self.assertTrue(np.all(weights == 0.0))
+
+    def test_zero_with_tuple_size(self):
+        """Test zero initialization with multi-dimensional size."""
+        init = ZeroInit(u.siemens)
+        weights = init((10, 20), rng=self.rng)
+        self.assertEqual(weights.shape, (10, 20))
+        self.assertTrue(np.all(weights == 0.0 * u.siemens))
+
+    def test_zero_with_different_units(self):
+        """Test zero initialization with different units."""
+        init = ZeroInit(u.mS)
+        weights = init(50, rng=self.rng)
+        self.assertEqual(weights.shape, (50,))
+        self.assertTrue(np.all(weights == 0.0 * u.mS))
+        self.assertEqual(weights.unit, u.mS)
+
+    def test_inheritance_from_constant(self):
+        """Test that ZeroInit inherits from Constant correctly."""
+        init = ZeroInit(u.siemens)
+        self.assertIsInstance(init, Constant)
+        self.assertEqual(init.value, 0.0)
+        self.assertEqual(init.unit, u.siemens)
+
+    def test_repr(self):
+        """Test string representation."""
+        init = ZeroInit(u.siemens)
+        repr_str = repr(init)
+        self.assertIn('ZeroInit', repr_str)
+        self.assertIn('S', repr_str)  # siemens is represented as 'S'
+
+        init_unitless = ZeroInit()
+        repr_str_unitless = repr(init_unitless)
+        self.assertIn('ZeroInit', repr_str_unitless)
+
+
 class TestConstant(unittest.TestCase):
-    """
-    Test Constant initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import Constant
-
-        init = Constant(0.5 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(100, rng=rng)
-        assert np.all(weights == 0.5 * u.siemens)
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -76,23 +113,6 @@ class TestConstant(unittest.TestCase):
 
 
 class TestUniform(unittest.TestCase):
-    """
-    Test Uniform initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import Uniform
-
-        init = Uniform(0.1 * u.siemens, 1.0 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(1000, rng=rng)
-        assert np.all((weights >= 0.1 * u.siemens) & (weights < 1.0 * u.siemens))
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -116,23 +136,6 @@ class TestUniform(unittest.TestCase):
 
 
 class TestNormal(unittest.TestCase):
-    """
-    Test Normal initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import Normal
-
-        init = Normal(0.5 * u.siemens, 0.1 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(1000, rng=rng)
-        assert abs(np.mean(weights.mantissa) - 0.5) < 0.05
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -156,23 +159,6 @@ class TestNormal(unittest.TestCase):
 
 
 class TestLogNormal(unittest.TestCase):
-    """
-    Test LogNormal initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import LogNormal
-
-        init = LogNormal(0.5 * u.siemens, 0.2 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(1000, rng=rng)
-        assert np.all(weights > 0 * u.siemens)
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -194,23 +180,6 @@ class TestLogNormal(unittest.TestCase):
 
 
 class TestGamma(unittest.TestCase):
-    """
-    Test Gamma initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import Gamma
-
-        init = Gamma(shape=2.0, scale=0.5 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(1000, rng=rng)
-        assert np.all(weights >= 0 * u.siemens)
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -235,23 +204,6 @@ class TestGamma(unittest.TestCase):
 
 
 class TestExponential(unittest.TestCase):
-    """
-    Test Exponential initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import Exponential
-
-        init = Exponential(0.5 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(1000, rng=rng)
-        assert np.all(weights >= 0 * u.siemens)
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -274,28 +226,6 @@ class TestExponential(unittest.TestCase):
 
 
 class TestTruncatedNormal(unittest.TestCase):
-    """
-    Test TruncatedNormal initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import TruncatedNormal
-
-        init = TruncatedNormal(
-            mean=0.5 * u.siemens,
-            std=0.2 * u.siemens,
-            low=0.0 * u.siemens,
-            high=1.0 * u.siemens
-        )
-        rng = np.random.default_rng(0)
-        weights = init(1000, rng=rng)
-        assert np.all((weights >= 0.0 * u.siemens) & (weights <= 1.0 * u.siemens))
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -347,23 +277,6 @@ class TestTruncatedNormal(unittest.TestCase):
 
 
 class TestBeta(unittest.TestCase):
-    """
-    Test Beta initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import Beta
-
-        init = Beta(alpha=2.0, beta=5.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(1000, rng=rng)
-        assert np.all((weights >= 0.0 * u.siemens) & (weights <= 1.0 * u.siemens))
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -398,23 +311,6 @@ class TestBeta(unittest.TestCase):
 
 
 class TestWeibull(unittest.TestCase):
-    """
-    Test Weibull initialization.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        import numpy as np
-        import brainunit as u
-        from braintools.conn import Weibull
-
-        init = Weibull(shape=1.5, scale=0.5 * u.siemens)
-        rng = np.random.default_rng(0)
-        weights = init(1000, rng=rng)
-        assert np.all(weights >= 0 * u.siemens)
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
@@ -430,10 +326,6 @@ class TestWeibull(unittest.TestCase):
 
 
 class TestEdgeCases(unittest.TestCase):
-    """
-    Test edge cases for basic distributions.
-    """
-
     def setUp(self):
         self.rng = np.random.default_rng(42)
 

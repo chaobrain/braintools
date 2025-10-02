@@ -35,6 +35,7 @@ from brainstate.typing import ArrayLike
 from ._init_base import Initialization
 
 __all__ = [
+    'VarianceScaling',
     'KaimingUniform',
     'KaimingNormal',
     'XavierUniform',

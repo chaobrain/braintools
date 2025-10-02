@@ -19,11 +19,11 @@ from typing import Dict, Optional, Union, Callable, Any, List, Tuple
 
 import jax.tree
 import optax
-from brainstate import LongTermState, State, maybe_state
+from brainstate import State, maybe_state
 from brainstate.typing import PyTree
 
 from braintools.file._msg_checkpoint import msgpack_from_state_dict
-from ._base import Optimizer
+from ._base import Optimizer, OptimState
 from ._optax_lr_scheduler import LRScheduler, ConstantLR
 from ._state_uniquifier import UniqueStateManager
 
@@ -31,8 +31,11 @@ MaskOrFn = Optional[Union[Any, Callable]]
 
 __all__ = [
     'OptaxOptimizer',
+
     # Main Optimizers
     'SGD',
+    'Momentum',
+    'MomentumNesterov',
     'Adam',
     'AdamW',
     'Adagrad',
@@ -85,9 +88,9 @@ class OptaxOptimizer(Optimizer):
     ----------
     param_states : UniqueStateManager
         Container for PyTree of brainstate.State objects representing trainable parameters.
-    opt_state : LongTermState
+    opt_state : OptimState
         Optimizer state containing momentum, variance, and other optimizer-specific values.
-    step_count : LongTermState
+    step_count : OptimState
         Number of optimization steps taken.
     param_groups : list of dict
         List of parameter groups with their own hyperparameters. Each group is a dictionary
@@ -180,12 +183,12 @@ class OptaxOptimizer(Optimizer):
     __module__ = 'braintools.optim'
 
     param_states: UniqueStateManager  # Container for PyTree of brainstate.State objects
-    opt_state: Optional[LongTermState]
-    step_count: LongTermState
+    opt_state: Optional[OptimState]
+    step_count: OptimState
     base_lr: float
     current_lr: float
     param_groups: List[Dict[str, Any]]
-    param_groups_opt_states: List[LongTermState]
+    param_groups_opt_states: List[OptimState]
     schedulers: List[LRScheduler]
 
     def __init__(
@@ -217,7 +220,7 @@ class OptaxOptimizer(Optimizer):
         self.weight_decay = weight_decay
         self.grad_clip_norm = grad_clip_norm
         self.grad_clip_value = grad_clip_value
-        self.step_count = LongTermState(0)
+        self.step_count = OptimState(0)
         self.param_groups = []
         self.param_groups_opt_states = []  # Changed to list
         self._schedulers = []
@@ -227,7 +230,7 @@ class OptaxOptimizer(Optimizer):
         lr = ConstantLR(base_lr=lr, factor=1.0, total_iters=0) if not isinstance(lr, LRScheduler) else lr
         self._lr_scheduler = lr
         self._base_lr = lr.base_lrs[0] if lr.base_lrs else 1e-3
-        self._current_lr = LongTermState(self._base_lr)
+        self._current_lr = OptimState(self._base_lr)
         lr.attach_optimizer(self)
 
         tx = self.default_tx() if tx is None else tx
@@ -305,7 +308,7 @@ class OptaxOptimizer(Optimizer):
         manager = UniqueStateManager()
         manager.merge_with(params)
         param_values = manager.to_dict_value()
-        group_lr_state = LongTermState(kwargs.get('lr', self.base_lr))
+        group_lr_state = OptimState(kwargs.get('lr', self.base_lr))
 
         group = {
             'params': manager.to_dict(),
@@ -339,7 +342,7 @@ class OptaxOptimizer(Optimizer):
         group['tx'] = group_tx
 
         # Initialize and store the optimizer state for this group
-        group_opt_state = LongTermState(group_tx.init(param_values))
+        group_opt_state = OptimState(group_tx.init(param_values))
         self.param_groups_opt_states.append(group_opt_state)
 
     def register_trainable_weights(self, param_states: PyTree[State]):
@@ -355,7 +358,7 @@ class OptaxOptimizer(Optimizer):
 
         # Initialize optimizer state using values from State objects
         param_values = self.param_states.to_pytree_value()
-        self.opt_state = LongTermState(self.tx.init(param_values))
+        self.opt_state = OptimState(self.tx.init(param_values))
 
         # Create a default param group with all registered parameters
         # This maintains compatibility with PyTorch-like behavior
@@ -363,7 +366,7 @@ class OptaxOptimizer(Optimizer):
             self.param_groups = [
                 {
                     'params': self.param_states.to_pytree(),
-                    'lr': self.base_lr,
+                    'lr': self._current_lr,
                     'weight_decay': self.weight_decay,
                 }
             ]
@@ -478,8 +481,8 @@ class OptaxOptimizer(Optimizer):
                     )
 
             # Handle any remaining parameters not in any param_group
-            params = self.param_states.to_dict()
-            param_values = self.param_states.to_dict_value()
+            params = self.param_states.to_pytree()
+            param_values = self.param_states.to_pytree_value()
             unprocessed_params = set(params.keys()) - processed_params
 
             if unprocessed_params:
@@ -502,8 +505,8 @@ class OptaxOptimizer(Optimizer):
                     params[k].value = new_params[k]
         else:
             # Original implementation for backward compatibility
-            param_states = self.param_states.to_dict()
-            param_values = self.param_states.to_dict_value()
+            param_states = self.param_states.to_pytree()
+            param_values = self.param_states.to_pytree_value()
             # Fix: create dict not set
             filtered_grads = {k: grads[k] for k in param_values.keys() if k in grads}
 
@@ -574,7 +577,7 @@ class OptaxOptimizer(Optimizer):
 
         if 'opt_state' in state_dict:
             if self.opt_state is None:
-                self.opt_state = LongTermState(state_dict['opt_state'])
+                self.opt_state = OptimState(state_dict['opt_state'])
             else:
                 self.opt_state.value = state_dict['opt_state']
 
@@ -584,7 +587,7 @@ class OptaxOptimizer(Optimizer):
                 if i < len(self.param_groups_opt_states):
                     self.param_groups_opt_states[i].value = s
                 else:
-                    self.param_groups_opt_states.append(LongTermState(s))
+                    self.param_groups_opt_states.append(OptimState(s))
 
     def add_scheduler(self, scheduler: LRScheduler):
         """Add a learning rate scheduler."""
@@ -730,6 +733,266 @@ class SGD(OptaxOptimizer):
                 transforms.append(optax.trace(decay=self.momentum, nesterov=True))
             else:
                 transforms.append(optax.trace(decay=self.momentum, nesterov=False))
+
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+
+        return optax.chain(*transforms)
+
+
+class Momentum(OptaxOptimizer):
+    r"""
+    Momentum optimizer.
+
+    Implements the momentum variant of stochastic gradient descent, where updates
+    accumulate a velocity that persists across iterations to accelerate convergence
+    in relevant directions.
+
+    Parameters
+    ----------
+    lr : float or LRScheduler, default=1e-3
+        Learning rate. Can be a float or LRScheduler instance.
+    momentum : float, default=0.9
+        Momentum factor. The fraction of the gradient to retain from previous steps.
+    weight_decay : float, default=0.0
+        Weight decay (L2 penalty) coefficient.
+    grad_clip_norm : float, optional
+        Maximum gradient norm for clipping.
+    grad_clip_value : float, optional
+        Maximum gradient value for clipping.
+
+    Notes
+    -----
+    The momentum update is computed as:
+
+    .. math::
+
+        v_{t+1} = \mu v_t + g_t
+
+        \theta_{t+1} = \theta_t - \alpha v_{t+1}
+
+    where :math:`\mu` is the momentum factor, :math:`g_t` is the gradient at step t,
+    :math:`\alpha` is the learning rate, :math:`v_t` is the velocity, and
+    :math:`\theta` are the parameters.
+
+    Examples
+    --------
+    Basic Momentum optimizer:
+
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import braintools
+        >>> import jax.numpy as jnp
+        >>>
+        >>> # Create model
+        >>> model = brainstate.nn.Linear(10, 5)
+        >>> optimizer = braintools.optim.Momentum(lr=0.01, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+    Momentum with weight decay:
+
+    .. code-block:: python
+
+        >>> optimizer = braintools.optim.Momentum(lr=0.01, momentum=0.9, weight_decay=0.0001)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+    Momentum with learning rate scheduling:
+
+    .. code-block:: python
+
+        >>> scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
+        >>> optimizer = braintools.optim.Momentum(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>>
+        >>> for epoch in range(100):
+        ...     # Training code here
+        ...     optimizer.step(grads)
+        ...     if (epoch + 1) % epoch_size == 0:
+        ...         scheduler.step()
+
+    See Also
+    --------
+    MomentumNesterov : Momentum with Nesterov acceleration
+    SGD : Stochastic gradient descent with optional momentum
+    Adam : Adam optimizer with adaptive learning rates
+    """
+    __module__ = 'braintools.optim'
+
+    def __init__(
+        self,
+        lr: Union[float, LRScheduler] = 1e-3,
+        momentum: float = 0.9,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        # Store momentum-specific parameters
+        self.momentum = momentum
+
+        # Don't build tx here, let the base class handle it
+        super().__init__(
+            tx=None,  # Will be created by base class
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
+
+    def default_tx(self):
+        """Create Momentum-specific gradient transformation."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        # Add momentum transformation (always use momentum for this optimizer)
+        transforms.append(optax.trace(decay=self.momentum, nesterov=False))
+
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Always use the scheduler (now always present due to ConstantLR unification)
+        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+
+        return optax.chain(*transforms)
+
+
+class MomentumNesterov(OptaxOptimizer):
+    r"""
+    Nesterov Momentum optimizer.
+
+    Implements Nesterov's accelerated gradient method, which looks ahead by extrapolating
+    the momentum term before computing the gradient. This often leads to faster convergence
+    compared to standard momentum.
+
+    Parameters
+    ----------
+    lr : float or LRScheduler, default=1e-3
+        Learning rate. Can be a float or LRScheduler instance.
+    momentum : float, default=0.9
+        Momentum factor. The fraction of the gradient to retain from previous steps.
+    weight_decay : float, default=0.0
+        Weight decay (L2 penalty) coefficient.
+    grad_clip_norm : float, optional
+        Maximum gradient norm for clipping.
+    grad_clip_value : float, optional
+        Maximum gradient value for clipping.
+
+    Notes
+    -----
+    The Nesterov momentum update is computed as:
+
+    .. math::
+
+        v_{t+1} = \mu v_t + g_t
+
+        \theta_{t+1} = \theta_t - \alpha (\mu v_{t+1} + g_t)
+
+    This is equivalent to first making a momentum step, then computing the gradient
+    at the resulting position, which provides a "lookahead" effect.
+
+    where :math:`\mu` is the momentum factor, :math:`g_t` is the gradient at step t,
+    :math:`\alpha` is the learning rate, :math:`v_t` is the velocity, and
+    :math:`\theta` are the parameters.
+
+    References
+    ----------
+    .. [1] Nesterov, Y. (1983). A method for unconstrained convex minimization problem
+           with the rate of convergence O(1/k²).
+
+    Examples
+    --------
+    Basic Nesterov Momentum optimizer:
+
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import braintools
+        >>> import jax.numpy as jnp
+        >>>
+        >>> # Create model
+        >>> model = brainstate.nn.Linear(10, 5)
+        >>> optimizer = braintools.optim.MomentumNesterov(lr=0.01, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+    Nesterov Momentum with weight decay:
+
+    .. code-block:: python
+
+        >>> optimizer = braintools.optim.MomentumNesterov(lr=0.01, momentum=0.9, weight_decay=0.0001)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+    Nesterov Momentum with gradient clipping:
+
+    .. code-block:: python
+
+        >>> optimizer = braintools.optim.MomentumNesterov(
+        ...     lr=0.01,
+        ...     momentum=0.9,
+        ...     grad_clip_norm=1.0
+        ... )
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+    Nesterov Momentum with learning rate scheduling:
+
+    .. code-block:: python
+
+        >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.01, gamma=0.95)
+        >>> optimizer = braintools.optim.MomentumNesterov(lr=scheduler, momentum=0.9)
+        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>>
+        >>> for epoch in range(100):
+        ...     # Training code here
+        ...     optimizer.step(grads)
+        ...     scheduler.step()
+
+    See Also
+    --------
+    Momentum : Standard momentum optimizer
+    SGD : Stochastic gradient descent with optional momentum and Nesterov
+    Adam : Adam optimizer with adaptive learning rates
+    """
+    __module__ = 'braintools.optim'
+
+    def __init__(
+        self,
+        lr: Union[float, LRScheduler] = 1e-3,
+        momentum: float = 0.9,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+    ):
+        # Store momentum-specific parameters
+        self.momentum = momentum
+
+        # Don't build tx here, let the base class handle it
+        super().__init__(
+            tx=None,  # Will be created by base class
+            lr=lr,
+            weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm,
+            grad_clip_value=grad_clip_value
+        )
+
+    def default_tx(self):
+        """Create Nesterov Momentum-specific gradient transformation."""
+        transforms = []
+
+        if self.grad_clip_norm is not None:
+            transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
+
+        if self.grad_clip_value is not None:
+            transforms.append(optax.clip(self.grad_clip_value))
+
+        # Add Nesterov momentum transformation
+        transforms.append(optax.trace(decay=self.momentum, nesterov=True))
 
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))

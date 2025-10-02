@@ -39,6 +39,7 @@ from ._init_base import Initialization
 
 __all__ = [
     'Constant',
+    'ZeroInit',
     'Uniform',
     'Normal',
     'LogNormal',
@@ -74,16 +75,54 @@ class Constant(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, value: ArrayLike):
+    def __init__(self, value: ArrayLike, unit: u.Unit = u.UNITLESS):
         self.value = value
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
-        if isinstance(size, int):
-            return u.math.full(size, self.value)
-        return u.math.full(size, self.value)
+        return u.maybe_decimal(u.math.full(size, self.value) * self.unit)
 
     def __repr__(self):
-        return f'Constant(value={self.value})'
+        return f'Constant(value={self.value}, unit={self.unit})'
+
+
+class ZeroInit(Constant):
+    """
+    Zero initialization.
+
+    Special case of constant initialization that initializes all values to zero.
+    Useful for initializing connections that start with no synaptic weight.
+
+    Parameters
+    ----------
+    unit : Unit
+        The unit of the zero values (default: unitless).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import brainunit as u
+        >>> from braintools.init import ZeroInit
+        >>>
+        >>> # Create zero weights with siemens unit
+        >>> init = ZeroInit(u.siemens)
+        >>> weights = init(100)
+        >>> assert np.all(weights == 0.0 * u.siemens)
+        >>>
+        >>> # Create unitless zero weights
+        >>> init = ZeroInit()
+        >>> weights = init((10, 20))
+        >>> assert np.all(weights == 0.0)
+    """
+    __module__ = 'braintools.init'
+
+    def __init__(self, unit: u.Unit = u.UNITLESS):
+        super().__init__(0.0, unit=unit)
+
+    def __repr__(self):
+        return f'ZeroInit(unit={self.unit})'
 
 
 class Uniform(Initialization):
