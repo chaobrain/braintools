@@ -307,11 +307,11 @@ class OptaxOptimizer(Optimizer):
         # Create UniqueStateManager for this group
         manager = UniqueStateManager()
         manager.merge_with(params)
-        param_values = manager.to_dict_value()
+        param_values = manager.to_pytree_value()
         group_lr_state = OptimState(kwargs.get('lr', self.base_lr))
 
         group = {
-            'params': manager.to_dict(),
+            'params': manager.to_pytree(),
             'lr': group_lr_state,
             'weight_decay': kwargs.get('weight_decay', self.weight_decay),
         }
@@ -2058,14 +2058,13 @@ class RAdam(OptaxOptimizer):
         >>> # Training step
         >>> @brainstate.transform.jit
         ... def train_step(input_data, target):
-        ...     def loss_fn(params):
-        ...         model.states(brainstate.ParamState).assign(params)
+        ...     def loss_fn():
         ...         pred = model(input_data)
         ...         return jnp.mean((pred - target) ** 2)
         ...
-        ...     grads = brainstate.transform.grad(loss_fn)(model.states(brainstate.ParamState).to_dict())
+        ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
-        ...     return loss_fn(model.states(brainstate.ParamState).to_dict())
+        ...     return loss_fn()
         >>>
         >>> # Train
         >>> x = jnp.ones((32, 10))
@@ -2269,18 +2268,15 @@ class Lamb(OptaxOptimizer):
         >>>
         >>> # Simulate large batch training
         >>> def train_step(batch_x, batch_y):
-        ...     def loss_fn(params):
-        ...         model.states(brainstate.ParamState).assign(params)
+        ...     def loss_fn():
         ...         logits = model(batch_x)
         ...         return jnp.mean(
         ...             braintools.metric.softmax_cross_entropy(logits, batch_y)
         ...         )
         ...
-        ...     grads = brainstate.transform.grad(loss_fn)(
-        ...         model.states(brainstate.ParamState).to_dict()
-        ...     )
+        ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
-        ...     return loss_fn(model.states(brainstate.ParamState).to_dict())
+        ...     return loss_fn()
         >>>
         >>> # Large batch size
         >>> x = jnp.ones((1024, 784))  # Large batch
@@ -2508,18 +2504,15 @@ class Lars(OptaxOptimizer):
         >>>
         >>> # Training step
         >>> def train_step(images, labels):
-        ...     def loss_fn(params):
-        ...         model.states(brainstate.ParamState).assign(params)
+        ...     def loss_fn():
         ...         logits = model(images)
         ...         return jnp.mean(
         ...             braintools.metric.softmax_cross_entropy(logits, labels)
         ...         )
         ...
-        ...     grads = brainstate.transform.grad(loss_fn)(
-        ...         model.states(brainstate.ParamState).to_dict()
-        ...     )
+        ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
-        ...     return loss_fn(model.states(brainstate.ParamState).to_dict())
+        ...     return loss_fn()
         >>>
         >>> # Large batch training
         >>> x = jnp.ones((256, 3, 32, 32))  # Large batch
@@ -2750,16 +2743,13 @@ class Lookahead(OptaxOptimizer):
         >>> # Training loop
         >>> for epoch in range(10):
         ...     for batch_x, batch_y in data_loader:
-        ...         def loss_fn(params):
-        ...             model.states(brainstate.ParamState).assign(params)
+        ...         def loss_fn():
         ...             logits = model(batch_x)
         ...             return jnp.mean(
         ...                 braintools.metric.softmax_cross_entropy(logits, batch_y)
         ...             )
         ...
-        ...         grads = brainstate.transform.grad(loss_fn)(
-        ...             model.states(brainstate.ParamState).to_dict()
-        ...         )
+        ...         grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...         optimizer.update(grads)
 
     See Also
@@ -2963,18 +2953,15 @@ class Yogi(OptaxOptimizer):
         >>>
         >>> # Training step
         >>> def train_step(tokens, targets):
-        ...     def loss_fn(params):
-        ...         model.states(brainstate.ParamState).assign(params)
+        ...     def loss_fn():
         ...         logits = model(tokens)
         ...         return jnp.mean(
         ...             braintools.metric.softmax_cross_entropy(logits, targets)
         ...         )
         ...
-        ...     grads = brainstate.transform.grad(loss_fn)(
-        ...         model.states(brainstate.ParamState).to_dict()
-        ...     )
+        ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
-        ...     return loss_fn(model.states(brainstate.ParamState).to_dict())
+        ...     return loss_fn()
         >>>
         >>> # Train
         >>> tokens = jnp.ones((32, 50), dtype=jnp.int32)
@@ -3209,19 +3196,16 @@ class LBFGS(OptaxOptimizer):
         >>>
         >>> # Full-batch training step
         >>> def train_step(data_x, data_y):
-        ...     def loss_fn(params):
-        ...         model.states(brainstate.ParamState).assign(params)
+        ...     def loss_fn():
         ...         logits = model(data_x)
         ...         return jnp.mean(
         ...             braintools.metric.softmax_cross_entropy(logits, data_y)
         ...         )
         ...
         ...     # Compute gradients on full dataset
-        ...     grads = brainstate.transform.grad(loss_fn)(
-        ...         model.states(brainstate.ParamState).to_dict()
-        ...     )
+        ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
-        ...     return loss_fn(model.states(brainstate.ParamState).to_dict())
+        ...     return loss_fn()
         >>>
         >>> # Use entire dataset (not mini-batch)
         >>> x_full = jnp.ones((1000, 784))
@@ -3564,18 +3548,15 @@ class Rprop(OptaxOptimizer):
         >>>
         >>> # Full-batch training step
         >>> def train_step(batch_x, batch_y):
-        ...     def loss_fn(params):
-        ...         model.states(brainstate.ParamState).assign(params)
+        ...     def loss_fn():
         ...         logits = model(batch_x)
         ...         return jnp.mean(
         ...             braintools.metric.softmax_cross_entropy(logits, batch_y)
         ...         )
         ...
-        ...     grads = brainstate.transform.grad(loss_fn)(
-        ...         model.states(brainstate.ParamState).to_dict()
-        ...     )
+        ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
-        ...     return loss_fn(model.states(brainstate.ParamState).to_dict())
+        ...     return loss_fn()
         >>>
         >>> # Use full batch or large batches
         >>> x = jnp.ones((500, 100))
@@ -3798,18 +3779,15 @@ class Adafactor(OptaxOptimizer):
         >>>
         >>> # Training step
         >>> def train_step(tokens, targets):
-        ...     def loss_fn(params):
-        ...         model.states(brainstate.ParamState).assign(params)
+        ...     def loss_fn():
         ...         logits = model(tokens)
         ...         return jnp.mean(
         ...             braintools.metric.softmax_cross_entropy(logits, targets)
         ...         )
         ...
-        ...     grads = brainstate.transform.grad(loss_fn)(
-        ...         model.states(brainstate.ParamState).to_dict()
-        ...     )
+        ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
-        ...     return loss_fn(model.states(brainstate.ParamState).to_dict())
+        ...     return loss_fn()
         >>>
         >>> # Train with large batches
         >>> tokens = jnp.ones((128, 512), dtype=jnp.int32)
