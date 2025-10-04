@@ -127,6 +127,7 @@ patterns. They are simple to configure and work well for many standard training 
    LinearLR
    ExponentialLR
    PolynomialLR
+   ExponentialDecayLR
 
 Annealing Schedulers
 ~~~~~~~~~~~~~~~~~~~~

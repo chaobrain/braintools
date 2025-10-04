@@ -77,14 +77,6 @@ class VarianceScaling(Initialization):
         self.scale = scale
         self.mode = mode
         self.distribution = distribution
-        if unit is not None:
-            warnings.warn(
-                "The 'unit' parameter is deprecated and will be removed in future versions. "
-                "Please handle units directly in `scale`.",
-                DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
         self.unit = unit
 
     def _compute_fans(self, shape):
@@ -180,18 +172,20 @@ class KaimingUniform(VarianceScaling):
 
     def __init__(
         self,
+        scale: ArrayLike = None,
         mode: Literal['fan_in', 'fan_out', 'fan_avg'] = 'fan_in',
         nonlinearity: Literal['relu', 'leaky_relu'] = 'relu',
         negative_slope: float = 0.01,
         unit: u.Unit = None,
     ):
         # Compute scale based on nonlinearity
-        if nonlinearity == 'relu':
-            scale = jnp.sqrt(2.0)
-        elif nonlinearity == 'leaky_relu':
-            scale = jnp.sqrt(2.0 / (1 + negative_slope ** 2))
-        else:
-            raise ValueError(f"Unsupported nonlinearity: {nonlinearity}")
+        if scale is None:
+            if nonlinearity == 'relu':
+                scale = jnp.sqrt(2.0)
+            elif nonlinearity == 'leaky_relu':
+                scale = jnp.sqrt(2.0 / (1 + negative_slope ** 2))
+            else:
+                raise ValueError(f"Unsupported nonlinearity: {nonlinearity}")
 
         super().__init__(scale=scale, mode=mode, distribution='uniform', unit=unit)
         self.nonlinearity = nonlinearity
@@ -236,18 +230,20 @@ class KaimingNormal(VarianceScaling):
 
     def __init__(
         self,
+        scale: ArrayLike = None,
         mode: Literal['fan_in', 'fan_out', 'fan_avg'] = 'fan_in',
         nonlinearity: Literal['relu', 'leaky_relu'] = 'relu',
         negative_slope: float = 0.01,
         unit: u.Unit = None,
     ):
         # Compute scale based on nonlinearity
-        if nonlinearity == 'relu':
-            scale = jnp.sqrt(2.0)
-        elif nonlinearity == 'leaky_relu':
-            scale = jnp.sqrt(2.0 / (1 + negative_slope ** 2))
-        else:
-            raise ValueError(f"Unsupported nonlinearity: {nonlinearity}")
+        if scale is None:
+            if nonlinearity == 'relu':
+                scale = jnp.sqrt(2.0)
+            elif nonlinearity == 'leaky_relu':
+                scale = jnp.sqrt(2.0 / (1 + negative_slope ** 2))
+            else:
+                raise ValueError(f"Unsupported nonlinearity: {nonlinearity}")
 
         super().__init__(scale=scale, mode=mode, distribution='normal', unit=unit)
         self.nonlinearity = nonlinearity
@@ -285,7 +281,7 @@ class XavierUniform(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
+    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None):
         super().__init__(scale=scale, mode='fan_avg', distribution='uniform', unit=unit)
 
     def __repr__(self):
@@ -320,7 +316,7 @@ class XavierNormal(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
+    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None):
         super().__init__(scale=scale, mode='fan_avg', distribution='normal', unit=unit)
 
     def __repr__(self):
@@ -355,7 +351,7 @@ class LecunUniform(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
+    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None):
         super().__init__(scale=scale, mode='fan_in', distribution='uniform', unit=unit)
 
     def __repr__(self):
@@ -390,7 +386,7 @@ class LecunNormal(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
+    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None):
         super().__init__(scale=scale, mode='fan_in', distribution='normal', unit=unit)
 
     def __repr__(self):

@@ -319,14 +319,16 @@ def param(
                 batch_size,
                 axis=0
             )
-            init.restore_value(param_value)
+            if isinstance(init, State):
+                init.restore_value(param_value)
+            param_value = init
         else:
             if param_value.shape[0] != batch_size:
                 raise ValueError(
                     f'The batch size of the parameter {param_value.shape[0]} '
                     f'does not match with the given batch size {batch_size}'
                 )
-    return init if isinstance(init, State) else param_value
+    return param_value
 
 
 # =============================================================================
