@@ -33,6 +33,7 @@ from braintools._misc import set_module_as
 
 __all__ = [
     'Initialization',
+    'Initializer',
     'param',
     'Compose',
 ]

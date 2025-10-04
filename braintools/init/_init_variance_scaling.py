@@ -24,7 +24,7 @@ This module provides variance scaling initialization methods commonly used in de
 These methods scale the initial weights based on the number of input/output units
 to maintain stable gradients during training.
 """
-
+import warnings
 from typing import Literal
 
 import brainstate
@@ -72,11 +72,19 @@ class VarianceScaling(Initialization):
         scale: ArrayLike = 1.0,
         mode: Literal['fan_in', 'fan_out', 'fan_avg'] = 'fan_in',
         distribution: Literal['uniform', 'normal', 'truncated_normal'] = 'normal',
-        unit: u.Unit = u.UNITLESS,
+        unit: u.Unit = None,
     ):
         self.scale = scale
         self.mode = mode
         self.distribution = distribution
+        if unit is not None:
+            warnings.warn(
+                "The 'unit' parameter is deprecated and will be removed in future versions. "
+                "Please handle units directly in `scale`.",
+                DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
         self.unit = unit
 
     def _compute_fans(self, shape):
@@ -110,9 +118,9 @@ class VarianceScaling(Initialization):
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
         shape = (size,) if isinstance(size, int) else size
-
+        scale, unit = u.split_mantissa_unit(self.scale)
         fan = self._get_fan(shape)
-        variance = self.scale / max(1.0, fan)
+        variance = scale / max(1.0, fan)
 
         if self.distribution == 'uniform':
             limit = jnp.sqrt(3.0 * variance)
@@ -128,14 +136,13 @@ class VarianceScaling(Initialization):
         else:
             raise ValueError(f"Invalid distribution: {self.distribution}")
 
-        return samples
+        return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
         return (f'{self.__class__.__name__}('
                 f'scale={self.scale}, '
                 f'mode={self.mode}, '
-                f'distribution={self.distribution}, '
-                f'unit={self.unit})')
+                f'distribution={self.distribution})')
 
 
 class KaimingUniform(VarianceScaling):
@@ -176,7 +183,7 @@ class KaimingUniform(VarianceScaling):
         mode: Literal['fan_in', 'fan_out', 'fan_avg'] = 'fan_in',
         nonlinearity: Literal['relu', 'leaky_relu'] = 'relu',
         negative_slope: float = 0.01,
-        unit: u.Unit = u.UNITLESS,
+        unit: u.Unit = None,
     ):
         # Compute scale based on nonlinearity
         if nonlinearity == 'relu':
@@ -232,7 +239,7 @@ class KaimingNormal(VarianceScaling):
         mode: Literal['fan_in', 'fan_out', 'fan_avg'] = 'fan_in',
         nonlinearity: Literal['relu', 'leaky_relu'] = 'relu',
         negative_slope: float = 0.01,
-        unit: u.Unit = u.UNITLESS,
+        unit: u.Unit = None,
     ):
         # Compute scale based on nonlinearity
         if nonlinearity == 'relu':
@@ -278,7 +285,7 @@ class XavierUniform(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
+    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
         super().__init__(scale=scale, mode='fan_avg', distribution='uniform', unit=unit)
 
     def __repr__(self):
@@ -313,7 +320,7 @@ class XavierNormal(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
+    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
         super().__init__(scale=scale, mode='fan_avg', distribution='normal', unit=unit)
 
     def __repr__(self):
@@ -348,7 +355,7 @@ class LecunUniform(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
+    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
         super().__init__(scale=scale, mode='fan_in', distribution='uniform', unit=unit)
 
     def __repr__(self):
@@ -383,7 +390,7 @@ class LecunNormal(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
+    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
         super().__init__(scale=scale, mode='fan_in', distribution='normal', unit=unit)
 
     def __repr__(self):

@@ -27,7 +27,7 @@ This module provides fundamental weight initialization strategies including:
 - Beta distributions
 - Weibull distributions
 """
-
+import warnings
 from typing import Optional
 
 import brainunit as u
@@ -75,15 +75,22 @@ class Constant(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, value: ArrayLike, unit: u.Unit = u.UNITLESS):
+    def __init__(self, value: ArrayLike, unit: u.Unit = None):
         self.value = value
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please specify units directly in `value`.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
         self.unit = unit
 
     def __call__(self, size, **kwargs):
         return u.maybe_decimal(u.math.full(size, self.value) * self.unit)
 
     def __repr__(self):
-        return f'Constant(value={self.value}, unit={self.unit})'
+        return f'Constant(value={self.value})'
 
 
 class ZeroInit(Constant):
@@ -152,16 +159,24 @@ class Uniform(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, low: ArrayLike, high: ArrayLike):
+    def __init__(self, low: ArrayLike, high: ArrayLike, unit: u.Unit = None):
         self.low = low
         self.high = high
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please specify units directly in `low` and `high`.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', np.random)
         low, unit = u.split_mantissa_unit(self.low)
         high = u.Quantity(self.high).to(unit).mantissa
         samples = rng.uniform(low, high, size)
-        return u.maybe_decimal(samples * unit)
+        return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
         return f'Uniform(low={self.low}, high={self.high})'
@@ -194,16 +209,24 @@ class Normal(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, mean: ArrayLike, std: ArrayLike):
+    def __init__(self, mean: ArrayLike, std: ArrayLike, unit: u.Unit = None):
         self.mean = mean
         self.std = std
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please specify units directly in `mean` and `std`.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', np.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
         samples = rng.normal(mean, std, size)
-        return u.maybe_decimal(samples * unit)
+        return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
         return f'Normal(mean={self.mean}, std={self.std})'
@@ -237,9 +260,17 @@ class LogNormal(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, mean: ArrayLike, std: ArrayLike):
+    def __init__(self, mean: ArrayLike, std: ArrayLike, unit: u.Unit = None):
         self.mean = mean
         self.std = std
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please specify units directly in `mean` and `std`.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', np.random)
@@ -250,7 +281,7 @@ class LogNormal(Initialization):
         sigma = np.sqrt(np.log(1 + std ** 2 / mean ** 2))
 
         samples = rng.lognormal(mu, sigma, size)
-        return u.maybe_decimal(samples * unit)
+        return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
         return f'LogNormal(mean={self.mean}, std={self.std})'
@@ -283,15 +314,23 @@ class Gamma(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, shape: float, scale: ArrayLike):
+    def __init__(self, shape: float, scale: ArrayLike, unit: u.Unit = None):
         self.shape = shape
         self.scale = scale
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please specify units directly in `scale`.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', np.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.gamma(self.shape, scale, size)
-        return u.maybe_decimal(samples * unit)
+        return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
         return f'Gamma(shape={self.shape}, scale={self.scale})'
@@ -322,14 +361,22 @@ class Exponential(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: ArrayLike):
+    def __init__(self, scale: ArrayLike, unit: u.Unit = None):
         self.scale = scale
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please specify units directly in `scale`.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', np.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.exponential(scale, size)
-        return u.maybe_decimal(samples * unit)
+        return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
         return f'Exponential(scale={self.scale})'
@@ -377,12 +424,21 @@ class TruncatedNormal(Initialization):
         mean: ArrayLike,
         std: ArrayLike,
         low: Optional[ArrayLike] = None,
-        high: Optional[ArrayLike] = None
+        high: Optional[ArrayLike] = None,
+        unit: u.Unit = None,
     ):
         self.mean = mean
         self.std = std
         self.low = low
         self.high = high
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please specify units directly in `mean`, `std`, `low`, and `high`.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', np.random)
@@ -393,7 +449,7 @@ class TruncatedNormal(Initialization):
         b = np.inf if self.high is None else (u.Quantity(self.high).to(unit).mantissa - mean) / std
 
         samples = truncnorm.rvs(a, b, loc=mean, scale=std, size=size, random_state=rng)
-        return u.maybe_decimal(samples * unit)
+        return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
         return f'TruncatedNormal(mean={self.mean}, std={self.std}, low={self.low}, high={self.high})'
@@ -435,19 +491,28 @@ class Beta(Initialization):
         alpha: float,
         beta: float,
         low: ArrayLike,
-        high: ArrayLike
+        high: ArrayLike,
+        unit: u.Unit = None,
     ):
         self.alpha = alpha
         self.beta = beta
         self.low = low
         self.high = high
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please specify units directly in `low` and `high`.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
+        self.unit = unit
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', np.random)
         samples = rng.beta(self.alpha, self.beta, size)
         low, unit = u.split_mantissa_unit(self.low)
         high = u.Quantity(self.high).to(unit).mantissa
-        return u.maybe_decimal((low + (high - low) * samples) * unit)
+        return u.maybe_decimal((low + (high - low) * samples) * unit * self.unit)
 
     def __repr__(self):
         return f'Beta(alpha={self.alpha}, beta={self.beta}, low={self.low}, high={self.high})'
