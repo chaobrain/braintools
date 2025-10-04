@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Dict, Optional, Union, Callable, Any, List, Tuple
 
 import jax.tree
@@ -1115,6 +1116,8 @@ class Adam(OptaxOptimizer):
         self,
         lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
+        beta1: float = None,
+        beta2: float = None,
         eps: float = 1e-8,
         weight_decay: float = 0.0,
         amsgrad: bool = False,
@@ -1122,7 +1125,20 @@ class Adam(OptaxOptimizer):
         grad_clip_value: Optional[float] = None,
     ):
         # Store Adam-specific parameters
-        self.betas = betas
+        betas = list(betas)
+        if beta1 is not None:
+            betas[0] = beta1
+            warnings.warn(
+                'The `beta1` parameter is deprecated, please use `betas=(beta1, beta2)` instead.',
+                DeprecationWarning
+            )
+        if beta2 is not None:
+            betas[1] = beta2
+            warnings.warn(
+                'The `beta2` parameter is deprecated, please use `betas=(beta1, beta2)` instead.',
+                DeprecationWarning
+            )
+        self.betas = tuple(betas)
         self.eps = eps
         self.amsgrad = amsgrad
 
