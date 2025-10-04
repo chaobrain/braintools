@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -3372,7 +3372,7 @@ class LBFGS(OptaxOptimizer):
             Current value of the objective function. Required for linesearch.
         value_fn : callable, optional
             Function to compute objective value. Required for linesearch.
-        **kwargs : dict
+        **kwargs
             Additional arguments passed to the optimizer update.
 
         Notes
