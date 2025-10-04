@@ -26,8 +26,7 @@ from braintools.conn import (
     DistanceDependent,
     Exponential,
 )
-from braintools.init import Constant, Uniform
-
+from braintools.init import Constant
 
 
 class TestDistanceDependent(unittest.TestCase):
@@ -190,6 +189,7 @@ class TestDistanceDependent(unittest.TestCase):
         # Should handle 3D positions (using first 2 dimensions)
         self.assertGreaterEqual(result.n_connections, 0)
 
+
 class TestGaussianAndExponentialAliases(unittest.TestCase):
 
     def setUp(self):
@@ -200,6 +200,7 @@ class TestGaussianAndExponentialAliases(unittest.TestCase):
 
     def test_exponential_is_distance_dependent(self):
         self.assertTrue(issubclass(Exponential, DistanceDependent))
+
 
 class TestSpatialPatterns(unittest.TestCase):
     def setUp(self):

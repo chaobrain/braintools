@@ -18,6 +18,7 @@ import unittest
 import brainstate
 import jax.numpy as jnp
 import numpy as np
+
 import braintools
 
 brainstate.environ.set(dt=0.1)

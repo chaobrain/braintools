@@ -20,8 +20,8 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from braintools.tree import as_numpy
 from braintools._misc import set_module_as
+from braintools.tree import as_numpy
 
 __all__ = [
     'neural_network_3d',

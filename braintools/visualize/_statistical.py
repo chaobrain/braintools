@@ -20,8 +20,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as stats
 
-from braintools.tree import as_numpy
 from braintools._misc import set_module_as
+from braintools.tree import as_numpy
 
 __all__ = [
     'correlation_matrix',

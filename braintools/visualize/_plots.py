@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
 from matplotlib.gridspec import GridSpec
+
 from braintools._misc import set_module_as
 
 __all__ = [

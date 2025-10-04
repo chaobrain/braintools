@@ -35,7 +35,7 @@ import brainunit as u
 import numpy as np
 from scipy.spatial.distance import cdist
 
-from braintools.init._init_base import init_call, Initializer
+from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
@@ -191,7 +191,7 @@ class Random(PointConnectivity):
             )
 
         # Generate weights using the initialization class
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             param_type='weight',
@@ -203,7 +203,7 @@ class Random(PointConnectivity):
         )
 
         # Generate delays using the initialization class
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             param_type='delay',
@@ -563,7 +563,7 @@ class ClusteredRandom(PointConnectivity):
 
         n_connections = len(pre_indices)
 
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -573,7 +573,7 @@ class ClusteredRandom(PointConnectivity):
             pre_positions=pre_positions,
             post_positions=post_positions
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,

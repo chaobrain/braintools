@@ -43,8 +43,7 @@ Helper functions and type aliases that support initialization workflows.
    :toctree: generated/
    :nosignatures:
 
-   init_call
-   Initializer
+   param
    Compose
 
 Basic Distributions

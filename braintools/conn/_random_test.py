@@ -164,7 +164,6 @@ class TestRandom(unittest.TestCase):
             np.testing.assert_array_almost_equal(u.get_mantissa(result.delays), 1.0)
 
 
-
 class TestFixedProbabilityAlias(unittest.TestCase):
     def setUp(self):
         self.rng = np.random.default_rng(42)
@@ -181,8 +180,6 @@ class TestFixedProbabilityAlias(unittest.TestCase):
         self.assertEqual(result.metadata['pattern'], 'random')
         self.assertEqual(result.metadata['probability'], 0.2)
         self.assertGreater(result.n_connections, 0)
-
-
 
 
 class TestEdgeCases(unittest.TestCase):

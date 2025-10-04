@@ -19,9 +19,8 @@ from typing import Callable, Sequence
 
 import brainunit as u
 import jax.numpy as jnp
-from jax import Array
-
 from brainstate.typing import ArrayLike
+from jax import Array
 
 __all__ = [
     'Transform',
@@ -190,6 +189,7 @@ class Transform(ABC):
 
 class IdentityTransform(Transform):
     __module__ = 'braintools'
+
     def forward(self, x: ArrayLike) -> Array:
         return x
 

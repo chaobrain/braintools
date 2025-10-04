@@ -59,7 +59,7 @@ class TestIntegration(unittest.TestCase):
 
         # Population activity
         braintools.visualize.population_activity(population_activity[:, None], time=time,
-                                   ax=axes[0, 1], title='Population Activity')
+                                                 ax=axes[0, 1], title='Population Activity')
 
         # ISI distribution
         braintools.visualize.isi_distribution(spike_times, ax=axes[1, 0], title='ISI Distribution')

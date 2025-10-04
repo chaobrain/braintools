@@ -21,6 +21,7 @@ from typing import Union
 
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+
 from braintools._misc import set_module_as
 
 __all__ = [

@@ -6,10 +6,8 @@ Comprehensive test cases for UniqueStateManager class.
 Tests all methods and edge cases for managing unique State objects in PyTrees.
 """
 
-import pytest
 import brainstate
 import jax.numpy as jnp
-import jax.tree_util as jtu
 from brainstate import ParamState, State
 
 from braintools.optim._state_uniquifier import UniqueStateManager
@@ -567,6 +565,7 @@ class TestEdgeCases:
 
     def test_with_nn_module(self):
         """Test integration with brainstate.nn.Module."""
+
         class SimpleModel(brainstate.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -584,6 +583,7 @@ class TestEdgeCases:
 
     def test_with_shared_module_weights(self):
         """Test with module that has shared weights."""
+
         class ModelWithSharedWeights(brainstate.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -614,7 +614,7 @@ class TestEdgeCases:
 
     def test_merge_multiple_times(self):
         """Test merging multiple pytrees sequentially."""
-        states = [ParamState(jnp.ones((i+1, i+1))) for i in range(5)]
+        states = [ParamState(jnp.ones((i + 1, i + 1))) for i in range(5)]
 
         manager = UniqueStateManager()
 
@@ -678,6 +678,7 @@ class TestIntegration:
 
     def test_model_states_extraction(self):
         """Test extracting states from a neural network model."""
+
         class TestModel(brainstate.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -723,4 +724,3 @@ class TestIntegration:
 
         # Should have 2 unique gradients (w and b)
         assert len(unique_grads) == 2
-

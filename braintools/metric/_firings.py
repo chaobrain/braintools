@@ -287,42 +287,42 @@ def victor_purpura_distance(
     """
     spikes1 = jnp.asarray(spike_times_1)
     spikes2 = jnp.asarray(spike_times_2)
-    
+
     n1, n2 = len(spikes1), len(spikes2)
-    
+
     # Handle empty spike trains
     if n1 == 0:
         return float(n2)
     if n2 == 0:
         return float(n1)
-    
+
     # Dynamic programming matrix
     # dp[i][j] = minimum cost to transform spikes1[:i] to spikes2[:j]
     dp = jnp.full((n1 + 1, n2 + 1), jnp.inf)
-    
+
     # Base cases
     dp = dp.at[0, 0].set(0.0)
     for i in range(1, n1 + 1):
         dp = dp.at[i, 0].set(i)  # Delete all spikes in train 1
     for j in range(1, n2 + 1):
         dp = dp.at[0, j].set(j)  # Insert all spikes in train 2
-    
+
     # Fill the DP matrix
     for i in range(1, n1 + 1):
         for j in range(1, n2 + 1):
             # Cost to match spike i with spike j (temporal shift)
-            shift_cost = cost_factor * jnp.abs(spikes1[i-1] - spikes2[j-1])
-            match_cost = dp[i-1, j-1] + shift_cost
-            
+            shift_cost = cost_factor * jnp.abs(spikes1[i - 1] - spikes2[j - 1])
+            match_cost = dp[i - 1, j - 1] + shift_cost
+
             # Cost to delete spike i
-            delete_cost = dp[i-1, j] + 1.0
-            
+            delete_cost = dp[i - 1, j] + 1.0
+
             # Cost to insert spike j
-            insert_cost = dp[i, j-1] + 1.0
-            
+            insert_cost = dp[i, j - 1] + 1.0
+
             # Take minimum cost
             dp = dp.at[i, j].set(jnp.min(jnp.array([match_cost, delete_cost, insert_cost])))
-    
+
     return float(dp[n1, n2])
 
 
@@ -381,42 +381,42 @@ def van_rossum_distance(
     """
     spikes1 = jnp.asarray(spike_times_1)
     spikes2 = jnp.asarray(spike_times_2)
-    
+
     # Determine time window
     if t_max is None:
         all_spikes = jnp.concatenate([spikes1, spikes2])
         if len(all_spikes) == 0:
             return 0.0
         t_max = jnp.max(all_spikes) + 5 * tau
-    
+
     # Create time grid
     dt = tau / 20  # Fine temporal resolution
     t_grid = jnp.arange(0, t_max + dt, dt)
-    
+
     def convolve_spikes(spike_times):
         """Convolve spike train with exponential kernel."""
         if len(spike_times) == 0:
             return jnp.zeros_like(t_grid)
-        
+
         # For each time point, sum contributions from all spikes
         response = jnp.zeros_like(t_grid)
         for spike_time in spike_times:
             # Exponential kernel starting from spike time
             mask = t_grid >= spike_time
-            kernel = jnp.where(mask, 
-                              (1.0 / tau) * jnp.exp(-(t_grid - spike_time) / tau),
-                              0.0)
+            kernel = jnp.where(mask,
+                               (1.0 / tau) * jnp.exp(-(t_grid - spike_time) / tau),
+                               0.0)
             response = response + kernel
         return response
-    
+
     # Convolve both spike trains
     f1 = convolve_spikes(spikes1)
     f2 = convolve_spikes(spikes2)
-    
+
     # Compute Euclidean distance
     diff = f1 - f2
-    distance_squared = jnp.sum(diff**2) * dt
-    
+    distance_squared = jnp.sum(diff ** 2) * dt
+
     return float(jnp.sqrt(distance_squared))
 
 
@@ -474,31 +474,31 @@ def spike_train_synchrony(
     dt = brainstate.environ.get_dt() if dt is None else dt
     spikes = jnp.asarray(spike_matrix)
     n_time, n_neurons = spikes.shape
-    
+
     if n_neurons < 2:
         return 0.0
-    
+
     # Convert window size to time steps
     window_steps = int(window_size / dt)
-    
+
     # Extract spike times for each neuron
     spike_times_list = []
     for i in range(n_neurons):
         spike_indices = jnp.where(spikes[:, i] > 0)[0]
         spike_times_list.append(spike_indices * dt)
-    
+
     total_synchrony = 0.0
     n_pairs = 0
-    
+
     # Calculate pairwise synchrony
     for i in range(n_neurons):
         for j in range(i + 1, n_neurons):
             spikes_i = spike_times_list[i]
             spikes_j = spike_times_list[j]
-            
+
             if len(spikes_i) == 0 or len(spikes_j) == 0:
                 continue
-            
+
             # Count coincidences
             coincidences = 0
             for spike_time_i in spikes_i:
@@ -506,14 +506,14 @@ def spike_train_synchrony(
                 time_diffs = jnp.abs(spikes_j - spike_time_i)
                 if jnp.any(time_diffs <= window_size / 2):
                     coincidences += 1
-            
+
             # Normalize by minimum number of spikes
             min_spikes = min(len(spikes_i), len(spikes_j))
             if min_spikes > 0:
                 pair_synchrony = coincidences / min_spikes
                 total_synchrony += pair_synchrony
                 n_pairs += 1
-    
+
     return float(total_synchrony / n_pairs) if n_pairs > 0 else 0.0
 
 
@@ -564,59 +564,59 @@ def burst_synchrony_index(
     dt = brainstate.environ.get_dt() if dt is None else dt
     spikes = jnp.asarray(spike_matrix)
     n_time, n_neurons = spikes.shape
-    
+
     def detect_bursts(spike_train):
         """Detect burst events in a single spike train."""
         spike_times = jnp.where(spike_train > 0)[0] * dt
         if len(spike_times) < burst_threshold:
             return []
-        
+
         bursts = []
         current_burst = [spike_times[0]]
-        
+
         for i in range(1, len(spike_times)):
-            isi = spike_times[i] - spike_times[i-1]
+            isi = spike_times[i] - spike_times[i - 1]
             if isi <= max_isi:
                 current_burst.append(spike_times[i])
             else:
                 if len(current_burst) >= burst_threshold:
                     bursts.append((current_burst[0], current_burst[-1]))
                 current_burst = [spike_times[i]]
-        
+
         # Check final burst
         if len(current_burst) >= burst_threshold:
             bursts.append((current_burst[0], current_burst[-1]))
-        
+
         return bursts
-    
+
     # Detect bursts for all neurons
     all_bursts = []
     for i in range(n_neurons):
         bursts = detect_bursts(spikes[:, i])
         for start, end in bursts:
             all_bursts.append((i, start, end))
-    
+
     if len(all_bursts) == 0:
         return 0.0
-    
+
     # Count synchronized bursts
     synchronous_bursts = 0
     total_bursts = len(all_bursts)
-    
+
     for i, (neuron1, start1, end1) in enumerate(all_bursts):
         overlapping_neurons = {neuron1}
-        
+
         for j, (neuron2, start2, end2) in enumerate(all_bursts):
             if i != j and neuron1 != neuron2:
                 # Check for temporal overlap
                 overlap = min(end1, end2) - max(start1, start2)
                 if overlap > 0:
                     overlapping_neurons.add(neuron2)
-        
+
         # If burst involves multiple neurons, it's synchronous
         if len(overlapping_neurons) > 1:
             synchronous_bursts += 1
-    
+
     return float(synchronous_bursts / total_bursts) if total_bursts > 0 else 0.0
 
 
@@ -677,32 +677,32 @@ def phase_locking_value(
     dt = brainstate.environ.get_dt() if dt is None else dt
     spikes = jnp.asarray(spike_matrix)
     n_time, n_neurons = spikes.shape
-    
+
     # Create time vector
     times = jnp.arange(n_time) * dt
-    
+
     # Reference phase signal
     reference_phase = 2 * jnp.pi * reference_freq * times
-    
+
     plv_values = jnp.zeros(n_neurons)
-    
+
     for i in range(n_neurons):
         spike_indices = jnp.where(spikes[:, i] > 0)[0]
-        
+
         if len(spike_indices) == 0:
             plv_values = plv_values.at[i].set(0.0)
             continue
-        
+
         # Get phases at spike times
         spike_phases = reference_phase[spike_indices]
-        
+
         # Compute mean resultant vector
         complex_phases = jnp.exp(1j * spike_phases)
         mean_vector = jnp.mean(complex_phases)
         plv = jnp.abs(mean_vector)
-        
+
         plv_values = plv_values.at[i].set(plv)
-    
+
     return plv_values
 
 
@@ -765,27 +765,27 @@ def spike_time_tiling_coefficient(
     dt = brainstate.environ.get_dt() if dt is None else dt
     spikes = jnp.asarray(spike_matrix)
     n_time, n_neurons = spikes.shape
-    
+
     # Total recording time
     T_total = n_time * dt
-    
+
     # Convert tau to time steps
     tau_steps = int(tau / dt)
-    
+
     sttc_matrix = jnp.eye(n_neurons)  # Diagonal is 1 by definition
-    
+
     for i in range(n_neurons):
         for j in range(i + 1, n_neurons):
             spikes_i = jnp.where(spikes[:, i] > 0)[0]
             spikes_j = jnp.where(spikes[:, j] > 0)[0]
-            
+
             n_i, n_j = len(spikes_i), len(spikes_j)
-            
+
             if n_i == 0 or n_j == 0:
                 sttc_matrix = sttc_matrix.at[i, j].set(0.0)
                 sttc_matrix = sttc_matrix.at[j, i].set(0.0)
                 continue
-            
+
             # Calculate P_A: proportion of spikes in i that have spike in j within tau
             coincident_i = 0
             for spike_i in spikes_i:
@@ -794,7 +794,7 @@ def spike_time_tiling_coefficient(
                 if jnp.any(time_diffs <= tau_steps):
                     coincident_i += 1
             P_A = coincident_i / n_i
-            
+
             # Calculate P_B: proportion of spikes in j that have spike in i within tau
             coincident_j = 0
             for spike_j in spikes_j:
@@ -802,7 +802,7 @@ def spike_time_tiling_coefficient(
                 if jnp.any(time_diffs <= tau_steps):
                     coincident_j += 1
             P_B = coincident_j / n_j
-            
+
             # Calculate T_A: proportion of time covered by windows around spikes in i
             covered_time_i = 0
             for spike_i in spikes_i:
@@ -810,7 +810,7 @@ def spike_time_tiling_coefficient(
                 window_end = min(n_time - 1, spike_i + tau_steps)
                 covered_time_i += (window_end - window_start + 1)
             T_A = min(1.0, covered_time_i * dt / T_total)
-            
+
             # Calculate T_B: proportion of time covered by windows around spikes in j
             covered_time_j = 0
             for spike_j in spikes_j:
@@ -818,7 +818,7 @@ def spike_time_tiling_coefficient(
                 window_end = min(n_time - 1, spike_j + tau_steps)
                 covered_time_j += (window_end - window_start + 1)
             T_B = min(1.0, covered_time_j * dt / T_total)
-            
+
             # Calculate STTC
             if P_A * T_B < 1 and P_B * T_A < 1:
                 term1 = (P_A - T_B) / (1 - P_A * T_B)
@@ -826,10 +826,10 @@ def spike_time_tiling_coefficient(
                 sttc_value = 0.5 * (term1 + term2)
             else:
                 sttc_value = 0.0  # Avoid division by zero
-            
+
             sttc_matrix = sttc_matrix.at[i, j].set(sttc_value)
             sttc_matrix = sttc_matrix.at[j, i].set(sttc_value)
-    
+
     return sttc_matrix
 
 
@@ -882,42 +882,42 @@ def correlation_index(
     dt = brainstate.environ.get_dt() if dt is None else dt
     spikes = jnp.asarray(spike_matrix)
     n_time, n_neurons = spikes.shape
-    
+
     if n_neurons < 2:
         return 0.0
-    
+
     # Bin size in time steps
     bin_size = int(window_size / dt)
     n_bins = n_time // bin_size
-    
+
     if n_bins < 2:
         return 0.0
-    
+
     # Bin spike counts
     binned_spikes = jnp.zeros((n_bins, n_neurons))
     for i in range(n_bins):
         start_idx = i * bin_size
         end_idx = min((i + 1) * bin_size, n_time)
         binned_spikes = binned_spikes.at[i, :].set(jnp.sum(spikes[start_idx:end_idx, :], axis=0))
-    
+
     # Calculate pairwise correlations
     correlations = []
     for i in range(n_neurons):
         for j in range(i + 1, n_neurons):
             # Compute Pearson correlation
             x, y = binned_spikes[:, i], binned_spikes[:, j]
-            
+
             # Handle case where one or both series have zero variance
             x_var = jnp.var(x)
             y_var = jnp.var(y)
-            
+
             if x_var == 0 or y_var == 0:
                 corr = 0.0
             else:
                 corr = jnp.corrcoef(x, y)[0, 1]
                 # Handle NaN case
                 corr = jnp.where(jnp.isnan(corr), 0.0, corr)
-            
+
             correlations.append(corr)
-    
+
     return float(jnp.mean(jnp.array(correlations)))

@@ -227,7 +227,7 @@ def unitary_LFP(
                          f'But we got {spikes.shape}')
     if times.shape[0] != spikes.shape[0]:
         raise ValueError('times and spikes should be consistent at the firs axis. '
-                                                  f'But we got {times.shape[0]} != {spikes.shape}.')
+                         f'But we got {times.shape[0]} != {spikes.shape}.')
 
     # Distributing cells in a 2D grid
     rng = brainstate.random.RandomState(seed)
@@ -296,33 +296,33 @@ def power_spectral_density(
     lfp = jnp.asarray(lfp)
     if lfp.ndim == 1:
         lfp = lfp[:, None]
-    
+
     n_time, n_channels = lfp.shape
     fs = 1.0 / dt
-    
+
     if nperseg is None:
         nperseg = n_time // 8
     if noverlap is None:
         noverlap = nperseg // 2
-    
+
     # Simple periodogram approach (more JAX-friendly than Welch's method)
     n_fft = 2 ** int(jnp.ceil(jnp.log2(nperseg)))
-    freqs = jnp.fft.fftfreq(n_fft, dt)[:n_fft//2]
-    
+    freqs = jnp.fft.fftfreq(n_fft, dt)[:n_fft // 2]
+
     # Compute FFT-based PSD
     windowed_fft = jnp.fft.fft(lfp[:nperseg] * jnp.hanning(nperseg)[:, None], n=n_fft, axis=0)
-    psd = (jnp.abs(windowed_fft[:n_fft//2]) ** 2) / (fs * nperseg)
-    
+    psd = (jnp.abs(windowed_fft[:n_fft // 2]) ** 2) / (fs * nperseg)
+
     if freq_range is not None:
         freq_mask = (freqs >= freq_range[0]) & (freqs <= freq_range[1])
         freqs = freqs[freq_mask]
         psd = psd[freq_mask]
-        
+
         # Handle case where no frequencies are in range
         if freqs.size == 0:
             freqs = jnp.array([freq_range[0]])
             psd = jnp.zeros((1, n_channels)) if n_channels > 1 else jnp.array([0.0])
-    
+
     return freqs, psd.squeeze() if n_channels == 1 else psd
 
 
@@ -353,29 +353,29 @@ def coherence_analysis(
     """
     lfp1, lfp2 = jnp.asarray(lfp1), jnp.asarray(lfp2)
     n_time = len(lfp1)
-    
+
     if nperseg is None:
         nperseg = n_time // 8
-    
+
     n_fft = 2 ** int(jnp.ceil(jnp.log2(nperseg)))
-    freqs = jnp.fft.fftfreq(n_fft, dt)[:n_fft//2]
-    
+    freqs = jnp.fft.fftfreq(n_fft, dt)[:n_fft // 2]
+
     # Apply window and compute FFTs
     window = jnp.hanning(nperseg)
-    fft1 = jnp.fft.fft(lfp1[:nperseg] * window, n=n_fft)[:n_fft//2]
-    fft2 = jnp.fft.fft(lfp2[:nperseg] * window, n=n_fft)[:n_fft//2]
-    
+    fft1 = jnp.fft.fft(lfp1[:nperseg] * window, n=n_fft)[:n_fft // 2]
+    fft2 = jnp.fft.fft(lfp2[:nperseg] * window, n=n_fft)[:n_fft // 2]
+
     # Cross-spectral density
     psd12 = fft1 * jnp.conj(fft2)
     psd11 = jnp.abs(fft1) ** 2
     psd22 = jnp.abs(fft2) ** 2
-    
+
     # Coherence (magnitude-squared coherence)
     coherence = jnp.abs(psd12) ** 2 / (psd11 * psd22 + 1e-12)
-    
+
     # Ensure coherence is bounded between 0 and 1
     coherence = jnp.clip(coherence, 0.0, 1.0)
-    
+
     return freqs, coherence
 
 
@@ -412,51 +412,51 @@ def phase_amplitude_coupling(
         Mean amplitude in each phase bin.
     """
     lfp = jnp.asarray(lfp)
-    
+
     # Extract phase and amplitude using simplified filtering
     # Low-pass for phase (simplified Butterworth approximation)
     nyquist = 0.5 / dt
     low_cutoff = jnp.mean(jnp.array(phase_freq_range)) / nyquist
     high_cutoff = jnp.mean(jnp.array(amplitude_freq_range)) / nyquist
-    
+
     # Simple bandpass filtering using FFT
     n_fft = len(lfp)
     freqs = jnp.fft.fftfreq(n_fft, dt)
     fft_lfp = jnp.fft.fft(lfp)
-    
+
     # Phase component
     phase_mask = (jnp.abs(freqs) >= phase_freq_range[0]) & (jnp.abs(freqs) <= phase_freq_range[1])
     phase_fft = fft_lfp * phase_mask
     phase_signal = jnp.fft.ifft(phase_fft)
     instantaneous_phase = jnp.angle(phase_signal)
-    
+
     # Amplitude component  
     amp_mask = (jnp.abs(freqs) >= amplitude_freq_range[0]) & (jnp.abs(freqs) <= amplitude_freq_range[1])
     amp_fft = fft_lfp * amp_mask
     amp_signal = jnp.fft.ifft(amp_fft)
     instantaneous_amplitude = jnp.abs(amp_signal)
-    
+
     # Compute PAC using phase binning
     phase_bins = jnp.linspace(-jnp.pi, jnp.pi, n_bins + 1)
     bin_centers = (phase_bins[:-1] + phase_bins[1:]) / 2
-    
+
     mean_amplitudes = jnp.array([
         jnp.mean(instantaneous_amplitude[
-            (instantaneous_phase >= phase_bins[i]) & 
-            (instantaneous_phase < phase_bins[i + 1])
-        ]) for i in range(n_bins)
+                     (instantaneous_phase >= phase_bins[i]) &
+                     (instantaneous_phase < phase_bins[i + 1])
+                     ]) for i in range(n_bins)
     ])
-    
+
     # Handle NaN values
     mean_amplitudes = jnp.nan_to_num(mean_amplitudes, nan=0.0)
-    
+
     # Modulation index (normalized entropy)
     p_normalized = mean_amplitudes / (jnp.sum(mean_amplitudes) + 1e-12)
     p_normalized = jnp.where(p_normalized > 0, p_normalized, 1e-12)
     entropy = -jnp.sum(p_normalized * jnp.log(p_normalized))
     max_entropy = jnp.log(n_bins)
     modulation_index = (max_entropy - entropy) / max_entropy
-    
+
     return modulation_index, bin_centers, mean_amplitudes
 
 
@@ -480,8 +480,8 @@ def theta_gamma_coupling(
         Theta-gamma coupling modulation index.
     """
     return phase_amplitude_coupling(
-        lfp, dt, 
-        phase_freq_range=(4, 8),    # Theta band
+        lfp, dt,
+        phase_freq_range=(4, 8),  # Theta band
         amplitude_freq_range=(30, 80)  # Gamma band
     )[0]
 
@@ -508,15 +508,15 @@ def current_source_density(
         First and last electrodes are excluded due to boundary conditions.
     """
     lfp_laminar = jnp.asarray(lfp_laminar)
-    
+
     # Second spatial derivative approximation
     # CSD ≈ -σ * ∂²φ/∂z² ≈ -σ * (φ[z+h] - 2φ[z] + φ[z-h]) / h²
     # where σ is tissue conductivity (assumed constant)
-    
+
     # Apply second derivative operator
     csd = -(lfp_laminar[:, 2:] - 2 * lfp_laminar[:, 1:-1] + lfp_laminar[:, :-2])
     csd = csd / (electrode_spacing ** 2)
-    
+
     return csd
 
 
@@ -543,23 +543,23 @@ def spectral_entropy(
         Normalized spectral entropy (0 = most regular, 1 = most random).
     """
     freqs, psd = power_spectral_density(lfp, dt, freq_range=freq_range)
-    
+
     # Handle edge cases
     if jnp.sum(psd) == 0 or psd.size == 0:
         return 0.0
-    
+
     # Normalize PSD to get probability distribution
     psd_norm = psd / jnp.sum(psd)
     psd_norm = jnp.where(psd_norm > 0, psd_norm, 1e-12)
-    
+
     # Shannon entropy
     entropy = -jnp.sum(psd_norm * jnp.log2(psd_norm))
     max_entropy = jnp.log2(psd_norm.shape[0] if psd_norm.ndim > 0 else 1)
-    
+
     # Handle edge cases
     if max_entropy == 0:
         return 0.0
-    
+
     return entropy / max_entropy
 
 
@@ -588,11 +588,11 @@ def lfp_phase_coherence(
     """
     lfp_signals = jnp.asarray(lfp_signals)
     n_time, n_channels = lfp_signals.shape
-    
+
     # Extract phase for each channel using bandpass filtering
     freqs = jnp.fft.fftfreq(n_time, dt)
     band_mask = (jnp.abs(freqs) >= freq_band[0]) & (jnp.abs(freqs) <= freq_band[1])
-    
+
     phases = []
     for ch in range(n_channels):
         fft_signal = jnp.fft.fft(lfp_signals[:, ch])
@@ -600,12 +600,12 @@ def lfp_phase_coherence(
         analytic_signal = jnp.fft.ifft(band_fft)
         phase = jnp.angle(analytic_signal)
         phases.append(phase)
-    
+
     phases = jnp.array(phases)  # Shape: (n_channels, n_time)
-    
+
     # Compute pairwise phase coherence
     coherence_matrix = jnp.zeros((n_channels, n_channels))
-    
+
     for i in range(n_channels):
         for j in range(n_channels):
             if i == j:
@@ -616,5 +616,5 @@ def lfp_phase_coherence(
                 # Circular mean of complex exponentials
                 mean_coherence = jnp.abs(jnp.mean(jnp.exp(1j * phase_diff)))
                 coherence_matrix = coherence_matrix.at[i, j].set(mean_coherence)
-    
+
     return coherence_matrix

@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-from typing import Callable, Any, Union, Sequence, Optional
+from typing import Callable, Any, Union, Optional
 
 import brainstate
 import brainunit as u
@@ -39,4 +39,3 @@ def randn_like(y):
 
 Initializer = Union[brainstate.typing.ArrayLike, Callable]
 InitializerOrNot = Optional[Union[brainstate.typing.ArrayLike, Callable]]
-

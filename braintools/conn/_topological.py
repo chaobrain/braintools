@@ -18,7 +18,7 @@ from typing import Optional, Dict, Sequence
 import brainunit as u
 import numpy as np
 
-from braintools.init._init_base import init_call, Initializer
+from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
@@ -164,7 +164,7 @@ class SmallWorld(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate weights and delays using initialization classes
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -174,7 +174,7 @@ class SmallWorld(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -338,7 +338,7 @@ class ScaleFree(PointConnectivity):
         post_indices = np.array(post_indices, dtype=np.int64)
         n_connections = len(pre_indices)
 
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -348,7 +348,7 @@ class ScaleFree(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -480,7 +480,7 @@ class Regular(PointConnectivity):
 
         n_connections = len(pre_indices)
 
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -490,7 +490,7 @@ class Regular(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -693,7 +693,7 @@ class ModularRandom(PointConnectivity):
         post_indices = np.array(post_indices, dtype=np.int64)
         n_connections = len(pre_indices)
 
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -703,7 +703,7 @@ class ModularRandom(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -1345,7 +1345,7 @@ class HierarchicalRandom(PointConnectivity):
         post_indices = np.array(post_indices, dtype=np.int64)
         n_connections = len(pre_indices)
 
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -1355,7 +1355,7 @@ class HierarchicalRandom(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -1594,7 +1594,7 @@ class CorePeripheryRandom(PointConnectivity):
         post_indices = np.array(post_indices, dtype=np.int64)
         n_connections = len(pre_indices)
 
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -1604,7 +1604,7 @@ class CorePeripheryRandom(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,

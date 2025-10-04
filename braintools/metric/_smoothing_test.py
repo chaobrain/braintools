@@ -16,6 +16,7 @@
 import jax.numpy as jnp
 import numpy as np
 from absl.testing import parameterized
+
 import braintools
 
 
@@ -39,7 +40,8 @@ class SmoothLabelsTest(parameterized.TestCase):
     def test_batched(self):
         """Tests for a full batch."""
         np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts, 0.), self.exp_alpha_zero, atol=1e-4)
-        np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts, 0.1), self.exp_alpha_zero_point_one, atol=1e-4)
+        np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts, 0.1), self.exp_alpha_zero_point_one,
+                                   atol=1e-4)
         np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts, 1.), self.exp_alpha_one, atol=1e-4)
 
     def test_smooth_labels_assertion_error(self):

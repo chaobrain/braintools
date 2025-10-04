@@ -18,6 +18,7 @@ from typing import Dict, List, Tuple, Optional
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.colors import LinearSegmentedColormap
+
 from braintools._misc import set_module_as
 
 __all__ = [

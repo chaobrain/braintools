@@ -16,7 +16,7 @@ import pytest
 
 from braintools.init._init_base import (
     Initialization,
-    init_call,
+    param,
     Compose,
 )
 
@@ -457,32 +457,32 @@ class TestInitCall:
         rng = np.random.default_rng(42)
         init = SimpleInit(5.0)
 
-        result = init_call(init, 10, rng=rng)
+        result = param(init, 10, rng=rng)
         assert result.shape == (10,)
         assert np.all(result == 5.0)
 
     def test_init_call_with_none(self):
         """Test init_call with None returns None."""
         rng = np.random.default_rng(42)
-        result = init_call(None, 10, rng=rng)
+        result = param(None, 10, rng=rng)
         assert result is None
 
     def test_init_call_with_float(self):
         """Test init_call with float scalar."""
         rng = np.random.default_rng(42)
-        result = init_call(5.0, 10, rng=rng)
+        result = param(5.0, 10, rng=rng)
         assert result == 5.0
 
     def test_init_call_with_int(self):
         """Test init_call with int scalar."""
         rng = np.random.default_rng(42)
-        result = init_call(5, 10, rng=rng)
+        result = param(5, 10, rng=rng)
         assert result == 5
 
     def test_init_call_with_scalar_quantity(self):
         """Test init_call with scalar quantity."""
         rng = np.random.default_rng(42)
-        result = init_call(5.0 * u.nS, 10, rng=rng)
+        result = param(5.0 * u.nS, 10, rng=rng)
         assert isinstance(result, u.Quantity)
         assert result.to(u.nS).mantissa == 5.0
 
@@ -490,14 +490,14 @@ class TestInitCall:
         """Test init_call with array of correct size."""
         rng = np.random.default_rng(42)
         arr = np.ones(10)
-        result = init_call(arr, 10, rng=rng)
+        result = param(arr, 10, rng=rng)
         assert np.array_equal(result, arr)
 
     def test_init_call_with_quantity_array_correct_size(self):
         """Test init_call with quantity array of correct size."""
         rng = np.random.default_rng(42)
         arr = np.ones(10) * u.nS
-        result = init_call(arr, 10, rng=rng)
+        result = param(arr, 10, rng=rng)
         assert u.math.allclose(result, arr)
 
     def test_init_call_with_array_wrong_size(self):
@@ -505,13 +505,13 @@ class TestInitCall:
         rng = np.random.default_rng(42)
         arr = np.ones(5)
         with pytest.raises(ValueError, match="must be scalar or match number of connections"):
-            init_call(arr, 10, rng=rng)
+            param(arr, 10, rng=rng)
 
     def test_init_call_with_invalid_type(self):
         """Test init_call raises error for invalid type."""
         rng = np.random.default_rng(42)
         with pytest.raises(TypeError, match="Initialization must be"):
-            init_call("invalid", 10, rng=rng)
+            param("invalid", 10, rng=rng)
 
     def test_init_call_passes_kwargs(self):
         """Test that init_call passes kwargs to initialization."""
@@ -525,7 +525,7 @@ class TestInitCall:
 
         rng = np.random.default_rng(42)
         init = KwargsInit()
-        result = init_call(init, 10, custom_param=7.0, rng=rng)
+        result = param(init, 10, custom_param=7.0, rng=rng)
         assert np.all(result == 7.0)
 
 

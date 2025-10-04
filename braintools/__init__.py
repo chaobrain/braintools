@@ -17,9 +17,9 @@
 __version__ = "0.1.0"
 __version_info__ = (0, 1, 0)
 
-from . import init
 from . import conn
 from . import file
+from . import init
 from . import input
 from . import metric
 from . import optim

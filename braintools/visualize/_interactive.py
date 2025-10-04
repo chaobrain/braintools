@@ -17,8 +17,8 @@ from typing import Optional, Union, Tuple, List
 
 import numpy as np
 
-from ..tree import as_numpy
 from braintools._misc import set_module_as
+from ..tree import as_numpy
 
 # Try to import plotly
 try:

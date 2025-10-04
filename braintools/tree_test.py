@@ -1,6 +1,6 @@
-import numpy as np
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from braintools.tree import (
     scale,
@@ -173,8 +173,8 @@ def test_idx_int_and_slice():
 
 def test_expand_shapes():
     tree = {
-        'a': jnp.array([1.0, 2.0, 3.0]),    # (3,)
-        'b': {'c': jnp.ones((2, 3))},        # (2, 3)
+        'a': jnp.array([1.0, 2.0, 3.0]),  # (3,)
+        'b': {'c': jnp.ones((2, 3))},  # (2, 3)
     }
     out = expand(tree, axis=0)
     assert out['a'].shape == (1, 3)

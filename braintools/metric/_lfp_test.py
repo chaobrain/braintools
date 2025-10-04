@@ -1,5 +1,5 @@
-import unittest
 import math
+import unittest
 
 import brainstate
 import jax.numpy as jnp
@@ -24,10 +24,10 @@ class TestUnitaryLFP(unittest.TestCase):
         times = jnp.arange(1000) * 0.1
         spikes = jnp.zeros((1000, 10))
         spikes = spikes.at[100, :].set(1)  # Synchronized spikes
-        
+
         lfp_exc = unitary_LFP(times, spikes, 'exc', seed=42)
         lfp_inh = unitary_LFP(times, spikes, 'inh', seed=42)
-        
+
         self.assertEqual(lfp_exc.shape, (1000,))
         self.assertEqual(lfp_inh.shape, (1000,))
         self.assertFalse(jnp.allclose(lfp_exc, 0.0))
@@ -38,7 +38,7 @@ class TestUnitaryLFP(unittest.TestCase):
         times = jnp.arange(500) * 0.1
         spikes = jnp.zeros((500, 5))
         spikes = spikes.at[50::100, :].set(1)
-        
+
         locations = ['soma layer', 'deep layer', 'superficial layer', 'surface layer']
         for location in locations:
             lfp = unitary_LFP(times, spikes, 'exc', location=location, seed=42)
@@ -53,9 +53,9 @@ class TestPowerSpectralDensity(unittest.TestCase):
         t = jnp.arange(0, 2, dt)
         # Generate signal with known frequencies
         signal = jnp.sin(2 * jnp.pi * 10 * t) + 0.5 * jnp.sin(2 * jnp.pi * 30 * t)
-        
+
         freqs, psd = power_spectral_density(signal, dt)
-        
+
         self.assertTrue(len(freqs) > 0)
         self.assertEqual(psd.shape, freqs.shape)
         self.assertTrue(jnp.all(psd >= 0))
@@ -64,9 +64,9 @@ class TestPowerSpectralDensity(unittest.TestCase):
         """Test frequency range filtering."""
         dt = 0.001
         signal = jnp.sin(2 * jnp.pi * 15 * jnp.arange(0, 1, dt))
-        
+
         freqs, psd = power_spectral_density(signal, dt, freq_range=(10, 20))
-        
+
         self.assertTrue(jnp.all(freqs >= 10))
         self.assertTrue(jnp.all(freqs <= 20))
 
@@ -78,9 +78,9 @@ class TestPowerSpectralDensity(unittest.TestCase):
             jnp.sin(2 * jnp.pi * 10 * t),
             jnp.sin(2 * jnp.pi * 20 * t)
         ])
-        
+
         freqs, psd = power_spectral_density(signals, dt)
-        
+
         self.assertEqual(psd.shape[0], len(freqs))
         self.assertEqual(psd.shape[1], 2)
 
@@ -90,9 +90,9 @@ class TestCoherenceAnalysis(unittest.TestCase):
         """Test coherence between identical signals."""
         dt = 0.001
         signal = jnp.sin(2 * jnp.pi * 10 * jnp.arange(0, 1, dt))
-        
+
         freqs, coherence = coherence_analysis(signal, signal, dt)
-        
+
         # Coherence between identical signals should be close to 1
         # Check that most values are reasonable (some edge frequencies may be low)
         self.assertGreater(jnp.mean(coherence), 0.3)
@@ -105,9 +105,9 @@ class TestCoherenceAnalysis(unittest.TestCase):
         dt = 0.001
         signal1 = brainstate.random.normal(size=1000)
         signal2 = brainstate.random.normal(size=1000)
-        
+
         freqs, coherence = coherence_analysis(signal1, signal2, dt)
-        
+
         # Coherence should be low for uncorrelated signals
         # Just check that values are bounded and mostly reasonable
         self.assertTrue(jnp.all(coherence >= 0))
@@ -121,10 +121,10 @@ class TestCoherenceAnalysis(unittest.TestCase):
         dt = 0.001
         t = jnp.arange(0, 1, dt)
         signal1 = jnp.sin(2 * jnp.pi * 10 * t)
-        signal2 = jnp.sin(2 * jnp.pi * 10 * t + jnp.pi/4)  # Phase shift
-        
+        signal2 = jnp.sin(2 * jnp.pi * 10 * t + jnp.pi / 4)  # Phase shift
+
         freqs, coherence = coherence_analysis(signal1, signal2, dt)
-        
+
         # Should still have high coherence despite phase shift
         peak_coherence = jnp.max(coherence)
         self.assertGreater(peak_coherence, 0.5)
@@ -136,9 +136,9 @@ class TestPhaseAmplitudeCoupling(unittest.TestCase):
         brainstate.random.seed(42)
         dt = 0.001
         signal = brainstate.random.normal(size=2000)
-        
+
         mi, phase_bins, amplitudes = phase_amplitude_coupling(signal, dt)
-        
+
         # No coupling should result in low modulation index
         self.assertGreaterEqual(mi, 0.0)
         self.assertLessEqual(mi, 1.0)
@@ -148,15 +148,15 @@ class TestPhaseAmplitudeCoupling(unittest.TestCase):
         """Test PAC with synthetic coupled signal."""
         dt = 0.001
         t = jnp.arange(0, 4, dt)
-        
+
         # Create signal with theta-gamma coupling
         theta = jnp.sin(2 * jnp.pi * 6 * t)
         gamma_amplitude = 1 + 0.5 * theta  # Amplitude modulated by theta phase
         gamma = gamma_amplitude * jnp.sin(2 * jnp.pi * 40 * t)
         signal = theta + gamma
-        
+
         mi, phase_bins, amplitudes = phase_amplitude_coupling(signal, dt)
-        
+
         self.assertEqual(len(phase_bins), 18)  # Default n_bins
         self.assertEqual(len(amplitudes), 18)
         self.assertGreaterEqual(mi, 0.0)
@@ -166,13 +166,13 @@ class TestPhaseAmplitudeCoupling(unittest.TestCase):
         """Test that PAC parameters are within expected bounds."""
         dt = 0.001
         signal = jnp.sin(2 * jnp.pi * 10 * jnp.arange(0, 2, dt))
-        
+
         mi, phase_bins, amplitudes = phase_amplitude_coupling(
-            signal, dt, n_bins=12, 
-            phase_freq_range=(8, 12), 
+            signal, dt, n_bins=12,
+            phase_freq_range=(8, 12),
             amplitude_freq_range=(60, 100)
         )
-        
+
         self.assertEqual(len(phase_bins), 12)
         self.assertGreaterEqual(mi, 0.0)
         self.assertLessEqual(mi, 1.0)
@@ -183,9 +183,9 @@ class TestThetaGammaCoupling(unittest.TestCase):
         """Test basic theta-gamma coupling calculation."""
         dt = 0.001
         signal = jnp.sin(2 * jnp.pi * 6 * jnp.arange(0, 2, dt))
-        
+
         coupling = theta_gamma_coupling(signal, dt)
-        
+
         self.assertGreaterEqual(coupling, 0.0)
         self.assertLessEqual(coupling, 1.0)
         self.assertFalse(math.isnan(float(coupling)))
@@ -195,9 +195,9 @@ class TestThetaGammaCoupling(unittest.TestCase):
         brainstate.random.seed(42)
         dt = 0.001
         signal = brainstate.random.normal(size=1000)
-        
+
         coupling = theta_gamma_coupling(signal, dt)
-        
+
         # Random signal should have low coupling
         self.assertLess(coupling, 0.6)  # Relaxed threshold
 
@@ -208,13 +208,13 @@ class TestCurrentSourceDensity(unittest.TestCase):
         # Simulate laminar LFP data
         n_time, n_electrodes = 1000, 8
         lfp_data = jnp.ones((n_time, n_electrodes))
-        
+
         # Add gradient across electrodes
         for i in range(n_electrodes):
             lfp_data = lfp_data.at[:, i].set(i * 0.1)
-        
+
         csd = current_source_density(lfp_data, electrode_spacing=0.1)
-        
+
         # CSD should have 2 fewer electrodes due to boundary conditions
         self.assertEqual(csd.shape, (n_time, n_electrodes - 2))
 
@@ -222,9 +222,9 @@ class TestCurrentSourceDensity(unittest.TestCase):
         """Test CSD with uniform field should be zero."""
         n_time, n_electrodes = 500, 6
         lfp_uniform = jnp.ones((n_time, n_electrodes)) * 5.0
-        
+
         csd = current_source_density(lfp_uniform, electrode_spacing=0.1)
-        
+
         # Uniform field should give zero CSD
         self.assertTrue(jnp.allclose(csd, 0.0, atol=1e-10))
 
@@ -233,10 +233,10 @@ class TestCurrentSourceDensity(unittest.TestCase):
         n_time, n_electrodes = 100, 5
         brainstate.random.seed(42)
         lfp_data = brainstate.random.normal(size=(n_time, n_electrodes))
-        
+
         csd1 = current_source_density(lfp_data, electrode_spacing=0.1)
         csd2 = current_source_density(lfp_data, electrode_spacing=0.2)
-        
+
         # Different spacings should give different results
         self.assertFalse(jnp.allclose(csd1, csd2))
         self.assertEqual(csd1.shape, csd2.shape)
@@ -248,9 +248,9 @@ class TestSpectralEntropy(unittest.TestCase):
         dt = 0.001
         t = jnp.arange(0, 2, dt)
         signal = jnp.sin(2 * jnp.pi * 10 * t)  # Pure sine wave
-        
+
         entropy = spectral_entropy(signal, dt)
-        
+
         # Pure sine should have low entropy
         self.assertGreaterEqual(entropy, 0.0)
         self.assertLessEqual(entropy, 1.0)
@@ -261,9 +261,9 @@ class TestSpectralEntropy(unittest.TestCase):
         brainstate.random.seed(42)
         dt = 0.001
         signal = brainstate.random.normal(size=2000)
-        
+
         entropy = spectral_entropy(signal, dt)
-        
+
         # Random signal should have higher entropy
         self.assertGreater(entropy, 0.3)
         self.assertLessEqual(entropy, 1.0)
@@ -273,9 +273,9 @@ class TestSpectralEntropy(unittest.TestCase):
         dt = 0.001
         t = jnp.arange(0, 1, dt)
         signal = jnp.sin(2 * jnp.pi * 15 * t)
-        
+
         entropy = spectral_entropy(signal, dt, freq_range=(10, 20))
-        
+
         self.assertGreaterEqual(entropy, 0.0)
         self.assertLessEqual(entropy, 1.0)
 
@@ -283,9 +283,9 @@ class TestSpectralEntropy(unittest.TestCase):
         """Test that entropy is properly bounded."""
         dt = 0.001
         signal = jnp.sin(2 * jnp.pi * 10 * jnp.arange(0, 1, dt))
-        
+
         entropy = spectral_entropy(signal, dt)
-        
+
         self.assertGreaterEqual(entropy, 0.0)
         self.assertLessEqual(entropy, 1.0)
         self.assertFalse(math.isnan(float(entropy)))
@@ -298,9 +298,9 @@ class TestLFPPhaseCoherence(unittest.TestCase):
         t = jnp.arange(0, 2, dt)
         signal = jnp.sin(2 * jnp.pi * 10 * t)
         signals = jnp.column_stack([signal, signal, signal])
-        
+
         coherence_matrix = lfp_phase_coherence(signals, dt, freq_band=(8, 12))
-        
+
         # Diagonal should be 1
         self.assertTrue(jnp.allclose(jnp.diag(coherence_matrix), 1.0))
         # Off-diagonal should be close to 1 for identical signals
@@ -313,9 +313,9 @@ class TestLFPPhaseCoherence(unittest.TestCase):
         n_time = 1000
         n_channels = 4
         signals = brainstate.random.normal(size=(n_time, n_channels))
-        
+
         coherence_matrix = lfp_phase_coherence(signals, dt)
-        
+
         # Should be symmetric
         self.assertTrue(jnp.allclose(coherence_matrix, coherence_matrix.T))
         # Diagonal should be 1
@@ -329,15 +329,15 @@ class TestLFPPhaseCoherence(unittest.TestCase):
         dt = 0.001
         t = jnp.arange(0, 2, dt)
         base_signal = jnp.sin(2 * jnp.pi * 10 * t)
-        
+
         signals = jnp.column_stack([
             base_signal,
-            jnp.sin(2 * jnp.pi * 10 * t + jnp.pi/4),
-            jnp.sin(2 * jnp.pi * 10 * t + jnp.pi/2)
+            jnp.sin(2 * jnp.pi * 10 * t + jnp.pi / 4),
+            jnp.sin(2 * jnp.pi * 10 * t + jnp.pi / 2)
         ])
-        
+
         coherence_matrix = lfp_phase_coherence(signals, dt, freq_band=(8, 12))
-        
+
         # Should have some coherence despite phase shifts
         # Just check basic properties and reasonable values
         self.assertTrue(jnp.all(coherence_matrix >= 0.0))
@@ -350,9 +350,9 @@ class TestLFPPhaseCoherence(unittest.TestCase):
         n_time, n_channels = 500, 5
         signals = jnp.sin(2 * jnp.pi * 10 * jnp.arange(0, n_time * dt, dt))[:, None]
         signals = jnp.tile(signals, (1, n_channels))
-        
+
         coherence_matrix = lfp_phase_coherence(signals, dt)
-        
+
         # Should be square
         self.assertEqual(coherence_matrix.shape, (n_channels, n_channels))
         # Should be symmetric
@@ -366,12 +366,12 @@ class TestLFPPhaseCoherence(unittest.TestCase):
         t = jnp.arange(0, 2, dt)
         signal = jnp.sin(2 * jnp.pi * 25 * t)  # 25 Hz signal
         signals = jnp.column_stack([signal, signal])
-        
+
         # Test in beta band (should have high coherence)
         coherence_beta = lfp_phase_coherence(signals, dt, freq_band=(20, 30))
         # Test in alpha band (should have lower coherence)
         coherence_alpha = lfp_phase_coherence(signals, dt, freq_band=(8, 12))
-        
+
         # Both should be high for identical signals, just check they're valid
         self.assertGreaterEqual(coherence_beta[0, 1], 0.8)
         self.assertGreaterEqual(coherence_alpha[0, 1], 0.8)

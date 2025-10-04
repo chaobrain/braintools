@@ -21,8 +21,8 @@ import brainstate
 import brainunit as u
 import jax.numpy as jnp
 
-from ._util import _reduce
 from braintools._misc import set_module_as
+from ._util import _reduce
 
 __all__ = [
     'squared_error',
