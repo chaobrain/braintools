@@ -77,7 +77,7 @@ class VarianceScaling(Initialization):
         self.scale = scale
         self.mode = mode
         self.distribution = distribution
-        self.unit = unit
+        self.unit = u.UNITLESS if unit is None else unit
 
     def _compute_fans(self, shape):
         """Compute number of input and output units from shape."""
