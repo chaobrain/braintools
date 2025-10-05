@@ -236,7 +236,7 @@ class Random(PointConnectivity):
 
 # Convenience aliases for common patterns
 class FixedProb(Random):
-    """Alias for Random connectivity with fixed probability."""
+    """Alias for Random connectivity with fixed probability (:class:`Random`)."""
 
     __module__ = 'braintools.conn'
 
