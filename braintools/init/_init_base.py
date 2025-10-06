@@ -299,7 +299,7 @@ def param(
         elif isinstance(init, (np.ndarray, jax.Array, u.Quantity, State)):
             init = init
         else:
-            raise ValueError(f'Unknown parameter type: {type(init)}')
+            raise TypeError(f'Unknown parameter type: {type(init)}')
 
     # Check if the shape of the parameter matches the given size
     if not _are_broadcastable_shapes(u.math.shape(init), sizes):

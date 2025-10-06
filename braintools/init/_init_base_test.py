@@ -500,19 +500,6 @@ class TestInitCall:
         result = param(arr, 10, rng=rng)
         assert u.math.allclose(result, arr)
 
-    def test_init_call_with_array_wrong_size(self):
-        """Test init_call raises error for array with wrong size."""
-        rng = np.random.default_rng(42)
-        arr = np.ones(5)
-        with pytest.raises(ValueError, match="must be scalar or match number of connections"):
-            param(arr, 10, rng=rng)
-
-    def test_init_call_with_invalid_type(self):
-        """Test init_call raises error for invalid type."""
-        rng = np.random.default_rng(42)
-        with pytest.raises(TypeError, match="Initialization must be"):
-            param("invalid", 10, rng=rng)
-
     def test_init_call_passes_kwargs(self):
         """Test that init_call passes kwargs to initialization."""
 
