@@ -1,4 +1,4 @@
-# Copyright 2025 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -76,7 +76,7 @@ class TestSpikeBitwiseOps(unittest.TestCase):
     def test_broadcasting(self):
         # Ensure elementwise broadcasting works as expected
         x = jnp.array([[0], [1]])  # shape (2,1)
-        y = jnp.array([0, 1])      # shape (2,)
+        y = jnp.array([0, 1])  # shape (2,)
 
         # OR truth table broadcast -> [[0,1],[1,1]]
         expected_or = jnp.array([[0, 1], [1, 1]])
@@ -91,4 +91,3 @@ class TestSpikeBitwiseOps(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

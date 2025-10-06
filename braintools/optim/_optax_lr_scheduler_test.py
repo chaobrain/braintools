@@ -1,4 +1,4 @@
-# Copyright 2025 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1884,3 +1884,455 @@ class test_scheduler_edge_cases(unittest.TestCase):
         assert abs(optimizer.current_lr - 0.1) < 1e-6
 
         print("[OK] test_scheduler_polynomial_power_zero")
+
+
+class TestExponentialDecayLR(unittest.TestCase):
+    """Comprehensive tests for ExponentialDecayLR scheduler."""
+
+    # ============================================================================
+    # Basic Functionality Tests
+    # ============================================================================
+
+    def test_basic_continuous_decay(self):
+        """Test basic continuous exponential decay."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=1000,
+            decay_rate=0.96
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Initial lr
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
+
+        # After 1000 steps: lr = 0.1 * 0.96^1
+        for _ in range(1000):
+            scheduler.step()
+        expected_lr = 0.1 * (0.96 ** 1.0)
+        assert abs(optimizer.current_lr - expected_lr) < 1e-5
+
+        # After 2000 steps: lr = 0.1 * 0.96^2
+        for _ in range(1000):
+            scheduler.step()
+        expected_lr = 0.1 * (0.96 ** 2.0)
+        assert abs(optimizer.current_lr - expected_lr) < 1e-5
+
+        print("[OK] test_basic_continuous_decay")
+
+    def test_staircase_mode(self):
+        """Test staircase (discrete) decay mode."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=1000,
+            decay_rate=0.5,
+            staircase=True
+        )
+        optimizer = bts.optim.SGD(lr=scheduler, momentum=0.9)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Initial lr
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
+
+        # At step 500, should still be at base_lr (staircase mode)
+        for _ in range(500):
+            scheduler.step()
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
+
+        # At step 1000, should drop to 0.1 * 0.5^1 = 0.05
+        for _ in range(500):
+            scheduler.step()
+        assert abs(optimizer.current_lr - 0.05) < 1e-6
+
+        # At step 1500, should still be 0.05
+        for _ in range(500):
+            scheduler.step()
+        assert abs(optimizer.current_lr - 0.05) < 1e-6
+
+        # At step 2000, should drop to 0.1 * 0.5^2 = 0.025
+        for _ in range(500):
+            scheduler.step()
+        assert abs(optimizer.current_lr - 0.025) < 1e-6
+
+        print("[OK] test_staircase_mode")
+
+    def test_transition_begin(self):
+        """Test delayed decay start with transition_begin."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.01,
+            decay_steps=1000,
+            decay_rate=0.95,
+            transition_begin=2000
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Steps 0-1999: lr should remain at base_lr
+        for step in [0, 1000, 1999]:
+            while scheduler.last_epoch.value < step:
+                scheduler.step()
+            assert abs(optimizer.current_lr - 0.01) < 1e-7
+
+        # Step 2000: decay starts, but rate_factor = 0
+        scheduler.step()  # step 2000
+        assert abs(optimizer.current_lr - 0.01) < 1e-7
+
+        # Step 3000: rate_factor = 1, lr = 0.01 * 0.95^1
+        for _ in range(1000):
+            scheduler.step()
+        expected_lr = 0.01 * 0.95
+        assert abs(optimizer.current_lr - expected_lr) < 1e-7
+
+        print("[OK] test_transition_begin")
+
+    def test_end_value_lower_bound(self):
+        """Test end_value as lower bound for decay."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=100,
+            decay_rate=0.5,
+            end_value=0.01
+        )
+        optimizer = bts.optim.SGD(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Run for many steps to ensure we hit the bound
+        for _ in range(1000):
+            scheduler.step()
+
+        # lr should not go below end_value
+        assert optimizer.current_lr >= 0.01 - 1e-7
+        # Should be close to end_value after enough steps
+        assert abs(optimizer.current_lr - 0.01) < 1e-5
+
+        print("[OK] test_end_value_lower_bound")
+
+    def test_end_value_upper_bound(self):
+        """Test end_value as upper bound for growth (decay_rate > 1)."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.01,
+            decay_steps=10,
+            decay_rate=1.5,  # Fast growth
+            end_value=0.05
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Run for many steps to exceed end_value
+        for _ in range(100):
+            scheduler.step()
+
+        # lr should not go above end_value
+        assert optimizer.current_lr <= 0.05 + 1e-6
+        # Should be at end_value after enough steps
+        assert abs(optimizer.current_lr - 0.05) < 1e-5
+
+        print("[OK] test_end_value_upper_bound")
+
+    # ============================================================================
+    # Multiple Parameter Groups Tests
+    # ============================================================================
+
+    def test_multiple_param_groups(self):
+        """Test with multiple parameter groups."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=[0.1, 0.01],
+            decay_steps=1000,
+            decay_rate=0.9
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Check initial lrs
+        lrs = scheduler.get_lr()
+        assert len(lrs) >= 1
+        assert abs(lrs[0] - 0.1) < 1e-6
+
+        # After 1000 steps
+        for _ in range(1000):
+            scheduler.step()
+        lrs = scheduler.get_lr()
+        assert abs(lrs[0] - 0.1 * 0.9) < 1e-5
+
+        print("[OK] test_multiple_param_groups")
+
+    # ============================================================================
+    # Edge Cases and Validation Tests
+    # ============================================================================
+
+    def test_zero_transition_begin(self):
+        """Test with transition_begin=0 (immediate decay)."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=500,
+            decay_rate=0.9,
+            transition_begin=0
+        )
+        optimizer = bts.optim.SGD(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Decay should start immediately
+        for _ in range(500):
+            scheduler.step()
+        expected_lr = 0.1 * (0.9 ** 1.0)
+        assert abs(optimizer.current_lr - expected_lr) < 1e-5
+
+        print("[OK] test_zero_transition_begin")
+
+    def test_decay_rate_close_to_one(self):
+        """Test with decay_rate very close to 1 (slow decay)."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.01,
+            decay_steps=100,
+            decay_rate=0.99
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        initial_lr = optimizer.current_lr
+
+        # After 1000 steps
+        for _ in range(1000):
+            scheduler.step()
+
+        # lr should have decayed but not drastically
+        assert optimizer.current_lr < initial_lr
+        assert optimizer.current_lr > initial_lr * 0.5
+
+        print("[OK] test_decay_rate_close_to_one")
+
+    def test_small_decay_rate(self):
+        """Test with small decay_rate (fast decay)."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=1.0,
+            decay_steps=10,
+            decay_rate=0.1
+        )
+        optimizer = bts.optim.SGD(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # After 10 steps: lr = 1.0 * 0.1^1 = 0.1
+        for _ in range(10):
+            scheduler.step()
+        expected_lr = 1.0 * 0.1
+        assert abs(optimizer.current_lr - expected_lr) < 1e-5
+
+        # After 20 steps: lr = 1.0 * 0.1^2 = 0.01
+        for _ in range(10):
+            scheduler.step()
+        expected_lr = 1.0 * 0.01
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
+
+        print("[OK] test_small_decay_rate")
+
+    def test_invalid_transition_steps(self):
+        """Test that negative or zero transition_steps raises error."""
+        with self.assertRaises(ValueError):
+            bts.optim.ExponentialDecayLR(
+                base_lr=0.1,
+                decay_steps=0,
+                decay_rate=0.9
+            )
+
+        with self.assertRaises(ValueError):
+            bts.optim.ExponentialDecayLR(
+                base_lr=0.1,
+                decay_steps=-100,
+                decay_rate=0.9
+            )
+
+        print("[OK] test_invalid_transition_steps")
+
+    def test_zero_decay_rate(self):
+        """Test that decay_rate=0 raises error."""
+        with self.assertRaises(ValueError):
+            bts.optim.ExponentialDecayLR(
+                base_lr=0.1,
+                decay_steps=1000,
+                decay_rate=0.0
+            )
+
+        print("[OK] test_zero_decay_rate")
+
+    def test_negative_transition_begin(self):
+        """Test that negative transition_begin raises error."""
+        with self.assertRaises(ValueError):
+            bts.optim.ExponentialDecayLR(
+                base_lr=0.1,
+                decay_steps=1000,
+                decay_rate=0.9,
+                transition_begin=-100
+            )
+
+        print("[OK] test_negative_transition_begin")
+
+    # ============================================================================
+    # Integration Tests
+    # ============================================================================
+
+    def test_with_different_optimizers(self):
+        """Test ExponentialDecayLR with different optimizers."""
+        model = bst.nn.Linear(10, 5)
+
+        # Test with Adam
+        scheduler1 = bts.optim.ExponentialDecayLR(
+            base_lr=0.001,
+            decay_steps=1000,
+            decay_rate=0.96
+        )
+        opt1 = bts.optim.Adam(lr=scheduler1)
+        opt1.register_trainable_weights(model.states(bst.ParamState))
+        for _ in range(100):
+            scheduler1.step()
+        assert opt1.current_lr > 0
+
+        # Test with SGD
+        model2 = bst.nn.Linear(10, 5)
+        scheduler2 = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=500,
+            decay_rate=0.95
+        )
+        opt2 = bts.optim.SGD(lr=scheduler2, momentum=0.9)
+        opt2.register_trainable_weights(model2.states(bst.ParamState))
+        for _ in range(100):
+            scheduler2.step()
+        assert opt2.current_lr > 0
+
+        print("[OK] test_with_different_optimizers")
+
+    def test_staircase_with_transition_begin(self):
+        """Test combining staircase mode with transition_begin."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=1000,
+            decay_rate=0.8,
+            transition_begin=500,
+            staircase=True
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Steps 0-499: constant at base_lr (before transition_begin)
+        for _ in range(500):
+            scheduler.step()
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
+
+        # Steps 500-1499: still constant (staircase, rate_factor < 1)
+        for _ in range(999):
+            scheduler.step()
+        assert abs(optimizer.current_lr - 0.1) < 1e-6
+
+        # Step 1500: rate_factor=1, lr drops
+        for _ in range(1):
+            scheduler.step()
+        expected_lr = 0.1 * 0.8
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
+
+        # Steps 1501-2499: stays at 0.08 (staircase)
+        for _ in range(999):
+            scheduler.step()
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
+
+        print("[OK] test_staircase_with_transition_begin")
+
+    def test_end_value_with_staircase(self):
+        """Test end_value combined with staircase mode."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=100,
+            decay_rate=0.5,
+            staircase=True,
+            end_value=0.01
+        )
+        optimizer = bts.optim.SGD(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Run for many steps
+        for _ in range(1000):
+            scheduler.step()
+
+        # Should not go below end_value
+        assert optimizer.current_lr >= 0.01 - 1e-7
+
+        print("[OK] test_end_value_with_staircase")
+
+    # ============================================================================
+    # Comparison and Consistency Tests
+    # ============================================================================
+
+    def test_consistency_with_small_steps(self):
+        """Test that small transition_steps gives fine-grained control."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=1,  # Decay every step
+            decay_rate=0.99
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # After 10 steps: lr = 0.1 * 0.99^10
+        for _ in range(10):
+            scheduler.step()
+        expected_lr = 0.1 * (0.99 ** 10)
+        assert abs(optimizer.current_lr - expected_lr) < 1e-6
+
+        print("[OK] test_consistency_with_small_steps")
+
+    def test_long_training_stability(self):
+        """Test scheduler behavior over long training runs."""
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=100,
+            decay_rate=0.5,
+            end_value=1e-4
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # Run for many steps to reach end_value
+        for _ in range(2000):
+            scheduler.step()
+
+        # Should converge to end_value and not go below
+        assert optimizer.current_lr >= 1e-4 - 1e-9
+        assert abs(optimizer.current_lr - 1e-4) < 1e-6
+
+        print("[OK] test_long_training_stability")
+
+    def test_jit_compatibility(self):
+        """Test that get_lr is JIT-compatible."""
+        import jax
+
+        model = bst.nn.Linear(10, 5)
+        scheduler = bts.optim.ExponentialDecayLR(
+            base_lr=0.1,
+            decay_steps=1000,
+            decay_rate=0.96
+        )
+        optimizer = bts.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(bst.ParamState))
+
+        # This should not raise an error
+        @jax.jit
+        def step_fn():
+            return scheduler.get_lr()
+
+        lrs = step_fn()
+        assert len(lrs) > 0
+        assert abs(lrs[0] - 0.1) < 1e-6
+
+        print("[OK] test_jit_compatibility")

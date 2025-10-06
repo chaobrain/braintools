@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 import jax.numpy as jnp
 import numpy as np
 from absl.testing import parameterized
+
 import braintools
 
 
@@ -120,7 +121,8 @@ class CosineDistanceTest(parameterized.TestCase):
 
     def test_scalar_similarity(self):
         """Tests for a full batch."""
-        np.testing.assert_allclose((braintools.metric.cosine_similarity)(self.ys[0], self.ts[0]), 1. - self.exp[0], atol=1e-4)
+        np.testing.assert_allclose((braintools.metric.cosine_similarity)(self.ys[0], self.ts[0]), 1. - self.exp[0],
+                                   atol=1e-4)
 
     def test_batched_distance(self):
         """Tests for a full batch."""

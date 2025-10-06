@@ -1,4 +1,4 @@
-# Copyright 2025 BrainSim Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ from typing import Optional
 import brainunit as u
 import numpy as np
 
-from braintools.init._init_base import init_call, Initializer
+from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
@@ -197,7 +197,7 @@ class ExcitatoryInhibitory(PointConnectivity):
         elif self.exc_weight is None or self.inh_weight is None:
             raise ValueError("exc_weight and inh_weight must be both None or both specified")
         else:
-            exc_weights = init_call(
+            exc_weights = param(
                 self.exc_weight,
                 n_exc_conn,
                 rng=self.rng,
@@ -209,7 +209,7 @@ class ExcitatoryInhibitory(PointConnectivity):
             )
             exc_weights, weight_unit = u.split_mantissa_unit(exc_weights)
 
-            inh_weights = init_call(
+            inh_weights = param(
                 self.inh_weight,
                 n_inh_conn,
                 rng=self.rng,
@@ -240,7 +240,7 @@ class ExcitatoryInhibitory(PointConnectivity):
         elif self.exc_delay is None or self.inh_delay is None:
             raise ValueError("exc_delay and inh_delay must be both None or both specified")
         else:
-            exc_delays = init_call(
+            exc_delays = param(
                 self.exc_delay,
                 n_exc_conn,
                 rng=self.rng,
@@ -252,7 +252,7 @@ class ExcitatoryInhibitory(PointConnectivity):
             )
             exc_delays, delay_unit = u.split_mantissa_unit(exc_delays)
 
-            inh_delays = init_call(
+            inh_delays = param(
                 self.inh_delay,
                 n_inh_conn,
                 rng=self.rng,

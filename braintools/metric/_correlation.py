@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,10 +15,9 @@
 
 # -*- coding: utf-8 -*-
 
-from typing import Union, Optional
+from typing import Union
 
 import brainstate
-import brainunit as u
 import jax
 import numpy as onp
 from jax import vmap, lax, numpy as jnp
@@ -33,7 +32,6 @@ __all__ = [
     'functional_connectivity',
     'functional_connectivity_dynamics',
 ]
-
 
 
 @set_module_as('braintools.metric')

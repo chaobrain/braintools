@@ -1,4 +1,4 @@
-# Copyright 2025 BrainSim Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ from typing import Optional
 import brainunit as u
 import numpy as np
 
-from braintools.init._init_base import init_call, Initializer
+from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
@@ -96,7 +96,7 @@ class AllToAll(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate weights and delays using initialization classes
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -106,7 +106,7 @@ class AllToAll(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -196,7 +196,7 @@ class OneToOne(PointConnectivity):
             post_indices = np.arange(n_connections)
 
         # Generate weights and delays using initialization classes
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -206,7 +206,7 @@ class OneToOne(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,

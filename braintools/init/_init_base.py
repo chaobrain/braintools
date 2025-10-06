@@ -1,4 +1,4 @@
-# Copyright 2025 BrainSim Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,16 +21,20 @@ functions for all initialization strategies (weights, delays, distances).
 """
 
 from abc import ABC, abstractmethod
-from typing import Union, Optional
+from typing import Union, Optional, Callable, Sequence, Tuple
 
 import brainunit as u
 import jax
 import numpy as np
+from brainstate import State
+from brainstate.typing import ArrayLike
+
+from braintools._misc import set_module_as
 
 __all__ = [
     'Initialization',
     'Initializer',
-    'init_call',
+    'param',
     'Compose',
 ]
 
@@ -173,67 +177,158 @@ Initializer = Union[Initialization, float, int, np.ndarray, jax.Array, u.Quantit
 # Helper Functions
 # =============================================================================
 
-def init_call(init: Optional[Initialization], n: int, **kwargs):
-    """
-    Helper function to call initialization functions.
+def _to_size(x) -> Optional[Tuple[int]]:
+    if isinstance(x, (tuple, list)):
+        return tuple(x)
+    if isinstance(x, (int, np.integer)):
+        return (x,)
+    if x is None:
+        return x
+    raise ValueError(f'Cannot make a size for {x}')
 
-    This utility function provides a unified interface for calling initialization strategies,
-    whether they are Initialization objects, scalars, or arrays.
+
+def _are_broadcastable_shapes(shape1, shape2):
+    """
+    Check if two shapes are broadcastable.
+
+    Parameters:
+    - shape1: Tuple[int], the shape of the first array.
+    - shape2: Tuple[int], the shape of the second array.
+
+    Returns:
+    - bool: True if shapes are broadcastable, False otherwise.
+    """
+    # Reverse the shapes to compare from the last dimension
+    shape1_reversed = shape1[::-1]
+    shape2_reversed = shape2[::-1]
+
+    # Iterate over the dimensions of the shorter shape
+    for dim1, dim2 in zip(shape1_reversed, shape2_reversed):
+        # Check if the dimensions are not equal and neither is 1
+        if dim1 != dim2 and 1 not in (dim1, dim2):
+            return False
+
+    # If all dimensions are compatible, the shapes are broadcastable
+    return True
+
+
+def _expand_params_to_match_sizes(params, sizes):
+    """
+    Expand the dimensions of params to match the dimensions of sizes.
+
+    Parameters:
+    - params: jax.Array or np.ndarray, the parameter array to be expanded.
+    - sizes: tuple[int] or list[int], the target shape dimensions.
+
+    Returns:
+    - Expanded params with dimensions matching sizes.
+    """
+    params_dim = params.ndim
+    sizes_dim = len(sizes)
+    dim_diff = sizes_dim - params_dim
+
+    # Add new axes to params if it has fewer dimensions than sizes
+    for _ in range(dim_diff):
+        params = u.math.expand_dims(params, axis=0)  # Add new axis at the last dimension
+    return params
+
+
+@set_module_as('brainstate.nn')
+def param(
+    init: Union[Callable, ArrayLike, State],
+    sizes: Union[int, Sequence[int]],
+    batch_size: Optional[int] = None,
+    allow_none: bool = True,
+    allow_scalar: bool = True,
+    **param_kwargs,
+):
+    """
+    Initialize parameters.
 
     Parameters
     ----------
-    init : Initialization, float, int, array, or None
-        The initialization strategy or value.
-    n : int
-        Number of connections or parameters to generate.
-    **kwargs :
+    init: callable, ArrayLike, State
+        The initialization of the parameter.
+
+        - If it is None, the created parameter will be None.
+        - If it is a callable function :math:`f`, the ``f(size)`` will be returned.
+        - If it is an instance of :py:class:`init.Initializer``, the ``f(size)`` will be returned.
+        - If it is a tensor, then this function check whether ``tensor.shape`` is equal to the given ``size``.
+    sizes: int, sequence of int
+        The shape of the parameter.
+    batch_size: int
+        The batch size.
+    allow_none: bool
+        Whether allow the parameter is None.
+    allow_scalar: bool
+        Whether allow the parameter is a scalar value.
+    **param_kwargs
         Additional keyword arguments passed to the initialization.
-        rng : numpy.random.Generator, optional
-            Random number generator (default: np.random).
 
     Returns
     -------
-    values : array_like or None
-        Generated parameter values, or None if init is None.
+    param: ArrayType, float, int, bool, None
+      The initialized parameter.
 
-    Raises
-    ------
-    ValueError
-        If array size doesn't match the number of connections.
-    TypeError
-        If init is not a valid initialization type.
-
-    Examples
+    See Also
     --------
-    .. code-block:: python
-
-        >>> import numpy as np
-        >>> import brainunit as u
-        >>> from braintools.init import init_call, Normal
-        >>>
-        >>> weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), 100)
-        >>>
-        >>> # With custom rng
-        >>> rng = np.random.default_rng(0)
-        >>> weights = init_call(Normal(0.5 * u.siemens, 0.1 * u.siemens), 100, rng=rng)
-        >>>
-        >>> scalar_weights = init_call(0.5, 100)
+    noise, state
     """
+    # Check if the parameter is None
     if init is None:
-        return None
-    elif isinstance(init, Initialization):
-        return init(n, **kwargs)
-    elif isinstance(init, (float, int)):
-        return init
-    elif isinstance(init, (u.Quantity, np.ndarray, jax.Array)):
-        if u.math.size(init) in [1, n]:
-            return init
+        if allow_none:
+            return None
         else:
-            raise ValueError('Quantity must be scalar or match number of connections')
-    elif hasattr(init, '__array__'):
-        return init
+            raise ValueError(
+                f'Expect a parameter with type of float, ArrayType, Initializer, or '
+                f'Callable function, but we got None. '
+            )
+
+    # Convert sizes to a tuple
+    sizes = tuple(_to_size(sizes))
+
+    # Check if the parameter is a callable function
+    if callable(init):
+        if batch_size is not None:
+            sizes = (batch_size,) + sizes
+        init = init(sizes, **param_kwargs)
     else:
-        raise TypeError(f"Initialization must be an Initialization class, scalar, or array. Got {type(init)}")
+        # Check if the parameter is a scalar value
+        if allow_scalar and u.math.isscalar(init):
+            return init
+        elif isinstance(init, (np.ndarray, jax.Array, u.Quantity, State)):
+            init = init
+        else:
+            raise TypeError(f'Unknown parameter type: {type(init)}')
+
+    # Check if the shape of the parameter matches the given size
+    if not _are_broadcastable_shapes(u.math.shape(init), sizes):
+        raise ValueError(
+            f'The shape of the parameter {u.math.shape(init)} '
+            f'does not match with the given size {sizes}'
+        )
+
+    # Expand the parameter to match the given batch size
+    param_value = init.value if isinstance(init, State) else init
+    if batch_size is not None:
+        if param_value.ndim <= len(sizes):
+            # add a new axis to the params so that it matches the dimensionality of the given shape ``sizes``
+            param_value = _expand_params_to_match_sizes(param_value, sizes)
+            param_value = u.math.repeat(
+                u.math.expand_dims(param_value, axis=0),
+                batch_size,
+                axis=0
+            )
+            if isinstance(init, State):
+                init.restore_value(param_value)
+            param_value = init
+        else:
+            if param_value.shape[0] != batch_size:
+                raise ValueError(
+                    f'The batch size of the parameter {param_value.shape[0]} '
+                    f'does not match with the given batch size {batch_size}'
+                )
+    return param_value
 
 
 # =============================================================================

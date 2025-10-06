@@ -1,4 +1,4 @@
-# Copyright 2025 BrainSim Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from scipy.spatial.distance import cdist
 
 from braintools.init._distance_base import DistanceProfile
 from braintools.init._distance_impl import GaussianProfile, ExponentialProfile
-from braintools.init._init_base import init_call, Initializer
+from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
@@ -237,7 +237,7 @@ class DistanceDependent(PointConnectivity):
 
         # Generate weights using initialization class
         # Pass distances for distance-dependent weight distributions
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -250,7 +250,7 @@ class DistanceDependent(PointConnectivity):
         )
 
         # Generate delays using initialization class
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -849,7 +849,7 @@ class Ring(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate weights and delays
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -859,7 +859,7 @@ class Ring(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -1120,7 +1120,7 @@ class Grid2d(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate weights and delays
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -1130,7 +1130,7 @@ class Grid2d(PointConnectivity):
             pre_positions=kwargs.get('pre_positions', None),
             post_positions=kwargs.get('post_positions', None)
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -1466,7 +1466,7 @@ class RadialPatches(PointConnectivity):
 
         n_connections = len(pre_indices)
 
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -1476,7 +1476,7 @@ class RadialPatches(PointConnectivity):
             pre_positions=pre_positions,
             post_positions=post_positions
         )
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,

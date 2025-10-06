@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import brainstate
 import brainunit as u
 import jax.numpy as jnp
 
-from ._util import _reduce
 from braintools._misc import set_module_as
+from ._util import _reduce
 
 __all__ = [
     'squared_error',

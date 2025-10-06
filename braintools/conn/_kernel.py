@@ -1,4 +1,4 @@
-# Copyright 2025 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,14 +22,14 @@ Useful for implementing center-surround receptive fields, orientation selectivit
 and other spatially-structured connectivity patterns in spiking neural networks.
 """
 
-from typing import Optional, Union, Callable
+from typing import Optional, Callable
 
 import brainunit as u
 import numpy as np
+from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from brainstate.typing import ArrayLike
-from braintools.init import init_call, Initializer
+from braintools.init import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
@@ -189,7 +189,7 @@ class Conv2dKernel(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate base weights
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             param_type='weight',
@@ -216,7 +216,7 @@ class Conv2dKernel(PointConnectivity):
         else:
             weights = kernel_weights
 
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             param_type='delay',
@@ -346,7 +346,7 @@ class GaussianKernel(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate base weights
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             param_type='weight',
@@ -373,7 +373,7 @@ class GaussianKernel(PointConnectivity):
         else:
             weights = gaussian_weights
 
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -557,7 +557,7 @@ class GaborKernel(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate base weights
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             rng=self.rng,
@@ -584,7 +584,7 @@ class GaborKernel(PointConnectivity):
         else:
             weights = gabor_weights
 
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             rng=self.rng,
@@ -721,7 +721,7 @@ class DoGKernel(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate base weights
-        weights = init_call(
+        weights = param(
             self.weight_init, n_connections,
             param_type='weight', pre_size=pre_size, post_size=post_size,
             pre_positions=pre_positions, post_positions=post_positions,
@@ -744,7 +744,7 @@ class DoGKernel(PointConnectivity):
         else:
             weights = dog_weights
 
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             param_type='delay',
@@ -1168,7 +1168,7 @@ class CustomKernel(PointConnectivity):
         n_connections = len(pre_indices)
 
         # Generate base weights
-        weights = init_call(
+        weights = param(
             self.weight_init,
             n_connections,
             param_type='weight',
@@ -1195,7 +1195,7 @@ class CustomKernel(PointConnectivity):
         else:
             weights = kernel_weights
 
-        delays = init_call(
+        delays = param(
             self.delay_init,
             n_connections,
             param_type='delay',

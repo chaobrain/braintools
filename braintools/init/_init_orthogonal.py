@@ -1,4 +1,4 @@
-# Copyright 2025 BrainSim Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ This module provides orthogonal initialization methods:
 - DeltaOrthogonal: Orthogonal initialization for deep networks
 - Identity: Identity matrix initialization
 """
+import warnings
 
 import brainstate
 import brainunit as u
@@ -71,8 +72,15 @@ class Orthogonal(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
+    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
         self.scale = scale
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please handle units separately from initialization.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
         self.unit = unit
 
     def __call__(self, size, **kwargs):
@@ -106,7 +114,7 @@ class Orthogonal(Initialization):
         return u.maybe_decimal(self.scale * q * self.unit)
 
     def __repr__(self):
-        return f'Orthogonal(scale={self.scale}, unit={self.unit})'
+        return f'Orthogonal(scale={self.scale})'
 
 
 class DeltaOrthogonal(Initialization):
@@ -139,8 +147,15 @@ class DeltaOrthogonal(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: float = 1.0, unit: u.Unit = u.UNITLESS):
+    def __init__(self, scale: float = 1.0, unit: u.Unit = None):
         self.scale = scale
+        if unit is not None:
+            warnings.warn(
+                'The `unit` parameter is deprecated and will be removed in future versions. '
+                'Please handle units separately from initialization.', DeprecationWarning
+            )
+        else:
+            unit = u.UNITLESS
         self.unit = unit
 
     def __call__(self, size, **kwargs):
@@ -169,7 +184,7 @@ class DeltaOrthogonal(Initialization):
         return u.maybe_decimal(weights * self.unit)
 
     def __repr__(self):
-        return f'DeltaOrthogonal(scale={self.scale}, unit={self.unit})'
+        return f'DeltaOrthogonal(scale={self.scale})'
 
 
 class Identity(Initialization):

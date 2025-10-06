@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,16 +14,17 @@
 # ==============================================================================
 
 
-__version__ = "0.0.14"
-__version_info__ = (0, 0, 14)
+__version__ = "0.1.0"
+__version_info__ = (0, 1, 0)
 
-from . import init
 from . import conn
 from . import file
+from . import init
 from . import input
 from . import metric
 from . import optim
 from . import quad
+from . import surrogate
 from . import tree
 from . import visualize
 from ._spike_encoder import *
@@ -33,7 +34,12 @@ from ._spike_operation import __all__ as operation_all
 from ._transform import *
 from ._transform import __all__ as transform_all
 
-__all__ = ['conn', 'input', 'init', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad']
+__all__ = [
+    'conn', 'input', 'init',
+    'file', 'metric', 'visualize',
+    'optim', 'tree', 'quad',
+    'surrogate',
+]
 __all__ = __all__ + encoder_all + transform_all + operation_all
 
 del encoder_all, transform_all, operation_all

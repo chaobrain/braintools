@@ -1,4 +1,4 @@
-# Copyright 2025 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2025 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-from typing import Callable, Any, Union, Sequence, Optional
+from typing import Callable, Any, Union, Optional
 
 import brainstate
 import brainunit as u
@@ -39,4 +39,3 @@ def randn_like(y):
 
 Initializer = Union[brainstate.typing.ArrayLike, Callable]
 InitializerOrNot = Optional[Union[brainstate.typing.ArrayLike, Callable]]
-

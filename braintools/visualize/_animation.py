@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,8 +24,8 @@ from matplotlib.animation import ArtistAnimation
 from matplotlib.artist import Artist
 from matplotlib.figure import Figure
 
-from braintools.tree import as_numpy
 from braintools._misc import set_module_as
+from braintools.tree import as_numpy
 
 __all__ = [
     'animator',

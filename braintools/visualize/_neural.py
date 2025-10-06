@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Normalize
 
-from braintools.tree import as_numpy
 from braintools._misc import set_module_as
+from braintools.tree import as_numpy
 
 __all__ = [
     'spike_raster',
@@ -274,8 +274,8 @@ def connectivity_matrix(
     pre_labels: Optional[List[str]] = None,
     post_labels: Optional[List[str]] = None,
     cmap: str = 'RdBu_r',
-xlabel : Optional[str] = None,
-ylabel : Optional[str] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
     center_zero: bool = True,
     ax: Optional[plt.Axes] = None,
     figsize: Tuple[float, float] = (8, 8),

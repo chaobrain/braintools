@@ -1,4 +1,4 @@
-# Copyright 2024 BDP Ecosystem Limited. All Rights Reserved.
+# Copyright 2024 BrainX Ecosystem Limited. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ class TestIntegration(unittest.TestCase):
 
         # Population activity
         braintools.visualize.population_activity(population_activity[:, None], time=time,
-                                   ax=axes[0, 1], title='Population Activity')
+                                                 ax=axes[0, 1], title='Population Activity')
 
         # ISI distribution
         braintools.visualize.isi_distribution(spike_times, ax=axes[1, 0], title='ISI Distribution')
