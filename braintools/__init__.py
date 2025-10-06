@@ -24,6 +24,7 @@ from . import input
 from . import metric
 from . import optim
 from . import quad
+from . import surrogate
 from . import tree
 from . import visualize
 from ._spike_encoder import *
@@ -33,7 +34,12 @@ from ._spike_operation import __all__ as operation_all
 from ._transform import *
 from ._transform import __all__ as transform_all
 
-__all__ = ['conn', 'input', 'init', 'file', 'metric', 'visualize', 'optim', 'tree', 'quad']
+__all__ = [
+    'conn', 'input', 'init',
+    'file', 'metric', 'visualize',
+    'optim', 'tree', 'quad',
+    'surrogate',
+]
 __all__ = __all__ + encoder_all + transform_all + operation_all
 
 del encoder_all, transform_all, operation_all
