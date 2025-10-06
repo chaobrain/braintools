@@ -2,6 +2,76 @@
 
 
 
+## Version 0.1.0
+
+### Major Features
+
+#### Surrogate Gradients Module (`braintools.surrogate`)
+- **New comprehensive surrogate gradient system** for training spiking neural networks (SNNs)
+- **18+ surrogate gradient functions** with straight-through estimator support:
+  - **Sigmoid-based**: `Sigmoid`, `SoftSign`, `Arctan`, `ERF`
+  - **Piecewise**: `PiecewiseQuadratic`, `PiecewiseExp`, `PiecewiseLeakyRelu`
+  - **ReLU-based**: `ReluGrad`, `LeakyRelu`, `LogTailedRelu`
+  - **Distribution-inspired**: `GaussianGrad`, `MultiGaussianGrad`, `InvSquareGrad`, `SlayerGrad`
+  - **Advanced**: `S2NN`, `QPseudoSpike`, `SquarewaveFourierSeries`, `NonzeroSignLog`
+- **Customizable hyperparameters** (alpha, sigma, width, etc.) for fine-tuning gradient behavior
+- **Comprehensive tutorials**: 2 detailed notebooks covering basics and customization
+- Enables gradient-based training of SNNs via backpropagation through time
+- Over 2,600 lines of implementation with extensive test coverage
+
+### New Features
+
+#### Learning Rate Schedulers (`braintools.optim`)
+- **ExponentialDecayLR scheduler**: Fine-grained exponential decay with step-based control
+  - Support for transition steps, staircase mode, delayed start, and bounded decay
+  - Better control than epoch-based ExponentialLR for step-level scheduling
+  - Compatible with Optax's exponential_decay schedule
+
+### Improvements
+
+#### API Refinements
+- **Deprecation warnings** added for future API changes:
+  - Deprecated `beta1` and `beta2` parameters in Adam optimizer (use `b1` and `b2` instead)
+  - Deprecated `unit` parameter in various initializers (use `UNITLESS` by default)
+  - Deprecated `init_call` function replaced with `param` for improved consistency
+- **Enhanced state management**: Refactored `UniqueStateManager` to utilize pytree methods
+- **Comprehensive tests**: Added extensive tests for `UniqueStateManager` methods and edge cases
+
+#### Documentation
+- Updated API documentation for new surrogate gradient module
+- Added learning rate scheduler documentation for `ExponentialDecayLR`
+- Enhanced optimizer tutorials with updated examples
+- Clarified docstrings for `FixedProb` class and variance scaling initializer
+
+### Code Quality
+
+#### Internal Improvements
+- Updated copyright information from BDP Ecosystem Limited to BrainX Ecosystem Limited
+- Improved consistency across codebase with standardized function signatures
+- Better default parameter handling (`UNITLESS` for unit parameters)
+- Enhanced test coverage for state management and optimizers
+
+#### Metric Enhancements
+- Improved correlation and firing metrics implementation
+- Enhanced LFP (Local Field Potential) analysis functions
+- Better error handling and validation in metric computations
+
+### Breaking Changes
+- **Deprecation notices** (not yet removed, but will be in future versions):
+  - `beta1`/`beta2` parameters in Adam optimizer (use `b1`/`b2`)
+  - `unit` parameter in initializers (defaults to `UNITLESS`)
+  - `init_call` function (use `param` instead)
+
+### Notes
+- This release focuses on enabling gradient-based training for spiking neural networks
+- The surrogate gradient module is a major addition for neuromorphic computing and SNN research
+- Enhanced learning rate scheduling provides more control for training workflows
+
+
+
+
+
+
 ## Version 0.0.14
 
 ### New Features
