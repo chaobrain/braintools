@@ -12,8 +12,8 @@ Comprehensive tools for generating neural connectivity patterns across different
 ```{toctree}
 :maxdepth: 1
 
-conn_tutorial_01_basic_connectivity.ipynb
-conn_tutorial_02_spatial_connectivity.ipynb
-conn_tutorial_03_network_topologies.ipynb
-conn_tutorial_04_advanced_patterns.ipynb
+01_basic_connectivity.ipynb
+02_spatial_connectivity.ipynb
+03_network_topologies.ipynb
+04_advanced_patterns.ipynb
 ```

@@ -16,8 +16,8 @@ pipelines, each accompanied by runnable notebooks.
 ```{toctree}
 :maxdepth: 1
 
-input_tutorial_01_introduction.ipynb
-input_tutorial_02_functional_api.ipynb
-input_tutorial_03_composable_api.ipynb
-input_tutorial_04_custom_pipelines.ipynb
+01_introduction.ipynb
+02_functional_api.ipynb
+03_composable_api.ipynb
+04_custom_pipelines.ipynb
 ```
