@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Union, Callable, Any, List, Sequence
 
+import jax
 import brainstate.transform
 import jax.numpy as jnp
 
@@ -118,6 +119,22 @@ class LRScheduler:
             values = [values]
 
         self.current_lrs.value = list(values)
+
+        # If attached to update its learning rates
+        if self.optimizer is not None:
+            for param_group, lr in zip(self.optimizer.param_groups, values):
+                param_group['lr'].value = lr
+
+            # Update the main optimizer lr
+            self.optimizer.current_lr = values[0]
+
+    def apply(self, apply_fn: Callable[[float], float]):
+        """Apply a function to modify the current learning rate."""
+
+        values = self.get_lr()
+        if not isinstance(values, (list, tuple)):
+            values = [values]
+        self.current_lrs.value = [apply_fn(v) for v in values]
 
         # If attached to update its learning rates
         if self.optimizer is not None:
@@ -3079,9 +3096,9 @@ class ReduceLROnPlateau(LRScheduler):
         if self.optimizer is not None:
             for i, param_group in enumerate(self.optimizer.param_groups):
                 if i < len(new_lrs_array):
-                    param_group['lr'] = float(new_lrs_array[i])
+                    param_group['lr'].value = new_lrs_array[i]
             # Update the main optimizer lr
-            self.optimizer.current_lr = float(new_lrs_array[0])
+            self.optimizer.current_lr = new_lrs_array[0]
 
     def _reduce_lr(self):
         """Direct learning rate reduction (for non-JIT contexts)."""
@@ -4369,7 +4386,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         values = self.get_lr()
         if self.optimizer is not None:
             for param_group, lr in zip(self.optimizer.param_groups, values):
-                param_group['lr'] = lr
+                param_group['lr'].value = lr
             self.optimizer.current_lr = values[0]
 
 

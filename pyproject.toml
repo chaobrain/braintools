@@ -16,7 +16,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Natural Language :: English",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
@@ -36,11 +35,15 @@ keywords = [
     "brain-inspired computing"
 ]
 dependencies = [
+    "jax",
     "numpy>=1.15",
     "brainstate>=0.1.0",
     "brainunit>=0.0.8",
     "typing_extensions",
     "optax",
+    "matplotlib",
+    "msgpack",
+    "scipy",
 ]
 
 [project.optional-dependencies]

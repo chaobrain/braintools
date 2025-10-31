@@ -24,10 +24,10 @@ This module provides variance scaling initialization methods commonly used in de
 These methods scale the initial weights based on the number of input/output units
 to maintain stable gradients during training.
 """
-import warnings
 from typing import Literal
 
 import brainstate
+import numpy as np
 import brainunit as u
 import jax.numpy as jnp
 from brainstate.typing import ArrayLike
@@ -90,7 +90,7 @@ class VarianceScaling(Initialization):
             fan_out = shape[1]
         else:
             # For higher dimensional tensors (e.g., conv kernels)
-            receptive_field_size = jnp.prod(shape[2:])
+            receptive_field_size = np.prod(shape[2:])
             fan_in = shape[1] * receptive_field_size
             fan_out = shape[0] * receptive_field_size
         return fan_in, fan_out
