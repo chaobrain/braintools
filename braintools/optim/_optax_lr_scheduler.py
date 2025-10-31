@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Union, Callable, Any, List, Sequence
 
-import jax
 import brainstate.transform
+import jax
 import jax.numpy as jnp
 
 from ._base import OptimState
@@ -113,20 +113,7 @@ class LRScheduler:
             self.last_epoch.value += 1
         else:
             self.last_epoch.value = epoch
-
-        values = self.get_lr()
-        if not isinstance(values, (list, tuple)):
-            values = [values]
-
-        self.current_lrs.value = list(values)
-
-        # If attached to update its learning rates
-        if self.optimizer is not None:
-            for param_group, lr in zip(self.optimizer.param_groups, values):
-                param_group['lr'].value = lr
-
-            # Update the main optimizer lr
-            self.optimizer.current_lr = values[0]
+        self.apply(lambda x: x)
 
     def apply(self, apply_fn: Callable[[float], float]):
         """Apply a function to modify the current learning rate."""
@@ -134,15 +121,16 @@ class LRScheduler:
         values = self.get_lr()
         if not isinstance(values, (list, tuple)):
             values = [values]
-        self.current_lrs.value = [apply_fn(v) for v in values]
+        applied_values = [apply_fn(v) for v in values]
+        self.current_lrs.value = applied_values
 
         # If attached to update its learning rates
         if self.optimizer is not None:
-            for param_group, lr in zip(self.optimizer.param_groups, values):
+            for param_group, lr in zip(self.optimizer.param_groups, applied_values):
                 param_group['lr'].value = lr
 
             # Update the main optimizer lr
-            self.optimizer.current_lr = values[0]
+            self.optimizer.current_lr = applied_values[0]
 
     def step_epoch(self):
         """Step the scheduler by one epoch."""
