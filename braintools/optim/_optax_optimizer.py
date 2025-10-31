@@ -23,7 +23,7 @@ import optax
 from brainstate import State, maybe_state
 from brainstate.typing import PyTree
 
-from braintools.file._msg_checkpoint import msgpack_from_state_dict
+from braintools.file import msgpack_from_state_dict
 from ._base import Optimizer, OptimState
 from ._optax_lr_scheduler import LRScheduler, ConstantLR
 from ._state_uniquifier import UniqueStateManager
@@ -599,6 +599,10 @@ class OptaxOptimizer(Optimizer):
         if self._schedulers:
             return self._schedulers[-1].get_last_lr()
         return [self.current_lr]
+
+    def lr_apply(self, apply_fn: Callable[[float], float]):
+        """Apply a function to modify the current learning rate."""
+        self.lr.apply(apply_fn)
 
 
 # Optimizer implementations
