@@ -349,10 +349,8 @@ class StepLR(LRScheduler):
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
-        return [
-            base_lr * self.gamma ** (self.last_epoch.value // self.step_size)
-            for base_lr in self.base_lrs
-        ]
+        factor = self.gamma ** (self.last_epoch.value // self.step_size)
+        return [base_lr * factor for base_lr in self.base_lrs]
 
 
 class MultiStepLR(LRScheduler):
@@ -759,8 +757,8 @@ class ExponentialLR(LRScheduler):
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
-        return [base_lr * self.gamma ** self.last_epoch.value
-                for base_lr in self.base_lrs]
+        expon = self.gamma ** self.last_epoch.value
+        return [base_lr * expon for base_lr in self.base_lrs]
 
 
 class ExponentialDecayLR(LRScheduler):
@@ -1001,16 +999,16 @@ class ExponentialDecayLR(LRScheduler):
 
     def get_lr(self):
         step = self.last_epoch.value
+
+        # Calculate decay using JAX operations for JIT compatibility
+        steps_since_begin = jnp.maximum(step - self.transition_begin, 0)
+        rate_factor = steps_since_begin / self.decay_steps
+
+        # Apply staircase if needed
+        rate_factor = jnp.floor(rate_factor) if self.staircase else rate_factor
+
         lrs = []
-
         for base_lr in self.base_lrs:
-            # Calculate decay using JAX operations for JIT compatibility
-            steps_since_begin = jnp.maximum(step - self.transition_begin, 0)
-            rate_factor = steps_since_begin / self.decay_steps
-
-            # Apply staircase if needed
-            rate_factor = jnp.floor(rate_factor) if self.staircase else rate_factor
-
             # Apply exponential decay
             lr = base_lr * (self.decay_rate ** rate_factor)
 
@@ -1302,9 +1300,9 @@ class CosineAnnealingLR(LRScheduler):
     def get_lr(self):
         # JIT-compatible cosine annealing computation
         epoch = self.last_epoch.value
+        factor = (1 + jnp.cos(jnp.pi * epoch / self.T_max)) / 2
         return [
-            self.eta_min + (base_lr - self.eta_min) *
-            (1 + jnp.cos(jnp.pi * epoch / self.T_max)) / 2
+            self.eta_min + (base_lr - self.eta_min) * factor
             for base_lr in self.base_lrs
         ]
 
@@ -2174,25 +2172,24 @@ class CyclicLR(LRScheduler):
         cycle = jnp.floor(1 + self.last_epoch.value / (self.step_size_up + self.step_size_down))
         x = jnp.abs(self.last_epoch.value / self.step_size_up - 2 * cycle + 1)
 
+        if self.scale_fn is None:
+            if self.mode == 'triangular':
+                scale = 1.0
+            elif self.mode == 'triangular2':
+                scale = 1.0 / (2.0 ** (cycle - 1))
+            elif self.mode == 'exp_range':
+                scale = self.gamma ** self.last_epoch.value
+            else:
+                raise ValueError(f"Unknown mode: {self.mode}")
+        else:
+            if self.scale_mode == 'cycle':
+                scale = self.scale_fn(cycle)
+            else:
+                scale = self.scale_fn(self.last_epoch.value)
+
         lrs = []
         for base_lr, max_lr in zip(self.base_lrs, self.max_lrs):
             base_height = max_lr - base_lr
-
-            if self.scale_fn is None:
-                if self.mode == 'triangular':
-                    scale = 1.0
-                elif self.mode == 'triangular2':
-                    scale = 1.0 / (2.0 ** (cycle - 1))
-                elif self.mode == 'exp_range':
-                    scale = self.gamma ** self.last_epoch.value
-                else:
-                    raise ValueError(f"Unknown mode: {self.mode}")
-            else:
-                if self.scale_mode == 'cycle':
-                    scale = self.scale_fn(cycle)
-                else:
-                    scale = self.scale_fn(self.last_epoch.value)
-
             lr = base_lr + base_height * scale * jnp.maximum(0, 1 - x)
             lrs.append(lr)
 
@@ -4362,14 +4359,13 @@ class CosineAnnealingWarmRestarts(LRScheduler):
     def step(self, epoch: Optional[int] = None):
         if epoch is None:
             epoch = self.last_epoch.value + 1
+        self.last_epoch.value = epoch
 
         # JIT-compatible: use jnp.where for conditional updates
         self.T_cur.value = self.T_cur.value + 1
         should_restart = self.T_cur.value >= self.T_i.value
         self.T_cur.value = jnp.where(should_restart, 0, self.T_cur.value)
         self.T_i.value = jnp.where(should_restart, self.T_i.value * self.T_mult, self.T_i.value)
-
-        self.last_epoch.value = epoch
 
         values = self.get_lr()
         if self.optimizer is not None:
