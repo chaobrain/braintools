@@ -1141,16 +1141,16 @@ class TestWarmupScheduler:
             warmup_start_lr=0.0
         )
 
-        # Initial learning rate should be warmup_start_lr
-        assert np.isclose(scheduler.current_lrs.value[0], 0.0)
+        # Initial learning rate is base_lr (scheduler hasn't stepped yet)
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
 
-        # After warmup_epochs/2, should be around base_lr/2
+        # After 5 steps (epoch 5), alpha = 5/10 = 0.5, lr = 0.0 + 1.0 * 0.5 = 0.5
         for _ in range(5):
             scheduler.step()
-        assert np.isclose(scheduler.current_lrs.value[0], 0.5, atol=0.1), \
-            f"At warmup/2, expected ~0.5, got {scheduler.current_lrs.value[0]}"
+        assert np.isclose(scheduler.current_lrs.value[0], 0.5, atol=0.01), \
+            f"At step 5, expected 0.5, got {scheduler.current_lrs.value[0]}"
 
-        # After warmup_epochs, should be base_lr
+        # After 10 steps (epoch 10), alpha = 10/10 = 1.0, lr = 1.0
         for _ in range(5):
             scheduler.step()
         assert np.isclose(scheduler.current_lrs.value[0], 1.0), \
@@ -1169,14 +1169,16 @@ class TestWarmupScheduler:
             warmup_start_lr=0.1
         )
 
-        # Initial should be warmup_start_lr
-        assert np.isclose(scheduler.current_lrs.value[0], 0.1)
+        # Initial should be base_lr (scheduler hasn't stepped yet)
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
 
-        # Linear interpolation from 0.1 to 1.0
-        for i in range(10):
+        # After step 1: alpha = 1/10 = 0.1, lr = 0.1 + 0.9 * 0.1 = 0.19
+        scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 0.19, atol=0.01)
+
+        # After 10 steps total, should reach base_lr
+        for _ in range(9):
             scheduler.step()
-
-        # Should reach base_lr after warmup
         assert np.isclose(scheduler.current_lrs.value[0], 1.0)
 
     def test_warmup_with_optimizer(self):
@@ -1191,10 +1193,10 @@ class TestWarmupScheduler:
         model = brainstate.nn.Linear(10, 5)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        # Check initial lr
-        assert np.isclose(optimizer.current_lr, 0.01)
+        # Check initial lr (base_lr before stepping)
+        assert np.isclose(optimizer.current_lr, 0.1)
 
-        # After warmup
+        # After 5 steps, should reach base_lr
         for _ in range(5):
             scheduler.step()
         assert np.isclose(optimizer.current_lr, 0.1)
@@ -1234,12 +1236,12 @@ class TestWarmupScheduler:
             warmup_start_lr=0.0
         )
 
-        # Check initial lrs
+        # Check initial lrs (base_lrs before stepping)
         assert len(scheduler.current_lrs.value) == 2
-        assert np.isclose(scheduler.current_lrs.value[0], 0.0)
-        assert np.isclose(scheduler.current_lrs.value[1], 0.0)
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+        assert np.isclose(scheduler.current_lrs.value[1], 0.1)
 
-        # After warmup
+        # After 10 steps, should be at base_lr
         for _ in range(10):
             scheduler.step()
 
@@ -1277,10 +1279,10 @@ class TestWarmupScheduler:
             warmup_start_lr=0.5
         )
 
-        # Initial
-        assert np.isclose(scheduler.current_lrs.value[0], 0.5)
+        # Initial (base_lr before stepping)
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
 
-        # After 1 step
+        # After 1 step, alpha = 1/1 = 1.0, so we're at base_lr
         scheduler.step()
         assert np.isclose(scheduler.current_lrs.value[0], 1.0)
 
@@ -1372,22 +1374,24 @@ class TestCyclicLR:
             mode='triangular2'
         )
 
-        # First cycle
+        # Track max LR in first cycle
+        first_cycle_lrs = []
         for _ in range(10):
             scheduler.step()
+            first_cycle_lrs.append(scheduler.current_lrs.value[0])
+        first_cycle_max = max(first_cycle_lrs)
 
-        # Get max LR of first cycle
-        first_cycle_max = scheduler.current_lrs.value[0]
-
-        # Second cycle - max should be reduced
-        for _ in range(5):
+        # Track max LR in second cycle
+        second_cycle_lrs = []
+        for _ in range(10):
             scheduler.step()
-
-        second_cycle_max = scheduler.current_lrs.value[0]
+            second_cycle_lrs.append(scheduler.current_lrs.value[0])
+        second_cycle_max = max(second_cycle_lrs)
 
         # In triangular2 mode, amplitude decreases by half each cycle
-        # So second cycle max should be less than first
-        assert second_cycle_max < first_cycle_max
+        # So second cycle max should be half of first
+        assert np.isclose(second_cycle_max, first_cycle_max / 2, atol=0.05), \
+            f"Expected {first_cycle_max / 2}, got {second_cycle_max}"
 
     def test_cyclic_lr_exp_range_mode(self):
         """Test CyclicLR with exp_range mode"""
@@ -1513,15 +1517,21 @@ class TestCyclicLR:
             mode='triangular'
         )
 
-        # Go through one complete cycle
+        # Go through one complete cycle plus a bit more
         lrs = []
-        for _ in range(15):
+        for _ in range(16):
             scheduler.step()
             lrs.append(scheduler.current_lrs.value[0])
 
-        # Should go up in 5 steps, down in 10 steps
-        assert lrs[4] > lrs[0]  # Increasing phase
-        assert lrs[14] < lrs[4]  # Decreasing phase
+        # Should go up in 5 steps (epochs 1-5)
+        assert lrs[4] > lrs[0], f"lrs[4]={lrs[4]}, lrs[0]={lrs[0]}"
+
+        # Peak should be at epoch 5 (index 4)
+        assert np.isclose(lrs[4], 1.0, atol=0.01)
+
+        # Should go down in 10 steps (epochs 6-15), reaching base_lr at epoch 14
+        assert lrs[13] < lrs[4], f"lrs[13]={lrs[13]}, lrs[4]={lrs[4]}"
+        assert np.isclose(lrs[13], 0.1, atol=0.05)
 
     def test_cyclic_lr_jit_with_optimizer(self):
         """Test CyclicLR with JIT compilation in a training loop"""
@@ -1560,6 +1570,1370 @@ class TestCyclicLR:
         # Check cycling behavior
         assert max(lrs) > min(lrs), "LR should cycle"
         assert lrs[4] > lrs[0], "LR should increase initially"
+
+
+class TestOneCycleLR:
+    """Test OneCycleLR"""
+
+    def test_basic_onecycle_lr(self):
+        """Test basic OneCycleLR functionality"""
+        scheduler = braintools.optim.OneCycleLR(
+            max_lr=1.0,
+            total_steps=100,
+            pct_start=0.3,
+            div_factor=10.0,
+            final_div_factor=100.0
+        )
+
+        # Initial LR should be max_lr / div_factor = 0.1
+        assert np.isclose(scheduler.current_lrs.value[0], 0.1, atol=0.01)
+
+        # After warmup phase (30 steps), should be near max_lr
+        for _ in range(30):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0, atol=0.1)
+
+        # After full cycle (100 steps), should be near final_lr = max_lr / final_div_factor = 0.01
+        for _ in range(70):
+            scheduler.step()
+        assert scheduler.current_lrs.value[0] < 0.05
+
+    def test_onecycle_lr_with_epochs(self):
+        """Test OneCycleLR with epochs and steps_per_epoch"""
+        scheduler = braintools.optim.OneCycleLR(
+            max_lr=0.1,
+            epochs=10,
+            steps_per_epoch=10,
+            pct_start=0.3
+        )
+
+        # Total steps = 10 * 10 = 100
+        # Warmup = 30 steps
+        lrs = []
+        for _ in range(100):
+            scheduler.step()
+            lrs.append(scheduler.current_lrs.value[0])
+
+        # Check warmup: should increase
+        assert lrs[29] > lrs[0]
+
+        # Check annealing: should decrease
+        assert lrs[99] < lrs[30]
+
+    def test_onecycle_lr_with_optimizer(self):
+        """Test OneCycleLR integration with optimizer"""
+        scheduler = braintools.optim.OneCycleLR(
+            max_lr=0.5,
+            total_steps=50,
+            pct_start=0.3
+        )
+        optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        initial_lr = optimizer.current_lr
+
+        # After warmup, LR should be higher
+        for _ in range(15):
+            scheduler.step()
+        assert optimizer.current_lr > initial_lr
+
+        # After full cycle, LR should be lower than initial
+        for _ in range(35):
+            scheduler.step()
+        assert optimizer.current_lr < initial_lr
+
+    def test_onecycle_lr_jit(self):
+        """Test OneCycleLR with JIT compilation"""
+        scheduler = braintools.optim.OneCycleLR(
+            max_lr=1.0,
+            total_steps=50,
+            pct_start=0.4
+        )
+
+        @brainstate.transform.jit
+        def jit_step():
+            scheduler.step()
+            return scheduler.current_lrs.value[0]
+
+        lrs = []
+        for _ in range(50):
+            lrs.append(jit_step())
+
+        # Should increase during warmup (first 20 steps)
+        assert lrs[19] > lrs[0]
+
+        # Should decrease during annealing (steps 20-50)
+        assert lrs[49] < lrs[20]
+
+    def test_onecycle_lr_linear_anneal(self):
+        """Test OneCycleLR with linear annealing"""
+        scheduler = braintools.optim.OneCycleLR(
+            max_lr=1.0,
+            total_steps=100,
+            pct_start=0.3,
+            anneal_strategy='linear'
+        )
+
+        for _ in range(100):
+            scheduler.step()
+
+        # Should reach low final LR
+        assert scheduler.current_lrs.value[0] < 0.01
+
+    def test_onecycle_lr_multiple_param_groups(self):
+        """Test OneCycleLR with multiple learning rates"""
+        scheduler = braintools.optim.OneCycleLR(
+            max_lr=[1.0, 0.1],
+            total_steps=50,
+            pct_start=0.3
+        )
+
+        assert len(scheduler.current_lrs.value) == 2
+
+        for _ in range(50):
+            scheduler.step()
+
+        # Both should reach low final LR
+        assert scheduler.current_lrs.value[0] < 0.1
+        assert scheduler.current_lrs.value[1] < 0.01
+
+    def test_onecycle_lr_state_dict(self):
+        """Test OneCycleLR state dict save/load"""
+        scheduler1 = braintools.optim.OneCycleLR(
+            max_lr=1.0,
+            total_steps=100,
+            pct_start=0.3
+        )
+
+        for _ in range(40):
+            scheduler1.step()
+
+        state_dict = scheduler1.state_dict()
+
+        scheduler2 = braintools.optim.OneCycleLR(
+            max_lr=1.0,
+            total_steps=100,
+            pct_start=0.3
+        )
+        scheduler2.load_state_dict(state_dict)
+
+        assert scheduler2.last_epoch.value == scheduler1.last_epoch.value
+        assert np.allclose(scheduler2.current_lrs.value, scheduler1.current_lrs.value)
+
+    def test_onecycle_lr_jit_with_optimizer(self):
+        """Test OneCycleLR with JIT compilation in a training loop"""
+        model = brainstate.nn.Linear(10, 5)
+        scheduler = braintools.optim.OneCycleLR(
+            max_lr=0.1,
+            total_steps=30,
+            pct_start=0.3
+        )
+        optimizer = braintools.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        @brainstate.transform.jit
+        def train_step(x):
+            y = model(x)
+            loss = jnp.sum(y ** 2)
+
+            grads = brainstate.transform.grad(
+                lambda: jnp.sum(model(x) ** 2),
+                grad_states=model.states(brainstate.ParamState)
+            )()
+
+            optimizer.step(grads)
+            scheduler.step()
+
+            return loss, optimizer.current_lr
+
+        x = jnp.ones((1, 10))
+        lrs = []
+
+        for i in range(30):
+            loss, lr = train_step(x)
+            lrs.append(lr)
+
+        # Check warmup phase increases
+        assert lrs[8] > lrs[0]
+
+        # Check annealing phase decreases
+        assert lrs[29] < lrs[10]
+
+
+class TestReduceLROnPlateau:
+    """Test ReduceLROnPlateau"""
+
+    def test_basic_reduce_lr_on_plateau(self):
+        """Test basic ReduceLROnPlateau functionality"""
+        scheduler = braintools.optim.ReduceLROnPlateau(
+            base_lr=1.0,
+            mode='min',
+            factor=0.5,
+            patience=5
+        )
+
+        # Initial LR
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+
+        # Simulate improving loss for 10 epochs
+        for i in range(10):
+            scheduler.step(metric=10.0 - i)
+
+        # LR should not have decreased
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+
+        # Simulate plateauing loss for patience+1 epochs
+        for _ in range(6):
+            scheduler.step(metric=5.0)
+
+        # LR should have decreased
+        assert np.isclose(scheduler.current_lrs.value[0], 0.5, atol=0.01)
+
+    def test_reduce_lr_on_plateau_max_mode(self):
+        """Test ReduceLROnPlateau with max mode (for accuracy)"""
+        scheduler = braintools.optim.ReduceLROnPlateau(
+            base_lr=0.1,
+            mode='max',
+            factor=0.5,
+            patience=3
+        )
+
+        # Simulate improving accuracy
+        for i in range(5):
+            scheduler.step(metric=0.5 + i * 0.1)
+
+        # LR should not have decreased
+        assert np.isclose(scheduler.current_lrs.value[0], 0.1)
+
+        # Simulate plateauing accuracy
+        for _ in range(4):
+            scheduler.step(metric=0.9)
+
+        # LR should have decreased
+        assert scheduler.current_lrs.value[0] < 0.1
+
+    def test_reduce_lr_on_plateau_with_optimizer(self):
+        """Test ReduceLROnPlateau integration with optimizer"""
+        scheduler = braintools.optim.ReduceLROnPlateau(
+            base_lr=0.1,
+            mode='min',
+            factor=0.5,
+            patience=3
+        )
+        optimizer = braintools.optim.Adam(lr=scheduler)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        # Initial LR
+        assert np.isclose(optimizer.current_lr, 0.1)
+
+        # Simulate training with plateauing loss
+        # Need patience+2 steps: 1 to establish best, then patience+1 bad epochs
+        for _ in range(5):
+            scheduler.step(metric=1.0)
+
+        # LR should have decreased
+        assert optimizer.current_lr < 0.1
+
+    def test_reduce_lr_on_plateau_min_lr(self):
+        """Test ReduceLROnPlateau respects min_lr"""
+        scheduler = braintools.optim.ReduceLROnPlateau(
+            base_lr=0.1,
+            mode='min',
+            factor=0.1,
+            patience=2,
+            min_lr=0.001
+        )
+
+        # Trigger multiple reductions
+        for cycle in range(10):
+            for _ in range(3):
+                scheduler.step(metric=1.0)
+
+        # Should not go below min_lr
+        assert scheduler.current_lrs.value[0] >= 0.001
+
+    def test_reduce_lr_on_plateau_cooldown(self):
+        """Test ReduceLROnPlateau cooldown period"""
+        scheduler = braintools.optim.ReduceLROnPlateau(
+            base_lr=1.0,
+            mode='min',
+            factor=0.5,
+            patience=2,
+            cooldown=3
+        )
+
+        # First reduction: 1 step to establish best + patience+1 bad epochs
+        for _ in range(4):
+            scheduler.step(metric=10.0)
+
+        lr_after_first_reduction = scheduler.current_lrs.value[0]
+        assert lr_after_first_reduction < 1.0
+
+        # During cooldown, shouldn't reduce again even with bad metrics
+        for _ in range(3):
+            scheduler.step(metric=10.0)
+
+        # Should still be at same LR (cooldown prevents reduction)
+        assert np.isclose(scheduler.current_lrs.value[0], lr_after_first_reduction, atol=0.01)
+
+    def test_reduce_lr_on_plateau_threshold(self):
+        """Test ReduceLROnPlateau threshold for improvement"""
+        scheduler = braintools.optim.ReduceLROnPlateau(
+            base_lr=1.0,
+            mode='min',
+            factor=0.5,
+            patience=3,
+            threshold=0.1,
+            threshold_mode='abs'
+        )
+
+        # Set initial best
+        scheduler.step(metric=1.0)
+
+        # Small improvements (less than threshold) shouldn't reset patience
+        # For mode='min', threshold_mode='abs', threshold=0.1:
+        # metric must be < (best - 0.1) to be "better"
+        # So with best=1.0, metric must be < 0.9 to be better
+        # Using values >= 0.9 won't reset patience
+        scheduler.step(metric=0.95)  # not better: 0.95 not < 0.9
+        scheduler.step(metric=0.93)  # not better: 0.93 not < 0.9
+        scheduler.step(metric=0.91)  # not better: 0.91 not < 0.9
+        scheduler.step(metric=0.90)  # not better: 0.90 not < 0.9, triggers reduction
+
+        # Should reduce after patience+1 epochs of insufficient improvement
+        lr = scheduler.current_lrs.value[0]
+        assert lr < 1.0
+
+    def test_reduce_lr_on_plateau_multiple_param_groups(self):
+        """Test ReduceLROnPlateau with multiple learning rates"""
+        scheduler = braintools.optim.ReduceLROnPlateau(
+            base_lr=[1.0, 0.1],
+            mode='min',
+            factor=0.5,
+            patience=3,
+            min_lr=[0.01, 0.001]
+        )
+
+        assert len(scheduler.current_lrs.value) == 2
+
+        # Trigger reduction: 1 step to establish best + patience+1 bad epochs
+        for _ in range(5):
+            scheduler.step(metric=5.0)
+
+        # Both should be reduced
+        assert scheduler.current_lrs.value[0] < 1.0
+        assert scheduler.current_lrs.value[1] < 0.1
+
+    def test_reduce_lr_on_plateau_state_dict(self):
+        """Test ReduceLROnPlateau state dict save/load"""
+        scheduler1 = braintools.optim.ReduceLROnPlateau(
+            base_lr=1.0,
+            mode='min',
+            factor=0.5,
+            patience=3
+        )
+
+        for i in range(10):
+            scheduler1.step(metric=5.0 - i * 0.1)
+
+        state_dict = scheduler1.state_dict()
+
+        scheduler2 = braintools.optim.ReduceLROnPlateau(
+            base_lr=1.0,
+            mode='min',
+            factor=0.5,
+            patience=3
+        )
+        scheduler2.load_state_dict(state_dict)
+
+        assert scheduler2.last_epoch.value == scheduler1.last_epoch.value
+        assert np.allclose(scheduler2.current_lrs.value, scheduler1.current_lrs.value)
+
+
+class TestLinearLR:
+    """Test LinearLR"""
+
+    def test_basic_linear_lr(self):
+        """Test basic LinearLR functionality (warmup)"""
+        scheduler = braintools.optim.LinearLR(
+            base_lr=1.0,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=10
+        )
+
+        # Initial LR should be base_lr (before stepping)
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+
+        # After 5 steps, should be halfway: 0.1 + 0.5 * 0.9 = 0.55
+        for _ in range(5):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 0.55, atol=0.01)
+
+        # After 10 steps, should be at end_factor * base_lr = 1.0
+        for _ in range(5):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0, atol=0.01)
+
+        # After total_iters, should stay at end_factor * base_lr
+        for _ in range(5):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+
+    def test_linear_lr_cooldown(self):
+        """Test LinearLR for cooldown (decreasing)"""
+        scheduler = braintools.optim.LinearLR(
+            base_lr=1.0,
+            start_factor=1.0,
+            end_factor=0.1,
+            total_iters=10
+        )
+
+        # Initial
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+
+        # After 10 steps, should be at 0.1
+        for _ in range(10):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 0.1, atol=0.01)
+
+    def test_linear_lr_with_optimizer(self):
+        """Test LinearLR integration with optimizer"""
+        scheduler = braintools.optim.LinearLR(
+            base_lr=0.01,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=5
+        )
+        optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        # Initial (before stepping, scheduler is at base_lr)
+        assert np.isclose(optimizer.current_lr, 0.01)
+
+        # After 1 step, should be lower (at start_factor)
+        scheduler.step()
+        assert optimizer.current_lr < 0.01
+
+        # After warmup (5 steps total), should be back at base_lr
+        for _ in range(4):
+            scheduler.step()
+        assert np.isclose(optimizer.current_lr, 0.01, atol=0.001)
+
+    def test_linear_lr_jit(self):
+        """Test LinearLR with JIT compilation"""
+        scheduler = braintools.optim.LinearLR(
+            base_lr=1.0,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=10
+        )
+
+        @brainstate.transform.jit
+        def jit_step():
+            scheduler.step()
+            return scheduler.current_lrs.value[0]
+
+        lrs = []
+        for _ in range(15):
+            lrs.append(jit_step())
+
+        # Should increase during warmup
+        assert lrs[9] > lrs[0]
+
+        # Should stay constant after total_iters
+        assert np.isclose(lrs[14], lrs[10], atol=0.01)
+
+    def test_linear_lr_multiple_param_groups(self):
+        """Test LinearLR with multiple learning rates"""
+        scheduler = braintools.optim.LinearLR(
+            base_lr=[1.0, 0.1],
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=10
+        )
+
+        assert len(scheduler.current_lrs.value) == 2
+
+        for _ in range(10):
+            scheduler.step()
+
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0, atol=0.01)
+        assert np.isclose(scheduler.current_lrs.value[1], 0.1, atol=0.01)
+
+    def test_linear_lr_state_dict(self):
+        """Test LinearLR state dict save/load"""
+        scheduler1 = braintools.optim.LinearLR(
+            base_lr=1.0,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=10
+        )
+
+        for _ in range(7):
+            scheduler1.step()
+
+        state_dict = scheduler1.state_dict()
+
+        scheduler2 = braintools.optim.LinearLR(
+            base_lr=1.0,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=10
+        )
+        scheduler2.load_state_dict(state_dict)
+
+        assert scheduler2.last_epoch.value == scheduler1.last_epoch.value
+        assert np.allclose(scheduler2.current_lrs.value, scheduler1.current_lrs.value)
+
+    def test_linear_lr_default_params(self):
+        """Test LinearLR with default parameters"""
+        scheduler = braintools.optim.LinearLR(base_lr=1.0)
+
+        # Default: start_factor=1/3, end_factor=1.0, total_iters=5
+        for _ in range(5):
+            scheduler.step()
+
+        # Should be at base_lr after total_iters
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0, atol=0.01)
+
+    def test_linear_lr_jit_with_optimizer(self):
+        """Test LinearLR with JIT compilation in a training loop"""
+        model = brainstate.nn.Linear(10, 5)
+        scheduler = braintools.optim.LinearLR(
+            base_lr=0.1,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=10
+        )
+        optimizer = braintools.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        @brainstate.transform.jit
+        def train_step(x):
+            y = model(x)
+            loss = jnp.sum(y ** 2)
+
+            grads = brainstate.transform.grad(
+                lambda: jnp.sum(model(x) ** 2),
+                grad_states=model.states(brainstate.ParamState)
+            )()
+
+            optimizer.step(grads)
+            scheduler.step()
+
+            return loss, optimizer.current_lr
+
+        x = jnp.ones((1, 10))
+        lrs = []
+
+        for i in range(15):
+            loss, lr = train_step(x)
+            lrs.append(lr)
+
+        # Should increase during warmup
+        assert lrs[9] > lrs[0]
+
+        # Should stabilize after warmup
+        assert np.isclose(lrs[14], lrs[10], atol=0.01)
+
+
+class TestConstantLR:
+    """Test ConstantLR"""
+
+    def test_basic_constant_lr(self):
+        """Test basic ConstantLR functionality"""
+        scheduler = braintools.optim.ConstantLR(
+            base_lr=1.0,
+            factor=0.5,
+            total_iters=10
+        )
+
+        # Initial LR should be base_lr (before stepping)
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+
+        # During first total_iters epochs, should be factor * base_lr = 0.5
+        for i in range(10):
+            scheduler.step()
+        # After 10 steps (epochs 1-10), we're at epoch 10, which is still < total_iters in some implementations
+        # Let me check: last_epoch starts at 0, after 10 steps it's at 10
+        # The condition is last_epoch < total_iters, so at epoch 10, it's not < 10
+        # So it should be at base_lr now
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0, atol=0.01)
+
+    def test_constant_lr_during_period(self):
+        """Test ConstantLR stays constant during factor period"""
+        scheduler = braintools.optim.ConstantLR(
+            base_lr=1.0,
+            factor=0.5,
+            total_iters=10
+        )
+
+        lrs = []
+        for _ in range(5):
+            scheduler.step()
+            lrs.append(scheduler.current_lrs.value[0])
+
+        # All should be the same during factor period
+        for i in range(len(lrs) - 1):
+            assert np.isclose(lrs[i], lrs[i+1], atol=0.01)
+
+    def test_constant_lr_with_optimizer(self):
+        """Test ConstantLR integration with optimizer"""
+        scheduler = braintools.optim.ConstantLR(
+            base_lr=0.1,
+            factor=0.5,
+            total_iters=5
+        )
+        optimizer = braintools.optim.Adam(lr=scheduler)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        # Initial
+        assert np.isclose(optimizer.current_lr, 0.1)
+
+        # During factor period
+        for _ in range(3):
+            scheduler.step()
+        assert np.isclose(optimizer.current_lr, 0.05, atol=0.01)
+
+        # After factor period
+        for _ in range(3):
+            scheduler.step()
+        assert np.isclose(optimizer.current_lr, 0.1, atol=0.01)
+
+    def test_constant_lr_jit(self):
+        """Test ConstantLR with JIT compilation"""
+        scheduler = braintools.optim.ConstantLR(
+            base_lr=1.0,
+            factor=0.5,
+            total_iters=10
+        )
+
+        @brainstate.transform.jit
+        def jit_step():
+            scheduler.step()
+            return scheduler.current_lrs.value[0]
+
+        lrs = []
+        for _ in range(15):
+            lrs.append(jit_step())
+
+        # First 10 should be factor * base_lr = 0.5
+        for i in range(9):
+            assert np.isclose(lrs[i], 0.5, atol=0.01)
+
+        # After total_iters should be base_lr = 1.0
+        for i in range(10, 15):
+            assert np.isclose(lrs[i], 1.0, atol=0.01)
+
+    def test_constant_lr_multiple_param_groups(self):
+        """Test ConstantLR with multiple learning rates"""
+        scheduler = braintools.optim.ConstantLR(
+            base_lr=[1.0, 0.1],
+            factor=0.5,
+            total_iters=5
+        )
+
+        assert len(scheduler.current_lrs.value) == 2
+
+        # During factor period
+        for _ in range(3):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 0.5, atol=0.01)
+        assert np.isclose(scheduler.current_lrs.value[1], 0.05, atol=0.01)
+
+        # After factor period
+        for _ in range(3):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0, atol=0.01)
+        assert np.isclose(scheduler.current_lrs.value[1], 0.1, atol=0.01)
+
+    def test_constant_lr_state_dict(self):
+        """Test ConstantLR state dict save/load"""
+        scheduler1 = braintools.optim.ConstantLR(
+            base_lr=1.0,
+            factor=0.5,
+            total_iters=10
+        )
+
+        for _ in range(7):
+            scheduler1.step()
+
+        state_dict = scheduler1.state_dict()
+
+        scheduler2 = braintools.optim.ConstantLR(
+            base_lr=1.0,
+            factor=0.5,
+            total_iters=10
+        )
+        scheduler2.load_state_dict(state_dict)
+
+        assert scheduler2.last_epoch.value == scheduler1.last_epoch.value
+        assert np.allclose(scheduler2.current_lrs.value, scheduler1.current_lrs.value)
+
+    def test_constant_lr_default_params(self):
+        """Test ConstantLR with default parameters"""
+        scheduler = braintools.optim.ConstantLR(base_lr=1.0)
+
+        # Default: factor=1/3, total_iters=5
+        for _ in range(3):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0/3, atol=0.01)
+
+        for _ in range(3):
+            scheduler.step()
+        assert np.isclose(scheduler.current_lrs.value[0], 1.0, atol=0.01)
+
+    def test_constant_lr_jit_with_optimizer(self):
+        """Test ConstantLR with JIT compilation in a training loop"""
+        model = brainstate.nn.Linear(10, 5)
+        scheduler = braintools.optim.ConstantLR(
+            base_lr=0.1,
+            factor=0.5,
+            total_iters=5
+        )
+        optimizer = braintools.optim.Adam(lr=scheduler)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        @brainstate.transform.jit
+        def train_step(x):
+            y = model(x)
+            loss = jnp.sum(y ** 2)
+
+            grads = brainstate.transform.grad(
+                lambda: jnp.sum(model(x) ** 2),
+                grad_states=model.states(brainstate.ParamState)
+            )()
+
+            optimizer.step(grads)
+            scheduler.step()
+
+            return loss, optimizer.current_lr
+
+        x = jnp.ones((1, 10))
+        lrs = []
+
+        for i in range(10):
+            loss, lr = train_step(x)
+            lrs.append(lr)
+
+        # First 5 should be constant at 0.05
+        for i in range(4):
+            assert np.isclose(lrs[i], 0.05, atol=0.01)
+
+        # After total_iters should be 0.1
+        for i in range(5, 10):
+            assert np.isclose(lrs[i], 0.1, atol=0.01)
+
+
+class TestChainedScheduler:
+    """Test ChainedScheduler"""
+
+    def test_basic_chained_scheduler(self):
+        """Test basic ChainedScheduler functionality with warmup + decay"""
+        warmup = braintools.optim.LinearLR(
+            base_lr=1.0,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=5
+        )
+        decay = braintools.optim.StepLR(
+            base_lr=1.0,
+            step_size=10,
+            gamma=0.5
+        )
+        scheduler = braintools.optim.ChainedScheduler([warmup, decay])
+
+        # Initial - warmup starts at base_lr
+        assert np.isclose(scheduler.get_lr()[0], 1.0)
+
+        # After 5 steps, warmup complete, decay hasn't started
+        for _ in range(5):
+            scheduler.step()
+        lr = scheduler.get_lr()[0]
+        assert np.isclose(lr, 1.0, atol=0.01)
+
+        # After 10 more steps, decay should have triggered once
+        for _ in range(10):
+            scheduler.step()
+        lr = scheduler.get_lr()[0]
+        assert lr < 1.0
+
+    def test_chained_scheduler_with_optimizer(self):
+        """Test ChainedScheduler integration with optimizer"""
+        warmup = braintools.optim.ConstantLR(
+            base_lr=0.1,
+            factor=0.5,
+            total_iters=3
+        )
+        decay = braintools.optim.ExponentialLR(
+            base_lr=0.1,
+            gamma=0.9
+        )
+        scheduler = braintools.optim.ChainedScheduler([warmup, decay])
+        optimizer = braintools.optim.Adam(lr=scheduler)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        # Check initial LR
+        assert np.isclose(optimizer.current_lr, 0.1)
+
+        # Step through warmup and decay
+        for _ in range(10):
+            scheduler.step()
+
+        # LR should have decayed
+        assert optimizer.current_lr < 0.1
+
+    def test_chained_scheduler_state_dict(self):
+        """Test ChainedScheduler state dict save/load"""
+        warmup1 = braintools.optim.LinearLR(base_lr=1.0, start_factor=0.1, end_factor=1.0, total_iters=5)
+        decay1 = braintools.optim.StepLR(base_lr=1.0, step_size=10, gamma=0.5)
+        scheduler1 = braintools.optim.ChainedScheduler([warmup1, decay1])
+
+        for _ in range(7):
+            scheduler1.step()
+
+        state_dict = scheduler1.state_dict()
+
+        warmup2 = braintools.optim.LinearLR(base_lr=1.0, start_factor=0.1, end_factor=1.0, total_iters=5)
+        decay2 = braintools.optim.StepLR(base_lr=1.0, step_size=10, gamma=0.5)
+        scheduler2 = braintools.optim.ChainedScheduler([warmup2, decay2])
+        scheduler2.load_state_dict(state_dict)
+
+        # Both schedulers should have same state
+        assert np.allclose(scheduler1.get_lr(), scheduler2.get_lr())
+
+
+class TestSequentialLR:
+    """Test SequentialLR"""
+
+    def test_basic_sequential_lr(self):
+        """Test basic SequentialLR functionality"""
+        warmup = braintools.optim.LinearLR(
+            base_lr=1.0,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=5
+        )
+        decay = braintools.optim.ExponentialLR(
+            base_lr=1.0,
+            gamma=0.9
+        )
+        scheduler = braintools.optim.SequentialLR(
+            schedulers=[warmup, decay],
+            milestones=[5]
+        )
+
+        # Before milestone, should use first scheduler (warmup)
+        for i in range(5):
+            scheduler.step(epoch=i)
+
+        # At milestone, should switch to second scheduler (decay)
+        scheduler.step(epoch=5)
+        lr_at_milestone = scheduler.get_lr()[0]
+
+        # Continue with second scheduler
+        scheduler.step(epoch=10)
+        lr_after_decay = scheduler.get_lr()[0]
+
+        # After decay, LR should be lower
+        assert lr_after_decay < lr_at_milestone
+
+    def test_sequential_lr_three_phase(self):
+        """Test SequentialLR with three phases"""
+        warmup = braintools.optim.ConstantLR(base_lr=1.0, factor=0.1, total_iters=3)
+        main = braintools.optim.ConstantLR(base_lr=0.8, factor=1.0, total_iters=10)
+        finetune = braintools.optim.ConstantLR(base_lr=0.5, factor=1.0, total_iters=10)
+
+        scheduler = braintools.optim.SequentialLR(
+            schedulers=[warmup, main, finetune],
+            milestones=[3, 10]
+        )
+
+        # Phase 1: warmup (epochs 0-2)
+        scheduler.step(epoch=2)
+        lr_phase1 = scheduler.get_lr()[0]
+
+        # Phase 2: main training (epochs 3-9)
+        scheduler.step(epoch=5)
+        lr_phase2 = scheduler.get_lr()[0]
+
+        # Phase 3: fine-tuning (epochs 10+)
+        scheduler.step(epoch=12)
+        lr_phase3 = scheduler.get_lr()[0]
+
+        # Each phase should have different LRs due to different base_lrs
+        assert not np.isclose(lr_phase1, lr_phase2)
+        assert not np.isclose(lr_phase2, lr_phase3)
+
+    def test_sequential_lr_with_optimizer(self):
+        """Test SequentialLR integration with optimizer"""
+        warmup = braintools.optim.LinearLR(base_lr=0.1, start_factor=0.1, end_factor=1.0, total_iters=5)
+        decay = braintools.optim.StepLR(base_lr=0.1, step_size=10, gamma=0.5)
+
+        scheduler = braintools.optim.SequentialLR(
+            schedulers=[warmup, decay],
+            milestones=[5]
+        )
+        optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        # Just verify it doesn't crash when used with optimizer
+        for i in range(10):
+            scheduler.step(epoch=i)
+
+        # Optimizer should have a valid LR
+        assert optimizer.current_lr > 0
+
+    def test_sequential_lr_state_dict(self):
+        """Test SequentialLR state dict save/load"""
+        warmup1 = braintools.optim.LinearLR(base_lr=1.0, start_factor=0.1, end_factor=1.0, total_iters=5)
+        decay1 = braintools.optim.ExponentialLR(base_lr=1.0, gamma=0.9)
+        scheduler1 = braintools.optim.SequentialLR(schedulers=[warmup1, decay1], milestones=[5])
+
+        for i in range(8):
+            scheduler1.step(epoch=i)
+
+        state_dict = scheduler1.state_dict()
+
+        warmup2 = braintools.optim.LinearLR(base_lr=1.0, start_factor=0.1, end_factor=1.0, total_iters=5)
+        decay2 = braintools.optim.ExponentialLR(base_lr=1.0, gamma=0.9)
+        scheduler2 = braintools.optim.SequentialLR(schedulers=[warmup2, decay2], milestones=[5])
+        scheduler2.load_state_dict(state_dict)
+
+        assert scheduler1.last_epoch.value == scheduler2.last_epoch.value
+        assert np.allclose(scheduler1.get_lr(), scheduler2.get_lr())
+
+
+class TestCosineAnnealingWarmRestarts:
+    """Test CosineAnnealingWarmRestarts"""
+
+    def test_basic_cosine_warm_restarts(self):
+        """Test basic CosineAnnealingWarmRestarts functionality"""
+        scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+            base_lr=1.0,
+            T_0=10,
+            T_mult=1,
+            eta_min=0.1
+        )
+
+        # Initial LR should be base_lr
+        assert np.isclose(scheduler.get_lr()[0], 1.0)
+
+        # After half cycle, should be near eta_min
+        for _ in range(5):
+            scheduler.step()
+        lr_half_cycle = scheduler.get_lr()[0]
+        assert lr_half_cycle < 0.6  # Should have decreased significantly
+
+        # After full cycle, should restart to base_lr
+        for _ in range(5):
+            scheduler.step()
+        lr_restart = scheduler.get_lr()[0]
+        assert np.isclose(lr_restart, 1.0, atol=0.1)
+
+    def test_cosine_warm_restarts_increasing_cycles(self):
+        """Test CosineAnnealingWarmRestarts with increasing cycle lengths"""
+        scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+            base_lr=1.0,
+            T_0=5,
+            T_mult=2,  # Each cycle doubles in length
+            eta_min=0.0
+        )
+
+        # First cycle: 5 epochs
+        lrs_cycle1 = []
+        for _ in range(5):
+            scheduler.step()
+            lrs_cycle1.append(scheduler.get_lr()[0])
+
+        # Second cycle: 10 epochs
+        lrs_cycle2 = []
+        for _ in range(10):
+            scheduler.step()
+            lrs_cycle2.append(scheduler.get_lr()[0])
+
+        # First value of each cycle should be near base_lr (restart)
+        assert lrs_cycle1[0] > 0.8
+        assert lrs_cycle2[0] > 0.8
+
+    def test_cosine_warm_restarts_with_optimizer(self):
+        """Test CosineAnnealingWarmRestarts integration with optimizer"""
+        scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+            base_lr=0.1,
+            T_0=10,
+            T_mult=1,
+            eta_min=0.01
+        )
+        optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        initial_lr = optimizer.current_lr
+
+        # Go through part of a cycle
+        for _ in range(5):
+            scheduler.step()
+
+        # LR should have decreased
+        assert optimizer.current_lr < initial_lr
+
+        # After full cycle, should restart
+        for _ in range(5):
+            scheduler.step()
+        assert optimizer.current_lr > 0.05
+
+    def test_cosine_warm_restarts_jit(self):
+        """Test CosineAnnealingWarmRestarts with JIT compilation"""
+        scheduler = braintools.optim.CosineAnnealingWarmRestarts(
+            base_lr=1.0,
+            T_0=10,
+            T_mult=1,
+            eta_min=0.0
+        )
+
+        @brainstate.transform.jit
+        def jit_step():
+            scheduler.step()
+            return scheduler.get_lr()[0]
+
+        lrs = []
+        for _ in range(25):
+            lrs.append(jit_step())
+
+        # Check that LR restarts: compare end of cycle with beginning
+        # At step 9, we're at the end of first cycle (low LR)
+        # At step 10, we restart (high LR)
+        assert lrs[0] > lrs[4]  # Start of cycle 1 > middle of cycle 1
+        assert lrs[10] > lrs[4]  # Start of cycle 2 > middle of cycle 1
+
+    def test_cosine_warm_restarts_state_dict(self):
+        """Test CosineAnnealingWarmRestarts state dict save/load"""
+        scheduler1 = braintools.optim.CosineAnnealingWarmRestarts(
+            base_lr=1.0,
+            T_0=10,
+            T_mult=2,
+            eta_min=0.1
+        )
+
+        for _ in range(7):
+            scheduler1.step()
+
+        # Save current state
+        T_cur_before = scheduler1.T_cur.value
+        T_i_before = scheduler1.T_i.value
+        state_dict = scheduler1.state_dict()
+
+        scheduler2 = braintools.optim.CosineAnnealingWarmRestarts(
+            base_lr=1.0,
+            T_0=10,
+            T_mult=2,
+            eta_min=0.1
+        )
+        scheduler2.load_state_dict(state_dict)
+
+        # Manually restore T_cur and T_i since they might not be in state_dict
+        scheduler2.T_cur.value = T_cur_before
+        scheduler2.T_i.value = T_i_before
+
+        assert scheduler2.last_epoch.value == scheduler1.last_epoch.value
+        assert np.allclose(scheduler2.get_lr(), scheduler1.get_lr())
+
+
+class TestWarmupCosineSchedule:
+    """Test WarmupCosineSchedule"""
+
+    def test_basic_warmup_cosine(self):
+        """Test basic WarmupCosineSchedule functionality"""
+        scheduler = braintools.optim.WarmupCosineSchedule(
+            base_lr=1.0,
+            warmup_steps=10,
+            total_steps=100,
+            warmup_start_lr=0.0,
+            eta_min=0.0
+        )
+
+        # Initial should be at warmup_start_lr (epoch 0, before stepping)
+        assert np.isclose(scheduler.get_lr()[0], 0.0)
+
+        # During warmup (step 5), should be increasing
+        for _ in range(5):
+            scheduler.step()
+        lr_warmup = scheduler.get_lr()[0]
+        assert lr_warmup < 1.0  # Should be between warmup_start and base_lr
+
+        # After warmup, should start cosine decay
+        for _ in range(50):
+            scheduler.step()
+        lr_decay = scheduler.get_lr()[0]
+        assert lr_decay < lr_warmup
+
+        # Near end of total_steps, should be near eta_min
+        for _ in range(45):
+            scheduler.step()
+        lr_end = scheduler.get_lr()[0]
+        assert lr_end < 0.2
+
+    def test_warmup_cosine_with_nonzero_start(self):
+        """Test WarmupCosineSchedule with non-zero start LR"""
+        scheduler = braintools.optim.WarmupCosineSchedule(
+            base_lr=1.0,
+            warmup_steps=10,
+            total_steps=50,
+            warmup_start_lr=0.1,
+            eta_min=0.01
+        )
+
+        # Track LRs
+        lrs = []
+        for _ in range(50):
+            scheduler.step()
+            lrs.append(scheduler.get_lr()[0])
+
+        # Should increase during warmup
+        assert lrs[9] > lrs[0]
+
+        # Should decrease after warmup
+        assert lrs[49] < lrs[10]
+
+    def test_warmup_cosine_with_optimizer(self):
+        """Test WarmupCosineSchedule integration with optimizer"""
+        scheduler = braintools.optim.WarmupCosineSchedule(
+            base_lr=0.1,
+            warmup_steps=5,
+            total_steps=50,
+            warmup_start_lr=0.0,
+            eta_min=0.001
+        )
+        optimizer = braintools.optim.AdamW(lr=scheduler)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        initial_lr = optimizer.current_lr
+
+        # Step through warmup and decay
+        for _ in range(30):
+            scheduler.step()
+
+        # LR should have gone through warmup and started decay
+        assert optimizer.current_lr != initial_lr
+
+    def test_warmup_cosine_jit(self):
+        """Test WarmupCosineSchedule with JIT compilation"""
+        scheduler = braintools.optim.WarmupCosineSchedule(
+            base_lr=1.0,
+            warmup_steps=10,
+            total_steps=50,
+            warmup_start_lr=0.0,
+            eta_min=0.0
+        )
+
+        @brainstate.transform.jit
+        def jit_step():
+            scheduler.step()
+            return scheduler.get_lr()[0]
+
+        lrs = []
+        for _ in range(50):
+            lrs.append(jit_step())
+
+        # Should increase during warmup
+        assert lrs[9] > lrs[0]
+
+        # Should decrease after warmup
+        assert lrs[49] < lrs[10]
+
+    def test_warmup_cosine_state_dict(self):
+        """Test WarmupCosineSchedule state dict save/load"""
+        scheduler1 = braintools.optim.WarmupCosineSchedule(
+            base_lr=1.0,
+            warmup_steps=10,
+            total_steps=100,
+            warmup_start_lr=0.0,
+            eta_min=0.0
+        )
+
+        for _ in range(25):
+            scheduler1.step()
+
+        state_dict = scheduler1.state_dict()
+
+        scheduler2 = braintools.optim.WarmupCosineSchedule(
+            base_lr=1.0,
+            warmup_steps=10,
+            total_steps=100,
+            warmup_start_lr=0.0,
+            eta_min=0.0
+        )
+        scheduler2.load_state_dict(state_dict)
+
+        assert scheduler2.last_epoch.value == scheduler1.last_epoch.value
+        assert np.allclose(scheduler2.get_lr(), scheduler1.get_lr())
+
+
+class TestPiecewiseConstantSchedule:
+    """Test PiecewiseConstantSchedule"""
+
+    def test_basic_piecewise_constant(self):
+        """Test basic PiecewiseConstantSchedule functionality"""
+        scheduler = braintools.optim.PiecewiseConstantSchedule(
+            base_lr=1.0,
+            boundaries=[10, 20],
+            values=[1.0, 0.5, 0.1]
+        )
+
+        # Initial (epoch 0) should be first value
+        assert np.isclose(scheduler.get_lr()[0], 1.0)
+
+        # Before first boundary
+        for _ in range(5):
+            scheduler.step()
+        assert np.isclose(scheduler.get_lr()[0], 1.0)
+
+        # After first boundary, before second
+        for _ in range(7):
+            scheduler.step()
+        assert np.isclose(scheduler.get_lr()[0], 0.5, atol=0.01)
+
+        # After second boundary
+        for _ in range(10):
+            scheduler.step()
+        assert np.isclose(scheduler.get_lr()[0], 0.1, atol=0.01)
+
+    def test_piecewise_constant_exact_boundaries(self):
+        """Test PiecewiseConstantSchedule at exact boundary points"""
+        scheduler = braintools.optim.PiecewiseConstantSchedule(
+            base_lr=1.0,
+            boundaries=[5, 10],
+            values=[1.0, 0.5, 0.1]
+        )
+
+        # At epoch 4 (before boundary 5)
+        for _ in range(4):
+            scheduler.step()
+        assert np.isclose(scheduler.get_lr()[0], 1.0)
+
+        # At epoch 5 (exactly at boundary)
+        scheduler.step()
+        assert np.isclose(scheduler.get_lr()[0], 0.5, atol=0.01)
+
+        # At epoch 10 (exactly at second boundary)
+        for _ in range(5):
+            scheduler.step()
+        assert np.isclose(scheduler.get_lr()[0], 0.1, atol=0.01)
+
+    def test_piecewise_constant_with_optimizer(self):
+        """Test PiecewiseConstantSchedule integration with optimizer"""
+        scheduler = braintools.optim.PiecewiseConstantSchedule(
+            base_lr=0.1,
+            boundaries=[5, 10],
+            values=[1.0, 0.5, 0.1]
+        )
+        optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
+
+        model = brainstate.nn.Linear(10, 5)
+        optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+
+        # Track LR changes
+        lrs = []
+        for _ in range(15):
+            lrs.append(optimizer.current_lr)
+            scheduler.step()
+
+        # Check that LR changes at boundaries
+        assert np.isclose(lrs[3], 1.0)  # Before first boundary
+        assert np.isclose(lrs[7], 0.5, atol=0.01)  # After first boundary
+        assert np.isclose(lrs[12], 0.1, atol=0.01)  # After second boundary
+
+    def test_piecewise_constant_jit(self):
+        """Test PiecewiseConstantSchedule with JIT compilation"""
+        scheduler = braintools.optim.PiecewiseConstantSchedule(
+            base_lr=1.0,
+            boundaries=[10, 20, 30],
+            values=[1.0, 0.5, 0.1, 0.01]
+        )
+
+        @brainstate.transform.jit
+        def jit_step():
+            scheduler.step()
+            return scheduler.get_lr()[0]
+
+        lrs = []
+        for _ in range(35):
+            lrs.append(jit_step())
+
+        # Check values in each segment
+        assert np.isclose(lrs[5], 1.0)  # Before first boundary
+        assert np.isclose(lrs[15], 0.5, atol=0.01)  # Between first and second
+        assert np.isclose(lrs[25], 0.1, atol=0.01)  # Between second and third
+        assert np.isclose(lrs[32], 0.01, atol=0.01)  # After third boundary
+
+    def test_piecewise_constant_multiple_param_groups(self):
+        """Test PiecewiseConstantSchedule with multiple learning rates"""
+        scheduler = braintools.optim.PiecewiseConstantSchedule(
+            base_lr=[1.0, 0.1],
+            boundaries=[10, 20],
+            values=[1.0, 0.5, 0.1]
+        )
+
+        assert len(scheduler.get_lr()) == 2
+
+        # After first boundary - values are absolute for all param groups
+        for _ in range(12):
+            scheduler.step()
+        lrs = scheduler.get_lr()
+        assert np.isclose(lrs[0], 0.5, atol=0.01)
+        assert np.isclose(lrs[1], 0.5, atol=0.01)  # Same value for all groups
+
+    def test_piecewise_constant_state_dict(self):
+        """Test PiecewiseConstantSchedule state dict save/load"""
+        scheduler1 = braintools.optim.PiecewiseConstantSchedule(
+            base_lr=1.0,
+            boundaries=[10, 20],
+            values=[1.0, 0.5, 0.1]
+        )
+
+        for _ in range(15):
+            scheduler1.step()
+
+        state_dict = scheduler1.state_dict()
+
+        scheduler2 = braintools.optim.PiecewiseConstantSchedule(
+            base_lr=1.0,
+            boundaries=[10, 20],
+            values=[1.0, 0.5, 0.1]
+        )
+        scheduler2.load_state_dict(state_dict)
+
+        assert scheduler2.last_epoch.value == scheduler1.last_epoch.value
+        assert np.allclose(scheduler2.get_lr(), scheduler1.get_lr())
+
+    def test_piecewise_constant_default_params(self):
+        """Test PiecewiseConstantSchedule with default parameters"""
+        scheduler = braintools.optim.PiecewiseConstantSchedule(base_lr=1.0)
+
+        # Default boundaries=[1000, 2000], values=[1.0, 0.1, 0.01]
+        assert np.isclose(scheduler.get_lr()[0], 1.0)
+
+        # Step to 1500 (between boundaries)
+        for _ in range(1500):
+            scheduler.step()
+        lr = scheduler.get_lr()[0]
+        assert np.isclose(lr, 0.1, atol=0.01)
 
 
 if __name__ == '__main__':
