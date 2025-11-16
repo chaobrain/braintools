@@ -1,6 +1,52 @@
 # Release Notes
 
 
+## Version 0.1.4
+
+### New Features
+
+#### Learning Rate Scheduler Enhancements (`braintools.optim`)
+- **New `apply()` method**: Added `apply()` method to all LR schedulers for more flexible learning rate application
+  - Allows applying learning rate transformations without stepping the scheduler
+  - Useful for custom training loops and learning rate inspection
+- **Comprehensive test coverage**: Added 118+ comprehensive tests covering all 17 learning rate schedulers
+  - Tests for basic functionality, optimizer integration, JIT compilation, state persistence
+  - Full coverage of edge cases and special modes for each scheduler
+  - Validates correctness with `@brainstate.transform.jit` compilation
+
+### Improvements
+
+#### Documentation
+- **Restructured tutorial organization**: Renamed and reorganized documentation files for better clarity
+  - Moved module tutorials into subdirectories (`conn/`, `init/`, `input/`, `file/`, `surrogate/`)
+  - Updated table of contents structure across all modules
+  - Improved navigation with consolidated index files (`index.md` instead of `toc_*.md`)
+- **Enhanced visual branding**: Updated project logo from JPG to high-resolution PNG format
+  - Better quality and transparency support
+  - Consistent branding across documentation
+
+#### Code Quality
+- **Test improvements**: Refactored scheduler tests with better organization and coverage
+  - Each scheduler now has 5-10 dedicated tests
+  - Tests verify: basic functionality, optimizer integration, JIT compilation, multiple param groups, state dict save/load
+  - Discovered and documented key implementation behaviors (epoch counting, initialization patterns)
+
+#### CI/CD
+- **Updated GitHub Actions**: Bumped actions to latest versions for improved security and performance
+  - `actions/download-artifact`: v5 → v6
+  - `actions/upload-artifact`: v4 → v5
+  - Better artifact handling in CI pipeline
+
+### Bug Fixes
+- Fixed edge cases in learning rate scheduler state management
+- Corrected epoch counting behavior in milestone-based schedulers
+- Improved JIT compilation compatibility for all schedulers
+
+### Notes
+- All 17 learning rate schedulers now have comprehensive test coverage (100%)
+- Enhanced reliability for training workflows with thorough validation
+- Improved developer experience with better documentation structure
+
 
 ## Version 0.1.0
 

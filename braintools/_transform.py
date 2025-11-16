@@ -640,6 +640,94 @@ class SoftsignTransform(Transform):
         return z / (1.0 - u.math.abs(z))
 
 
+class ClippedTransform(Transform):
+    r"""
+    Transformation with clipping to specified bounds.
+
+    This transformation applies a clipping operation to the input values,
+    constraining them within the specified lower and upper bounds. It is useful
+    for enforcing hard limits on parameters that must remain within a certain range.
+
+    The transformation is defined by:
+
+    .. math::
+        \text{forward}(x) = \min(\max(x, \text{lower}), \text{upper})
+
+    The inverse transformation is not defined for clipping, as information is lost.
+
+    Parameters
+    ----------
+    lower : array_like
+        Lower bound for clipping.
+    upper : array_like
+        Upper bound for clipping.
+
+    Attributes
+    ----------
+    lower : array_like
+        Lower bound for clipping.
+    upper : array_like
+        Upper bound for clipping.
+
+    Notes
+    -----
+    Clipping is a non-bijective transformation since multiple input values can
+    map to the same output value at the bounds. Therefore, the inverse method
+    is not implemented.
+
+    Examples
+    --------
+    >>> # Clip values to [0, 1]
+    >>> transform = ClippedTransform(0.0, 1.0)
+    >>> x = jnp.array([-0.5, 0.5, 1.5])
+    >>> y = transform.forward(x)
+    >>> # y = [0.0, 0.5, 1.0]
+    """
+    __module__ = 'braintools'
+
+    def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
+        """
+        Initialize the clipping transformation.
+
+        Parameters
+        ----------
+        lower : array_like
+            Lower bound for clipping.
+        upper : array_like
+            Upper bound for clipping.
+        """
+        super().__init__()
+        self.lower = lower
+        self.upper = upper
+
+    def forward(self, x: ArrayLike) -> Array:
+        """
+        Apply clipping to the input values.
+
+        Parameters
+        ----------
+        x : array_like
+            Input values to clip.
+
+        Returns
+        -------
+        Array
+            Clipped values within [lower, upper].
+        """
+        return u.math.clip(x, a_min=self.lower, a_max=self.upper)
+
+    def inverse(self, y: ArrayLike) -> Array:
+        """
+        Inverse transformation is not defined for clipping.
+
+        Raises
+        ------
+        NotImplementedError
+            Clipping is not bijective; inverse cannot be defined.
+        """
+        return u.math.clip(y, a_min=self.lower, a_max=self.upper)
+
+
 class AffineTransform(Transform):
     r"""
     Affine (linear) transformation with scaling and shifting.
