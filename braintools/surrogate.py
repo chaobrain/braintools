@@ -75,9 +75,24 @@ def _heaviside_imp(x, dx):
 
 def _heaviside_batching(args, axes):
     x, dx = args
-    if axes[0] != axes[1]:
-        dx = batching.moveaxis(dx, axes[1], axes[0])
-    return heaviside_p.bind(x, dx), tuple([axes[0]])
+    x_axis, dx_axis = axes
+
+    # Handle case where both are batched but on different axes
+    if x_axis is not None and dx_axis is not None and x_axis != dx_axis:
+        dx = jnp.moveaxis(dx, dx_axis, x_axis)
+        out_axis = x_axis
+    elif x_axis is not None:
+        out_axis = x_axis
+    elif dx_axis is not None:
+        out_axis = dx_axis
+        x = jnp.repeat(jnp.expand_dims(x, axis=dx_axis), axis=dx_axis, repeats=dx.shape[dx_axis])
+    else:
+        out_axis = None
+
+    # Since heaviside_p.multiple_results = True, bind returns a tuple
+    # and we need to return (result_tuple, axes_tuple)
+    result = heaviside_p.bind(x, dx)
+    return result, (out_axis,)
 
 
 def _heaviside_jvp(primals, tangents):
