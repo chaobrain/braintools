@@ -36,6 +36,7 @@ __all__ = [
     'ChainTransform',
     'MaskedTransform',
     'CustomTransform',
+    'ClippedTransform',
 ]
 
 
