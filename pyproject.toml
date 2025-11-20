@@ -32,7 +32,10 @@ classifiers = [
 keywords = [
     "brain dynamics programming",
     "brain simulation",
-    "brain-inspired computing"
+    "brain-inspired computing",
+    "brain-inspired computation",
+    "brain modeling",
+    "brain modeling toolbox",
 ]
 dependencies = [
     "jax",
