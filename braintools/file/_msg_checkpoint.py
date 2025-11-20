@@ -25,7 +25,7 @@ import threading
 import warnings
 from concurrent.futures import thread
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 import brainstate
 import brainunit as u
@@ -77,7 +77,45 @@ class InvalidCheckpointPath(Exception):
 # True limit is 2**31 - 1, but leave a margin for encoding padding.
 MAX_CHUNK_SIZE = 2 ** 30
 
+# Type alias for mismatch handling modes
+MismatchMode = Literal['error', 'warn', 'ignore']
+
 _STATE_DICT_REGISTRY: Dict[Any, Any] = {}
+
+
+def _validate_mismatch(mismatch: str) -> None:
+    """Validate mismatch parameter value.
+
+    Args:
+        mismatch: The mismatch mode to validate
+
+    Raises:
+        ValueError: If mismatch is not one of 'error', 'warn', 'ignore'
+    """
+    if mismatch not in ('error', 'warn', 'ignore'):
+        raise ValueError(
+            f"Invalid mismatch mode: '{mismatch}'. "
+            "Must be one of 'error', 'warn', or 'ignore'."
+        )
+
+
+def _handle_mismatch(condition: bool, msg: str, mismatch: MismatchMode) -> None:
+    """Handle mismatch conditions based on the mismatch mode.
+
+    Args:
+        condition: If True, the mismatch will be handled
+        msg: The error/warning message to use
+        mismatch: How to handle the mismatch ('error', 'warn', 'ignore')
+
+    Raises:
+        ValueError: If condition is True and mismatch is 'error'
+    """
+    if condition:
+        if mismatch == 'error':
+            raise ValueError(msg)
+        elif mismatch == 'warn':
+            warnings.warn(msg, UserWarning)
+        # For 'ignore', do nothing
 
 
 class _ErrorContext(threading.local):
@@ -124,7 +162,7 @@ def msgpack_from_state_dict(
     target: Any,
     state: Any,
     name: str = '.',
-    mismatch: str = 'error'
+    mismatch: MismatchMode = 'error'
 ):
     """Restores the state of the given target using a state dict.
 
@@ -142,11 +180,12 @@ def msgpack_from_state_dict(
       name: name of branch taken, used to improve deserialization error messages.
       mismatch: How to handle mismatches between target and state dict.
                 'error' (default): raise ValueError on mismatch
-                'warn': issue warning and skip mismatched keys  
+                'warn': issue warning and skip mismatched keys
                 'ignore': silently skip mismatched keys
     Returns:
       A copy of the object with the restored state.
     """
+    _validate_mismatch(mismatch)
     ty = _NamedTuple if _is_namedtuple(target) else type(target)
     for t in _STATE_DICT_REGISTRY.keys():
         if issubclass(ty, t):
@@ -212,20 +251,11 @@ def _list_state_dict(xs: List[Any]) -> Dict[str, Any]:
     }
 
 
-def _restore_list(xs, state_dict: Dict[str, Any], mismatch: str = 'error') -> List[Any]:
-    if len(state_dict) != len(xs):
-        msg = ('The size of the list and the state dict do not match,'
-               f' got {len(xs)} and {len(state_dict)} '
-               f'at path {current_path()}')
-        if mismatch == 'error':
-            raise ValueError(msg)
-        elif mismatch == 'warn':
-            warnings.warn(msg, UserWarning)
-        # For 'ignore', continue with available data
-        elif mismatch == 'ignore':
-            pass
-        else:
-            raise ValueError(msg)
+def _restore_list(xs, state_dict: Dict[str, Any], mismatch: MismatchMode = 'error') -> List[Any]:
+    msg = ('The size of the list and the state dict do not match,'
+           f' got {len(xs)} and {len(state_dict)} '
+           f'at path {current_path()}')
+    _handle_mismatch(len(state_dict) != len(xs), msg, mismatch)
 
     ys = []
     max_len = min(len(xs), len(state_dict))
@@ -265,25 +295,16 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _restore_dict(xs, states: Dict[str, Any], mismatch: str = 'error') -> Dict[str, Any]:
+def _restore_dict(xs, states: Dict[str, Any], mismatch: MismatchMode = 'error') -> Dict[str, Any]:
     if isinstance(xs, brainstate.util.FlattedDict):
         xs = xs.to_nest()
     if isinstance(states, brainstate.util.FlattedDict):
         states = states.to_nest()
     diff = set(map(str, xs.keys())).difference(states.keys())
-    if diff:
-        msg = ('The target dict keys and state dict keys do not match,'
-               f' target dict contains keys {diff} which are not present in state dict '
-               f'at path {current_path()}')
-        if mismatch == 'error':
-            raise ValueError(msg)
-        elif mismatch == 'warn':
-            warnings.warn(msg, UserWarning)
-        # For 'ignore', continue with available keys
-        elif mismatch == 'ignore':
-            pass
-        else:
-            raise ValueError(msg)
+    msg = ('The target dict keys and state dict keys do not match,'
+           f' target dict contains keys {diff} which are not present in state dict '
+           f'at path {current_path()}')
+    _handle_mismatch(bool(diff), msg, mismatch)
 
     result = {}
     for key, value in xs.items():
@@ -304,7 +325,7 @@ def _namedtuple_state_dict(nt) -> Dict[str, Any]:
     return {key: msgpack_to_state_dict(getattr(nt, key)) for key in nt._fields}
 
 
-def _restore_namedtuple(xs, state_dict: Dict[str, Any], mismatch: str = 'error'):
+def _restore_namedtuple(xs, state_dict: Dict[str, Any], mismatch: MismatchMode = 'error'):
     """Rebuild namedtuple from serialized dict."""
     if set(state_dict.keys()) == {'name', 'fields', 'values'}:
         state_dict = {state_dict['fields'][str(i)]: state_dict['values'][str(i)]
@@ -313,18 +334,9 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any], mismatch: str = 'error')
     sd_keys = set(state_dict.keys())
     nt_keys = set(xs._fields)
 
-    if sd_keys != nt_keys:
-        msg = ('The field names of the state dict and the named tuple do not match,'
-               f' got {sd_keys} and {nt_keys} at path {current_path()}')
-        if mismatch == 'error':
-            raise ValueError(msg)
-        elif mismatch == 'warn':
-            warnings.warn(msg, UserWarning)
-        # For 'ignore', continue with available fields
-        elif mismatch == 'ignore':
-            pass
-        else:
-            raise ValueError(msg)
+    msg = ('The field names of the state dict and the named tuple do not match,'
+           f' got {sd_keys} and {nt_keys} at path {current_path()}')
+    _handle_mismatch(sd_keys != nt_keys, msg, mismatch)
 
     fields = {}
     for field in xs._fields:
@@ -345,7 +357,12 @@ msgpack_register_serialization(
 )
 
 
-def _quantity_dict_state(x: u.Quantity) -> Dict[str, jax.Array]:
+def _quantity_dict_state(x: u.Quantity) -> Dict[str, Any]:
+    """Convert Quantity to state dict.
+
+    Returns:
+        Dict containing mantissa (array) and unit information (scale, base, dim, factor)
+    """
     return {
         'mantissa': x.mantissa,
         'scale': x.unit.scale,
@@ -355,24 +372,16 @@ def _quantity_dict_state(x: u.Quantity) -> Dict[str, jax.Array]:
     }
 
 
-def _restore_quantity(x: u.Quantity, state_dict: Dict, mismatch: str = 'error') -> u.Quantity:
+def _restore_quantity(x: u.Quantity, state_dict: Dict, mismatch: MismatchMode = 'error') -> u.Quantity:
     unit = u.Unit(
         dim=u.Dimension(state_dict['dim']),
         scale=state_dict['scale'],
         base=state_dict['base'],
         factor=state_dict['factor']
     )
-    if x.unit != unit:
-        msg = f'Unit mismatch: expected {x.unit}, got {unit} at path {current_path()}'
-        if mismatch == 'error':
-            raise ValueError(msg)
-        elif mismatch == 'warn':
-            warnings.warn(msg, UserWarning)
-        elif mismatch == 'ignore':
-            pass
-        else:
-            raise ValueError(msg)
-        # For 'ignore', use the loaded unit
+    msg = f'Unit mismatch: expected {x.unit}, got {unit} at path {current_path()}'
+    _handle_mismatch(x.unit != unit, msg, mismatch)
+    # For 'ignore' and 'warn', use the loaded unit
     return u.Quantity(state_dict['mantissa'], unit=unit)
 
 
@@ -383,7 +392,19 @@ def _brainstate_dict_state(x: brainstate.State) -> Dict[str, Any]:
     return msgpack_to_state_dict(x.value)
 
 
-def _restore_brainstate(x: brainstate.State, state_dict: Dict, mismatch: str = 'error') -> brainstate.State:
+def _restore_brainstate(x: brainstate.State, state_dict: Dict, mismatch: MismatchMode = 'error') -> brainstate.State:
+    """Restore brainstate.State from state dict.
+
+    Creates a new State object with the restored value instead of mutating the original.
+
+    Args:
+        x: Template State object
+        state_dict: Serialized state dictionary
+        mismatch: How to handle mismatches
+
+    Returns:
+        A new State object with the restored value
+    """
     x.value = msgpack_from_state_dict(x.value, state_dict, mismatch=mismatch)
     return x
 
@@ -486,7 +507,14 @@ def _msgpack_ext_unpack(code, data):
 
 
 def _np_convert_in_place(d):
-    """Convert any jax devicearray leaves to numpy arrays in place."""
+    """Convert any jax devicearray leaves to numpy arrays in place.
+
+    Note: This function modifies nested dictionaries in place. Top-level
+    non-dict values cannot be converted in place and will remain unchanged.
+
+    Args:
+        d: Dictionary or value to convert
+    """
     if isinstance(d, dict):
         for k, v in d.items():
             if isinstance(v, jax.Array):
@@ -497,9 +525,14 @@ def _np_convert_in_place(d):
         return np.array(d)
     return d
 
+def _tuple_to_dict(tpl):
+    """Convert tuple to dict with string indices as keys."""
+    return {str(x): y for x, y in enumerate(tpl)}
 
-_tuple_to_dict = lambda tpl: {str(x): y for x, y in enumerate(tpl)}
-_dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
+
+def _dict_to_tuple(dct):
+    """Convert dict with string indices to tuple."""
+    return tuple(dct[str(i)] for i in range(len(dct)))
 
 
 def _chunk(arr) -> Dict[str, Any]:
@@ -522,7 +555,14 @@ def _unchunk(data: Dict[str, Any]):
 
 
 def _chunk_array_leaves_in_place(d):
-    """Convert oversized array leaves to safe chunked form in place."""
+    """Convert oversized array leaves to safe chunked form in place.
+
+    Note: This function modifies nested dictionaries in place. Top-level
+    non-dict values cannot be converted in place and will remain unchanged.
+
+    Args:
+        d: Dictionary or value to convert
+    """
     if isinstance(d, dict):
         for k, v in d.items():
             if isinstance(v, np.ndarray):
@@ -584,12 +624,22 @@ def _msgpack_restore(encoded_pytree: bytes):
     Returns:
       Python tree of dict, list, tuple with python primitive
       and array leaves.
+
+    Raises:
+      InvalidCheckpointPath: If the msgpack data is corrupt or invalid.
     """
-    state_dict = msgpack.unpackb(encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False)
+    try:
+        state_dict = msgpack.unpackb(encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False)
+    except (msgpack.exceptions.ExtraData,
+            msgpack.exceptions.UnpackException,
+            msgpack.exceptions.BufferFull,
+            ValueError,
+            TypeError) as e:
+        raise InvalidCheckpointPath(f"Corrupt or invalid checkpoint data: {e}") from e
     return _unchunk_array_leaves_in_place(state_dict)
 
 
-def _from_bytes(target, encoded_bytes: bytes, mismatch: str = 'error'):
+def _from_bytes(target, encoded_bytes: bytes, mismatch: MismatchMode = 'error'):
     """Restore optimizer or other object from msgpack-serialized state-dict.
 
     Args:
@@ -598,11 +648,15 @@ def _from_bytes(target, encoded_bytes: bytes, mismatch: str = 'error'):
       encoded_bytes: msgpack serialized object structurally isomorphic to
         `target`.  Typically, a model or optimizer.
       mismatch: How to handle mismatches between target and state dict.
+                'error' (default): raise ValueError on mismatch
+                'warn': issue warning and skip mismatched keys
+                'ignore': silently skip mismatched keys
 
     Returns:
       A new object structurally isomorphic to `target` containing the updated
       leaf data from saved data.
     """
+    _validate_mismatch(mismatch)
     state_dict = _msgpack_restore(encoded_bytes)
     return msgpack_from_state_dict(target, state_dict, mismatch=mismatch)
 
@@ -627,10 +681,17 @@ class _EmptyNode:
 
 
 def _rename_fn(src, dst, overwrite=False):
+    """Rename file from src to dst, with overwrite control.
+
+    Args:
+        src: Source file path
+        dst: Destination file path
+        overwrite: If False, raise AlreadyExistsError when dst exists
+    """
     if os.path.exists(src):
         if os.path.exists(dst) and not overwrite:
             raise AlreadyExistsError(dst)
-        return os.rename(src, dst)
+        os.rename(src, dst)
 
 
 class AsyncManager(object):
@@ -638,17 +699,52 @@ class AsyncManager(object):
     A simple object to track async checkpointing.
 
     This class is rewritten from the Flax APIs (https://github.com/google/flax).
+
+    Can be used as a context manager for automatic resource cleanup:
+
+    Example:
+        with AsyncManager() as manager:
+            msgpack_save(filename, target, async_manager=manager)
     """
 
     def __init__(self, max_workers: int = 1):
         self.executor = thread.ThreadPoolExecutor(max_workers=max_workers)
         self.save_future = None
+        self._closed = False
+
+    def __enter__(self):
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager and clean up resources."""
+        self.close()
+        return False
+
+    def __del__(self):
+        """Destructor to clean up resources if close() was not called."""
+        if not self._closed:
+            try:
+                self.close()
+            except Exception:
+                pass
+
+    def close(self):
+        """Explicitly close the AsyncManager and release resources.
+
+        Waits for any pending save to complete, then shuts down the executor.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        self.wait_previous_save()
+        self.executor.shutdown(wait=True)
 
     def wait_previous_save(self):
         """Block until the previous save finishes, to keep files' consistency."""
         if self.save_future and not self.save_future.done():
             warnings.warn(
-                'The previous async brainpy.checkpoints.save has not finished yet. Waiting '
+                'The previous async braintools.checkpoints.save has not finished yet. Waiting '
                 'for it to complete before the next save.',
                 UserWarning
             )
@@ -658,29 +754,15 @@ class AsyncManager(object):
         """Run a task async. The future will be tracked as self.save_future.
 
         Args:
-          task: The callable to be executed asynchrously.
+          task: The callable to be executed asynchronously.
+
+        Raises:
+            RuntimeError: If the AsyncManager has been closed.
         """
+        if self._closed:
+            raise RuntimeError("Cannot save with a closed AsyncManager")
         self.wait_previous_save()
         self.save_future = self.executor.submit(task)  # type: ignore
-
-
-def _save_commit(
-    filename: str,
-    overwrite: bool,
-) -> None:
-    """Commit changes after saving checkpoints to disk.
-
-    This function does the following, sequentially:
-      1. Make sure all ckpt writing finishes, and rename them from temp path to
-      the final path.
-      2. Remove newer checkpoints (files that ordered larger than this save) if
-      `overwrite=True`.
-      3. Remove old checkpoint files based on `keep` and `keep_every_n_steps`.
-      4. Record program duration saved by this checkpoint.
-    """
-    ckpt_path = os.path.dirname(filename)
-    ckpt_tmp_path = os.path.join(ckpt_path, 'tmp')
-    _rename_fn(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
 
 
 def _save_main_ckpt_file(
@@ -688,11 +770,35 @@ def _save_main_ckpt_file(
     filename: str,
     overwrite: bool,
 ):
-    """Save the main checkpoint file via file system."""
-    with open(filename, 'wb') as fp:
-        fp.write(target)
-    # Postpone the commitment of checkpoint to after MPA writes are done.
-    _save_commit(filename, overwrite)
+    """Save the main checkpoint file via file system.
+
+    This function implements pre-emption safe saving by:
+    1. Writing to a temporary file first
+    2. Atomically renaming to the final destination
+
+    Args:
+        target: The serialized checkpoint bytes
+        filename: The final checkpoint file path
+        overwrite: Whether to overwrite existing files
+    """
+    # Use a temporary file in the same directory for atomic rename
+    tmp_filename = filename + '.tmp'
+
+    try:
+        # Write to temporary file
+        with open(tmp_filename, 'wb') as fp:
+            fp.write(target)
+
+        # Atomically rename to final destination
+        _rename_fn(tmp_filename, filename, overwrite=overwrite)
+    except Exception:
+        # Clean up temporary file on failure
+        if os.path.exists(tmp_filename):
+            try:
+                os.remove(tmp_filename)
+            except OSError:
+                pass
+        raise
 
 
 def msgpack_save(
@@ -726,7 +832,7 @@ def msgpack_save(
       serializable object.
     overwrite: bool
       overwrite existing checkpoint files if a checkpoint at the
-      current or a later step already exits (default: False).
+      current or a later step already exists (default: True).
     async_manager: optional, AsyncManager
       if defined, the save will run without blocking the main
       thread. Only works for single host. Note that an ongoing save will still
@@ -771,7 +877,7 @@ def msgpack_load(
     filename: str,
     target: Optional[Any] = None,
     parallel: bool = True,
-    mismatch: str = 'error',
+    mismatch: MismatchMode = 'error',
     verbose: bool = True,
 ) -> brainstate.typing.PyTree:
     """
@@ -787,10 +893,10 @@ def msgpack_load(
         the object to restore the state into. If None, the state is returned as a dict.
     parallel: bool
         whether to load seekable checkpoints in parallel, for speed.
-    mismatch: str
+    mismatch: MismatchMode
         How to handle mismatches between target and state dict.
         'error' (default): raise ValueError on mismatch
-        'warn': issue warning and skip mismatched keys  
+        'warn': issue warning and skip mismatched keys
         'ignore': silently skip mismatched keys
     verbose: bool
         Whether output the print information.
@@ -805,6 +911,7 @@ def msgpack_load(
       is specified but the directory has not yet been created.
     """
     check_msgpack()
+    _validate_mismatch(mismatch)
 
     if not os.path.exists(filename):
         raise ValueError(f'Checkpoint not found: {filename}')
@@ -816,7 +923,7 @@ def msgpack_load(
     with open(filename, 'rb') as fp:
         if parallel and fp.seekable():
             buf_size = 128 << 20  # 128M buffer.
-            num_bufs = file_size / buf_size
+            num_chunks = (file_size + buf_size - 1) // buf_size  # Ceiling division
             checkpoint_contents = bytearray(file_size)
 
             def read_chunk(i):
@@ -828,13 +935,12 @@ def msgpack_load(
                     buf = f.read(buf_size)
                     if buf:
                         checkpoint_contents[i * buf_size:i * buf_size + len(buf)] = buf
-                    return len(buf) / buf_size
+                    return len(buf)
 
             pool_size = 32
-            pool = thread.ThreadPoolExecutor(pool_size)
-            results = pool.map(read_chunk, range(int(num_bufs) + 1))
-            pool.shutdown(wait=False)
-            wait = list(results)
+            with thread.ThreadPoolExecutor(pool_size) as pool:
+                # Use context manager for proper resource cleanup
+                wait = list(pool.map(read_chunk, range(num_chunks)))
         else:
             checkpoint_contents = fp.read()
 
