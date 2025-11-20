@@ -25,7 +25,7 @@ import threading
 import warnings
 from concurrent.futures import thread
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 import brainstate
 import brainunit as u
@@ -524,6 +524,7 @@ def _np_convert_in_place(d):
     elif isinstance(d, jax.Array):
         return np.array(d)
     return d
+
 
 def _tuple_to_dict(tpl):
     """Convert tuple to dict with string indices as keys."""
