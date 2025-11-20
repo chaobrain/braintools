@@ -75,17 +75,73 @@ def _heaviside_imp(x, dx):
 
 def _heaviside_batching(args, axes):
     x, dx = args
-    if axes[0] != axes[1]:
-        dx = batching.moveaxis(dx, axes[1], axes[0])
-    return heaviside_p.bind(x, dx), tuple([axes[0]])
+    x_axis, dx_axis = axes
+
+    # Handle case where both are batched but on different axes
+    if x_axis is not None and dx_axis is not None and x_axis != dx_axis:
+        dx = jnp.moveaxis(dx, dx_axis, x_axis)
+        out_axis = x_axis
+    elif x_axis is not None:
+        out_axis = x_axis
+    elif dx_axis is not None:
+        out_axis = dx_axis
+        x = jnp.repeat(jnp.expand_dims(x, axis=dx_axis), axis=dx_axis, repeats=dx.shape[dx_axis])
+    else:
+        out_axis = None
+
+    # Since heaviside_p.multiple_results = True, bind returns a tuple
+    # and we need to return (result_tuple, axes_tuple)
+    result = heaviside_p.bind(x, dx)
+    return result, (out_axis,)
 
 
 def _heaviside_jvp(primals, tangents):
     x, dx = primals
     tx, tdx = tangents
-    primal_outs = heaviside_p.bind(x, dx)
-    tangent_outs = [dx * tx, ]
+    # Call the implementation directly instead of bind to avoid recursion
+    primal_outs = _heaviside_imp(x, dx)
+    # Handle gradients w.r.t. both x and dx
+    # ∂output/∂x via surrogate gradient dx, plus ∂output/∂dx contribution
+    # Need to handle JAX's Zero type for optimization
+    if type(tx) is ad.Zero:
+        tangent_x = tx  # Keep as Zero
+    else:
+        tangent_x = dx * tx
+
+    if type(tdx) is ad.Zero:
+        tangent_dx = tdx  # Keep as Zero
+    else:
+        tangent_dx = tdx
+
+    # Combine tangents using add_tangents which handles Zero properly
+    tangent_outs = [ad.add_tangents(tangent_x, tangent_dx)]
     return primal_outs, tangent_outs
+
+
+def _heaviside_transpose(ct, x, dx):
+    """
+    Transpose rule for reverse-mode autodiff.
+
+    This computes cotangents for the tangents (tx, tdx) given the output cotangent.
+
+    From JVP: output_tangent = dx * tx + tdx
+    Transpose: cotangent_tx = dx * ct_out, cotangent_tdx = ct_out
+    """
+    # ct is a tuple/list containing the cotangent for each output
+    ct_out = ct[0]
+
+    # Cotangent for tx (from dx * tx term)
+    # In JAX transpose, dx is a residual and might be UndefinedPrimal if it's symbolic
+    if type(dx) is ad.UndefinedPrimal:
+        # Can't use dx if it's undefined - return zero
+        cotangent_tx = ad.Zero(dx.aval)
+    else:
+        cotangent_tx = dx * ct_out
+
+    # Cotangent for tdx (from tdx term)
+    cotangent_tdx = ct_out
+
+    return (cotangent_tx, cotangent_tdx)
 
 
 heaviside_p = Primitive('heaviside_surrogate_gradient')
@@ -94,6 +150,8 @@ heaviside_p.def_abstract_eval(_heaviside_abstract)
 heaviside_p.def_impl(_heaviside_imp)
 batching.primitive_batchers[heaviside_p] = _heaviside_batching
 ad.primitive_jvps[heaviside_p] = _heaviside_jvp
+# Let JAX automatically derive transpose from JVP
+# ad.primitive_transposes[heaviside_p] = _heaviside_transpose
 mlir.register_lowering(heaviside_p, mlir.lower_fun(_heaviside_imp, multiple_results=True))
 
 
@@ -152,7 +210,7 @@ class Surrogate(PrettyObject):
     __module__ = 'braintools.surrogate'
 
     def __call__(self, x):
-        dx = self.surrogate_grad(x)
+        dx = self.surrogate_grad(jax.lax.stop_gradient(x))
         return heaviside_p.bind(x, dx)[0]
 
     def surrogate_fun(self, x) -> jax.Array:

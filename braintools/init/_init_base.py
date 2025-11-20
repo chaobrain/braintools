@@ -233,7 +233,7 @@ def _expand_params_to_match_sizes(params, sizes):
     return params
 
 
-@set_module_as('brainstate.nn')
+@set_module_as('braintools.init')
 def param(
     init: Union[Callable, ArrayLike, State],
     sizes: Union[int, Sequence[int]],

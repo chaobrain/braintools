@@ -27,6 +27,7 @@ or modify other distributions including:
 
 from typing import Optional
 
+import brainstate
 import brainunit as u
 import numpy as np
 from brainstate.typing import ArrayLike
@@ -80,7 +81,7 @@ class Mixture(Initialization):
         self.weights = weights if weights is not None else [1.0 / len(distributions)] * len(distributions)
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         choices = rng.choice(len(self.distributions), size=size, p=self.weights)
 
         if isinstance(size, int):

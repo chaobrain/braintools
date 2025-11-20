@@ -27,9 +27,12 @@ This module provides fundamental weight initialization strategies including:
 - Beta distributions
 - Weibull distributions
 """
+
+
 import warnings
 from typing import Optional
 
+import brainstate
 import brainunit as u
 import numpy as np
 from brainstate.typing import ArrayLike
@@ -172,7 +175,7 @@ class Uniform(Initialization):
         self.unit = unit
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         low, unit = u.split_mantissa_unit(self.low)
         high = u.Quantity(self.high).to(unit).mantissa
         samples = rng.uniform(low, high, size)
@@ -222,7 +225,7 @@ class Normal(Initialization):
         self.unit = unit
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
         samples = rng.normal(mean, std, size)
@@ -273,7 +276,7 @@ class LogNormal(Initialization):
         self.unit = unit
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
 
@@ -327,7 +330,7 @@ class Gamma(Initialization):
         self.unit = unit
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.gamma(self.shape, scale, size)
         return u.maybe_decimal(samples * unit * self.unit)
@@ -373,7 +376,7 @@ class Exponential(Initialization):
         self.unit = unit
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.exponential(scale, size)
         return u.maybe_decimal(samples * unit * self.unit)
@@ -441,7 +444,7 @@ class TruncatedNormal(Initialization):
         self.unit = unit
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
 
@@ -508,7 +511,7 @@ class Beta(Initialization):
         self.unit = unit
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         samples = rng.beta(self.alpha, self.beta, size)
         low, unit = u.split_mantissa_unit(self.low)
         high = u.Quantity(self.high).to(unit).mantissa
@@ -550,7 +553,7 @@ class Weibull(Initialization):
         self.scale = scale
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.weibull(self.shape, size) * scale
         return u.maybe_decimal(samples * unit)

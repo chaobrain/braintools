@@ -4,11 +4,13 @@ Surrogate gradients provide differentiable approximations for non-differentiable
 
 - `01_basics.ipynb` walks through the rationale behind surrogate gradients, demonstrates the built-in surrogate functions, and highlights common training patterns for spiking networks.
 - `02_customizing.ipynb` dives deeper into extending the library, illustrating how to register custom surrogate kernels, combine them with existing layers, and validate their gradients.
+- `03_meta_learning.ipynb` explores meta-learning techniques for optimizing surrogate hyperparameters, showing how to take derivatives with respect to surrogate parameters and adapt them during training for improved performance.
 
 ```{toctree}
 :maxdepth: 1
 
 01_basics.ipynb
 02_customizing.ipynb
+03_meta_learning.ipynb
 ```
 
