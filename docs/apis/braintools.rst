@@ -76,3 +76,4 @@ valid domains during training.
     ChainTransform
     MaskedTransform
     CustomTransform
+    ClippedTransform

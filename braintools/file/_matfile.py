@@ -13,7 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Any, Dict
+import os
+from typing import Any, Dict, List, Union
 
 import numpy as np
 from scipy.io import loadmat
@@ -27,51 +28,119 @@ __all__ = [
 def load_matfile(
     filename: str,
     header_info: bool = True,
-    struct_as_record=False,
-    squeeze_me=True,
+    struct_as_record: bool = False,
+    squeeze_me: bool = True,
+    verbose: bool = True,
     **kwargs
-) -> Dict:
+) -> Dict[str, Any]:
     """
     A simple function to load a .mat file using scipy from Python.
-    It uses a recursive approach for parsing properly Matlab' objects.
+    It uses a recursive approach for parsing properly Matlab objects.
+
+    This function recursively converts MATLAB data structures to Python types:
+    - MATLAB structs → Python dictionaries
+    - MATLAB cell arrays (object arrays) → Python lists
+    - Numeric arrays → NumPy arrays
 
     Parameters
     ----------
     filename : str
         The path to the .mat file to be loaded.
     header_info : bool, optional
-        Whether to include the header information, by default True.
+        If True (default), excludes MATLAB header keys ('__header__',
+        '__version__', '__globals__') from the output. If False, includes them.
     struct_as_record : bool, optional
-        Whether to load Matlab structs as numpy record arrays, by default False.
+        Whether to load MATLAB structs as numpy record arrays, by default False.
+        Passed to scipy.io.loadmat.
     squeeze_me : bool, optional
         Whether to squeeze unit matrix dimensions, by default True.
+        Passed to scipy.io.loadmat.
+    verbose : bool, optional
+        If True (default), print loading information.
+    **kwargs
+        Additional keyword arguments passed to scipy.io.loadmat.
 
     Returns
     -------
     dict
-        A dictionary with the content of the .mat file.
-    """
+        A dictionary with the content of the .mat file, with MATLAB-specific
+        structures converted to Python types.
 
-    def parse_mat(element: Any):
-        # lists (1D cell arrays usually) or numpy arrays as well
-        if element.__class__ == np.ndarray and element.dtype == np.object_ and len(element.shape) > 0:
+    Raises
+    ------
+    TypeError
+        If filename is not a string or path-like object.
+    FileNotFoundError
+        If the specified file does not exist.
+    ValueError
+        If the path is not a file, or if loading fails.
+
+    See Also
+    --------
+    scipy.io.loadmat : Underlying MATLAB file loader
+
+    Examples
+    --------
+    >>> data = load_matfile('experiment_data.mat')
+    >>> print(data.keys())
+    dict_keys(['trial_data', 'timestamps', 'spike_times'])
+    """
+    # Input validation
+    if not isinstance(filename, (str, os.PathLike)):
+        raise TypeError(
+            f'filename must be a string or path-like object, got {type(filename).__name__}'
+        )
+
+    # File existence check
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f'MATLAB file not found: {filename}')
+    if not os.path.isfile(filename):
+        raise ValueError(f'Path is not a file: {filename}')
+
+    if verbose:
+        print(f'Loading MATLAB file from {filename}')
+
+    def parse_mat(element: Any) -> Union[List, Dict[str, Any], np.ndarray, Any]:
+        """Recursively parse MATLAB data structures to Python types.
+
+        Parameters
+        ----------
+        element : Any
+            MATLAB data structure element to parse
+
+        Returns
+        -------
+        Union[List, Dict[str, Any], np.ndarray, Any]
+            Parsed Python data structure
+        """
+        # MATLAB cell arrays (object arrays) → Python lists
+        # Using isinstance() for proper subclass support
+        # Using ndim for safer dimension checking
+        if isinstance(element, np.ndarray) and element.dtype == np.object_ and element.ndim > 0:
             return [parse_mat(entry) for entry in element]
 
-        # matlab struct
-        if element.__class__ == mio5_params.mat_struct:
+        # MATLAB structs → Python dictionaries
+        if isinstance(element, mio5_params.mat_struct):
             return {fn: parse_mat(getattr(element, fn)) for fn in element._fieldnames}
 
-        # regular numeric matrix, or a scalar
+        # Regular numeric arrays, scalars, or other types → return as-is
         return element
 
-    mat = loadmat(filename, struct_as_record=struct_as_record, squeeze_me=squeeze_me, **kwargs)
-    dict_output = dict()
-
+    # Load MATLAB file with error handling
+    try:
+        mat = loadmat(
+            filename,
+            struct_as_record=struct_as_record,
+            squeeze_me=squeeze_me,
+            **kwargs
+        )
+    except Exception as e:
+        raise ValueError(f'Failed to load MATLAB file "{filename}": {e}') from e
+    # Parse loaded data and filter headers if requested
+    dict_output = {}
     for key, value in mat.items():
-        if header_info:
-            # not considering the '__header__', '__version__', '__globals__'
-            if not key.startswith('__'):
-                dict_output[key] = parse_mat(mat[key])
-        else:
-            dict_output[key] = parse_mat(mat[key])
+        # Skip header keys if header_info=True (default)
+        if not header_info or not key.startswith('__'):
+            dict_output[key] = parse_mat(value)
+
     return dict_output

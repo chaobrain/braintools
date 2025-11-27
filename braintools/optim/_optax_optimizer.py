@@ -13,8 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-from __future__ import annotations
-
 import warnings
 from typing import Dict, Optional, Union, Callable, Any, List, Tuple
 
