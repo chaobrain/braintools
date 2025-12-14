@@ -133,7 +133,7 @@ class Sigmoid(Transform):
     >>> y = transform.forward(x)
     >>> # y ≈ [0.0]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
         r"""
@@ -254,7 +254,7 @@ class Softplus(Transform):
     >>> y = transform.forward(x)
     >>> # y ≈ [2.693]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike) -> None:
         """
@@ -369,7 +369,7 @@ class NegSoftplus(Softplus):
     >>> y = transform.forward(x)
     >>> # y ≈ [-2.693]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, upper: ArrayLike) -> None:
         """
@@ -439,7 +439,7 @@ class Log(Transform):
     lower : array_like
         Lower bound of the target interval.
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike) -> None:
         super().__init__()
@@ -459,7 +459,7 @@ class Exp(Transform):
 
     Equivalent to Log; provided for explicit naming.
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike) -> None:
         super().__init__()
@@ -480,7 +480,7 @@ class Tanh(Transform):
     y = lower + width * (tanh(x) + 1) / 2
     x = arctanh(2 * (y - lower) / width - 1)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
         super().__init__()
@@ -503,7 +503,7 @@ class Softsign(Transform):
     y = lower + width * (x / (1 + |x|) + 1) / 2
     x = z / (1 - |z|), where z = 2 * (y - lower) / width - 1, z in (-1, 1)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
         super().__init__()
@@ -562,7 +562,7 @@ class Clip(Transform):
     >>> y = transform.forward(x)
     >>> # y = [0.0, 0.5, 1.0]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
         """
@@ -672,7 +672,7 @@ class Affine(Transform):
     >>> fahrenheit = transform.forward(celsius)
     >>> # fahrenheit ≈ [32.0, 212.0]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, scale: ArrayLike, shift: ArrayLike):
         """
@@ -780,7 +780,7 @@ class Chain(Transform):
     >>> softplus = Softplus(0)
     >>> chain = Chain(standardize, softplus)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, *transforms: Sequence[Transform]) -> None:
         """
@@ -913,7 +913,7 @@ class Masked(Transform):
     >>> sigmoid = Sigmoid(-1, 1)
     >>> transform = Masked(corr_mask, sigmoid)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, mask: ArrayLike, transform: Transform) -> None:
         """
@@ -1059,7 +1059,7 @@ class Custom(Transform):
     ...     return ((y / 2) + 1) ** 2 - 1
     >>> boxcox = Custom(boxcox_forward, boxcox_inverse)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, forward_fn: Callable, inverse_fn: Callable) -> None:
         """

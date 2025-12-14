@@ -62,7 +62,7 @@ class Transform(ABC):
     ...     def inverse(self, y):
     ...         return jnp.sqrt(y)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __call__(self, x: ArrayLike) -> Array:
         r"""
@@ -138,7 +138,7 @@ class Transform(ABC):
 
 
 class Identity(Transform):
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def forward(self, x: ArrayLike) -> Array:
         return x

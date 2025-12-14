@@ -109,7 +109,7 @@ class Param(brainstate.ParamState, u.CustomArray):
       the unconstrained ``.value``, which often leads to better optimization dynamics.
 
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(
         self,
