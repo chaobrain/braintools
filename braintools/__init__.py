@@ -14,8 +14,8 @@
 # ==============================================================================
 
 
-__version__ = "0.1.4"
-__version_info__ = (0, 1, 4)
+__version__ = "0.1.5"
+__version_info__ = tuple(map(int, __version__.split(".")))
 
 from . import conn
 from . import file
@@ -23,6 +23,7 @@ from . import init
 from . import input
 from . import metric
 from . import optim
+from . import param
 from . import quad
 from . import surrogate
 from . import tree
@@ -31,15 +32,12 @@ from ._spike_encoder import *
 from ._spike_encoder import __all__ as encoder_all
 from ._spike_operation import *
 from ._spike_operation import __all__ as operation_all
-from ._transform import *
-from ._transform import __all__ as transform_all
 
 __all__ = [
-    'conn', 'input', 'init',
-    'file', 'metric', 'visualize',
-    'optim', 'tree', 'quad',
-    'surrogate',
-]
-__all__ = __all__ + encoder_all + transform_all + operation_all
+              'conn', 'input', 'init',
+              'file', 'metric', 'visualize',
+              'optim', 'tree', 'quad',
+              'surrogate', 'param',
+          ] + encoder_all + operation_all
 
-del encoder_all, transform_all, operation_all
+del encoder_all, operation_all

@@ -14,29 +14,37 @@
 # ==============================================================================
 
 
-from abc import ABC, abstractmethod
 from typing import Callable, Sequence
 
+import jax
 import brainunit as u
 import jax.numpy as jnp
 from brainstate.typing import ArrayLike
 from jax import Array
 
+from ._base import Transform
+
 __all__ = [
-    'Transform',
-    'IdentityTransform',
-    'SigmoidTransform',
-    'SoftplusTransform',
-    'NegSoftplusTransform',
-    'LogTransform',
-    'ExpTransform',
-    'TanhTransform',
-    'SoftsignTransform',
-    'AffineTransform',
-    'ChainTransform',
-    'MaskedTransform',
-    'CustomTransform',
-    'ClippedTransform',
+    'Sigmoid',
+    'Softplus',
+    'NegSoftplus',
+    'Log',
+    'Exp',
+    'Tanh',
+    'Softsign',
+    'Affine',
+    'Chain',
+    'Masked',
+    'Custom',
+    'Clip',
+    # New transforms
+    'Positive',
+    'Negative',
+    'ScaledSigmoid',
+    'Power',
+    'Ordered',
+    'Simplex',
+    'UnitVector',
 ]
 
 
@@ -77,155 +85,34 @@ def save_exp(x, max_value: float = 20.0):
     return u.math.exp(x)
 
 
-class Transform(ABC):
-    r"""
-    Abstract base class for bijective parameter transformations.
-
-    This class provides the interface for implementing bijective (one-to-one and onto)
-    transformations that map parameters between different domains. These transformations
-    are essential in optimization and statistical inference where parameters need to be
-    constrained to specific domains (e.g., positive values, bounded intervals).
-    
-    A bijective transformation :math:`f: \mathcal{X} \rightarrow \mathcal{Y}` must satisfy:
-    
-    1. **Injectivity** (one-to-one): :math:`f(x_1) = f(x_2) \Rightarrow x_1 = x_2`
-    2. **Surjectivity** (onto): :math:`\forall y \in \mathcal{Y}, \exists x \in \mathcal{X} : f(x) = y`
-    3. **Invertibility**: :math:`f^{-1}(f(x)) = x` and :math:`f(f^{-1}(y)) = y`
-    
-    Methods
-    -------
-    forward(x)
-        Apply the forward transformation :math:`y = f(x)`
-    inverse(y)
-        Apply the inverse transformation :math:`x = f^{-1}(y)`
-
-    Notes
-    -----
-    Subclasses must implement both `forward` and `inverse` methods to ensure
-    the transformation is truly bijective. The implementation should guarantee
-    numerical stability and handle edge cases appropriately.
-    
-    Examples
-    --------
-    >>> class SquareTransform(Transform):
-    ...     def forward(self, x):
-    ...         return x**2
-    ...     def inverse(self, y):
-    ...         return jnp.sqrt(y)
-    """
-    __module__ = 'braintools'
-
-    def __call__(self, x: ArrayLike) -> Array:
-        r"""
-        Apply the forward transformation to the input.
-
-        Parameters
-        ----------
-        x : array_like
-            Input array to transform.
-
-        Returns
-        -------
-        Array
-            Transformed output array.
-            
-        Notes
-        -----
-        This method provides a convenient callable interface that delegates
-        to the forward method, allowing Transform objects to be used as functions.
-        """
-        return self.forward(x)
-
-    @abstractmethod
-    def forward(self, x: ArrayLike) -> Array:
-        r"""
-        Apply the forward transformation.
-        
-        Transforms input from the unconstrained domain to the constrained domain.
-        This method implements the mathematical function :math:`y = f(x)` where
-        :math:`x` is in the unconstrained space and :math:`y` is in the target domain.
-
-        Parameters
-        ----------
-        x : array_like
-            Input array in the unconstrained domain.
-
-        Returns
-        -------
-        Array
-            Transformed output in the constrained domain.
-            
-        Notes
-        -----
-        Implementations must ensure numerical stability and handle boundary
-        conditions appropriately.
-        """
-
-    @abstractmethod
-    def inverse(self, y: ArrayLike) -> Array:
-        r"""
-        Apply the inverse transformation.
-        
-        Transforms input from the constrained domain back to the unconstrained domain.
-        This method implements the mathematical function :math:`x = f^{-1}(y)` where
-        :math:`y` is in the constrained space and :math:`x` is in the unconstrained domain.
-
-        Parameters
-        ----------
-        y : array_like
-            Input array in the constrained domain.
-
-        Returns
-        -------
-        Array
-            Transformed output in the unconstrained domain.
-            
-        Notes
-        -----
-        Implementations must ensure that inverse(forward(x)) = x for all valid x,
-        and forward(inverse(y)) = y for all y in the target domain.
-        """
-        pass
-
-
-class IdentityTransform(Transform):
-    __module__ = 'braintools'
-
-    def forward(self, x: ArrayLike) -> Array:
-        return x
-
-    def inverse(self, y: ArrayLike) -> Array:
-        return y
-
-
-class SigmoidTransform(Transform):
+class Sigmoid(Transform):
     r"""
     Sigmoid transformation mapping unbounded values to a bounded interval.
-    
+
     This transformation uses the logistic sigmoid function to map any real value
     to a bounded interval [lower, upper]. It is particularly useful for constraining
     parameters that must lie within specific bounds, such as probabilities or
     correlation coefficients.
-    
+
     The transformation is defined by:
-    
+
     .. math::
         \text{forward}(x) = \text{lower} + (\text{upper} - \text{lower}) \cdot \sigma(x)
-        
+
     where :math:`\sigma(x) = \frac{1}{1 + e^{-x}}` is the standard sigmoid function.
-    
+
     The inverse transformation is:
-    
+
     .. math::
         \text{inverse}(y) = \log\left(\frac{y - \text{lower}}{\text{upper} - y}\right)
-    
+
     Parameters
     ----------
     lower : array_like
         Lower bound of the target interval.
     upper : array_like
         Upper bound of the target interval.
-        
+
     Attributes
     ----------
     lower : array_like
@@ -234,40 +121,40 @@ class SigmoidTransform(Transform):
         Width of the interval (upper - lower).
     unit : brainunit.Unit
         Physical unit of the bounds.
-        
+
     Notes
     -----
     The sigmoid function provides a smooth, differentiable mapping with asymptotes
     at the specified bounds. The transformation is bijective from ℝ to (lower, upper),
     though numerical precision may limit the effective range near the boundaries.
-    
+
     Examples
     --------
     >>> # Map to probability range [0, 1]
-    >>> transform = SigmoidTransform(0.0, 1.0)
+    >>> transform = Sigmoid(0.0, 1.0)
     >>> x = jnp.array([-2.0, 0.0, 2.0])
     >>> y = transform.forward(x)
     >>> # y ≈ [0.12, 0.5, 0.88]
-    
-    >>> # Map to correlation range [-1, 1] 
-    >>> transform = SigmoidTransform(-1.0, 1.0)
+
+    >>> # Map to correlation range [-1, 1]
+    >>> transform = Sigmoid(-1.0, 1.0)
     >>> x = jnp.array([0.0])
     >>> y = transform.forward(x)
     >>> # y ≈ [0.0]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
         r"""
         Initialize the sigmoid transformation.
-        
+
         Parameters
         ----------
         lower : array_like
             Lower bound of the target interval. Must be less than upper.
         upper : array_like
             Upper bound of the target interval. Must be greater than lower.
-            
+
         Raises
         ------
         ValueError
@@ -277,6 +164,9 @@ class SigmoidTransform(Transform):
         self.lower = lower
         self.width = upper - lower
         self.unit = u.get_unit(lower)
+
+    def __repr__(self) -> str:
+        return f"Sigmoid(lower={self.lower}, upper={self.lower + self.width})"
 
     def forward(self, x: ArrayLike) -> Array:
         r"""
@@ -302,17 +192,17 @@ class SigmoidTransform(Transform):
     def inverse(self, y: ArrayLike) -> Array:
         r"""
         Transform bounded input back to unbounded domain using logit function.
-        
+
         Parameters
         ----------
         y : array_like
             Input values in bounded interval [lower, upper].
-            
+
         Returns
         -------
         Array
             Transformed values in unbounded domain (-∞, ∞).
-            
+
         Notes
         -----
         For numerical stability, input should be strictly within (lower, upper).
@@ -322,66 +212,76 @@ class SigmoidTransform(Transform):
         x = -u.math.log((1.0 / x) - 1.0)
         return x
 
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        r"""
+        Compute log absolute determinant of the Jacobian.
 
-class SoftplusTransform(Transform):
+        For sigmoid: d/dx[lower + width * sigmoid(x)] = width * sigmoid(x) * (1 - sigmoid(x))
+        log|det J| = sum(log(width) + log(sigmoid(x)) + log(1 - sigmoid(x)))
+        """
+        s = jax.nn.sigmoid(x)
+        return jnp.sum(jnp.log(self.width) + jnp.log(s) + jnp.log(1 - s), axis=-1)
+
+
+class Softplus(Transform):
     r"""
     Softplus transformation mapping unbounded values to positive semi-infinite interval.
-    
+
     This transformation uses the softplus function to map any real value to the
     interval [lower, ∞). It provides a smooth, differentiable alternative to
     ReLU activation and is commonly used to constrain parameters to be positive,
     such as variance parameters or rate constants.
-    
+
     The transformation is defined by:
-    
+
     .. math::
         \text{forward}(x) = \log(1 + e^x) + \text{lower}
-        
+
     The inverse transformation is:
-    
+
     .. math::
         \text{inverse}(y) = \log(e^{y - \text{lower}} - 1)
-    
+
     Parameters
     ----------
     lower : array_like
         Lower bound of the target interval.
-        
+
     Attributes
     ----------
     lower : array_like
         Lower bound of the interval.
     unit : brainunit.Unit
         Physical unit of the lower bound.
-        
+
     Notes
     -----
     The softplus function is the smooth approximation to the ReLU function:
     :math:`\lim_{\beta \to \infty} \frac{1}{\beta} \log(1 + e^{\beta x}) = \max(0, x)`
-    
+
     For large positive x, softplus(x) ≈ x, and for large negative x, softplus(x) ≈ 0.
     The function is strictly positive and has a well-defined inverse.
-    
+
     Examples
     --------
     >>> # Map to positive reals [0, ∞)
-    >>> transform = SoftplusTransform(0.0)
+    >>> transform = Softplus(0.0)
     >>> x = jnp.array([-5.0, 0.0, 5.0])
     >>> y = transform.forward(x)
     >>> # y ≈ [0.007, 0.693, 5.007]
-    
+
     >>> # Map to interval [2, ∞) for positive-definite parameters
-    >>> transform = SoftplusTransform(2.0)
+    >>> transform = Softplus(2.0)
     >>> x = jnp.array([0.0])
     >>> y = transform.forward(x)
     >>> # y ≈ [2.693]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike) -> None:
         """
         Initialize the softplus transformation.
-        
+
         Parameters
         ----------
         lower : array_like
@@ -391,6 +291,9 @@ class SoftplusTransform(Transform):
         super().__init__()
         self.lower = lower
         self.unit = u.get_unit(lower)
+
+    def __repr__(self) -> str:
+        return f"Softplus(lower={self.lower})"
 
     def forward(self, x: ArrayLike) -> Array:
         """
@@ -416,17 +319,17 @@ class SoftplusTransform(Transform):
     def inverse(self, y: ArrayLike) -> Array:
         """
         Transform positive semi-infinite input back to unbounded domain.
-        
+
         Parameters
         ----------
         y : array_like
             Input values in interval [lower, ∞).
-            
+
         Returns
         -------
         Array
             Transformed values in unbounded domain (-∞, ∞).
-            
+
         Notes
         -----
         Input must be strictly greater than lower bound to avoid numerical issues.
@@ -434,69 +337,78 @@ class SoftplusTransform(Transform):
         """
         return u.math.log(save_exp((y - self.lower) / self.unit) - 1.0)
 
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        r"""
+        Compute log absolute determinant of the Jacobian.
 
-class NegSoftplusTransform(SoftplusTransform):
+        For softplus: d/dx[log(1 + exp(x))] = sigmoid(x)
+        log|det J| = sum(log(sigmoid(x))) = sum(x - softplus(x))
+        """
+        return jnp.sum(x - jnp.log1p(save_exp(x)), axis=-1)
+
+
+class NegSoftplus(Softplus):
     r"""
     Negative softplus transformation mapping unbounded values to negative semi-infinite interval.
-    
+
     This transformation uses the negative softplus function to map any real value
     to the interval (-∞, upper]. It is the reflection of the softplus function
     and is useful for constraining parameters to be negative, such as log-probabilities
     or negative rate constants.
-    
+
     The transformation is defined by:
-    
+
     .. math::
         \text{forward}(x) = -\log(1 + e^{-x}) + \text{upper}
-        
+
     which is equivalent to:
-    
+
     .. math::
         \text{forward}(x) = \text{upper} - \text{softplus}(-x)
-    
+
     The inverse transformation is:
-    
+
     .. math::
         \text{inverse}(y) = -\log(e^{\text{upper} - y} - 1)
-    
+
     Parameters
     ----------
     upper : array_like
         Upper bound of the target interval.
-        
+
     Attributes
     ----------
     lower : array_like
         Stores the upper bound (inherited from parent class).
     unit : brainunit.Unit
         Physical unit of the upper bound.
-        
+
     Notes
     -----
     This transformation is implemented by negating the input and output of the
     standard softplus transformation. For large positive x, the output approaches
     the upper bound, while for large negative x, the output approaches -∞.
-    
+
     Examples
     --------
     >>> # Map to negative reals (-∞, 0]
-    >>> transform = NegSoftplusTransform(0.0)
+    >>> transform = NegSoftplus(0.0)
     >>> x = jnp.array([-5.0, 0.0, 5.0])
     >>> y = transform.forward(x)
     >>> # y ≈ [-5.007, -0.693, -0.007]
-    
+
     >>> # Map to interval (-∞, -2] for negative-definite parameters
-    >>> transform = NegSoftplusTransform(-2.0)
+    >>> transform = NegSoftplus(-2.0)
     >>> x = jnp.array([0.0])
     >>> y = transform.forward(x)
     >>> # y ≈ [-2.693]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, upper: ArrayLike) -> None:
         """
         Initialize the negative softplus transformation.
-        
+
         Parameters
         ----------
         upper : array_like
@@ -504,6 +416,9 @@ class NegSoftplusTransform(SoftplusTransform):
             unbounded inputs to (-∞, upper].
         """
         super().__init__(upper)
+
+    def __repr__(self) -> str:
+        return f"NegSoftplus(upper={self.lower})"
 
     def forward(self, x: ArrayLike) -> Array:
         """
@@ -547,7 +462,7 @@ class NegSoftplusTransform(SoftplusTransform):
         return -u.math.log(save_exp(s) - 1.0)
 
 
-class LogTransform(Transform):
+class Log(Transform):
     """
     Log transformation mapping (lower, +inf) to (-inf, +inf).
 
@@ -561,12 +476,15 @@ class LogTransform(Transform):
     lower : array_like
         Lower bound of the target interval.
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike) -> None:
         super().__init__()
         self.lower = lower
         self.unit = u.get_unit(lower)
+
+    def __repr__(self) -> str:
+        return f"Log(lower={self.lower})"
 
     def forward(self, x: ArrayLike) -> Array:
         return self.lower + save_exp(x) * self.unit
@@ -574,19 +492,26 @@ class LogTransform(Transform):
     def inverse(self, y: ArrayLike) -> Array:
         return u.math.log((y - self.lower) / self.unit)
 
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        """For exp transform: d/dx[exp(x)] = exp(x), so log|det J| = sum(x)."""
+        return jnp.sum(x, axis=-1)
 
-class ExpTransform(Transform):
+
+class Exp(Transform):
     """
     Exponential transformation mapping (-inf, +inf) to (lower, +inf).
 
-    Equivalent to LogTransform; provided for explicit naming.
+    Equivalent to Log; provided for explicit naming.
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike) -> None:
         super().__init__()
         self.lower = lower
         self.unit = u.get_unit(lower)
+
+    def __repr__(self) -> str:
+        return f"Exp(lower={self.lower})"
 
     def forward(self, x: ArrayLike) -> Array:
         return self.lower + save_exp(x) * self.unit
@@ -594,21 +519,28 @@ class ExpTransform(Transform):
     def inverse(self, y: ArrayLike) -> Array:
         return u.math.log((y - self.lower) / self.unit)
 
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        """For exp transform: d/dx[exp(x)] = exp(x), so log|det J| = sum(x)."""
+        return jnp.sum(x, axis=-1)
 
-class TanhTransform(Transform):
+
+class Tanh(Transform):
     """
     Tanh-based transformation mapping (-inf, +inf) to (lower, upper).
 
     y = lower + width * (tanh(x) + 1) / 2
     x = arctanh(2 * (y - lower) / width - 1)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
         super().__init__()
         self.lower = lower
         self.width = upper - lower
         self.unit = u.get_unit(lower)
+
+    def __repr__(self) -> str:
+        return f"Tanh(lower={self.lower}, upper={self.lower + self.width})"
 
     def forward(self, x: ArrayLike) -> Array:
         return self.lower + self.width * (jnp.tanh(x) + 1.0) / 2.0
@@ -618,20 +550,23 @@ class TanhTransform(Transform):
         return jnp.arctanh(z)
 
 
-class SoftsignTransform(Transform):
+class Softsign(Transform):
     """
     Softsign-based transformation mapping (-inf, +inf) to (lower, upper).
 
     y = lower + width * (x / (1 + |x|) + 1) / 2
     x = z / (1 - |z|), where z = 2 * (y - lower) / width - 1, z in (-1, 1)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
         super().__init__()
         self.lower = lower
         self.width = upper - lower
         self.unit = u.get_unit(lower)
+
+    def __repr__(self) -> str:
+        return f"Softsign(lower={self.lower}, upper={self.lower + self.width})"
 
     def forward(self, x: ArrayLike) -> Array:
         return self.lower + self.width * (x / (1.0 + u.math.abs(x)) + 1.0) / 2.0
@@ -641,7 +576,7 @@ class SoftsignTransform(Transform):
         return z / (1.0 - u.math.abs(z))
 
 
-class ClippedTransform(Transform):
+class Clip(Transform):
     r"""
     Transformation with clipping to specified bounds.
 
@@ -679,12 +614,12 @@ class ClippedTransform(Transform):
     Examples
     --------
     >>> # Clip values to [0, 1]
-    >>> transform = ClippedTransform(0.0, 1.0)
+    >>> transform = Clip(0.0, 1.0)
     >>> x = jnp.array([-0.5, 0.5, 1.5])
     >>> y = transform.forward(x)
     >>> # y = [0.0, 0.5, 1.0]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, lower: ArrayLike, upper: ArrayLike) -> None:
         """
@@ -700,6 +635,9 @@ class ClippedTransform(Transform):
         super().__init__()
         self.lower = lower
         self.upper = upper
+
+    def __repr__(self) -> str:
+        return f"Clip(lower={self.lower}, upper={self.upper})"
 
     def forward(self, x: ArrayLike) -> Array:
         """
@@ -729,7 +667,7 @@ class ClippedTransform(Transform):
         return u.math.clip(y, a_min=self.lower, a_max=self.upper)
 
 
-class AffineTransform(Transform):
+class Affine(Transform):
     r"""
     Affine (linear) transformation with scaling and shifting.
     
@@ -783,18 +721,18 @@ class AffineTransform(Transform):
     --------
     >>> # Standardization transform (z-score)
     >>> mu, sigma = 5.0, 2.0
-    >>> transform = AffineTransform(1/sigma, -mu/sigma)
+    >>> transform = Affine(1/sigma, -mu/sigma)
     >>> x = jnp.array([3.0, 5.0, 7.0])
     >>> z = transform.forward(x)
     >>> # z ≈ [-1.0, 0.0, 1.0]
     
     >>> # Temperature conversion: Celsius to Fahrenheit
-    >>> transform = AffineTransform(9/5, 32)
+    >>> transform = Affine(9/5, 32)
     >>> celsius = jnp.array([0.0, 100.0])
     >>> fahrenheit = transform.forward(celsius)
     >>> # fahrenheit ≈ [32.0, 212.0]
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, scale: ArrayLike, shift: ArrayLike):
         """
@@ -818,6 +756,9 @@ class AffineTransform(Transform):
         self.a = scale
         self.b = shift
 
+    def __repr__(self) -> str:
+        return f"Affine(scale={self.a}, shift={self.b})"
+
     def forward(self, x: ArrayLike) -> Array:
         """
         Apply the affine transformation y = ax + b.
@@ -837,12 +778,12 @@ class AffineTransform(Transform):
     def inverse(self, x: ArrayLike) -> Array:
         """
         Apply the inverse affine transformation x = (y - b) / a.
-        
+
         Parameters
         ----------
         x : array_like
             Transformed values to invert (note: parameter name kept for consistency).
-            
+
         Returns
         -------
         Array
@@ -850,8 +791,13 @@ class AffineTransform(Transform):
         """
         return (x - self.b) / self.a
 
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        """For affine: d/dx[ax + b] = a, so log|det J| = n * log|a|."""
+        n = jnp.shape(x)[-1] if jnp.ndim(x) > 0 else 1
+        return n * jnp.log(jnp.abs(self.a))
 
-class ChainTransform(Transform):
+
+class Chain(Transform):
     r"""
     Composition of multiple transformations applied sequentially.
     
@@ -893,16 +839,16 @@ class ChainTransform(Transform):
     Examples
     --------
     >>> # Transform to (0, 1) then scale to (a, b)
-    >>> sigmoid = SigmoidTransform(0, 1)
-    >>> affine = AffineTransform(scale=b-a, shift=a)
-    >>> chain = ChainTransform(sigmoid, affine)
+    >>> sigmoid = Sigmoid(0, 1)
+    >>> affine = Affine(scale=b-a, shift=a)
+    >>> chain = Chain(sigmoid, affine)
     
     >>> # Standardize then apply softplus
-    >>> standardize = AffineTransform(1/sigma, -mu/sigma)
-    >>> softplus = SoftplusTransform(0)
-    >>> chain = ChainTransform(standardize, softplus)
+    >>> standardize = Affine(1/sigma, -mu/sigma)
+    >>> softplus = Softplus(0)
+    >>> chain = Chain(standardize, softplus)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, *transforms: Sequence[Transform]) -> None:
         """
@@ -922,6 +868,10 @@ class ChainTransform(Transform):
         """
         super().__init__()
         self.transforms: Sequence[Transform] = transforms
+
+    def __repr__(self) -> str:
+        transforms_str = ", ".join(repr(t) for t in self.transforms)
+        return f"Chain({transforms_str})"
 
     def forward(self, x: ArrayLike) -> Array:
         """
@@ -948,17 +898,17 @@ class ChainTransform(Transform):
     def inverse(self, y: ArrayLike) -> Array:
         """
         Apply all inverse transformations sequentially in reverse order.
-        
+
         Parameters
         ----------
         y : array_like
             Transformed values to invert.
-            
+
         Returns
         -------
         Array
             Original values before all transformations were applied.
-            
+
         Notes
         -----
         Transformations are inverted right-to-left (reverse order) to properly
@@ -968,8 +918,18 @@ class ChainTransform(Transform):
             y = transform.inverse(y)
         return y
 
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        """Sum of log Jacobian determinants of all transforms in the chain."""
+        total = jnp.zeros(jnp.shape(x)[:-1] if jnp.ndim(x) > 0 else ())
+        current_x = x
+        for transform in self.transforms:
+            current_y = transform.forward(current_x)
+            total = total + transform.log_abs_det_jacobian(current_x, current_y)
+            current_x = current_y
+        return total
 
-class MaskedTransform(Transform):
+
+class Masked(Transform):
     r"""
     Selective transformation using a boolean mask.
     
@@ -1023,8 +983,8 @@ class MaskedTransform(Transform):
     --------
     >>> # Transform only positive indices to be positive
     >>> mask = jnp.array([False, True, False, True])
-    >>> softplus = SoftplusTransform(0)
-    >>> masked_transform = MaskedTransform(mask, softplus)
+    >>> softplus = Softplus(0)
+    >>> masked_transform = Masked(mask, softplus)
     >>> x = jnp.array([-1.0, -1.0, 2.0, 2.0])
     >>> y = masked_transform.forward(x)
     >>> # y ≈ [-1.0, 0.31, 2.0, 2.13] (only indices 1,3 transformed)
@@ -1032,10 +992,10 @@ class MaskedTransform(Transform):
     >>> # Transform correlation parameters but not mean parameters
     >>> n_params = 5
     >>> corr_mask = jnp.arange(n_params) >= 3  # Last 2 are correlations
-    >>> sigmoid = SigmoidTransform(-1, 1)
-    >>> transform = MaskedTransform(corr_mask, sigmoid)
+    >>> sigmoid = Sigmoid(-1, 1)
+    >>> transform = Masked(corr_mask, sigmoid)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, mask: ArrayLike, transform: Transform) -> None:
         """
@@ -1057,6 +1017,9 @@ class MaskedTransform(Transform):
         super().__init__()
         self.mask = mask
         self.transform = transform
+
+    def __repr__(self) -> str:
+        return f"Masked(mask=..., transform={repr(self.transform)})"
 
     def forward(self, x: ArrayLike) -> Array:
         """
@@ -1103,7 +1066,7 @@ class MaskedTransform(Transform):
         return u.math.where(self.mask, self.transform.inverse(y), y)
 
 
-class CustomTransform(Transform):
+class Custom(Transform):
     r"""
     User-defined transformation using custom functions.
     
@@ -1165,23 +1128,23 @@ class CustomTransform(Transform):
     ...     return x ** 2
     >>> def square_inverse(y):
     ...     return jnp.sqrt(y)
-    >>> square_transform = CustomTransform(square_forward, square_inverse)
+    >>> square_transform = Custom(square_forward, square_inverse)
     
     >>> # Log-normal transformation
     >>> def lognorm_forward(x):
     ...     return jnp.exp(x)
     >>> def lognorm_inverse(y):
     ...     return jnp.log(y)
-    >>> lognorm = CustomTransform(lognorm_forward, lognorm_inverse)
+    >>> lognorm = Custom(lognorm_forward, lognorm_inverse)
     
     >>> # Box-Cox transformation (lambda=0.5)
     >>> def boxcox_forward(x):
     ...     return 2 * (jnp.sqrt(x + 1) - 1)
     >>> def boxcox_inverse(y):
     ...     return ((y / 2) + 1) ** 2 - 1
-    >>> boxcox = CustomTransform(boxcox_forward, boxcox_inverse)
+    >>> boxcox = Custom(boxcox_forward, boxcox_inverse)
     """
-    __module__ = 'braintools'
+    __module__ = 'braintools.param'
 
     def __init__(self, forward_fn: Callable, inverse_fn: Callable) -> None:
         """
@@ -1205,6 +1168,9 @@ class CustomTransform(Transform):
         super().__init__()
         self.forward_fn = forward_fn
         self.inverse_fn = inverse_fn
+
+    def __repr__(self) -> str:
+        return f"Custom(forward_fn={self.forward_fn.__name__ if hasattr(self.forward_fn, '__name__') else '...'})"
 
     def forward(self, x: ArrayLike) -> Array:
         """
@@ -1237,3 +1203,399 @@ class CustomTransform(Transform):
             Original values from the user-defined inverse function.
         """
         return self.inverse_fn(y)
+
+
+class Positive(Transform):
+    r"""
+    Transformation constraining parameters to be strictly positive (0, +∞).
+
+    This is a convenience class that provides a simple positive constraint
+    using the exponential transformation with lower bound of 0.
+
+    The transformation is defined by:
+
+    .. math::
+        \text{forward}(x) = e^x
+
+    The inverse transformation is:
+
+    .. math::
+        \text{inverse}(y) = \log(y)
+
+    Examples
+    --------
+    >>> transform = Positive()
+    >>> x = jnp.array([-1.0, 0.0, 1.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [0.368, 1.0, 2.718]
+    """
+    __module__ = 'braintools.param'
+
+    def __init__(self) -> None:
+        """Initialize the positive transformation."""
+        super().__init__()
+
+    def __repr__(self) -> str:
+        return "Positive()"
+
+    def forward(self, x: ArrayLike) -> Array:
+        """Transform unbounded input to positive values."""
+        return save_exp(x)
+
+    def inverse(self, y: ArrayLike) -> Array:
+        """Transform positive input back to unbounded domain."""
+        return u.math.log(y)
+
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        """For exp transform: d/dx[exp(x)] = exp(x), so log|det J| = sum(x)."""
+        return jnp.sum(x, axis=-1)
+
+
+class Negative(Transform):
+    r"""
+    Transformation constraining parameters to be strictly negative (-∞, 0).
+
+    This is a convenience class that provides a simple negative constraint
+    using the negative softplus transformation with upper bound of 0.
+
+    The transformation is defined by:
+
+    .. math::
+        \text{forward}(x) = -\log(1 + e^{-x})
+
+    The inverse transformation is:
+
+    .. math::
+        \text{inverse}(y) = -\log(e^{-y} - 1)
+
+    Examples
+    --------
+    >>> transform = Negative()
+    >>> x = jnp.array([-5.0, 0.0, 5.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [-5.007, -0.693, -0.007]
+    """
+    __module__ = 'braintools.param'
+
+    def __init__(self) -> None:
+        """Initialize the negative transformation."""
+        super().__init__()
+
+    def __repr__(self) -> str:
+        return "Negative()"
+
+    def forward(self, x: ArrayLike) -> Array:
+        """Transform unbounded input to negative values."""
+        return -jnp.log1p(save_exp(-x))
+
+    def inverse(self, y: ArrayLike) -> Array:
+        """Transform negative input back to unbounded domain."""
+        return -u.math.log(save_exp(-y) - 1.0)
+
+
+class ScaledSigmoid(Transform):
+    r"""
+    Sigmoid transformation with adjustable sharpness/temperature.
+
+    This transformation extends the standard sigmoid with a scaling parameter
+    (beta) that controls the sharpness of the transition. Higher beta values
+    result in a sharper sigmoid, while lower values produce a smoother transition.
+
+    The transformation is defined by:
+
+    .. math::
+        \text{forward}(x) = \text{lower} + \text{width} \cdot \sigma(\beta \cdot x)
+
+    where :math:`\sigma(x) = \frac{1}{1 + e^{-x}}` is the standard sigmoid function.
+
+    The inverse transformation is:
+
+    .. math::
+        \text{inverse}(y) = \frac{1}{\beta} \cdot \text{logit}\left(\frac{y - \text{lower}}{\text{width}}\right)
+
+    Parameters
+    ----------
+    lower : array_like
+        Lower bound of the target interval.
+    upper : array_like
+        Upper bound of the target interval.
+    beta : float, optional
+        Sharpness parameter, by default 1.0. Higher values produce sharper transitions.
+
+    Examples
+    --------
+    >>> # Standard sigmoid
+    >>> transform = ScaledSigmoid(0.0, 1.0, beta=1.0)
+    >>> # Sharp sigmoid
+    >>> transform_sharp = ScaledSigmoid(0.0, 1.0, beta=5.0)
+    >>> # Smooth sigmoid
+    >>> transform_smooth = ScaledSigmoid(0.0, 1.0, beta=0.5)
+    """
+    __module__ = 'braintools.param'
+
+    def __init__(self, lower: ArrayLike, upper: ArrayLike, beta: float = 1.0) -> None:
+        """
+        Initialize the scaled sigmoid transformation.
+
+        Parameters
+        ----------
+        lower : array_like
+            Lower bound of the target interval.
+        upper : array_like
+            Upper bound of the target interval.
+        beta : float, optional
+            Sharpness parameter, by default 1.0.
+        """
+        super().__init__()
+        self.lower = lower
+        self.width = upper - lower
+        self.beta = beta
+        self.unit = u.get_unit(lower)
+
+    def __repr__(self) -> str:
+        return f"ScaledSigmoid(lower={self.lower}, upper={self.lower + self.width}, beta={self.beta})"
+
+    def forward(self, x: ArrayLike) -> Array:
+        """Transform unbounded input to bounded interval."""
+        return self.lower + self.width * jax.nn.sigmoid(self.beta * x)
+
+    def inverse(self, y: ArrayLike) -> Array:
+        """Transform bounded input back to unbounded domain."""
+        z = (y - self.lower) / self.width
+        return jax.scipy.special.logit(z) / self.beta
+
+
+class Power(Transform):
+    r"""
+    Power (Box-Cox) transformation for stabilizing variance.
+
+    This transformation implements the Box-Cox family of power transformations,
+    which are commonly used to stabilize variance and make data more normally
+    distributed.
+
+    The transformation is defined by:
+
+    .. math::
+        \text{forward}(x) = \begin{cases}
+        \frac{x^{\lambda} - 1}{\lambda} & \text{if } \lambda \neq 0 \\
+        \log(x) & \text{if } \lambda = 0
+        \end{cases}
+
+    The inverse transformation is:
+
+    .. math::
+        \text{inverse}(y) = \begin{cases}
+        (y \cdot \lambda + 1)^{1/\lambda} & \text{if } \lambda \neq 0 \\
+        e^y & \text{if } \lambda = 0
+        \end{cases}
+
+    Parameters
+    ----------
+    lmbda : float, optional
+        Power parameter, by default 0.5. Special cases:
+        - lmbda = 0: log transformation
+        - lmbda = 0.5: square root transformation
+        - lmbda = 1: linear transformation (identity)
+        - lmbda = 2: quadratic transformation
+
+    Notes
+    -----
+    Input values must be positive for this transformation to be well-defined.
+
+    Examples
+    --------
+    >>> # Square root transformation
+    >>> transform = Power(lmbda=0.5)
+    >>> x = jnp.array([1.0, 4.0, 9.0])
+    >>> y = transform.forward(x)
+    >>> # y ≈ [0, 2, 4]
+    """
+    __module__ = 'braintools.param'
+
+    def __init__(self, lmbda: float = 0.5) -> None:
+        """
+        Initialize the power transformation.
+
+        Parameters
+        ----------
+        lmbda : float, optional
+            Power parameter, by default 0.5.
+        """
+        super().__init__()
+        self.lmbda = lmbda
+
+    def __repr__(self) -> str:
+        return f"Power(lmbda={self.lmbda})"
+
+    def forward(self, x: ArrayLike) -> Array:
+        """Apply the power transformation."""
+        if jnp.abs(self.lmbda) < 1e-10:
+            return u.math.log(x)
+        return (jnp.power(x, self.lmbda) - 1) / self.lmbda
+
+    def inverse(self, y: ArrayLike) -> Array:
+        """Apply the inverse power transformation."""
+        if jnp.abs(self.lmbda) < 1e-10:
+            return u.math.exp(y)
+        return jnp.power(y * self.lmbda + 1, 1 / self.lmbda)
+
+
+class Ordered(Transform):
+    r"""
+    Transformation ensuring ordered (monotonically increasing) output.
+
+    Maps unconstrained ℝⁿ to ordered vectors where y₁ < y₂ < ... < yₙ.
+    This is useful for parameters that must maintain an ordering constraint,
+    such as cutpoints in ordinal regression.
+
+    The transformation is defined by:
+
+    .. math::
+        y_1 = x_1 \\
+        y_i = y_{i-1} + \text{softplus}(x_i) \quad \text{for } i > 1
+
+    The inverse transformation reverses this process.
+
+    Examples
+    --------
+    >>> transform = Ordered()
+    >>> x = jnp.array([0.0, 1.0, 0.5])
+    >>> y = transform.forward(x)
+    >>> # y is monotonically increasing
+    >>> assert jnp.all(jnp.diff(y) > 0)
+    """
+    __module__ = 'braintools.param'
+
+    def __init__(self) -> None:
+        """Initialize the ordered transformation."""
+        super().__init__()
+
+    def __repr__(self) -> str:
+        return "Ordered()"
+
+    def forward(self, x: ArrayLike) -> Array:
+        """Transform unconstrained input to ordered vectors."""
+        first = x[..., :1]
+        rest = jnp.log1p(save_exp(x[..., 1:]))
+        return jnp.concatenate([first, first + jnp.cumsum(rest, axis=-1)], axis=-1)
+
+    def inverse(self, y: ArrayLike) -> Array:
+        """Transform ordered vectors back to unconstrained domain."""
+        first = y[..., :1]
+        diffs = y[..., 1:] - y[..., :-1]
+        rest = u.math.log(u.math.exp(diffs) - 1)
+        return jnp.concatenate([first, rest], axis=-1)
+
+
+class Simplex(Transform):
+    r"""
+    Stick-breaking transformation for simplex constraint.
+
+    Maps unconstrained ℝⁿ⁻¹ to n-dimensional simplex where all elements
+    are positive and sum to 1. This is useful for probability distributions
+    and categorical parameters.
+
+    The stick-breaking process works as follows:
+
+    .. math::
+        z_i = \sigma(x_i) \\
+        y_i = z_i \cdot \prod_{j<i} (1 - z_j) \quad \text{for } i < n \\
+        y_n = \prod_{j<n} (1 - z_j)
+
+    where :math:`\sigma` is the sigmoid function.
+
+    Notes
+    -----
+    The input dimension should be n-1 for an n-dimensional simplex output.
+
+    Examples
+    --------
+    >>> transform = Simplex()
+    >>> x = jnp.array([0.0, 0.0])  # 2D input -> 3D simplex output
+    >>> y = transform.forward(x)
+    >>> # y sums to 1 and all elements are positive
+    >>> assert jnp.allclose(jnp.sum(y), 1.0)
+    >>> assert jnp.all(y > 0)
+    """
+    __module__ = 'braintools.param'
+
+    def __init__(self) -> None:
+        """Initialize the simplex transformation."""
+        super().__init__()
+
+    def __repr__(self) -> str:
+        return "Simplex()"
+
+    def forward(self, x: ArrayLike) -> Array:
+        """Transform unconstrained input to simplex."""
+        z = jax.nn.sigmoid(x)
+        # Compute cumulative product of (1 - z)
+        one_minus_z = 1 - z
+        cumprod = jnp.cumprod(one_minus_z, axis=-1)
+        # Shift cumprod to get [1, (1-z1), (1-z1)(1-z2), ...]
+        cumprod_shifted = jnp.concatenate(
+            [jnp.ones((*z.shape[:-1], 1)), cumprod[..., :-1]], axis=-1
+        )
+        # First n-1 elements: z_i * product of (1-z_j) for j < i
+        y_head = z * cumprod_shifted
+        # Last element: remaining probability
+        y_tail = cumprod[..., -1:]
+        return jnp.concatenate([y_head, y_tail], axis=-1)
+
+    def inverse(self, y: ArrayLike) -> Array:
+        """Transform simplex back to unconstrained domain."""
+        y_head = y[..., :-1]
+        # Compute cumulative sum from left
+        cumsum = jnp.cumsum(y_head, axis=-1)
+        # remaining = 1 - cumsum + current = probability still available
+        remaining = 1 - cumsum + y_head
+        # z_i = y_i / remaining
+        z = y_head / (remaining + 1e-8)
+        return jax.scipy.special.logit(z)
+
+
+class UnitVector(Transform):
+    r"""
+    Transformation to unit vectors (L2 norm = 1).
+
+    Projects input vectors onto the unit sphere by normalizing.
+    This is useful for directional data or when parameters must
+    lie on a sphere.
+
+    The transformation is defined by:
+
+    .. math::
+        \text{forward}(x) = \frac{x}{\|x\|_2}
+
+    Notes
+    -----
+    This transformation is not strictly bijective since all vectors
+    along a ray map to the same unit vector. The inverse returns
+    the input unchanged, assuming it is already on the unit sphere.
+
+    Examples
+    --------
+    >>> transform = UnitVector()
+    >>> x = jnp.array([3.0, 4.0])
+    >>> y = transform.forward(x)
+    >>> # y has unit norm
+    >>> assert jnp.allclose(jnp.linalg.norm(y), 1.0)
+    """
+    __module__ = 'braintools.param'
+
+    def __init__(self) -> None:
+        """Initialize the unit vector transformation."""
+        super().__init__()
+
+    def __repr__(self) -> str:
+        return "UnitVector()"
+
+    def forward(self, x: ArrayLike) -> Array:
+        """Project input onto unit sphere."""
+        norm = jnp.sqrt(jnp.sum(x ** 2, axis=-1, keepdims=True) + 1e-8)
+        return x / norm
+
+    def inverse(self, y: ArrayLike) -> Array:
+        """Return input unchanged (assumes already on unit sphere)."""
+        return y
+
