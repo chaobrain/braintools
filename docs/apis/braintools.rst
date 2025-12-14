@@ -50,30 +50,3 @@ combining encoder outputs.
     spike_bitwise_ixor
     spike_bitwise
 
-
-
-Parameter Transformations
--------------------------
-
-Smooth and invertible transforms used to keep optimization parameters within
-valid domains during training.
-
-.. autosummary::
-    :toctree: generated/
-    :nosignatures:
-    :template: classtemplate.rst
-
-    Transform
-    IdentityTransform
-    SigmoidTransform
-    SoftplusTransform
-    NegSoftplusTransform
-    LogTransform
-    ExpTransform
-    TanhTransform
-    SoftsignTransform
-    AffineTransform
-    ChainTransform
-    MaskedTransform
-    CustomTransform
-    ClippedTransform

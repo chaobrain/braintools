@@ -1,6 +1,45 @@
 # Release Notes
 
 
+## Version 0.1.5
+
+### New Features
+
+#### Parameter Transformation Module (`braintools.param`)
+- **7 new bijective transforms** for constrained optimization and probabilistic modeling:
+  - **Positive**: Constrains parameters to (0, +∞) using exponential transformation
+  - **Negative**: Constrains parameters to (-∞, 0) using negative softplus
+  - **ScaledSigmoid**: Sigmoid with adjustable sharpness/temperature parameter (beta)
+  - **Power**: Box-Cox family power transformation for variance stabilization
+  - **Ordered**: Ensures monotonically increasing output vectors (useful for cutpoints in ordinal regression)
+  - **Simplex**: Stick-breaking transformation for probability vectors summing to 1
+  - **UnitVector**: Projects vectors onto the unit sphere (L2 norm = 1)
+- **Jacobian computation**: Added `log_abs_det_jacobian()` method to Transform base class and implementations for probabilistic modeling
+  - Implemented for: Identity, Sigmoid, Softplus, Log, Exp, Affine, Chain, Positive
+
+#### Surrogate Gradient Enhancements (`braintools.surrogate`)
+
+- Gradient computation of hyperparameters of surrogate gradient functions.
+- Fix batching issue in surrogate gradient functions
+
+
+### Improvements
+
+#### API Enhancements
+- **`__repr__` methods**: Added string representations to all Transform classes and Param class for better debugging
+- **Enhanced documentation**: Updated `docs/apis/param.rst` with comprehensive API reference
+  - Organized sections: Base Classes, Parameter Wrapper, Bounded Transforms, Positive/Negative Transforms, Advanced Transforms, Composition Transforms
+  - Descriptive explanations for each transform's use case
+
+#### Code Quality
+- **Comprehensive test coverage**: Added 28 new tests for param module (45 total tests passing)
+  - Tests for all new transforms: roundtrip, constraints, repr methods
+  - Tests for `log_abs_det_jacobian` correctness
+  - Tests for edge cases and numerical stability
+
+
+
+
 ## Version 0.1.4
 
 ### New Features
