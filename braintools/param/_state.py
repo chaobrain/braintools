@@ -122,6 +122,9 @@ class Param(brainstate.ParamState, u.CustomArray):
         super().__init__(value)
         self.transform = transform
 
+    def __repr__(self) -> str:
+        return f"Param(data={self.data}, transform={repr(self.transform)})"
+
     @property
     def data(self):
         return self.transform(self.value)

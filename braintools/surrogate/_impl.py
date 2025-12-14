@@ -22,6 +22,7 @@ from jax.interpreters import batching, ad, mlir
 
 from brainstate._compatible_import import Primitive
 from brainstate.util import PrettyObject
+from ._base import Surrogate
 
 __all__ = [
     'Sigmoid',

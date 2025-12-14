@@ -47,6 +47,8 @@ class Transform(ABC):
         Apply the forward transformation :math:`y = f(x)`
     inverse(y)
         Apply the inverse transformation :math:`x = f^{-1}(y)`
+    log_abs_det_jacobian(x, y)
+        Compute the log absolute determinant of the Jacobian
 
     Notes
     -----
@@ -63,6 +65,10 @@ class Transform(ABC):
     ...         return jnp.sqrt(y)
     """
     __module__ = 'braintools.param'
+
+    def __repr__(self) -> str:
+        """Return a string representation of the transform."""
+        return f"{self.__class__.__name__}()"
 
     def __call__(self, x: ArrayLike) -> Array:
         r"""
@@ -136,8 +142,52 @@ class Transform(ABC):
         """
         pass
 
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        r"""
+        Compute the log absolute determinant of the Jacobian of the forward transformation.
+
+        For a bijective transformation :math:`f: \mathcal{X} \rightarrow \mathcal{Y}`,
+        this computes:
+
+        .. math::
+            \log \left| \det \frac{\partial f(x)}{\partial x} \right|
+
+        This is essential for computing probability densities under change of variables
+        and is widely used in normalizing flows and variational inference.
+
+        Parameters
+        ----------
+        x : array_like
+            Input in the unconstrained domain.
+        y : array_like
+            Output in the constrained domain (i.e., y = forward(x)).
+            This parameter is provided for efficiency since it may already
+            be computed.
+
+        Returns
+        -------
+        Array
+            Log absolute determinant of the Jacobian.
+
+        Notes
+        -----
+        The default implementation raises NotImplementedError. Subclasses
+        should override this method to provide an efficient implementation.
+
+        For element-wise transformations, the log determinant is simply
+        the sum of log absolute derivatives:
+
+        .. math::
+            \log \left| \det J \right| = \sum_i \log \left| \frac{\partial f(x_i)}{\partial x_i} \right|
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement log_abs_det_jacobian. "
+            "Override this method in your subclass."
+        )
+
 
 class Identity(Transform):
+    """Identity transformation (no-op)."""
     __module__ = 'braintools.param'
 
     def forward(self, x: ArrayLike) -> Array:
@@ -145,3 +195,7 @@ class Identity(Transform):
 
     def inverse(self, y: ArrayLike) -> Array:
         return y
+
+    def log_abs_det_jacobian(self, x: ArrayLike, y: ArrayLike) -> Array:
+        """Log determinant is 0 for identity (det(I) = 1)."""
+        return jnp.zeros(jnp.shape(x)[:-1] if jnp.ndim(x) > 0 else ())
