@@ -4,13 +4,8 @@ on:
   push:
     branches:
       - main
-      - develop
-      - 'release/**'
   pull_request:
-    branches:
-      - main
-      - develop
-  workflow_call:
+
 
 permissions:
   contents: read
