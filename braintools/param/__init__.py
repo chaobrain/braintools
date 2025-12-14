@@ -15,10 +15,11 @@
 
 from ._base import *
 from ._base import __all__ as base_all
-from ._state import Param
+from ._state import *
+from ._state import __all__ as state_all
 from ._transform import *
 from ._transform import __all__ as transform_all
 
-__all__ = ['Param'] + transform_all + base_all
+__all__ = state_all + transform_all + base_all
 
-del transform_all, base_all
+del transform_all, base_all, state_all
