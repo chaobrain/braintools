@@ -3553,7 +3553,7 @@ class Rprop(OptaxOptimizer):
         >>> # Setup for batch learning
         >>> model = brainstate.nn.Sequential(
         ...     brainstate.nn.Linear(100, 50),
-        ...     brainstate.nn.Tanh(),
+        ...     brainstate.nn.TanhT(),
         ...     brainstate.nn.Linear(50, 10)
         ... )
         >>>

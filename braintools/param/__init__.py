@@ -13,13 +13,21 @@
 # limitations under the License.
 # ==============================================================================
 
-from ._base import *
-from ._base import __all__ as base_all
+from ._data import *
+from ._data import __all__ as data_all
+from ._module import *
+from ._module import __all__ as module_all
+from ._regularization import *
+from ._regularization import __all__ as reg_all
 from ._state import *
 from ._state import __all__ as state_all
 from ._transform import *
 from ._transform import __all__ as transform_all
 
-__all__ = state_all + transform_all + base_all
+__all__ = state_all + transform_all + reg_all + module_all + data_all
 
-del transform_all, base_all, state_all
+del transform_all
+del state_all
+del reg_all
+del module_all
+del data_all

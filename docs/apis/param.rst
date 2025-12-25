@@ -4,21 +4,86 @@
 .. currentmodule:: braintools.param
 .. automodule:: braintools.param
 
-Parameter transformation module for constrained optimization and probabilistic modeling.
-Provides bijective transforms that map between unconstrained and constrained parameter spaces.
+Comprehensive parameter management module for constrained optimization and probabilistic modeling.
+Provides bijective transforms, regularization priors, and parameter wrappers for neural network training.
 
 Overview
 --------
 
 The ``braintools.param`` module provides:
 
+- **Parameter wrappers** (``Param``, ``Const``) for managing trainable and fixed parameters
+- **State containers** (``ArrayHidden``, ``ArrayParam``) for transformed array storage
 - **Bijective transformations** for mapping parameters between constrained and unconstrained domains
-- **Parameter wrapper** (``Param``) that automatically applies transforms during optimization
+- **Regularization priors** for Bayesian inference and weight decay
 - **Jacobian computation** via ``log_abs_det_jacobian`` for probabilistic modeling
-- **Composition utilities** for building complex transforms from simple ones
+- **Data containers** for hierarchical state management
 
-Base Classes
-------------
+Data Container
+--------------
+
+The ``Data`` class provides a base class for creating dataclass-like containers
+that support hierarchical state management and JAX pytree operations.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   Data
+
+State Containers
+----------------
+
+These classes extend brainstate's ``HiddenState`` and ``ParamState`` to support
+automatic bijective transformations. They store values in unconstrained space
+internally while exposing constrained values via the ``.data`` property.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   ArrayHidden
+   ArrayParam
+
+
+Parameter Wrappers
+------------------
+
+The ``Param`` class wraps parameter values and automatically applies bijective
+transformations and regularization. It provides a high-level interface for
+managing trainable parameters in neural networks.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   Param
+   Const
+
+
+Regularization Classes
+----------------------
+
+These classes implement regularization priors for Bayesian inference and weight
+decay. They provide ``loss()``, ``sample_init()``, and ``reset_value()`` methods
+for integration with parameter optimization workflows.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   Regularization
+   GaussianReg
+   L1Reg
+   L2Reg
+
+
+Base Transform Classes
+----------------------
 
 These classes provide the foundational architecture for all transforms in the module.
 The ``Transform`` class defines the common interface with ``forward``, ``inverse``,
@@ -30,21 +95,7 @@ and ``log_abs_det_jacobian`` methods.
    :template: classtemplate.rst
 
    Transform
-   Identity
-
-Parameter Wrapper
------------------
-
-The ``Param`` class wraps parameter values and automatically applies bijective
-transformations. It stores values in unconstrained space internally while exposing
-constrained values via the ``.data`` property.
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   Param
+   IdentityT
 
 Bounded Transforms
 ------------------
@@ -58,17 +109,12 @@ coefficients, or physical quantities with known bounds.
    :nosignatures:
    :template: classtemplate.rst
 
-   Sigmoid
-   ScaledSigmoid
-   Tanh
-   Softsign
-   Clip
+   SigmoidT
+   ScaledSigmoidT
+   TanhT
+   SoftsignT
+   ClipT
 
-- **Sigmoid**: Maps ℝ → [lower, upper] using the logistic sigmoid function
-- **ScaledSigmoid**: Sigmoid with adjustable sharpness/temperature parameter
-- **Tanh**: Maps ℝ → (lower, upper) using hyperbolic tangent
-- **Softsign**: Maps ℝ → (lower, upper) using softsign function
-- **Clip**: Hard clipping to bounds (non-bijective)
 
 Positive/Negative Transforms
 ----------------------------
@@ -82,18 +128,14 @@ quantities that must maintain a specific sign.
    :nosignatures:
    :template: classtemplate.rst
 
-   Softplus
-   NegSoftplus
-   Log
-   Exp
-   Positive
-   Negative
+   SoftplusT
+   NegSoftplusT
+   LogT
+   ExpT
+   PositiveT
+   NegativeT
+   ReluT
 
-- **Softplus**: Maps ℝ → [lower, ∞) using log(1 + exp(x))
-- **NegSoftplus**: Maps ℝ → (-∞, upper] using negative softplus
-- **Log/Exp**: Maps ℝ → (lower, ∞) using exponential transformation
-- **Positive**: Convenience class for (0, ∞) constraint
-- **Negative**: Convenience class for (-∞, 0) constraint
 
 Advanced Transforms
 -------------------
@@ -106,33 +148,37 @@ in probabilistic modeling, ordinal regression, and directional statistics.
    :nosignatures:
    :template: classtemplate.rst
 
-   Power
-   Ordered
-   Simplex
-   UnitVector
+   PowerT
+   OrderedT
+   SimplexT
+   UnitVectorT
 
-- **Power**: Box-Cox family power transformation for variance stabilization
-- **Ordered**: Ensures monotonically increasing output vectors (useful for cutpoints)
-- **Simplex**: Stick-breaking transformation for probability vectors summing to 1
-- **UnitVector**: Projects vectors onto the unit sphere (L2 norm = 1)
 
 Composition Transforms
 ----------------------
 
 These transforms allow building complex transformations from simpler ones.
-They support chaining, masking, and custom user-defined transformations.
+They support chaining, masking, and affine transformations.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
    :template: classtemplate.rst
 
-   Affine
-   Chain
-   Masked
-   Custom
+   AffineT
+   ChainT
+   MaskedT
 
-- **Affine**: Linear transformation y = ax + b
-- **Chain**: Composes multiple transforms sequentially
-- **Masked**: Applies transform selectively based on boolean mask
-- **Custom**: User-defined transformation with custom forward/inverse functions
+
+Utility Functions
+-----------------
+
+Helper functions for working with parameters and state objects.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   get_param
+   get_size
+
