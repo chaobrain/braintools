@@ -444,7 +444,7 @@ class TruncatedNormal(Initialization):
         self.unit = unit
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', brainstate.random)
+        rng = kwargs.get('rng', np.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
 
