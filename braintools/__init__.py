@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 __version_info__ = tuple(map(int, __version__.split(".")))
 
 from . import conn
@@ -34,10 +34,17 @@ from ._spike_operation import *
 from ._spike_operation import __all__ as operation_all
 
 __all__ = [
-              'conn', 'input', 'init',
-              'file', 'metric', 'visualize',
-              'optim', 'tree', 'quad',
-              'surrogate', 'param',
+              'conn',
+              'input',
+              'init',
+              'file',
+              'metric',
+              'visualize',
+              'optim',
+              'tree',
+              'quad',
+              'surrogate',
+              'param',
           ] + encoder_all + operation_all
 
 del encoder_all, operation_all

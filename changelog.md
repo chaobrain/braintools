@@ -1,6 +1,45 @@
 # Release Notes
 
 
+## Version 0.1.6
+
+### New Features
+
+#### Parameter Management Expansion (`braintools.param`)
+- **Hierarchical data container**: Added `Data` for composed state storage and cloning.
+- **Parameter wrappers**: Added `Param` and `Const` with built-in transforms and optional regularization.
+- **State containers**: Added `ArrayHidden` and `ArrayParam` with transform-aware `.data` access.
+- **Regularization priors**: Added `GaussianReg`, `L1Reg`, and `L2Reg` with optional trainable hyperparameters.
+- **Utilities**: Added `get_param()` and `get_size()` helpers for parameter/state handling.
+
+#### Transforms
+- **New `ReluT` transform** for lower-bounded parameters.
+- **Expanded transform suite** now includes `PositiveT`, `NegativeT`, `ScaledSigmoidT`, `PowerT`,
+  `OrderedT`, `SimplexT`, and `UnitVectorT`.
+
+### Improvements
+
+#### API Consistency
+- **Transform naming cleanup**: Standardized transform class names with the `*T` suffix
+  (e.g., `SigmoidT`, `SoftplusT`, `AffineT`, `ChainT`, `MaskedT`, `ClipT`).
+
+#### Documentation
+- **Expanded param API docs**: Added sections for data containers, state containers, regularization,
+  utilities, and updated transform listings in `docs/apis/param.rst`.
+- **API index update**: Added `param` API page to `docs/index.rst`.
+
+#### Tests
+- **New test coverage**: Added tests for data containers, modules, regularization, state, transforms,
+  and utilities across the param module.
+
+### Breaking Changes
+- **Transform API renames**: Transform classes now use the `*T` suffix (e.g., `Sigmoid` -> `SigmoidT`).
+- **Custom transform removed**: The `Custom` transform is no longer part of the public API.
+
+### Bug Fixes
+- **Initializer RNG**: `TruncatedNormal` now defaults to `numpy.random` when no RNG is provided.
+
+
 ## Version 0.1.5
 
 ### New Features
