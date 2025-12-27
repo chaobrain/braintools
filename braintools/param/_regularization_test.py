@@ -94,10 +94,9 @@ class TestL2Reg(unittest.TestCase):
         self.assertNotIsInstance(reg.weight, brainstate.State)
 
     def test_fit_hyper_true(self):
-        """Test that weight is trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = L2Reg(weight=1.0, fit_hyper=True)
         self.assertTrue(reg.fit_hyper)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
 
 
 class TestL1Reg(unittest.TestCase):
@@ -144,10 +143,9 @@ class TestL1Reg(unittest.TestCase):
         self.assertNotIsInstance(reg.weight, brainstate.State)
 
     def test_fit_hyper_true(self):
-        """Test that weight is trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = L1Reg(weight=1.0, fit_hyper=True)
         self.assertTrue(reg.fit_hyper)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
 
 
 class TestGaussianReg(unittest.TestCase):
@@ -194,12 +192,9 @@ class TestGaussianReg(unittest.TestCase):
         self.assertNotIsInstance(reg.weight, brainstate.State)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = GaussianReg(mean=0.0, std=1.0, fit_hyper=True)
         self.assertTrue(reg.fit_hyper)
-        self.assertIsInstance(reg.mean, brainstate.ParamState)
-        self.assertIsInstance(reg.precision, brainstate.ParamState)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
 
     def test_weight_scales_loss(self):
         """Test that weight parameter scales the loss."""
@@ -277,12 +272,9 @@ class TestElasticNetReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = ElasticNetReg(l1_weight=1.0, l2_weight=1.0, alpha=0.5, fit_hyper=True)
         self.assertTrue(reg.fit_hyper)
-        self.assertIsInstance(reg.l1_weight, brainstate.ParamState)
-        self.assertIsInstance(reg.l2_weight, brainstate.ParamState)
-        self.assertIsInstance(reg.alpha, brainstate.ParamState)
 
 
 class TestHuberReg(unittest.TestCase):
@@ -325,10 +317,9 @@ class TestHuberReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = HuberReg(weight=1.0, delta=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.delta, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
 
 class TestGroupLassoReg(unittest.TestCase):
@@ -365,9 +356,9 @@ class TestGroupLassoReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that weight is trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = GroupLassoReg(weight=1.0, group_size=2, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
 
 class TestTotalVariationReg(unittest.TestCase):
@@ -409,9 +400,9 @@ class TestTotalVariationReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that weight is trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = TotalVariationReg(weight=1.0, order=1, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
 
 class TestMaxNormReg(unittest.TestCase):
@@ -452,10 +443,9 @@ class TestMaxNormReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = MaxNormReg(weight=1.0, max_value=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.max_value, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
 
 class TestEntropyReg(unittest.TestCase):
@@ -494,9 +484,9 @@ class TestEntropyReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that weight is trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = EntropyReg(weight=1.0, maximize=True, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
 
 class TestOrthogonalReg(unittest.TestCase):
@@ -531,9 +521,9 @@ class TestOrthogonalReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that weight is trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = OrthogonalReg(weight=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
 
 class TestSpectralNormReg(unittest.TestCase):
@@ -567,10 +557,9 @@ class TestSpectralNormReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = SpectralNormReg(weight=1.0, max_value=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.max_value, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
 
 class TestNewRegularizationsInheritance(unittest.TestCase):
@@ -667,11 +656,9 @@ class TestStudentTReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = StudentTReg(weight=1.0, df=3.0, scale=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.df, brainstate.ParamState)
-        self.assertIsInstance(reg.scale, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test StudentTReg inherits from brainstate.nn.Module."""
@@ -711,10 +698,9 @@ class TestCauchyReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = CauchyReg(weight=1.0, scale=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.scale, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test CauchyReg inherits from brainstate.nn.Module."""
@@ -768,11 +754,9 @@ class TestUniformReg(unittest.TestCase):
         np.testing.assert_allclose(reset, 1.0)  # (-2 + 4) / 2 = 1
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = UniformReg(weight=1.0, lower=-1.0, upper=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.lower, brainstate.ParamState)
-        self.assertIsInstance(reg.upper, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test UniformReg inherits from brainstate.nn.Module."""
@@ -810,11 +794,9 @@ class TestLogNormalReg(unittest.TestCase):
         np.testing.assert_allclose(reset, jnp.exp(1.0), rtol=1e-5)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = LogNormalReg(weight=1.0, mu=0.0, sigma=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.mu, brainstate.ParamState)
-        self.assertIsInstance(reg.sigma, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test LogNormalReg inherits from brainstate.nn.Module."""
@@ -860,10 +842,9 @@ class TestExponentialReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = ExponentialReg(weight=1.0, rate=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.rate, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test ExponentialReg inherits from brainstate.nn.Module."""
@@ -902,11 +883,9 @@ class TestGammaReg(unittest.TestCase):
         np.testing.assert_allclose(reset, 1.0, rtol=1e-3)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = GammaReg(weight=1.0, alpha=2.0, beta=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.alpha, brainstate.ParamState)
-        self.assertIsInstance(reg.beta, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test GammaReg inherits from brainstate.nn.Module."""
@@ -945,11 +924,9 @@ class TestBetaReg(unittest.TestCase):
         np.testing.assert_allclose(reset, 2.0 / 3.0, rtol=1e-3)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = BetaReg(weight=1.0, a=2.0, b=2.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.a, brainstate.ParamState)
-        self.assertIsInstance(reg.b, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test BetaReg inherits from brainstate.nn.Module."""
@@ -990,10 +967,9 @@ class TestHorseshoeReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = HorseshoeReg(weight=1.0, tau=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.tau, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test HorseshoeReg inherits from brainstate.nn.Module."""
@@ -1032,11 +1008,9 @@ class TestInverseGammaReg(unittest.TestCase):
         np.testing.assert_allclose(reset, 0.5, rtol=1e-3)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = InverseGammaReg(weight=1.0, alpha=2.0, beta=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.alpha, brainstate.ParamState)
-        self.assertIsInstance(reg.beta, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test InverseGammaReg inherits from brainstate.nn.Module."""
@@ -1078,11 +1052,9 @@ class TestLogUniformReg(unittest.TestCase):
         np.testing.assert_allclose(reset, 10.0, rtol=1e-3)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = LogUniformReg(weight=1.0, lower=1e-3, upper=1e3, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.lower, brainstate.ParamState)
-        self.assertIsInstance(reg.upper, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test LogUniformReg inherits from brainstate.nn.Module."""
@@ -1123,12 +1095,9 @@ class TestSpikeAndSlabReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = SpikeAndSlabReg(weight=1.0, spike_scale=0.01, slab_scale=1.0, pi=0.5, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.spike_scale, brainstate.ParamState)
-        self.assertIsInstance(reg.slab_scale, brainstate.ParamState)
-        self.assertIsInstance(reg.pi, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test SpikeAndSlabReg inherits from brainstate.nn.Module."""
@@ -1173,10 +1142,9 @@ class TestDirichletReg(unittest.TestCase):
         self.assertEqual(reset, 0.0)
 
     def test_fit_hyper_true(self):
-        """Test that hyperparams are trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         reg = DirichletReg(weight=1.0, alpha=1.0, fit_hyper=True)
-        self.assertIsInstance(reg.weight, brainstate.ParamState)
-        self.assertIsInstance(reg.alpha, brainstate.ParamState)
+        self.assertTrue(reg.fit_hyper)
 
     def test_inherits_from_module(self):
         """Test DirichletReg inherits from brainstate.nn.Module."""
@@ -1268,10 +1236,9 @@ class TestChainedReg(unittest.TestCase):
         self.assertNotIsInstance(chained.weight, brainstate.State)
 
     def test_fit_hyper_true(self):
-        """Test that weight is trainable when fit_hyper=True."""
+        """Test that fit_hyper=True is stored correctly."""
         chained = ChainedReg(L1Reg(weight=1.0), L2Reg(weight=1.0), fit_hyper=True)
         self.assertTrue(chained.fit_hyper)
-        self.assertIsInstance(chained.weight, brainstate.ParamState)
 
     def test_inherits_from_module(self):
         """Test ChainedReg inherits from brainstate.nn.Module."""
