@@ -26,6 +26,7 @@ from . import optim
 from . import param
 from . import quad
 from . import surrogate
+from . import trainer
 from . import tree
 from . import visualize
 from ._spike_encoder import *
@@ -41,6 +42,7 @@ __all__ = [
               'metric',
               'visualize',
               'optim',
+              'trainer',
               'tree',
               'quad',
               'surrogate',
