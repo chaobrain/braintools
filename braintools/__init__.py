@@ -23,7 +23,6 @@ from . import init
 from . import input
 from . import metric
 from . import optim
-from . import param
 from . import quad
 from . import surrogate
 from . import trainer
@@ -46,7 +45,6 @@ __all__ = [
               'tree',
               'quad',
               'surrogate',
-              'param',
           ] + encoder_all + operation_all
 
 del encoder_all, operation_all
