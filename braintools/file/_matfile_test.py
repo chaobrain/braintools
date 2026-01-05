@@ -22,7 +22,7 @@ from typing import Any, Dict
 import numpy as np
 import pytest
 
-from braintools.file import matfile as matfile_mod
+from braintools.file import _matfile as matfile_mod
 
 
 class DummyMatStruct:
