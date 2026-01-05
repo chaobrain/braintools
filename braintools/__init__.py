@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 __version_info__ = tuple(map(int, __version__.split(".")))
 
 from . import conn
