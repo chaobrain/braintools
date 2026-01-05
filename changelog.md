@@ -1,7 +1,81 @@
 # Release Notes
 
 
-## Version 0.1.6
+## Version 0.1.7 (2026-01-05)
+
+### Major Features
+
+#### New Training Framework (`braintools.trainer`)
+- **PyTorch Lightning-like training API** for JAX-based neural network training with comprehensive features:
+  - **LightningModule**: Base class for defining training models with `training_step()`, `validation_step()`, and `configure_optimizers()` hooks
+  - **Trainer**: Orchestration class for managing training loops, epochs, and device placement
+  - **TrainOutput/EvalOutput**: Structured output types for training and evaluation results
+
+#### Callbacks System
+- **10+ built-in callbacks** for customizing training behavior:
+  - `ModelCheckpoint`: Automatic model saving based on monitored metrics
+  - `EarlyStopping`: Stop training when metrics plateau
+  - `LearningRateMonitor`: Track and log learning rate changes
+  - `GradientClipCallback`: Gradient clipping for training stability
+  - `Timer`: Track training time
+  - `RichProgressBar` / `TQDMProgressBar`: Visual progress indicators
+  - `LambdaCallback` / `PrintCallback`: Custom callback utilities
+
+#### Logging Backends
+- **6 pluggable logging backends**:
+  - `TensorBoardLogger`: TensorBoard integration
+  - `WandBLogger`: Weights & Biases integration
+  - `CSVLogger`: Simple CSV file logging
+  - `NeptuneLogger`: Neptune.ai integration
+  - `MLFlowLogger`: MLFlow integration
+  - `CompositeLogger`: Combine multiple loggers
+
+#### Data Loading Utilities
+- **JAX-compatible data loading** with distributed support:
+  - `DataLoader` / `DistributedDataLoader`: Efficient batch loading
+  - `Dataset`, `ArrayDataset`, `DictDataset`, `IterableDataset`: Dataset abstractions
+  - `Sampler`, `RandomSampler`, `SequentialSampler`, `BatchSampler`, `DistributedSampler`: Sampling strategies
+
+#### Distributed Training
+- **Multi-device and multi-host training strategies**:
+  - `SingleDeviceStrategy`: Single device execution
+  - `DataParallelStrategy`: Data parallelism across devices
+  - `ShardedDataParallelStrategy` / `FullyShardedDataParallelStrategy`: Memory-efficient sharded training
+  - `AutoStrategy`: Automatic strategy selection
+  - `all_reduce`, `broadcast`: Distributed communication primitives
+
+#### Checkpointing
+- **Comprehensive checkpoint management**:
+  - `CheckpointManager`: Manage multiple checkpoints with retention policies
+  - `save_checkpoint` / `load_checkpoint`: Save and restore model states
+  - `find_checkpoint` / `list_checkpoints`: Checkpoint discovery utilities
+
+#### Progress Bar System
+- **Multiple progress bar implementations**:
+  - `SimpleProgressBar`: Basic text-based progress
+  - `TQDMProgressBarWrapper`: TQDM-based progress
+  - `RichProgressBarWrapper`: Rich library-based progress
+
+### Improvements
+
+#### API Documentation
+- **Enhanced module documentation**: All public modules now include comprehensive docstrings with examples, parameter descriptions, and usage guidelines directly in `__init__.py` files
+- **Reorganized imports**: Cleaner and more consistent import structure across all modules
+
+### Breaking Changes
+
+#### Removed `braintools.param` Module
+- **The entire `braintools.param` module has been removed**, including:
+  - Data containers (`Data`)
+  - Parameter wrappers (`Param`, `Const`)
+  - State containers (`ArrayHidden`, `ArrayParam`)
+  - Regularization classes (`GaussianReg`, `L1Reg`, `L2Reg`)
+  - All transform classes (`SigmoidT`, `SoftplusT`, `AffineT`, etc.)
+  - Utility functions (`get_param()`, `get_size()`)
+- Users relying on these features should migrate to alternative implementations or pin to version 0.1.6
+
+
+## Version 0.1.6 (2025-12-25)
 
 ### New Features
 
@@ -40,7 +114,7 @@
 - **Initializer RNG**: `TruncatedNormal` now defaults to `numpy.random` when no RNG is provided.
 
 
-## Version 0.1.5
+## Version 0.1.5 (2025-12-14)
 
 ### New Features
 
@@ -79,7 +153,7 @@
 
 
 
-## Version 0.1.4
+## Version 0.1.4 (2025-10-31)
 
 ### New Features
 
@@ -126,7 +200,7 @@
 - Improved developer experience with better documentation structure
 
 
-## Version 0.1.0
+## Version 0.1.0 (2025-10-06)
 
 ### Major Features
 
@@ -196,7 +270,7 @@
 
 
 
-## Version 0.0.14
+## Version 0.0.14 (2025-10-04)
 
 ### New Features
 
@@ -218,7 +292,7 @@
 - Improved learning rate scheduler implementation
 
 
-## Version 0.0.13
+## Version 0.0.13 (2025-10-02)
 
 ### Major Features
 
@@ -282,7 +356,7 @@
 - Changed some parameter names for clarity (e.g., unified use of `rng` parameter)
 
 
-## Version 0.0.12
+## Version 0.0.12 (2025-09-24)
 
 ### Major Features
 
