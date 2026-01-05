@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 __version_info__ = tuple(map(int, __version__.split(".")))
 
 from . import conn
@@ -23,28 +23,62 @@ from . import init
 from . import input
 from . import metric
 from . import optim
-from . import param
 from . import quad
 from . import surrogate
+from . import trainer
 from . import tree
 from . import visualize
-from ._spike_encoder import *
-from ._spike_encoder import __all__ as encoder_all
-from ._spike_operation import *
-from ._spike_operation import __all__ as operation_all
+from ._spike_encoder import (
+    LatencyEncoder,
+    RateEncoder,
+    PoissonEncoder,
+    PopulationEncoder,
+    BernoulliEncoder,
+    DeltaEncoder,
+    StepCurrentEncoder,
+    SpikeCountEncoder,
+    TemporalEncoder,
+    RankOrderEncoder,
+)
+from ._spike_operation import (
+    spike_bitwise_or,
+    spike_bitwise_and,
+    spike_bitwise_iand,
+    spike_bitwise_not,
+    spike_bitwise_xor,
+    spike_bitwise_ixor,
+    spike_bitwise,
+)
 
 __all__ = [
-              'conn',
-              'input',
-              'init',
-              'file',
-              'metric',
-              'visualize',
-              'optim',
-              'tree',
-              'quad',
-              'surrogate',
-              'param',
-          ] + encoder_all + operation_all
+    'conn',
+    'input',
+    'init',
+    'file',
+    'metric',
+    'visualize',
+    'optim',
+    'trainer',
+    'tree',
+    'quad',
+    'surrogate',
 
-del encoder_all, operation_all
+    'LatencyEncoder',
+    'RateEncoder',
+    'PoissonEncoder',
+    'PopulationEncoder',
+    'BernoulliEncoder',
+    'DeltaEncoder',
+    'StepCurrentEncoder',
+    'SpikeCountEncoder',
+    'TemporalEncoder',
+    'RankOrderEncoder',
+
+    'spike_bitwise_or',
+    'spike_bitwise_and',
+    'spike_bitwise_iand',
+    'spike_bitwise_not',
+    'spike_bitwise_xor',
+    'spike_bitwise_ixor',
+    'spike_bitwise',
+]

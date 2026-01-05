@@ -98,23 +98,187 @@ complete decoupling between model types to ensure clean, specialized implementat
 
 """
 
-from ._base import *
-from ._base import __all__ as base_all
-from ._biological import *
-from ._biological import __all__ as biological_all
-from ._compartment import *
-from ._compartment import __all__ as comp_all
-from ._kernel import *
-from ._kernel import __all__ as kernel_all
-from ._random import *
-from ._random import __all__ as point_all
-from ._regular import *
-from ._regular import __all__ as regular_all
-from ._spatial import *
-from ._spatial import __all__ as spatial_all
-from ._topological import *
-from ._topological import __all__ as topological_all
+# Base classes and utilities
+from ._base import (
+    ConnectionResult,
+    Connectivity,
+    PointConnectivity,
+    MultiCompartmentConnectivity,
+    ScaledConnectivity,
+    CompositeConnectivity,
+)
 
-__all__ = base_all + comp_all + kernel_all + point_all + spatial_all + topological_all + biological_all + regular_all
-del base_all, comp_all, kernel_all, point_all, spatial_all, topological_all, biological_all
-del regular_all
+# Biological patterns
+from ._biological import (
+    ExcitatoryInhibitory,
+)
+
+# Multi-compartment connectivity
+from ._compartment import (
+    # Compartment type constants
+    SOMA,
+    BASAL_DENDRITE,
+    APICAL_DENDRITE,
+    AXON,
+
+    # Basic compartment patterns
+    CompartmentSpecific,
+    AllToAllCompartments,
+
+    # Anatomical targeting patterns
+    SomaToDendrite,
+    AxonToSoma,
+    DendriteToSoma,
+    AxonToDendrite,
+    DendriteToDendrite,
+
+    # Morphology-aware patterns
+    ProximalTargeting,
+    DistalTargeting,
+    BranchSpecific,
+    MorphologyDistance,
+
+    # Dendritic patterns
+    DendriticTree,
+    BasalDendriteTargeting,
+    ApicalDendriteTargeting,
+    DendriticIntegration,
+
+    # Axonal patterns
+    AxonalProjection,
+    AxonalBranching,
+    AxonalArborization,
+    TopographicProjection,
+
+    # Synaptic patterns
+    SynapticPlacement,
+    SynapticClustering,
+
+    # Custom patterns
+    CustomCompartment,
+)
+
+# Kernel-based connectivity
+from ._kernel import (
+    Conv2dKernel,
+    GaussianKernel,
+    GaborKernel,
+    DoGKernel,
+    MexicanHat,
+    SobelKernel,
+    LaplacianKernel,
+    CustomKernel,
+)
+
+# Random connectivity patterns
+from ._random import (
+    Random,
+    FixedProb,
+    ClusteredRandom,
+)
+
+# Regular patterns
+from ._regular import (
+    AllToAll,
+    OneToOne,
+)
+
+# Spatial connectivity patterns
+from ._spatial import (
+    DistanceDependent,
+    Gaussian,
+    Exponential,
+    Ring,
+    Grid2d,
+    RadialPatches,
+)
+
+# Topological patterns
+from ._topological import (
+    SmallWorld,
+    ScaleFree,
+    Regular,
+    ModularRandom,
+    ModularGeneral,
+    HierarchicalRandom,
+    CorePeripheryRandom,
+)
+
+__all__ = [
+    # Base classes
+    'ConnectionResult',
+    'Connectivity',
+    'PointConnectivity',
+    'MultiCompartmentConnectivity',
+    'ScaledConnectivity',
+    'CompositeConnectivity',
+
+    # Biological patterns
+    'ExcitatoryInhibitory',
+
+    # Compartment constants
+    'SOMA',
+    'BASAL_DENDRITE',
+    'APICAL_DENDRITE',
+    'AXON',
+
+    # Multi-compartment patterns
+    'CompartmentSpecific',
+    'AllToAllCompartments',
+    'SomaToDendrite',
+    'AxonToSoma',
+    'DendriteToSoma',
+    'AxonToDendrite',
+    'DendriteToDendrite',
+    'ProximalTargeting',
+    'DistalTargeting',
+    'BranchSpecific',
+    'MorphologyDistance',
+    'DendriticTree',
+    'BasalDendriteTargeting',
+    'ApicalDendriteTargeting',
+    'DendriticIntegration',
+    'AxonalProjection',
+    'AxonalBranching',
+    'AxonalArborization',
+    'TopographicProjection',
+    'SynapticPlacement',
+    'SynapticClustering',
+    'CustomCompartment',
+
+    # Kernel patterns
+    'Conv2dKernel',
+    'GaussianKernel',
+    'GaborKernel',
+    'DoGKernel',
+    'MexicanHat',
+    'SobelKernel',
+    'LaplacianKernel',
+    'CustomKernel',
+
+    # Random patterns
+    'Random',
+    'FixedProb',
+    'ClusteredRandom',
+
+    # Regular patterns
+    'AllToAll',
+    'OneToOne',
+
+    # Spatial patterns
+    'DistanceDependent',
+    'Gaussian',
+    'Exponential',
+    'Ring',
+    'Grid2d',
+    'RadialPatches',
+
+    # Topological patterns
+    'SmallWorld',
+    'ScaleFree',
+    'Regular',
+    'ModularRandom',
+    'ModularGeneral',
+    'HierarchicalRandom',
+    'CorePeripheryRandom',
+]
