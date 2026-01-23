@@ -19,6 +19,7 @@ This module is rewritten from the Flax APIs (https://github.com/google/flax).
 """
 
 import enum
+import multiprocessing
 import os
 import sys
 import threading
@@ -286,10 +287,28 @@ msgpack_register_serialization(
 def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(xs, brainstate.util.FlattedDict):
         xs = xs.to_nest()
-    str_keys = set(str(k) for k in xs.keys())
+
+    try:
+        str_keys = set(str(k) for k in xs.keys())
+    except TypeError as e:
+        raise ValueError(f'Dict contains unhashable keys: {e}') from e
+
     if len(str_keys) != len(xs):
-        raise ValueError('Dict keys do not have a unique string representation: '
-                         f'{str_keys} vs given: {xs}')
+        # Provide detailed error showing which keys collide
+        str_to_keys = {}
+        for k in xs.keys():
+            sk = str(k)
+            if sk in str_to_keys:
+                str_to_keys[sk].append(k)
+            else:
+                str_to_keys[sk] = [k]
+
+        collisions = {sk: keys for sk, keys in str_to_keys.items() if len(keys) > 1}
+        raise ValueError(
+            f'Dict keys do not have a unique string representation. '
+            f'Collisions: {collisions}'
+        )
+
     return {
         str(key): msgpack_to_state_dict(value)
         for key, value in xs.items()
@@ -348,7 +367,13 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any], mismatch: MismatchMode =
             # Keep original value if field is missing from state_dict
             fields[field] = getattr(xs, field)
 
-    return type(xs)(**fields)
+    try:
+        return type(xs)(**fields)
+    except TypeError as e:
+        raise TypeError(
+            f"Failed to reconstruct namedtuple {type(xs).__name__} at path {current_path()}: {e}. "
+            f"Ensure the namedtuple class definition is available."
+        ) from e
 
 
 msgpack_register_serialization(
@@ -394,17 +419,19 @@ def _brainstate_dict_state(x: brainstate.State) -> Dict[str, Any]:
 
 
 def _restore_brainstate(x: brainstate.State, state_dict: Dict, mismatch: MismatchMode = 'error') -> brainstate.State:
-    """Restore brainstate.State from state dict.
+    """Restore brainstate.State from state dict by mutating its value in-place.
 
-    Creates a new State object with the restored value instead of mutating the original.
+    This function mutates the State object's value attribute rather than creating
+    a new State object, which is consistent with how State objects are used
+    throughout the codebase.
 
     Args:
-        x: Template State object
+        x: Template State object to restore (will be mutated)
         state_dict: Serialized state dictionary
         mismatch: How to handle mismatches
 
     Returns:
-        A new State object with the restored value
+        The same State object with restored value (for chaining)
     """
     x.value = msgpack_from_state_dict(x.value, state_dict, mismatch=mismatch)
     return x
@@ -539,7 +566,21 @@ def _dict_to_tuple(dct):
 
 def _chunk(arr) -> Dict[str, Any]:
     """Convert array to a canonical dictionary of chunked arrays."""
-    chunksize = max(1, int(MAX_CHUNK_SIZE / arr.dtype.itemsize))
+    itemsize = arr.dtype.itemsize
+    if itemsize == 0:
+        raise ValueError(f"Cannot chunk array with zero itemsize dtype: {arr.dtype}")
+
+    chunksize = max(1, int(MAX_CHUNK_SIZE / itemsize))
+
+    # Warn if chunking is very inefficient
+    if chunksize < 1000 and arr.size > 1000000:
+        warnings.warn(
+            f"Array chunking may be inefficient: dtype={arr.dtype}, "
+            f"itemsize={itemsize}, chunksize={chunksize}. "
+            f"Consider using a different dtype or smaller arrays.",
+            UserWarning
+        )
+
     data = {'__msgpack_chunked_array__': True,
             'shape': _tuple_to_dict(arr.shape)}
     flatarr = arr.reshape(-1)
@@ -614,7 +655,7 @@ def _msgpack_serialize(pytree, in_place: bool = False) -> bytes:
     return msgpack.packb(pytree, default=_msgpack_ext_pack, strict_types=True)
 
 
-def _msgpack_restore(encoded_pytree: bytes):
+def _msgpack_restore(encoded_pytree: bytes, max_size: Optional[int] = None):
     """Restore data structure from bytes in msgpack format.
 
     Low-level function that only supports python trees with array leaves,
@@ -622,14 +663,25 @@ def _msgpack_restore(encoded_pytree: bytes):
 
     Args:
       encoded_pytree: msgpack-encoded bytes of python tree.
+      max_size: Maximum allowed size in bytes (default: 10GB)
 
     Returns:
       Python tree of dict, list, tuple with python primitive
       and array leaves.
 
     Raises:
+      ValueError: If data exceeds max_size
       InvalidCheckpointPath: If the msgpack data is corrupt or invalid.
     """
+    if max_size is None:
+        max_size = 10 * (1024 ** 3)  # 10GB default
+
+    if len(encoded_pytree) > max_size:
+        raise ValueError(
+            f"Checkpoint data too large: {len(encoded_pytree)} bytes "
+            f"exceeds maximum {max_size} bytes"
+        )
+
     try:
         state_dict = msgpack.unpackb(encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False)
     except (msgpack.exceptions.ExtraData,
@@ -685,18 +737,28 @@ class _EmptyNode:
 def _rename_fn(src, dst, overwrite=False):
     """Rename file from src to dst, with overwrite control.
 
+    Uses os.replace() for atomic rename on both Unix and Windows (Python 3.3+).
+
     Args:
         src: Source file path
         dst: Destination file path
         overwrite: If False, raise AlreadyExistsError when dst exists
     """
-    if os.path.exists(src):
-        if os.path.exists(dst):
-            if not overwrite:
-                raise AlreadyExistsError(dst)
-            else:
-                # Remove the destination file before renaming on Windows
+    if not os.path.exists(src):
+        return
+
+    if not overwrite and os.path.exists(dst):
+        raise AlreadyExistsError(dst)
+
+    try:
+        os.replace(src, dst)  # Atomic on both platforms
+    except OSError:
+        # Fallback for edge cases
+        if overwrite and os.path.exists(dst):
+            try:
                 os.remove(dst)
+            except OSError:
+                pass
         os.rename(src, dst)
 
 
@@ -717,6 +779,7 @@ class AsyncManager(object):
         self.executor = thread.ThreadPoolExecutor(max_workers=max_workers)
         self.save_future = None
         self._closed = False
+        self._lock = threading.Lock()
 
     def __enter__(self):
         """Enter context manager."""
@@ -767,8 +830,10 @@ class AsyncManager(object):
         """
         if self._closed:
             raise RuntimeError("Cannot save with a closed AsyncManager")
-        self.wait_previous_save()
-        self.save_future = self.executor.submit(task)  # type: ignore
+
+        with self._lock:
+            self.wait_previous_save()
+            self.save_future = self.executor.submit(task)  # type: ignore
 
 
 def _save_main_ckpt_file(
@@ -860,10 +925,24 @@ def msgpack_save(
     if async_manager:
         async_manager.wait_previous_save()
 
-    if os.path.dirname(filename):
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
+    dirname = os.path.dirname(filename)
+    if dirname:
+        try:
+            os.makedirs(dirname, exist_ok=True)
+        except OSError as e:
+            raise OSError(f"Cannot create directory {dirname}: {e}") from e
     if not overwrite and os.path.exists(filename):
         raise InvalidCheckpointPath(filename)
+
+    # Warn on Windows if path exceeds MAX_PATH limitation
+    if sys.platform == 'win32':
+        abs_path = os.path.abspath(filename)
+        if len(abs_path) > 260:
+            warnings.warn(
+                f"Path length {len(abs_path)} exceeds Windows MAX_PATH (260). "
+                "Consider using shorter paths or enabling long path support.",
+                UserWarning
+            )
 
     if isinstance(target, brainstate.util.FlattedDict):
         target = target.to_nest()
@@ -930,23 +1009,36 @@ def msgpack_load(
         if parallel and fp.seekable():
             buf_size = 128 << 20  # 128M buffer.
             num_chunks = (file_size + buf_size - 1) // buf_size  # Ceiling division
-            checkpoint_contents = bytearray(file_size)
 
-            def read_chunk(i):
-                # NOTE: We have to re-open the file to read each chunk, otherwise the
-                # parallelism has no effect. But we could reuse the file pointers
-                # within each thread.
-                with open(filename, 'rb') as f:
-                    f.seek(i * buf_size)
-                    buf = f.read(buf_size)
-                    if buf:
-                        checkpoint_contents[i * buf_size:i * buf_size + len(buf)] = buf
-                    return len(buf)
+            try:
+                checkpoint_contents = bytearray(file_size)
+            except MemoryError:
+                # Fallback to sequential read for very large files
+                if verbose:
+                    warnings.warn(
+                        f"Insufficient memory for parallel load of {file_size} bytes. "
+                        "Falling back to sequential read.",
+                        UserWarning
+                    )
+                parallel = False
+                checkpoint_contents = fp.read()
 
-            pool_size = 32
-            with thread.ThreadPoolExecutor(pool_size) as pool:
-                # Use context manager for proper resource cleanup
-                wait = list(pool.map(read_chunk, range(num_chunks)))
+            if parallel:
+                def read_chunk(i):
+                    # NOTE: We have to re-open the file to read each chunk, otherwise the
+                    # parallelism has no effect. But we could reuse the file pointers
+                    # within each thread.
+                    with open(filename, 'rb') as f:
+                        f.seek(i * buf_size)
+                        buf = f.read(buf_size)
+                        if buf:
+                            checkpoint_contents[i * buf_size:i * buf_size + len(buf)] = buf
+                        return len(buf)
+
+                pool_size = min(32, max(1, multiprocessing.cpu_count()))
+                with thread.ThreadPoolExecutor(pool_size) as pool:
+                    # Use context manager for proper resource cleanup
+                    wait = list(pool.map(read_chunk, range(num_chunks)))
         else:
             checkpoint_contents = fp.read()
 
