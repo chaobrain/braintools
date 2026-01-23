@@ -376,30 +376,18 @@ class OptaxOptimizer(Optimizer):
         """Update the model states with gradients (backward compatibility)."""
         return self.step(grads)
 
-    def step(self, grads: Optional[Dict[str, Any]] = None, closure: Optional[Callable] = None):
+    def step(self, grads: Optional[Dict[str, Any]]):
         """
         Perform a single optimization step.
 
         Args:
-          grads: Gradients for parameters. If None, closure must be provided.
-          closure: A closure that reevaluates the model and returns the loss.
+            grads: Gradients for parameters. If None, closure must be provided.
 
         Returns:
-          Optional loss value if closure is provided.
+            Optional loss value if closure is provided.
         """
         if self.opt_state is None:
             raise ValueError("register_trainable_weights must be called before step.")
-
-        loss = None
-        if closure is not None:
-            loss = closure()
-
-        if grads is None:
-            if closure is None:
-                raise ValueError("Either grads or closure must be provided.")
-            # Compute gradients using closure if needed
-            # This would require additional implementation
-            raise NotImplementedError("Automatic gradient computation from closure not yet implemented.")
 
         # Only use param_groups logic if multiple groups have been configured
         # (more than just the single default group)
@@ -491,7 +479,11 @@ class OptaxOptimizer(Optimizer):
 
                 if unprocessed_grads:
                     # Use main optimizer for unprocessed parameters
-                    updates, new_opt_state = self.tx.update(unprocessed_grads, self.opt_state.value, unprocessed_values)
+                    updates, new_opt_state = self.tx.update(
+                        unprocessed_grads,
+                        self.opt_state.value,
+                        unprocessed_values
+                    )
                     self.opt_state.value = new_opt_state
                     all_updates.update(updates)
 
@@ -523,8 +515,6 @@ class OptaxOptimizer(Optimizer):
 
         # Increment step counter
         self.step_count.value += 1
-
-        return loss
 
     def state_dict(self):
         """

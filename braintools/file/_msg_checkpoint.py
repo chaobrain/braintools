@@ -23,6 +23,7 @@ import os
 import sys
 import threading
 import warnings
+import shutil
 from concurrent.futures import thread
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, List, Literal, Optional
@@ -690,8 +691,12 @@ def _rename_fn(src, dst, overwrite=False):
         overwrite: If False, raise AlreadyExistsError when dst exists
     """
     if os.path.exists(src):
-        if os.path.exists(dst) and not overwrite:
-            raise AlreadyExistsError(dst)
+        if os.path.exists(dst):
+            if not overwrite:
+                raise AlreadyExistsError(dst)
+            else:
+                # Remove the destination file before renaming on Windows
+                os.remove(dst)
         os.rename(src, dst)
 
 
