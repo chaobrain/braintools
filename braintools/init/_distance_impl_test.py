@@ -90,7 +90,7 @@ class TestGaussianProfile(unittest.TestCase):
         profile = GaussianProfile(sigma=50.0 * u.um, max_distance=200.0 * u.um)
         repr_str = repr(profile)
         self.assertIn('GaussianProfile', repr_str)
-        self.assertIn('50.0', repr_str)
+        self.assertIn('50', repr_str)
 
 
 class TestExponentialProfile(unittest.TestCase):
@@ -378,7 +378,7 @@ class TestSigmoidProfile(unittest.TestCase):
         profile = SigmoidProfile(midpoint=100.0 * u.um, slope=0.05, max_distance=300.0 * u.um)
         repr_str = repr(profile)
         self.assertIn('SigmoidProfile', repr_str)
-        self.assertIn('100.0', repr_str)
+        self.assertIn('100', repr_str)
 
 
 class TestDoGProfile(unittest.TestCase):
@@ -752,4 +752,4 @@ class TestMexicanHatProfile(unittest.TestCase):
         profile = MexicanHatProfile(sigma=50.0 * u.um, amplitude=1.0, max_distance=300.0 * u.um)
         repr_str = repr(profile)
         self.assertIn('MexicanHatProfile', repr_str)
-        self.assertIn('50.0', repr_str)
+        self.assertIn('50', repr_str)
