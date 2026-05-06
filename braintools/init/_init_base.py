@@ -27,6 +27,7 @@ import brainunit as u
 import jax
 import numpy as np
 from brainstate import State
+from brainstate.nn import Param
 from brainstate.typing import ArrayLike
 
 from braintools._misc import set_module_as
@@ -235,7 +236,7 @@ def _expand_params_to_match_sizes(params, sizes):
 
 @set_module_as('braintools.init')
 def param(
-    init: Union[Callable, ArrayLike, State],
+    init: Union[Callable, ArrayLike, State, Param],
     sizes: Union[int, Sequence[int]],
     batch_size: Optional[int] = None,
     allow_none: bool = True,
@@ -247,7 +248,7 @@ def param(
 
     Parameters
     ----------
-    init: callable, ArrayLike, State
+    init: callable, ArrayLike, State, Param
         The initialization of the parameter.
 
         - If it is None, the created parameter will be None.
@@ -286,6 +287,34 @@ def param(
 
     # Convert sizes to a tuple
     sizes = tuple(_to_size(sizes))
+
+    # Handle brainstate.nn.Param (must be checked before callable since Param is callable)
+    is_param = isinstance(init, Param)
+    if is_param:
+        param_value = init.value()
+        # Check shape compatibility
+        if not _are_broadcastable_shapes(u.math.shape(param_value), sizes):
+            raise ValueError(
+                f'The shape of the parameter {u.math.shape(param_value)} '
+                f'does not match with the given size {sizes}'
+            )
+        # Expand the parameter to match the given batch size
+        if batch_size is not None:
+            if param_value.ndim <= len(sizes):
+                param_value = _expand_params_to_match_sizes(param_value, sizes)
+                param_value = u.math.repeat(
+                    u.math.expand_dims(param_value, axis=0),
+                    batch_size,
+                    axis=0
+                )
+            else:
+                if param_value.shape[0] != batch_size:
+                    raise ValueError(
+                        f'The batch size of the parameter {param_value.shape[0]} '
+                        f'does not match with the given batch size {batch_size}'
+                    )
+        init.set_value(param_value)
+        return init
 
     # Check if the parameter is a callable function
     if callable(init):

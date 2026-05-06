@@ -626,6 +626,89 @@ class TestEdgeCases:
         assert result3.unit == u.nS
 
 
+class TestParamSupport:
+    """Test brainstate.nn.Param support in param() function."""
+
+    def test_param_basic(self):
+        """Test param() with a basic Param object."""
+        import jax.numpy as jnp
+        from brainstate.nn import Param as NNParam
+
+        p = NNParam(jnp.ones(5))
+        result = param(p, 5)
+        assert isinstance(result, NNParam)
+        assert result is p
+        assert np.allclose(result.value(), 1.0)
+
+    def test_param_with_quantity(self):
+        """Test param() with a Param wrapping a Quantity."""
+        import jax.numpy as jnp
+        from brainstate.nn import Param as NNParam
+
+        p = NNParam(jnp.ones(5) * u.nS)
+        result = param(p, 5)
+        assert isinstance(result, NNParam)
+        assert result is p
+        assert u.math.allclose(result.value(), jnp.ones(5) * u.nS)
+
+    def test_param_2d_shape(self):
+        """Test param() with a 2D Param."""
+        import jax.numpy as jnp
+        from brainstate.nn import Param as NNParam
+
+        p = NNParam(jnp.ones((3, 4)))
+        result = param(p, (3, 4))
+        assert isinstance(result, NNParam)
+        assert result.value().shape == (3, 4)
+
+    def test_param_shape_mismatch(self):
+        """Test param() raises error on shape mismatch."""
+        import jax.numpy as jnp
+        from brainstate.nn import Param as NNParam
+
+        p = NNParam(jnp.ones(10))
+        with pytest.raises(ValueError, match="does not match"):
+            param(p, 5)
+
+    def test_param_with_batch_size(self):
+        """Test param() expands Param for batch_size."""
+        import jax.numpy as jnp
+        from brainstate.nn import Param as NNParam
+
+        p = NNParam(jnp.ones(5))
+        result = param(p, 5, batch_size=3)
+        assert isinstance(result, NNParam)
+        assert result.value().shape == (3, 5)
+
+    def test_param_with_batch_size_2d(self):
+        """Test param() expands 2D Param for batch_size."""
+        import jax.numpy as jnp
+        from brainstate.nn import Param as NNParam
+
+        p = NNParam(jnp.ones((3, 4)))
+        result = param(p, (3, 4), batch_size=2)
+        assert isinstance(result, NNParam)
+        assert result.value().shape == (2, 3, 4)
+
+    def test_param_batch_size_already_expanded(self):
+        """Test param() with already-expanded batch dim."""
+        import jax.numpy as jnp
+        from brainstate.nn import Param as NNParam
+
+        p = NNParam(jnp.ones((3, 5)))
+        result = param(p, 5, batch_size=3)
+        assert isinstance(result, NNParam)
+
+    def test_param_batch_size_mismatch(self):
+        """Test param() raises error on batch size mismatch."""
+        import jax.numpy as jnp
+        from brainstate.nn import Param as NNParam
+
+        p = NNParam(jnp.ones((4, 5)))
+        with pytest.raises(ValueError, match="batch size"):
+            param(p, 5, batch_size=3)
+
+
 class TestDocumentationExamples:
     """Test examples from documentation."""
 
