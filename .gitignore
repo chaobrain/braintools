@@ -235,3 +235,8 @@ cython_debug/
 /neuronconnect/
 /conn_old/
 /.VSCodeCounter/
+
+# brainx-sphinx-header build artifacts
+docs/_brand/
+docs/_static/css/brainx-header.css
+docs/_static/js/brainx-header.js
