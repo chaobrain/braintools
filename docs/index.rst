@@ -10,6 +10,7 @@ Overview
 ``braintools`` is a lightweight, JAX-friendly collection of utilities used across computational neuroscience workflows:
 
 - Composable synaptic connectivity builders (:mod:`braintools.conn`) with point, compartment, and population abstractions
+- A composable **cognitive task framework** (:mod:`braintools.cogtask`) for constructing trial-structured tasks — decision making, working memory, reasoning, motor — with JIT/``vmap``-friendly batch sampling and a registry of pre-built paradigms
 - Rich visualization helpers (:mod:`braintools.visualize`) covering static plots, interactive dashboards, and animation utilities
 - Metric functions for model training and evaluation (classification, regression, ranking, correlation, LFP helpers)
 - Numerical integration utilities for ODE/SDE/DDE one-step steppers (:mod:`braintools.quad`) designed for PyTrees and functional APIs
@@ -80,6 +81,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
 
     apis/changelog.md
     apis/braintools.rst
+    apis/cogtask.rst
     apis/conn.rst
     apis/file.rst
     apis/init.rst

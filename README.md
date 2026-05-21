@@ -20,6 +20,7 @@
 ## Highlights
 
 - **Composable connectivity**: declarative builders for point, multi-compartment, and population networks with spatial kernels, degree constraints, and unit-aware metadata
+- **Cognitive task framework**: phase-based, composable trial construction (`braintools.cogtask`) for training and analyzing neural networks on classic systems-neuroscience paradigms — decision making, working memory, reasoning, motor — plus a registry of pre-built tasks
 - **Visualization suite**: publication plots, interactive dashboards, 3D viewers, and animation helpers in `braintools.visualize`
 - **Metrics and solvers**: losses, evaluation metrics, and PyTree-aware ODE/SDE/DDE integrators ready for `jit`/`vmap`
 - **Signal and optimization helpers**: reusable generators and lightweight optimizers to prototype models quickly
@@ -47,6 +48,27 @@ Alternatively, install the curated BrainX bundle that ships with `braintools` an
 ```bash
 pip install -U BrainX
 ```
+
+## Cognitive task framework (`braintools.cogtask`)
+
+`braintools.cogtask` lets you build cognitive tasks from composable, named **phases** (fixation, stimulus, delay, response, ...) connected by simple operators:
+
+- `a >> b` runs `b` after `a` (sequential)
+- `a * n` repeats `a` `n` times
+- `a | b` runs `a` and `b` in parallel (multi-modal stimuli)
+- `If`, `Switch`, `While` add trial-by-trial branching
+
+Trials are generated lazily via `task.sample(i)` / `task.batch_sample(B)`, both JIT- and `vmap`-friendly, with per-trial keys derived from `seed` so batches are fully reproducible.
+
+```python
+import brainunit as u
+from braintools.cogtask import PerceptualDecisionMaking
+
+task = PerceptualDecisionMaking(t_stimulus=1500 * u.ms, num_choices=2, seed=0)
+X, Y = task.batch_sample(32)   # X: (T, B, n_in), Y: (T, B) labels
+```
+
+The package also ships a registry of canonical tasks: `PerceptualDecisionMaking`, `ContextDecisionMaking`, `DelayMatchSample`, `DelayComparison`, `GoNoGo`, `ReadySetGo`, `PostDecisionWager`, `Reaching1D`, `EvidenceAccumulation`, `HierarchicalReasoning`, and more — see the [API reference](https://brainx.chaobrain.com/braintools/apis/cogtask.html) for the full list.
 
 ## Documentation
 
