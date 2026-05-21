@@ -7,7 +7,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 """Shared fixtures and task registries for braintools.cogtask tests.
 
-A session-scoped autouse fixture pins ``brainstate.environ`` to ``dt=1.0 ms``
+A package-scoped autouse fixture pins ``brainstate.environ`` to ``dt=1.0 ms``
 so phase durations resolve to a stable timestep count across tests. The task
 lists below are reused by parametrized tests in ``cogtask_test.py``,
 ``task_test.py``, and the per-family files under ``tasks/``.
@@ -20,10 +20,13 @@ import pytest
 import braintools.cogtask as ct
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="package", autouse=True)
 def _pin_dt():
-    brainstate.environ.set(dt=1.0 * u.ms)
-    yield
+    # Use environ.context so the dt change is restored on teardown. Without
+    # this, the global mutation leaks into other test packages run later in
+    # the same session (e.g. braintools.metric, which expects unitless dt).
+    with brainstate.environ.context(dt=1.0 * u.ms):
+        yield
 
 
 # Tasks whose phase durations are fixed at construction time. All trials share
