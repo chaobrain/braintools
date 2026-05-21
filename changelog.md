@@ -1,6 +1,42 @@
 # Release Notes
 
 
+## Unreleased
+
+### `braintools.cogtask` — variable-length trial sequences
+
+- **`VariableDuration` phase**: declarative phase whose duration is sampled at
+  trial time from a context entry. Its `max_steps` (Python int) is used as the
+  buffer slot size; `step_count` (traced int32) reports the actual length.
+- **Packed-mode trial generation**: `Task` auto-detects variable-length phase
+  trees via `phase_tree_is_variable(phases)`. When any phase declares
+  `is_variable = True`, `sample_trial` allocates buffers of size
+  `task.max_trial_duration()` and writes only the front `t_cursor` timesteps,
+  filling the trailing positions with zero and the mask with `False`.
+- **`Task.batch_sample(..., return_mask=True)`**: returns `(X, Y, mask)`
+  with shape-stable buffers under `brainstate.transform.jit` and
+  `brainstate.transform.vmap2`. Existing fixed-length tasks are unchanged;
+  `return_mask=True` on a fixed task yields an all-`True` mask.
+- **Conditional compounds**: `If` packed branch uses `jax.lax.cond` so both
+  branches contribute shape-stable output; `Switch` and `While` use Python
+  dispatch (concrete keys / Python `bool` conditions) and zero-pad to the
+  static maximum.
+- **Migrated tasks**: `HierarchicalReasoning`, `IntervalDiscrimination`,
+  `ReadySetGo` now use `VariableDuration` internally and work under
+  `batch_sample` with masking. Previously these tasks were valid only via
+  `sample_trial` and not vmap-safe.
+- **Samplers**: `TruncExp` and `UniformDuration` advertise
+  `is_variable = True` and expose `max_value()` / `min_value()` so phases can
+  size their slots statically from sampler bounds.
+- **API additions**: `VariableDuration`, `phase_tree_is_variable`,
+  `execute_phase_packed` are re-exported from `braintools.cogtask`. The
+  `info` dict returned by `sample_trial` gains a `'mask'` entry (`None` for
+  fixed tasks, a `(T,)` bool array for variable tasks).
+- **Migration note**: `Context` adds optional fields `mask`, `t_cursor`,
+  `phase_max_steps`, `phase_step_count` — `None` outside packed mode. The
+  public sample_trial contract is preserved.
+
+
 ## Version 0.1.7 (2026-01-05)
 
 ### Major Features

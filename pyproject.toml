@@ -51,64 +51,47 @@ dependencies = [
 
 [project.optional-dependencies]
 testing = [
-    "jax",
-    "brainstate",
-    "brainunit",
-    "matplotlib",
-    "nevergrad",
-    "scipy",
-    "msgpack",
-    "optax",
     "pytest",
     "absl-py",
-    "typing_extensions",
+    "nevergrad",
 ]
 cpu = [
     "jax[cpu]",
-    "brainstate",
-    "brainunit",
-    "matplotlib",
-    "scipy",
-    "msgpack",
-    "optax",
-    "typing_extensions",
 ]
 cuda12 = [
     "jax[cuda12]",
-    "brainstate",
-    "brainunit",
-    "matplotlib",
-    "scipy",
-    "msgpack",
-    "optax",
-    "typing_extensions",
 ]
 cuda13 = [
     "jax[cuda13]",
-    "brainstate",
-    "brainunit",
-    "matplotlib",
-    "scipy",
-    "msgpack",
-    "optax",
-    "typing_extensions",
 ]
 tpu = [
     "jax[tpu]",
-    "brainstate",
-    "brainunit",
-    "matplotlib",
-    "scipy",
-    "msgpack",
-    "optax",
-    "typing_extensions",
+]
+cogtask = [
+    "brainstate>=0.1.0",
+    "brainunit>=0.0.8",
+]
+doc = [
+    "pandoc",
+    "Jinja2",
+    "sphinx>=9.0.4",
+    "myst-nb",
+    "sphinx_thebe",
+    "sphinx-autodoc-typehints",
+    "sphinx-book-theme>=1.2.0",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-remove-toctrees",
+    "jupyter-sphinx>=0.5.3",
+    "sphinx-design",
+    "sphinx_math_dollar",
+    "brainx-sphinx-header>=0.4.0",
 ]
 
 [project.urls]
 homepage = "https://github.com/chaobrain/braintools"
 repository = "https://github.com/chaobrain/braintools"
 "Bug Tracker" = "https://github.com/chaobrain/braintools/issues"
-Documentation = "https://braintools.readthedocs.io/"
+Documentation = "https://brainx.chaobrain.com/braintools/"
 
 [tool.setuptools.packages.find]
 include = ["braintools*"]
@@ -123,4 +106,4 @@ exclude = [
 ]
 
 [tool.setuptools.dynamic]
-version = { attr = "braintools.__version__" }
+version = { attr = "braintools._version.__version__" }
