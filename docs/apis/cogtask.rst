@@ -7,6 +7,14 @@
 A modular, composable framework for constructing cognitive tasks for neural
 network training and computational neuroscience simulations.
 
+.. seealso::
+
+   For runnable, narrative walkthroughs, see the tutorials:
+
+   - :doc:`../cogtask/01_quickstart`
+   - :doc:`../cogtask/02_building_custom_tasks`
+   - :doc:`../cogtask/03_variable_length_trials`
+
 Overview
 --------
 
@@ -19,7 +27,7 @@ The ``braintools.cogtask`` module provides:
   (:class:`Sequence`, :class:`Repeat`, :class:`Parallel`) for building rich
   trial structures from simple parts
 - **Conditional control flow** with :class:`If`, :class:`Switch`, and
-  :class:`While` for trial-by-trial branching and variable-length tasks
+  :class:`While` for trial-by-trial branching and variable-iteration tasks
 - **A feature-encoding system** that maps trial state into input/output
   channels via :class:`Feature`/:class:`FeatureSet` and value-spec encoders
   (``one_hot``, ``circular``, ``von_mises``, ``gaussian``, ``cos_sin``, ...)
@@ -28,59 +36,6 @@ The ``braintools.cogtask`` module provides:
 - **JIT/``vmap``-friendly trial generation** through :meth:`Task.sample` and
   :meth:`Task.batch_sample`, designed to integrate cleanly with
   `brainstate <https://brainstate.readthedocs.io/>`_ and JAX training loops
-
-Quick Start
------------
-
-Using a pre-built task:
-
-.. code-block:: python
-
-   import brainunit as u
-   from braintools.cogtask import PerceptualDecisionMaking
-
-   task = PerceptualDecisionMaking(t_stimulus=1500 * u.ms, num_choices=2, seed=0)
-   X, Y = task.batch_sample(32)
-   # X: (T, B, num_inputs)  Y: (T, B) categorical labels
-
-Building a custom task from phases:
-
-.. code-block:: python
-
-   import brainunit as u
-   from braintools.cogtask import (
-       Task, Feature, concat,
-       Fixation, Stimulus, Delay, Response,
-       circular,
-   )
-
-   fix = Feature(1, 'fixation')
-   stim = Feature(8, 'stimulus')
-   choice = Feature(2, 'choice')
-
-   task = Task(
-       phases=concat([
-           Fixation(100 * u.ms, inputs={'fixation': 1.0}, outputs={'label': 0}),
-           Stimulus(500 * u.ms,
-                    inputs={'fixation': 1.0,
-                            'stimulus': circular('direction', 'coherence')},
-                    outputs={'label': 0}),
-           Delay(500 * u.ms, inputs={'fixation': 1.0}, outputs={'label': 0}),
-           Response(100 * u.ms,
-                    inputs={'fixation': 0.0},
-                    outputs={'label': lambda ctx, f: ctx['ground_truth'] + 1}),
-       ]),
-       input_features=fix + stim,
-       output_features=fix + choice,
-       trial_init=lambda ctx: ctx.update(
-           ground_truth=ctx.rng.choice(2),
-           coherence=51.2,
-           direction=ctx.rng.uniform(0, 6.2832),
-       ),
-       seed=0,
-   )
-
-   X, Y, info = task.sample_trial(0)
 
 
 Core Task Framework
@@ -99,6 +54,17 @@ trial-level user data.
 
    Task
    Context
+
+Two equivalent ways to define a task are supported:
+
+- **Instance-based**: pass ``phases=``, ``input_features=``,
+  ``output_features=``, and ``trial_init=`` directly to :class:`Task`. Best
+  for one-off tasks or interactive exploration.
+- **Class-based**: subclass :class:`Task` and override
+  :meth:`Task.define_features`, :meth:`Task.define_phases`, and
+  :meth:`Task.trial_init`. Best for reusable, parameterized tasks — all
+  pre-built tasks follow this pattern. See
+  :doc:`../cogtask/02_building_custom_tasks` for worked examples of both.
 
 
 Phases and Composition
@@ -200,6 +166,13 @@ loops until a condition fails (bounded by ``max_iterations``).
    Switch
    While
 
+Because these phases inspect trial state during a Python-level pass over the
+tree, the branch they take must be derivable from values set in
+``trial_init`` (or in earlier phases' ``on_exit`` hooks). Their total
+duration, summed across iterations or branches, contributes to the per-trial
+buffer size — see :doc:`../cogtask/03_variable_length_trials` for the
+implications.
+
 
 Features
 --------
@@ -291,14 +264,8 @@ Pre-built Tasks
 The ``cogtask`` package ships a library of standard cognitive paradigms,
 each implemented as a subclass of :class:`Task` that defines its own
 features, phase structure, and trial-init logic. Construct them like any
-other :class:`Task`, optionally passing ``seed=`` for reproducibility:
-
-.. code-block:: python
-
-   from braintools.cogtask import DelayMatchSample
-
-   task = DelayMatchSample(t_delay=2000 * u.ms, num_stimuli=16, seed=0)
-   X, Y = task.batch_sample(64)
+other :class:`Task`, optionally passing ``seed=`` for reproducibility — see
+:doc:`../cogtask/01_quickstart` for a runnable example.
 
 Decision Making
 ~~~~~~~~~~~~~~~
@@ -432,6 +399,36 @@ A :class:`Task` produces one trial as follows:
 :meth:`Task.batch_sample` ``vmap`` s this process, producing batches whose
 keys differ by ``fold_in`` of the trial index so batches are reproducible.
 
+Sampling APIs and tensor shapes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A configured :class:`Task` exposes three sampling entry points. The shapes
+below assume ``num_inputs == task.num_inputs`` and ``num_outputs ==
+task.num_outputs``; ``T`` is the per-trial timestep count.
+
+================================================  =====================================  ============================================
+Method                                            Returns                                 Shapes
+================================================  =====================================  ============================================
+:meth:`Task.sample_trial(index)`                  ``(X, Y, info)``                       ``X: (T, num_inputs)``, ``Y: (T,)`` or ``(T, num_outputs)``
+:meth:`Task.sample(index)` / ``task[index]``      ``(X, Y)``                             same as above (JIT-compiled)
+:meth:`Task.batch_sample(B)`                      ``(X, Y)``                             ``X: (T, B, num_inputs)``, ``Y: (T, B)`` or ``(T, B, num_outputs)``
+:meth:`Task.batch_sample(B, time_first=False)`    ``(X, Y)``                             ``X: (B, T, num_inputs)``, ``Y: (B, T)`` or ``(B, T, num_outputs)``
+:meth:`Task.batch_sample(B, return_meta=True)`    ``(X, Y, meta)``                        as above; ``meta`` is task-defined
+================================================  =====================================  ============================================
+
+The third value returned from :meth:`Task.sample_trial` is a dictionary
+with the following keys:
+
+- ``phase_history`` — list of ``(name, start, end)`` tuples logging each
+  phase's contribution to the timeline
+- ``trial_state`` — copy of the user state set via ``trial_init`` (e.g.
+  ``ground_truth``, ``coherence``)
+- ``dt`` — the resolved time step (from ``brainstate.environ.get_dt()``)
+- ``index`` — the trial index requested
+
+To customize the metadata returned by ``batch_sample(..., return_meta=True)``,
+override :meth:`Task.get_trial_meta` in your subclass.
+
 Output modes
 ~~~~~~~~~~~~
 
@@ -441,6 +438,31 @@ Output modes
   each output feature by name (e.g. ``'direction'``, ``'fixation_out'``).
   Use this for continuous-report tasks such as
   :class:`DelayDirectionReproduction`.
+
+Declarative phase shape conventions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A value spec for ``inputs=`` can be a constant or a callable
+``f(ctx, feature) -> array``. The encoded value is broadcast into the
+phase's slice of ``ctx.inputs`` according to its shape:
+
+- scalar → constant for every timestep and feature unit
+- 1-D, shape ``(feature.num,)`` → broadcast along the time axis
+- 2-D, shape ``(duration, feature.num)`` → written directly
+
+For ``outputs=`` the conventions depend on the output mode:
+
+- Categorical (``ctx.outputs.ndim == 1``): use the ``'label'`` key.
+  Accepts a scalar (constant label for the phase) or a 1-D array of shape
+  ``(duration,)`` (time-varying labels). Features other than ``'label'`` are
+  ignored.
+- Vector (``ctx.outputs.ndim == 2``): write per-output-feature; accept
+  ``(feature.num,)`` (broadcast along time) or ``(duration, feature.num)``.
+
+The ``noise=`` field maps a feature name to a ``sigma`` Quantity in units of
+``ms**0.5``. Noise is sampled fresh per phase and scaled by
+``1 / sqrt(dt)`` so the resulting signal variance is invariant under changes
+of ``dt``.
 
 Feature index management
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -457,4 +479,47 @@ Reproducibility
 A :class:`Task` constructed with ``seed=N`` derives each trial's key as
 ``jax.random.fold_in(jax.random.PRNGKey(N), trial_index)``. This makes
 ``task.sample(i)`` deterministic and ``task.batch_sample(B, start_index=k)``
-reproducible and non-overlapping across calls.
+reproducible and non-overlapping across calls. If ``seed`` is omitted, trials
+draw fresh randomness from ``brainstate``'s default RNG.
+
+Time step
+~~~~~~~~~
+
+All durations are resolved against the *currently active* time step,
+``brainstate.environ.get_dt()``. The same task can be re-sampled at a finer
+or coarser ``dt`` simply by wrapping it in a ``brainstate.environ.context``;
+see :doc:`../cogtask/01_quickstart` for a worked example.
+
+
+Variable-length trial sequences
+-------------------------------
+
+.. note::
+   **Status — partially supported / under active development.** Per-phase
+   variable durations, ``If``/``Switch``/``While``, and single-trial JIT
+   work today; uniform-length ``batch_sample`` is a hard requirement and
+   first-class mask-based batching is *planned*. The API for automatic
+   padding/masking is **not yet stable** and may change.
+
+What works today:
+
+- :class:`TruncExp` and :class:`UniformDuration` as callables sampled in
+  ``trial_init`` and stored in :class:`Context`.
+- :class:`If`, :class:`Switch`, and :class:`While` for data-dependent
+  control flow within a single trial. Their *upper-bound* duration sets the
+  trial's tensor size.
+- ``task.sample(index)`` — JIT-compiled per trial.
+
+Current limitation: :meth:`Task.batch_sample` uses ``vmap`` over the trial
+index, so every trial in a batch must produce buffers of *identical* shape.
+Variable lengths *across the batch axis* are not yet expressible in the
+JIT/``vmap`` path.
+
+Planned design: a fixed ``T_max`` per task, padded buffers, and a returned
+``mask`` of shape ``(T_max, B)`` marking the live region. A
+``masked_loss`` helper is part of the same roadmap.
+
+See :doc:`../cogtask/03_variable_length_trials` for worked workarounds
+available today (gated encoders, bucketed batching, explicit mask channels)
+and extension points if you need to experiment before the official API
+lands.

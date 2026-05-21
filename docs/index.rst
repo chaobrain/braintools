@@ -62,6 +62,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling
     :maxdepth: 2
     :caption: Tutorials
 
+    cogtask/index.md
     conn/index.md
     file/index.md
     init/index.md
