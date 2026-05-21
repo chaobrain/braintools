@@ -173,6 +173,15 @@ Working-memory epochs:
    Match
    Comparison
 
+Variable-length epochs:
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   VariableDuration
+
 Composition Helpers
 ~~~~~~~~~~~~~~~~~~~
 
@@ -182,6 +191,8 @@ Composition Helpers
 
    concat
    execute_phase
+   execute_phase_packed
+   phase_tree_is_variable
 
 
 Conditional Phases
@@ -431,6 +442,85 @@ A :class:`Task` produces one trial as follows:
 
 :meth:`Task.batch_sample` ``vmap`` s this process, producing batches whose
 keys differ by ``fold_in`` of the trial index so batches are reproducible.
+
+Variable-length trials
+~~~~~~~~~~~~~~~~~~~~~~
+
+A phase tree is *variable-length* when any phase advertises
+``is_variable = True``. The built-in cases are :class:`VariableDuration`
+(its duration is read from ``ctx[ctx_key]``), :class:`If`, :class:`Switch`,
+and :class:`While`. :func:`phase_tree_is_variable` walks the tree to
+detect this at construction time; :class:`Task` records the result as
+``task.is_variable_length`` and routes such trials through the packed
+sample path.
+
+Packed-mode semantics:
+
+- ``task.max_trial_duration()`` returns a Python ``int`` upper bound,
+  computed by walking each phase's ``max_steps``. This value is safe to
+  use as a static buffer dimension under ``brainstate.transform.jit``
+  and ``brainstate.transform.vmap2``.
+- ``sample_trial`` allocates ``X`` of shape
+  ``(max_trial_duration, num_inputs)``, ``Y`` of shape
+  ``(max_trial_duration,)`` (categorical) or
+  ``(max_trial_duration, num_outputs)`` (vector), and ``mask`` of shape
+  ``(max_trial_duration,)``.
+- Each phase contributes ``step_count`` valid timesteps starting at
+  ``ctx.t_cursor``. The phase's writes are gated to the active region,
+  trailing positions remain zero, and the mask is set to ``True`` only
+  over the actual valid range.
+- ``batch_sample(B, return_mask=True)`` returns ``(X, Y, mask)`` with the
+  mask in the same time/batch layout as ``X``/``Y``. Fixed-length tasks
+  also support ``return_mask=True``; their mask is all-``True``.
+
+Example::
+
+    import brainunit as u
+    import jax.numpy as jnp
+    from braintools.cogtask import (
+        Task, Feature, Fixation, Stimulus, Response,
+        VariableDuration, concat,
+    )
+
+    fix = Feature(1, 'fixation')
+    stim = Feature(2, 'stim')
+    choice = Feature(2, 'choice')
+
+    phases = concat([
+        Fixation(50 * u.ms, inputs={'fixation': 1.0}),
+        VariableDuration(
+            min_duration=200 * u.ms,
+            max_duration=1500 * u.ms,
+            ctx_key='delay',
+            inputs={'fixation': 1.0},
+        ),
+        Stimulus(100 * u.ms, inputs={'stim': lambda c, f: jnp.ones(f.num)}),
+        Response(50 * u.ms, outputs={'label': lambda c, f: c['gt']}),
+    ])
+
+    def init(ctx):
+        ctx['delay'] = ctx.rng.uniform(200.0, 1500.0)
+        ctx['gt'] = ctx.rng.choice(2)
+
+    task = Task(
+        phases=phases,
+        input_features=fix + stim,
+        output_features=fix + choice,
+        trial_init=init,
+        seed=0,
+    )
+
+    assert task.is_variable_length
+    X, Y, mask = task.batch_sample(64, return_mask=True)
+    # X, Y, mask all share their time dimension == task.max_trial_duration()
+
+Conditional compounds (:class:`If`, :class:`Switch`, :class:`While`) work
+in packed mode too. :class:`If` uses ``jax.lax.cond`` so both branches
+contribute shape-stable output even when the predicate is a tracer.
+:class:`Switch` and :class:`While` use Python-level dispatch: the
+selector must return a hashable key (not a tracer), and ``While``'s
+condition must return a Python ``bool``. Branches that don't run leave
+the buffer slot at zero and don't advance ``t_cursor``.
 
 Output modes
 ~~~~~~~~~~~~

@@ -86,8 +86,12 @@ def test_if_without_else_collapses_duration_when_condition_false():
         phases=phases, input_features=FeatureSet(fix), output_features=fix + out,
         trial_init=lambda ctx: ctx.update(go=False), seed=0,
     )
-    X, _, _ = task.sample_trial(0)
-    assert X.shape[0] == 5, "If without else and false condition contributes no timesteps"
+    X, _, info = task.sample_trial(0)
+    # Packed-mode: buffer is sized to ``max_trial_duration`` (5 + 20) and a
+    # mask gates the actual valid timesteps. The false branch contributes 0
+    # steps, so only the fixation's 5 timesteps should be valid.
+    assert X.shape[0] == 25
+    assert int(jnp.sum(info['mask'])) == 5
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +165,12 @@ def test_switch_with_unknown_key_and_no_default_yields_zero_duration():
         phases=phases, input_features=fix + a, output_features=fix + out,
         trial_init=lambda ctx: ctx.update(rule='nope'), seed=0,
     )
-    X, _, _ = task.sample_trial(0)
-    assert X.shape[0] == 3, "Missing case with no default contributes no timesteps"
+    X, _, info = task.sample_trial(0)
+    # Packed-mode: buffer is sized to ``max_trial_duration`` (3 + 10). The
+    # Switch resolves to a missing key with no default and contributes 0
+    # steps, so only the fixation's 3 timesteps should be marked valid.
+    assert X.shape[0] == 13
+    assert int(jnp.sum(info['mask'])) == 3
 
 
 # ---------------------------------------------------------------------------

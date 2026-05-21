@@ -24,7 +24,15 @@ import numpy as np
 
 from typing import Optional, Callable, Tuple, Dict, Any, Literal
 from .context import Context
-from .phase import Phase, Sequence, Repeat, Parallel, execute_phase
+from .phase import (
+    Phase,
+    Sequence,
+    Repeat,
+    Parallel,
+    execute_phase,
+    execute_phase_packed,
+    phase_tree_is_variable,
+)
 
 __all__ = ['Task', 'create_task']
 
@@ -143,6 +151,12 @@ class Task:
 
         self._bind_features_to_phases(phases)
 
+        # Variable-length detection: any phase in the tree that declares
+        # ``is_variable = True`` (VariableDuration, If/Switch/While, …)
+        # promotes the task to packed mode. Fixed tasks keep the original
+        # fast path with no buffer-size overhead.
+        self._is_variable_length: bool = phase_tree_is_variable(phases)
+
     def _trial_key(self, index: int, key: Optional[jax.Array] = None) -> Optional[jax.Array]:
         """Derive a per-trial PRNG key from ``seed`` and ``index``.
 
@@ -218,6 +232,29 @@ class Task:
     def dt(self):
         return brainstate.environ.get_dt()
 
+    @property
+    def is_variable_length(self) -> bool:
+        """True if any phase in the tree has ``is_variable = True``.
+
+        Variable-length tasks allocate trial buffers of size
+        ``max_trial_duration`` and return a per-timestep mask alongside
+        ``X``/``Y`` from :meth:`batch_sample` (use ``return_mask=True``).
+        """
+        return self._is_variable_length
+
+    def max_trial_duration(self, ctx: Optional[Context] = None) -> int:
+        """Static upper bound on the trial's timestep count.
+
+        For fixed tasks this equals the sum of per-phase ``get_duration``
+        outputs. For variable-length tasks each phase contributes its
+        ``max_steps`` (e.g. ``ceil(max_duration / dt)`` for
+        :class:`VariableDuration`). The result is a Python ``int`` and is
+        safe to use as a static buffer dimension under JIT/vmap.
+        """
+        if ctx is None:
+            ctx = Context(key=self._root_key)
+        return int(self.phases.max_steps(ctx))
+
     def sample_trial(
         self,
         index: int = 0,
@@ -241,6 +278,9 @@ class Task:
 
         if self._trial_init_func:
             self._trial_init_func(ctx)
+
+        if self._is_variable_length:
+            return self._sample_trial_packed(ctx, index)
 
         # Dry-run pass: compute total duration without mutating ctx state. Note
         # that ``get_duration`` must be pure with respect to ctx.rng — predicate
@@ -269,6 +309,43 @@ class Task:
             'trial_state': ctx.state,
             'dt': self.dt,
             'index': index,
+            'mask': None,
+        }
+        return ctx.inputs, ctx.outputs, info
+
+    def _sample_trial_packed(self, ctx: Context, index: int):
+        """Variable-length trial generation.
+
+        Buffers are sized by ``max_trial_duration`` (a Python int derived
+        from each phase's ``max_steps``) so shapes stay static under JIT
+        and ``vmap``. A boolean ``mask`` of length ``max_trial_duration``
+        marks the valid timesteps written by the phases; positions past
+        the actual trial length are zeroed in ``X``/``Y`` and ``False`` in
+        the mask.
+        """
+        max_dur = self.max_trial_duration(ctx)
+
+        ctx.inputs = jnp.zeros((max_dur, self.num_inputs), dtype=jnp.float32)
+        if self.output_mode == 'categorical':
+            ctx.outputs = jnp.zeros((max_dur,), dtype=jnp.int32)
+        else:
+            ctx.outputs = jnp.zeros((max_dur, self.num_outputs), dtype=jnp.float32)
+        ctx.mask = jnp.zeros((max_dur,), dtype=jnp.bool_)
+        ctx.t_cursor = jnp.int32(0)
+
+        ctx['output_mode'] = self.output_mode
+
+        ctx.current_step = 0
+        ctx.phase_history.clear()
+        execute_phase_packed(self.phases, ctx)
+
+        info = {
+            'phase_history': ctx.phase_history.copy(),
+            'trial_state': ctx.state,
+            'dt': self.dt,
+            'index': index,
+            'mask': ctx.mask,
+            't_cursor': ctx.t_cursor,
         }
         return ctx.inputs, ctx.outputs, info
 
@@ -306,8 +383,16 @@ class Task:
     def sample(self, index: int):
         return self[index]
 
-    @brainstate.transform.jit(static_argnums=(0, 1), static_argnames=['time_first', 'return_meta'])
-    def batch_sample(self, size: int, /, time_first: bool = True, return_meta: bool = False, start_index: int = 0):
+    @brainstate.transform.jit(static_argnums=(0, 1), static_argnames=['time_first', 'return_meta', 'return_mask'])
+    def batch_sample(
+        self,
+        size: int,
+        /,
+        time_first: bool = True,
+        return_meta: bool = False,
+        start_index: int = 0,
+        return_mask: bool = False,
+    ):
         """Sample a batch of ``size`` trials with indices ``start_index..start_index+size-1``.
 
         When the task was constructed with ``seed=...``, each trial in the batch
@@ -315,9 +400,31 @@ class Task:
         ``batch_sample`` with the same ``start_index`` is reproducible, and
         successive calls with different ``start_index`` produce non-overlapping
         batches.
+
+        Parameters
+        ----------
+        return_mask : bool, optional
+            If True, also return a ``(T, B)`` (or ``(B, T)``) boolean mask
+            of valid timesteps. Required for variable-length tasks if you
+            want to know which trailing positions are padding. The mask is
+            always-True for fixed-length tasks.
         """
         indices = jnp.arange(size, dtype=jnp.int32) + jnp.asarray(start_index, dtype=jnp.int32)
         out_axes_xy = 1 if time_first else 0
+        mask_axis = 1 if time_first else 0
+        if return_mask:
+            if return_meta:
+                X, Y, mask, meta = brainstate.transform.vmap2(
+                    lambda i: self.__getitem_with_mask_and_meta__(i),
+                    out_axes=(out_axes_xy, out_axes_xy, mask_axis, 0)
+                )(indices)
+                return X, Y, mask, meta
+            else:
+                X, Y, mask = brainstate.transform.vmap2(
+                    lambda i: self.__getitem_with_mask__(i),
+                    out_axes=(out_axes_xy, out_axes_xy, mask_axis)
+                )(indices)
+                return X, Y, mask
         if return_meta:
             X, Y, meta = brainstate.transform.vmap2(
                 lambda i: self.__getitem_with_meta__(i),
@@ -333,6 +440,22 @@ class Task:
     def __getitem__(self, index: int):
         X, Y, _ = self.sample_trial(index)
         return X, Y
+
+    def __getitem_with_mask__(self, index: int):
+        X, Y, info = self.sample_trial(index)
+        mask = info.get('mask')
+        if mask is None:
+            # Fixed-length task: mask is all True for the trial's length.
+            mask = jnp.ones((X.shape[0],), dtype=jnp.bool_)
+        return X, Y, mask
+
+    def __getitem_with_mask_and_meta__(self, index: int):
+        X, Y, info = self.sample_trial(index)
+        mask = info.get('mask')
+        if mask is None:
+            mask = jnp.ones((X.shape[0],), dtype=jnp.bool_)
+        meta = self.get_trial_meta(info["trial_state"])
+        return X, Y, mask, meta
 
     def __repr__(self) -> str:
         return (
