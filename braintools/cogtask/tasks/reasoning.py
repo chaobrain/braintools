@@ -104,28 +104,17 @@ class HierarchicalReasoning(Task):
         output_features = fix_feat + resp_feat
         return input_features, output_features
 
-    def _compute_variable_delay(self, ctx: Context) -> int:
-        """Compute delay duration from context."""
-        delay_duration = ctx.get('delay_duration', 500.0)
-        dt = ctx.dt
-        if hasattr(dt, 'mantissa'):
-            dt_val = float(dt.mantissa)
-        else:
-            dt_val = float(dt)
-        if dt_val == 0:
-            raise ValueError("dt cannot be zero")
-        return max(1, int(delay_duration / dt_val))
-
     def define_phases(self) -> Phase:
-        # Create a custom DeclarativePhase for variable delay
-        variable_delay = DeclarativePhase(
-            duration=0 * u.ms,  # Will be overridden by get_duration
-            name='delay',
+        from ..phase import VariableDuration
+
+        variable_delay = VariableDuration(
+            min_duration=self.t_delay[0],
+            max_duration=self.t_delay[1],
+            ctx_key='delay_duration',
             inputs={'fixation': 1.0},
-            outputs={'label': 0}
+            outputs={'label': 0},
+            name='delay',
         )
-        # Override get_duration method
-        variable_delay.get_duration = lambda ctx: self._compute_variable_delay(ctx)
 
         fixation_inputs = {'fixation': 1.0}
         if self.show_rule_cue:
@@ -171,9 +160,9 @@ class HierarchicalReasoning(Task):
         delay_max = float(self.t_delay[1].to(u.ms).mantissa)
 
         # Trial index determines rule block (alternating every 100 trials).
-        # trial_index is a Python int set by Task.sample_trial, so a Python
-        # branch is correct here.
-        trial_idx = int(ctx.get('trial_index', 0))
+        # Under ``batch_sample``/vmap the index is a traced int32 scalar, so
+        # use jnp arithmetic rather than Python int() coercion.
+        trial_idx = jnp.asarray(ctx.get('trial_index', 0), dtype=jnp.int32)
         ctx['rule'] = (trial_idx // 100) % 2  # 0 or 1
 
         # Sample delay

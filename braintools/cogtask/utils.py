@@ -92,6 +92,16 @@ class TruncExp:
 
         self.rng = brainstate.random.default_rng(key)
 
+    is_variable: bool = True
+
+    def max_value(self):
+        """Truncation upper bound in the sampler's time unit."""
+        return u.maybe_decimal(self._max * self._time_unit)
+
+    def min_value(self):
+        """Truncation lower bound in the sampler's time unit."""
+        return u.maybe_decimal(self._min * self._time_unit)
+
     def __call__(self, ctx=None):
         """
         Sample a value from the truncated exponential distribution.
@@ -166,6 +176,16 @@ class UniformDuration:
         self._max = u.Quantity(max_val).to(self._time_unit).mantissa
 
         self.rng = brainstate.random.default_rng(key)
+
+    is_variable: bool = True
+
+    def max_value(self):
+        """Upper bound of the uniform range in the sampler's time unit."""
+        return u.maybe_decimal(self._max * self._time_unit)
+
+    def min_value(self):
+        """Lower bound of the uniform range in the sampler's time unit."""
+        return u.maybe_decimal(self._min * self._time_unit)
 
     def __call__(self, ctx=None):
         """

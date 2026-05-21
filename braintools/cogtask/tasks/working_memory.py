@@ -25,7 +25,7 @@ from ..encoder import one_hot, circular, scalar, von_mises, gaussian, identity, 
 from ..feature import Feature
 from ..label import match_label, comparison_label
 from ..phase import (concat, Phase, Fixation, Stimulus, Delay, Response, Sample, Test,
-                     Cue, DeclarativePhase)
+                     Cue, DeclarativePhase, VariableDuration)
 from ..task import Task
 from .._typing import Duration, Data
 from ..utils import choice
@@ -1104,53 +1104,30 @@ class IntervalDiscrimination(Task):
         output_features = fix_feat + Feature(2, 'response')
         return input_features, output_features
 
-    def _compute_interval1_duration(self, ctx: Context) -> int:
-        """Compute interval1 duration from context."""
-        duration = ctx.get('interval1_duration', 500.0)
-        dt = ctx.dt
-        if hasattr(dt, 'mantissa'):
-            dt_val = float(dt.mantissa)
-        else:
-            dt_val = float(dt)
-        if dt_val == 0:
-            raise ValueError("dt cannot be zero")
-        return max(1, int(duration / dt_val))
-
-    def _compute_interval2_duration(self, ctx: Context) -> int:
-        """Compute interval2 duration from context."""
-        duration = ctx.get('interval2_duration', 500.0)
-        dt = ctx.dt
-        if hasattr(dt, 'mantissa'):
-            dt_val = float(dt.mantissa)
-        else:
-            dt_val = float(dt)
-        if dt_val == 0:
-            raise ValueError("dt cannot be zero")
-        return max(1, int(duration / dt_val))
-
     def define_phases(self) -> Phase:
-        # Create custom DeclarativePhases for variable intervals
-        interval1 = DeclarativePhase(
-            duration=0 * u.ms,
+        interval1 = VariableDuration(
+            min_duration=self.t_interval1[0],
+            max_duration=self.t_interval1[1],
+            ctx_key='interval1_duration',
             name='interval1',
             inputs={
                 'fixation': 1.0,
                 'interval': 1.0
             },
-            outputs={'label': 0}
+            outputs={'label': 0},
         )
-        interval1.get_duration = lambda ctx: self._compute_interval1_duration(ctx)
 
-        interval2 = DeclarativePhase(
-            duration=0 * u.ms,
+        interval2 = VariableDuration(
+            min_duration=self.t_interval2[0],
+            max_duration=self.t_interval2[1],
+            ctx_key='interval2_duration',
             name='interval2',
             inputs={
                 'fixation': 1.0,
                 'interval': 1.0
             },
-            outputs={'label': 0}
+            outputs={'label': 0},
         )
-        interval2.get_duration = lambda ctx: self._compute_interval2_duration(ctx)
 
         return concat([
             Fixation(
@@ -1357,18 +1334,6 @@ class ReadySetGo(Task):
         output_features = fix_feat + go_feat
         return input_features, output_features
 
-    def _compute_measure_interval(self, ctx: Context) -> int:
-        """Compute measure interval duration from context."""
-        duration = ctx.get('measure_interval', 500.0)
-        dt = ctx.dt
-        if hasattr(dt, 'mantissa'):
-            dt_val = float(dt.mantissa)
-        else:
-            dt_val = float(dt)
-        if dt_val == 0:
-            raise ValueError("dt cannot be zero")
-        return max(1, int(duration / dt_val))
-
     def _production_label(self, ctx: Context, feature) -> jnp.ndarray:
         """Time-varying production label across the entire phase slice.
 
@@ -1384,14 +1349,14 @@ class ReadySetGo(Task):
         return jnp.where(t < go_time, 1, 2).astype(jnp.int32)
 
     def define_phases(self) -> Phase:
-        # Measure interval phase
-        measure_interval = DeclarativePhase(
-            duration=0 * u.ms,
+        measure_interval = VariableDuration(
+            min_duration=self.t_interval[0],
+            max_duration=self.t_interval[1],
+            ctx_key='measure_interval',
             name='measure',
             inputs={'fixation': 1.0},
-            outputs={'label': 0}
+            outputs={'label': 0},
         )
-        measure_interval.get_duration = lambda ctx: self._compute_measure_interval(ctx)
 
         return concat([
             Cue(

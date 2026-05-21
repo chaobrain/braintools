@@ -141,6 +141,7 @@ from .phase import (
     Comparison,
     Blank,
     DeclarativePhase,
+    VariableDuration,
 )
 from .phase import (
     Phase,
@@ -149,6 +150,8 @@ from .phase import (
     Parallel,
     concat,
     execute_phase,
+    execute_phase_packed,
+    phase_tree_is_variable,
 )
 from .task import Task
 # Pre-built tasks
@@ -206,6 +209,8 @@ __all__ = [
     'Parallel',
     'concat',
     'execute_phase',
+    'execute_phase_packed',
+    'phase_tree_is_variable',
     'If',
     'Switch',
     'While',
@@ -223,6 +228,7 @@ __all__ = [
     'Response',
     'Cue',
     'DeclarativePhase',
+    'VariableDuration',
     # Memory Phases
     'Sample',
     'Test',

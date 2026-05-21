@@ -77,6 +77,17 @@ class Context:
         self.inputs: Optional[jax.Array] = None
         self.outputs: Optional[jax.Array] = None
 
+        # Variable-length / packed-mode bookkeeping (None in fixed mode).
+        # ``mask`` is a ``(T_max,)`` bool array; True for "real" timesteps.
+        # ``t_cursor`` is a traced int32 scalar counting valid timesteps
+        # written so far. ``phase_max_steps`` / ``phase_step_count`` expose
+        # the current phase's static upper bound and traced actual length
+        # to encode callbacks that need to size per-phase blocks.
+        self.mask: Optional[jax.Array] = None
+        self.t_cursor: Optional[jax.Array] = None
+        self.phase_max_steps: Optional[int] = None
+        self.phase_step_count: Optional[jax.Array] = None
+
     def __getitem__(self, key: str) -> Any:
         """Get a value from the trial state."""
         return self._state[key]
@@ -105,6 +116,10 @@ class Context:
         self.phase_end = 0
         self.current_phase = None
         self.phase_history.clear()
+        self.mask = None
+        self.t_cursor = None
+        self.phase_max_steps = None
+        self.phase_step_count = None
 
     @property
     def dt(self) -> Union[float, u.Quantity]:

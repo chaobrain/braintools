@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Union, Callable, Any
 
 import brainunit as u
+import jax
 import jax.numpy as jnp
 
 from .context import Context
@@ -32,6 +33,8 @@ __all__ = [
     'Parallel',
     'concat',
     'execute_phase',
+    'execute_phase_packed',
+    'phase_tree_is_variable',
 
     # Declarative phases
     'DeclarativePhase',
@@ -46,6 +49,7 @@ __all__ = [
     'Match',
     'Comparison',
     'Blank',
+    'VariableDuration',
 ]
 
 
@@ -87,6 +91,13 @@ class Phase(ABC):
     # phases keep it False and rely on encode_inputs/encode_outputs.
     IS_COMPOUND: bool = False
 
+    # Subclasses set this True when their actual step count is only known at
+    # trial time (e.g. drawn from ``ctx`` state). Compound phases propagate
+    # via ``children()``; the ``phase_tree_is_variable`` walker uses both
+    # signals together. Leaf phases keep ``False`` to stay on the static
+    # buffer path.
+    is_variable: bool = False
+
     def __init__(
         self,
         duration: Duration,
@@ -119,6 +130,43 @@ class Phase(ABC):
             Number of timesteps for this phase.
         """
         return max(1, int(self._duration / ctx.dt))
+
+    def max_steps(self, ctx: Context) -> int:
+        """Static upper bound on this phase's length in timesteps.
+
+        Must return a **Python int** with no dependence on traced values.
+        Used by ``Task`` in variable-length mode to size shape-stable
+        buffers. The default delegates to ``get_duration`` which is correct
+        for fixed-duration phases. Variable-duration phases (e.g. those
+        wrapping ``TruncExp``/``UniformDuration``) override this to return
+        the truncation upper bound divided by ``ctx.dt``.
+
+        Parameters
+        ----------
+        ctx : Context
+            A stub or trial context providing ``ctx.dt``. The default
+            implementation does not read ``ctx.rng`` or trial state.
+
+        Returns
+        -------
+        int
+            Upper bound on number of timesteps for this phase.
+        """
+        return int(self.get_duration(ctx))
+
+    def step_count(self, ctx: Context) -> jax.Array:
+        """Traced actual length of this phase in timesteps.
+
+        Returns a ``jax.Array`` ``int32`` scalar. May depend on
+        ``ctx[...]`` values populated by ``trial_init``. Must satisfy
+        ``0 <= step_count(ctx) <= max_steps(ctx)`` for every trial.
+
+        The default returns a static value equal to ``get_duration``; that
+        is correct for any phase whose actual length matches its upper
+        bound. Variable-duration phases override this to compute the
+        traced length from ``ctx`` state without any ``int(...)`` cast.
+        """
+        return jnp.asarray(self.get_duration(ctx), dtype=jnp.int32)
 
     @abstractmethod
     def encode_inputs(self, ctx: Context) -> None:
@@ -224,6 +272,15 @@ class Sequence(Phase):
         """Get total duration by summing child phases."""
         return sum(p.get_duration(ctx) for p in self.phases)
 
+    def max_steps(self, ctx: Context) -> int:
+        return sum(p.max_steps(ctx) for p in self.phases)
+
+    def step_count(self, ctx: Context) -> jax.Array:
+        total = jnp.asarray(0, dtype=jnp.int32)
+        for p in self.phases:
+            total = total + p.step_count(ctx)
+        return total
+
     def encode_inputs(self, ctx: Context) -> None:
         # Delegated to children during execute
         pass
@@ -236,6 +293,10 @@ class Sequence(Phase):
         """Execute all child phases sequentially."""
         for phase in self.phases:
             execute_phase(phase, ctx)
+
+    def execute_packed(self, ctx: Context) -> None:
+        for phase in self.phases:
+            execute_phase_packed(phase, ctx)
 
     def children(self) -> List[Phase]:
         return list(self.phases)
@@ -286,6 +347,16 @@ class Repeat(Phase):
         """Get total duration by multiplying single phase duration."""
         return self.phase.get_duration(ctx) * self.count
 
+    def max_steps(self, ctx: Context) -> int:
+        return self.phase.max_steps(ctx) * self.count
+
+    def step_count(self, ctx: Context) -> jax.Array:
+        # Conservative: assume every iteration uses the same step_count
+        # (Repeat does not currently carry per-iteration variable durations).
+        # The wrapped phase's step_count is queried once; under traced mode
+        # any randomness inside it is folded into the trial-level RNG.
+        return self.phase.step_count(ctx) * jnp.asarray(self.count, dtype=jnp.int32)
+
     def encode_inputs(self, ctx: Context) -> None:
         pass  # Delegated during execute
 
@@ -305,6 +376,21 @@ class Repeat(Phase):
         ctx['_repeat_stack'] = stack
         if prev_index is None:
             # Was not set before; remove our scratch entry.
+            ctx._state.pop('repeat_index', None)
+        else:
+            ctx['repeat_index'] = prev_index
+
+    def execute_packed(self, ctx: Context) -> None:
+        prev_index = ctx.get('repeat_index')
+        stack = ctx.get('_repeat_stack', [])
+        for i in range(self.count):
+            ctx['repeat_index'] = i
+            stack.append(i)
+            ctx['_repeat_stack'] = stack
+            execute_phase_packed(self.phase, ctx)
+            stack.pop()
+        ctx['_repeat_stack'] = stack
+        if prev_index is None:
             ctx._state.pop('repeat_index', None)
         else:
             ctx['repeat_index'] = prev_index
@@ -352,6 +438,16 @@ class Parallel(Phase):
         """Duration is max of children."""
         return max(p.get_duration(ctx) for p in self.phases)
 
+    def max_steps(self, ctx: Context) -> int:
+        return max(p.max_steps(ctx) for p in self.phases)
+
+    def step_count(self, ctx: Context) -> jax.Array:
+        counts = [p.step_count(ctx) for p in self.phases]
+        out = counts[0]
+        for c in counts[1:]:
+            out = jnp.maximum(out, c)
+        return out
+
     def encode_inputs(self, ctx: Context) -> None:
         # Delegated through execute
         pass
@@ -384,6 +480,36 @@ class Parallel(Phase):
         ctx.phase_end = parent_end
         ctx.current_phase = parent_name
         ctx.current_step = parent_end
+
+    def execute_packed(self, ctx: Context) -> None:
+        """Packed-mode parallel execution.
+
+        Every child starts at the same ``parent_cursor`` slot; the parent
+        cursor advances by the maximum of the children's actual step
+        counts. Child input/output writes compose via the leaf merge logic
+        in ``_execute_leaf_packed`` (later children inherit earlier slot
+        contents outside their active range). Only the first child's
+        output writes are propagated (matching the static semantic).
+        """
+        parent_cursor = ctx.t_cursor
+        max_child_actual = jnp.asarray(0, dtype=jnp.int32)
+
+        for i, child in enumerate(self.phases):
+            ctx.t_cursor = parent_cursor
+            if i == 0:
+                execute_phase_packed(child, ctx)
+            else:
+                # Other children must not advance the output buffer.
+                # Stash, encode, then restore output buffer.
+                saved_out = ctx.outputs
+                execute_phase_packed(child, ctx)
+                ctx.outputs = saved_out
+            child_actual = ctx.t_cursor - parent_cursor
+            max_child_actual = jnp.maximum(max_child_actual, child_actual)
+
+        ctx.t_cursor = parent_cursor + max_child_actual
+        ctx.phase_start = parent_cursor
+        ctx.phase_end = parent_cursor + max_child_actual
 
     def children(self) -> List[Phase]:
         return list(self.phases)
@@ -430,6 +556,145 @@ def execute_phase(phase: Phase, ctx: Context) -> None:
     phase.on_exit(ctx)
 
     ctx.phase_history.append((phase.name, ctx.phase_start, ctx.phase_end))
+
+
+def phase_tree_is_variable(phase: Phase) -> bool:
+    """Walk a phase tree and return True if any node declares
+    ``is_variable = True``.
+
+    Used by ``Task`` to decide whether to allocate variable-length buffers
+    and dispatch through ``execute_phase_packed``. Pure structural walk;
+    runs at construction time, no ``ctx`` needed.
+    """
+    if getattr(phase, 'is_variable', False):
+        return True
+    for child in phase.children():
+        if phase_tree_is_variable(child):
+            return True
+    return False
+
+
+def execute_phase_packed(phase: Phase, ctx: Context) -> None:
+    """Variable-length / packed-mode dispatch for a single phase.
+
+    Unlike :func:`execute_phase` the phase's actual length is a **traced**
+    ``int32`` scalar; the buffer slot reserved for it is sized by the
+    Python-int ``max_steps``. Leaf phases are run against a phase-local
+    block of shape ``(max_dur, …)``, the block is gated to zero for
+    positions beyond the traced actual length, and the block is then
+    written into the trial-level buffers at ``ctx.t_cursor`` via
+    ``jax.lax.dynamic_update_slice``. Compound phases dispatch to their
+    own ``execute_packed`` implementation; the runtime swap/gate/write
+    happens at each leaf.
+    """
+    if ctx.t_cursor is None or ctx.mask is None:
+        raise RuntimeError(
+            "execute_phase_packed called without t_cursor/mask. Did the "
+            "Task forget to enter variable-length mode?"
+        )
+
+    max_dur = int(phase.max_steps(ctx))
+    actual = jnp.asarray(phase.step_count(ctx), dtype=jnp.int32)
+    actual = jnp.clip(actual, 0, max_dur)
+    slot_start = ctx.t_cursor
+
+    ctx.phase_max_steps = max_dur
+    ctx.phase_step_count = actual
+    ctx.current_phase = phase.name
+
+    phase.on_enter(ctx)
+
+    if phase.IS_COMPOUND:
+        execute = getattr(phase, 'execute_packed', None)
+        if execute is None:
+            raise NotImplementedError(
+                f"Compound phase '{phase.name}' ({type(phase).__name__}) does "
+                "not implement execute_packed; variable-length mode for this "
+                "compound is not supported yet. See the design spec section "
+                "on conditional compounds."
+            )
+        execute(ctx)
+    else:
+        _execute_leaf_packed(phase, ctx, max_dur, actual, slot_start)
+
+    phase.on_exit(ctx)
+
+    ctx.phase_history.append((phase.name, slot_start, slot_start + actual))
+
+
+def _execute_leaf_packed(
+    phase: Phase,
+    ctx: Context,
+    max_dur: int,
+    actual: jax.Array,
+    slot_start: jax.Array,
+) -> None:
+    """Encode a leaf phase into the trial buffer at ``slot_start``.
+
+    The strategy is to make the phase's ordinary ``encode_inputs`` /
+    ``encode_outputs`` operate against a freshly allocated phase-local
+    block (``[0, max_dur)``). We swap the main buffers out, let the phase
+    write into the local block, then gate by ``actual`` and write the
+    block back into the trial buffers at the traced ``slot_start``.
+    """
+    real_inputs = ctx.inputs
+    real_outputs = ctx.outputs
+    real_mask = ctx.mask
+
+    num_inputs = real_inputs.shape[1]
+
+    # Initialise the phase-local block from the existing slot so that
+    # Parallel children can compose without erasing one another. For
+    # Sequence the slot is freshly zeroed and this is a no-op.
+    slot_in = jax.lax.dynamic_slice(real_inputs, (slot_start, jnp.int32(0)),
+                                    (max_dur, num_inputs))
+    if real_outputs.ndim == 1:
+        slot_out = jax.lax.dynamic_slice_in_dim(real_outputs, slot_start, max_dur, axis=0)
+    else:
+        slot_out = jax.lax.dynamic_slice(real_outputs, (slot_start, jnp.int32(0)),
+                                         (max_dur, real_outputs.shape[1]))
+    slot_mask = jax.lax.dynamic_slice_in_dim(real_mask, slot_start, max_dur, axis=0)
+
+    ctx.inputs = slot_in
+    ctx.outputs = slot_out
+    ctx.phase_start = 0
+    ctx.phase_end = max_dur
+
+    phase.encode_inputs(ctx)
+    phase.encode_outputs(ctx)
+
+    written_in = ctx.inputs
+    written_out = ctx.outputs
+
+    t = jnp.arange(max_dur, dtype=jnp.int32)
+    gate1d = (t < actual)
+    gate2d = gate1d[:, None]
+    # Inside the active region use the phase's writes; outside fall back to
+    # whatever was already in the slot (the slot is zeros under Sequence, but
+    # may carry sibling Parallel contributions).
+    merged_in = jnp.where(gate2d, written_in, slot_in)
+    if written_out.ndim == 1:
+        merged_out = jnp.where(gate1d, written_out, slot_out)
+    else:
+        merged_out = jnp.where(gate2d, written_out, slot_out)
+
+    ctx.inputs = jax.lax.dynamic_update_slice(
+        real_inputs, merged_in.astype(real_inputs.dtype), (slot_start, jnp.int32(0))
+    )
+    if real_outputs.ndim == 1:
+        ctx.outputs = jax.lax.dynamic_update_slice_in_dim(
+            real_outputs, merged_out.astype(real_outputs.dtype), slot_start, axis=0
+        )
+    else:
+        ctx.outputs = jax.lax.dynamic_update_slice(
+            real_outputs, merged_out.astype(real_outputs.dtype), (slot_start, jnp.int32(0))
+        )
+    new_mask = slot_mask | gate1d
+    ctx.mask = jax.lax.dynamic_update_slice_in_dim(real_mask, new_mask, slot_start, axis=0)
+
+    ctx.t_cursor = slot_start + actual
+    ctx.phase_start = slot_start
+    ctx.phase_end = slot_start + actual
 
 
 def concat(phases: List[Phase]) -> Sequence:
@@ -742,3 +1007,113 @@ class Comparison(DeclarativePhase):
 
 class Blank(DeclarativePhase):
     pass
+
+
+class VariableDuration(DeclarativePhase):
+    """Declarative phase whose actual length is decided per trial.
+
+    The phase reserves a buffer slot of ``ceil(max_duration / dt)``
+    timesteps and writes its content into the first
+    ``ceil(ctx[ctx_key] / dt)`` of them. Anything past the trial's actual
+    length is automatically zeroed by the packed runtime and masked out in
+    the trial mask. Compatible with ``brainstate.transform.jit`` and
+    ``brainstate.transform.vmap2``.
+
+    ``ctx_key`` names the trial state entry holding the sampled duration.
+    The value can be a scalar number of milliseconds or a Quantity; in
+    either case the runtime divides by ``ctx.dt`` to obtain a timestep
+    count. ``min_duration`` and ``max_duration`` must be Quantities with
+    matching units; ``min_duration`` is the static lower bound used to
+    floor the step count (always >= 1 timestep).
+
+    Examples
+    --------
+    >>> import brainunit as u
+    >>> from braintools.cogtask import VariableDuration
+    >>> phase = VariableDuration(
+    ...     min_duration=300 * u.ms,
+    ...     max_duration=1500 * u.ms,
+    ...     ctx_key='delay_duration',
+    ...     inputs={'fixation': 1.0},
+    ...     outputs={'label': 0},
+    ...     name='variable_delay',
+    ... )
+    """
+
+    is_variable = True
+
+    def __init__(
+        self,
+        min_duration,
+        max_duration,
+        ctx_key: str,
+        inputs: Optional[Dict[str, 'ValueSpec']] = None,
+        outputs: Optional[Dict[str, 'ValueSpec']] = None,
+        noise: Optional[Dict[str, Any]] = None,
+        on_enter: Optional[Callable[[Context], None]] = None,
+        on_exit: Optional[Callable[[Context], None]] = None,
+        name: Optional[str] = None,
+    ):
+        if name is None:
+            name = 'VariableDuration'
+        # Use max_duration as the nominal "duration" so get_duration falls
+        # back to the upper bound when called outside variable-length mode.
+        super().__init__(
+            duration=max_duration,
+            inputs=inputs,
+            outputs=outputs,
+            noise=noise,
+            on_enter=on_enter,
+            on_exit=on_exit,
+            name=name,
+        )
+        self._min_duration = min_duration
+        self._max_duration = max_duration
+        self._ctx_key = ctx_key
+
+    def _dt_mantissa(self, ctx: Context) -> float:
+        dt = ctx.dt
+        return float(dt.mantissa) if hasattr(dt, 'mantissa') else float(dt)
+
+    def _duration_unit_mantissa(self, value: Any) -> Any:
+        """Return the duration in the same unit-base as dt.
+
+        Trial-init code often stores ``ctx[ctx_key]`` as a Python float
+        already expressed in the same unit as dt (the existing tasks do
+        this). When a Quantity is provided we strip the unit; otherwise we
+        pass it through as a JAX scalar.
+        """
+        if hasattr(value, 'to') and hasattr(value, 'mantissa'):
+            # brainunit Quantity — convert to the dt unit before stripping.
+            return value.mantissa
+        return value
+
+    def max_steps(self, ctx: Context) -> int:
+        return max(1, int(self._max_duration / ctx.dt))
+
+    def step_count(self, ctx: Context) -> jax.Array:
+        if self._ctx_key not in ctx:
+            # Fall back to the max bound when the trial init didn't populate
+            # the key; this keeps shape contracts well-defined.
+            return jnp.asarray(self.max_steps(ctx), dtype=jnp.int32)
+        raw = self._duration_unit_mantissa(ctx[self._ctx_key])
+        dt_val = self._dt_mantissa(ctx)
+        steps = jnp.asarray(raw, dtype=jnp.float32) / jnp.asarray(dt_val, dtype=jnp.float32)
+        steps = jnp.maximum(jnp.int32(1), steps.astype(jnp.int32))
+        max_steps_static = self.max_steps(ctx)
+        return jnp.minimum(steps, jnp.int32(max_steps_static))
+
+    def get_duration(self, ctx: Context) -> int:
+        """Eager-mode duration. Reads ``ctx[self._ctx_key]`` if available
+        (and converts to a Python int via ``int(jnp.asarray(...))``); falls
+        back to ``max_steps`` otherwise. Not used on the packed JIT path.
+        """
+        if self._ctx_key not in ctx:
+            return self.max_steps(ctx)
+        try:
+            raw = self._duration_unit_mantissa(ctx[self._ctx_key])
+            dt_val = self._dt_mantissa(ctx)
+            v = int(jnp.asarray(raw) / jnp.asarray(dt_val))
+            return max(1, min(v, self.max_steps(ctx)))
+        except (TypeError, jax.errors.TracerArrayConversionError):
+            return self.max_steps(ctx)
