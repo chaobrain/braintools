@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://pypi.org/project/braintools/"><img alt="Supported Python Version" src="https://img.shields.io/pypi/pyversions/braintools"></a>
   <a href="https://github.com/chaobrain/braintools/blob/main/LICENSE"><img alt="LICENSE" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
-  <a href='https://braintools.readthedocs.io/?badge=latest'>
+  <a href='https://brainx.chaobrain.com/braintools/'>
     <img src='https://readthedocs.org/projects/braintools/badge/?version=latest' alt='Documentation Status' />
   </a>
   <a href="https://badge.fury.io/py/braintools"><img alt="PyPI version" src="https://badge.fury.io/py/braintools.svg"></a>
@@ -50,11 +50,11 @@ pip install -U BrainX
 
 ## Documentation
 
-The full documentation is available at https://braintools.readthedocs.io
+The full documentation is available at https://brainx.chaobrain.com/braintools/
 
 ## Ecosystem
 
-`braintools` is one part of our brain simulation ecosystem: https://brainmodeling.readthedocs.io/
+`braintools` is one part of our brain simulation ecosystem: https://brainx.chaobrain.com/
 
 ## Contributing
 

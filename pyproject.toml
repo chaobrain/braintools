@@ -108,7 +108,7 @@ tpu = [
 homepage = "https://github.com/chaobrain/braintools"
 repository = "https://github.com/chaobrain/braintools"
 "Bug Tracker" = "https://github.com/chaobrain/braintools/issues"
-Documentation = "https://braintools.readthedocs.io/"
+Documentation = "https://brainx.chaobrain.com/braintools/"
 
 [tool.setuptools.packages.find]
 include = ["braintools*"]
@@ -123,4 +123,4 @@ exclude = [
 ]
 
 [tool.setuptools.dynamic]
-version = { attr = "braintools.__version__" }
+version = { attr = "braintools._version.__version__" }
