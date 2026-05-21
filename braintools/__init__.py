@@ -14,9 +14,7 @@
 # ==============================================================================
 
 
-__version__ = "0.1.8"
-__version_info__ = tuple(map(int, __version__.split(".")))
-
+from . import cogtask
 from . import conn
 from . import file
 from . import init
@@ -49,8 +47,11 @@ from ._spike_operation import (
     spike_bitwise_ixor,
     spike_bitwise,
 )
+from ._version import __version__, __version_info__
 
 __all__ = [
+    '__version__',
+    '__version_info__',
     'conn',
     'input',
     'init',
@@ -62,6 +63,7 @@ __all__ = [
     'tree',
     'quad',
     'surrogate',
+    'cogtask',
 
     'LatencyEncoder',
     'RateEncoder',
