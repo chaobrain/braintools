@@ -1,40 +1,130 @@
 # Release Notes
 
 
-## Unreleased
+## Version 0.1.9 (2026-05-21)
 
-### `braintools.cogtask` — variable-length trial sequences
+This release introduces `braintools.cogtask`, a composable framework for
+constructing cognitive tasks for neural-network training and computational
+neuroscience experiments. It also extends `braintools.init` to accept
+`brainstate.nn.Param`, adds official Python 3.14 support, and refreshes
+documentation and CI infrastructure.
 
-- **`VariableDuration` phase**: declarative phase whose duration is sampled at
-  trial time from a context entry. Its `max_steps` (Python int) is used as the
-  buffer slot size; `step_count` (traced int32) reports the actual length.
-- **Packed-mode trial generation**: `Task` auto-detects variable-length phase
-  trees via `phase_tree_is_variable(phases)`. When any phase declares
-  `is_variable = True`, `sample_trial` allocates buffers of size
-  `task.max_trial_duration()` and writes only the front `t_cursor` timesteps,
-  filling the trailing positions with zero and the mask with `False`.
-- **`Task.batch_sample(..., return_mask=True)`**: returns `(X, Y, mask)`
-  with shape-stable buffers under `brainstate.transform.jit` and
-  `brainstate.transform.vmap2`. Existing fixed-length tasks are unchanged;
-  `return_mask=True` on a fixed task yields an all-`True` mask.
-- **Conditional compounds**: `If` packed branch uses `jax.lax.cond` so both
-  branches contribute shape-stable output; `Switch` and `While` use Python
-  dispatch (concrete keys / Python `bool` conditions) and zero-pad to the
-  static maximum.
-- **Migrated tasks**: `HierarchicalReasoning`, `IntervalDiscrimination`,
-  `ReadySetGo` now use `VariableDuration` internally and work under
-  `batch_sample` with masking. Previously these tasks were valid only via
-  `sample_trial` and not vmap-safe.
-- **Samplers**: `TruncExp` and `UniformDuration` advertise
-  `is_variable = True` and expose `max_value()` / `min_value()` so phases can
-  size their slots statically from sampler bounds.
-- **API additions**: `VariableDuration`, `phase_tree_is_variable`,
-  `execute_phase_packed` are re-exported from `braintools.cogtask`. The
-  `info` dict returned by `sample_trial` gains a `'mask'` entry (`None` for
-  fixed tasks, a `(T,)` bool array for variable tasks).
-- **Migration note**: `Context` adds optional fields `mask`, `t_cursor`,
-  `phase_max_steps`, `phase_step_count` — `None` outside packed mode. The
-  public sample_trial contract is preserved.
+### Highlights
+
+- **New module `braintools.cogtask`**: a phase-based DSL for building
+  trial-structured cognitive tasks, with a library of pre-built paradigms
+  drawn from the cognitive-neuroscience literature.
+- **Variable-length trials under JIT/vmap**: shape-stable packed-mode trial
+  generation enables `batch_sample` to remain compatible with
+  `brainstate.transform.jit` and `brainstate.transform.vmap2` for tasks whose
+  phases have data-dependent durations.
+- **Python 3.14 support**: CI matrix and project metadata updated; minimum
+  supported Python remains 3.11.
+
+### Added
+
+#### `braintools.cogtask` — composable cognitive task framework
+
+- **Core API**: `Task`, `TaskConfig`, `Context`, `Phase`, `Sequence`,
+  `Repeat`, `Parallel`, conditional combinators `If` / `Switch` / `While`,
+  and the `concat` helper for sequential composition.
+- **Phase primitives**: `Fixation`, `Delay`, `Stimulus`, `Response`, `Cue`,
+  plus the variable-length `VariableDuration` phase whose timestep budget is
+  resolved per-trial from a context entry.
+- **Feature and label utilities**: `Feature`, `circular`, `one_hot`, and a
+  set of input encoders/decoders for constructing task observations and
+  targets in a typed, composable way.
+- **Pre-built task library** spanning three domains:
+  - *Decision making*: `PerceptualDecisionMaking`,
+    `PerceptualDecisionMakingDelayResponse`, `ContextDecisionMaking`,
+    `SingleContextDecisionMaking`, `PulseDecisionMaking`.
+  - *Working memory*: `DelayMatchSample`, `DualDelayMatchSample`,
+    `DelayComparison`, `DelayMatchCategory`, `DelayPairedAssociation`,
+    `GoNoGo`, `IntervalDiscrimination`, `PostDecisionWager`, `ReadySetGo`,
+    `DelayDirectionReproduction`, `ImmediateDirectionReproduction`,
+    `DelayDirectionClassification`, `ImmediateDirectionClassification`.
+  - *Motor and reasoning*: `AntiReach`, `Reaching1D`, `EvidenceAccumulation`,
+    `HierarchicalReasoning`, `ProbabilisticReasoning`.
+- **Variable-length trial sequences**:
+  - `VariableDuration` phases declare a Python `max_steps` (used as the
+    buffer slot size) and report the realised trial length via the traced
+    `step_count` field.
+  - `Task` auto-detects variable-length phase trees via
+    `phase_tree_is_variable(phases)`. When any phase declares
+    `is_variable = True`, `sample_trial` allocates buffers of size
+    `task.max_trial_duration()`, writes only the front `t_cursor` timesteps,
+    and zero-fills the trailing positions while setting the mask to `False`.
+  - `Task.batch_sample(..., return_mask=True)` returns `(X, Y, mask)` with
+    shape-stable buffers under `brainstate.transform.jit` and
+    `brainstate.transform.vmap2`. Fixed-length tasks remain unaffected;
+    `return_mask=True` on a fixed task yields an all-`True` mask.
+  - `If` uses `jax.lax.cond` so both branches contribute shape-stable
+    output; `Switch` and `While` use Python dispatch (concrete keys /
+    Python `bool` conditions) and zero-pad to the static maximum.
+  - `HierarchicalReasoning`, `IntervalDiscrimination`, and `ReadySetGo`
+    have been migrated to `VariableDuration` and are now usable under
+    `batch_sample` with masking — previously they were valid only via
+    `sample_trial` and were not vmap-safe.
+  - Duration samplers `TruncExp` and `UniformDuration` advertise
+    `is_variable = True` and expose `max_value()` / `min_value()` so phases
+    can size their slots statically from sampler bounds.
+
+#### Other additions
+
+- **`braintools.init.param`**: now accepts `brainstate.nn.Param` instances
+  in addition to plain initializers, enabling reuse of pre-built parameter
+  objects when constructing layers.
+- **`.gitattributes`**: normalises line endings for text files to keep
+  diffs and tooling consistent across platforms.
+
+### Changed
+
+- **Python support**: project metadata, CI matrix, and classifiers updated
+  to include Python 3.14. Minimum supported Python remains 3.11.
+- **Documentation hosting**: docs are now self-hosted at
+  `brainx.chaobrain.com/braintools/`; the documentation deployment workflow
+  publishes on GitHub release events, while pushes to `main` run a
+  build-only verification step.
+- **Documentation dependencies**: bumped `sphinx` (`>=5` → `>=9.0.4`),
+  `sphinx-book-theme` (`>=1.0.1` → `>=1.2.0`),
+  `sphinx-copybutton` (`>=0.5.0` → `>=0.5.2`),
+  `jupyter-sphinx` (`>=0.3.2` → `>=0.5.3`), and `brainx-sphinx-header`.
+
+### Fixed
+
+- **`braintools.cogtask` end-to-end correctness pass** (introduced together
+  with the module):
+  - Renamed `cogtask/typing.py` to `cogtask/_typing.py` so the local module
+    no longer shadows the stdlib `typing` when tests run from inside the
+    package; updated the absolute import in `feature.py` to the relative
+    `from ._typing import Data`.
+  - Added the missing `noise_sigma` argument and attribute to
+    `PerceptualDecisionMaking`,
+    `PerceptualDecisionMakingDelayResponse`, `ContextDecisionMaking`,
+    `SingleContextDecisionMaking`, `AntiReach`, `Reaching1D`,
+    `EvidenceAccumulation`, `DelayPairedAssociation`, `GoNoGo`, and
+    `PostDecisionWager`, which previously raised `AttributeError` as soon
+    as `define_phases` ran.
+  - Removed a duplicate `Task.__repr__` and an undocumented `TaskLoader`
+    symbol from the public docs.
+- **Phase engine**: added an `IS_COMPOUND` flag on `Phase` and a uniform
+  `children()` traversal hook. `execute_phase` now dispatches
+  `Sequence`/`Repeat`/`Parallel`/`If`/`Switch`/`While` to their own
+  `execute()` methods; previously, `If`/`Switch`/`While` silently no-op'd.
+  `Parallel.execute` now gives each child its own
+  `[phase_start, phase_start + duration)` window.
+- **Distance-profile tests**: representation-equality checks corrected so
+  the test suite is stable across NumPy/JAX representations.
+
+### Infrastructure
+
+- Bumped GitHub Actions: `actions/checkout` 4 → 6,
+  `actions/setup-python` 5 → 6, `actions/download-artifact` 5 → 8,
+  `actions/upload-artifact` 6 → 7, `appleboy/ssh-action` 1.2.0 → 1.2.5,
+  `appleboy/scp-action` 0.1.7 → 1.0.0.
+- Refactored version management: a dedicated `braintools/_version.py`
+  module is now the single source of truth, and `pyproject.toml` resolves
+  the package version via `attr = "braintools._version.__version__"`.
 
 
 ## Version 0.1.7 (2026-01-05)
