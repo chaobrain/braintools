@@ -579,37 +579,3 @@ All durations are resolved against the *currently active* time step,
 ``brainstate.environ.get_dt()``. The same task can be re-sampled at a finer
 or coarser ``dt`` simply by wrapping it in a ``brainstate.environ.context``;
 see :doc:`../cogtask/01_quickstart` for a worked example.
-
-
-Variable-length trial sequences
--------------------------------
-
-.. note::
-   **Status — partially supported / under active development.** Per-phase
-   variable durations, ``If``/``Switch``/``While``, and single-trial JIT
-   work today; uniform-length ``batch_sample`` is a hard requirement and
-   first-class mask-based batching is *planned*. The API for automatic
-   padding/masking is **not yet stable** and may change.
-
-What works today:
-
-- :class:`TruncExp` and :class:`UniformDuration` as callables sampled in
-  ``trial_init`` and stored in :class:`Context`.
-- :class:`If`, :class:`Switch`, and :class:`While` for data-dependent
-  control flow within a single trial. Their *upper-bound* duration sets the
-  trial's tensor size.
-- ``task.sample(index)`` — JIT-compiled per trial.
-
-Current limitation: :meth:`Task.batch_sample` uses ``vmap`` over the trial
-index, so every trial in a batch must produce buffers of *identical* shape.
-Variable lengths *across the batch axis* are not yet expressible in the
-JIT/``vmap`` path.
-
-Planned design: a fixed ``T_max`` per task, padded buffers, and a returned
-``mask`` of shape ``(T_max, B)`` marking the live region. A
-``masked_loss`` helper is part of the same roadmap.
-
-See :doc:`../cogtask/03_variable_length_trials` for worked workarounds
-available today (gated encoders, bucketed batching, explicit mask channels)
-and extension points if you need to experiment before the official API
-lands.
