@@ -36,10 +36,10 @@ jobs:
           TAG="${{ github.event.release.tag_name }}"
           PKG_VERSION=$(python - <<'PY'
           import pathlib, re
-          init = pathlib.Path('braintools/__init__.py').read_text(encoding='utf-8')
-          match = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", init)
+          source = pathlib.Path('braintools/_version.py').read_text(encoding='utf-8')
+          match = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", source)
           if not match:
-              raise SystemExit("Unable to find __version__ in braintools/__init__.py")
+              raise SystemExit("Unable to find __version__ in braintools/_version.py")
           print(match.group(1))
           PY
           )
