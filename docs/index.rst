@@ -17,8 +17,8 @@ Overview
 - Input generators, optimization helpers, and reusable data-structure utilities
 - And more ...
 
-The project favors a simple, well-typed functional style that works seamlessly with `brainstate <https://brainstate.readthedocs.io/>`_,
-`brainunit <https://brainunit.readthedocs.io/>`_, and just-in-time compilation (``jit``/``vmap``).
+The project favors a simple, well-typed functional style that works seamlessly with `brainstate <https://brainx.chaobrain.com/brainstate/>`_,
+`brainunit <https://brainx.chaobrain.com/brainunit/>`_, and just-in-time compilation (``jit``/``vmap``).
 
 
 Installation
@@ -52,7 +52,7 @@ Installation
 See also the ecosystem
 ^^^^^^^^^^^^^^^^^^^^^^
 
-BrainTools is one part of our `brain simulation ecosystem <https://brainmodeling.readthedocs.io/>`_.
+BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobrain.com/>`_.
 
 
 ----

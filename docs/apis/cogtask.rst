@@ -35,7 +35,7 @@ The ``braintools.cogtask`` module provides:
   reasoning, and motor control, drawn from systems-neuroscience literature
 - **JIT/``vmap``-friendly trial generation** through :meth:`Task.sample` and
   :meth:`Task.batch_sample`, designed to integrate cleanly with
-  `brainstate <https://brainstate.readthedocs.io/>`_ and JAX training loops
+  `brainstate <https://brainx.chaobrain.com/brainstate/>`_ and JAX training loops
 
 
 Core Task Framework
