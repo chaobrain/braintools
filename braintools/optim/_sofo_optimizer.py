@@ -30,6 +30,7 @@ from ._optax_optimizer import OptaxOptimizer
 
 __all__ = [
     'SOFO',
+    'SOFOScan',
 ]
 
 
@@ -40,12 +41,6 @@ __all__ = [
 def _batch_jvp(f, W, M, has_aux=False):
     _jvp = lambda s: jax.jvp(f, (W,), (s,), has_aux=has_aux)
     return jax.vmap(_jvp)(M)
-
-
-def _batch_jvp_pair(f, W, M, has_aux=False):
-    M_1, M_2 = M
-    _jvp = lambda M_1, M_2: jax.jvp(f, W, (M_1, M_2), has_aux=has_aux)
-    return jax.vmap(_jvp)(M_1, M_2)
 
 
 def _ggn_ce(tangents, h):
@@ -307,3 +302,155 @@ class SOFO(OptaxOptimizer):
 
     def update(self, inputs, targets):
         return self.step(inputs, targets)
+
+
+# ---------------------------------------------------------------------------
+# SOFOScan: recurrent SOFO optimizer (stateful one-step Module)
+# ---------------------------------------------------------------------------
+
+def _collapse_time(a):
+    """Collapse the leading (time, batch) axes of ``a`` into a single sample axis."""
+    return a.reshape((a.shape[0] * a.shape[1],) + a.shape[2:])
+
+
+class SOFOScan(OptaxOptimizer):
+    r"""Recurrent Second-Order Forward-mode Optimization (SOFO) optimizer.
+
+    Like :class:`SOFO`, but for a stateful one-step recurrent Module. The model is scanned over
+    the input sequence with the hidden state ("latent") carried explicitly; forward-mode JVPs
+    propagate the tangents through time automatically (``jax.jvp`` through ``lax.scan``), so the
+    Generalised Gauss-Newton matrix is accumulated over every (timestep, batch) sample and solved
+    once. The resulting direction is applied via the same SGD-style optax update as :class:`SOFO`.
+
+    Parameters
+    ----------
+    rnn_cell : callable
+        Stateful Module called as ``rnn_cell(latent, inputs) -> (new_latent, output)``, using
+        ``brainstate.ParamState`` objects internally for its trainable weights.
+    loss_fn : callable
+        ``loss_fn(predictions, targets) -> scalar``, where both arguments have their leading
+        ``(time, batch)`` axes collapsed into a single sample axis.
+    lr : float or LRScheduler, default 1e-3
+        Learning rate.
+    loss : {'mse', 'ce'}, default 'mse'
+        Selects the Generalised Gauss-Newton form.
+    tangent_size : int, default 100
+        Number of random tangents / subspace dimension.
+    damping : float, default 1e-5
+        Damping on the GGN, scaled by the largest singular value.
+    momentum : float, default 0.0
+        Momentum for the SGD-style update.
+    nesterov : bool, default False
+        Whether to use Nesterov momentum.
+    weight_decay : float, default 0.0
+        Decoupled weight decay.
+    grad_clip_norm : float, optional
+        Clip the SOFO direction by global norm before the update.
+    grad_clip_value : float, optional
+        Clip the SOFO direction by value before the update.
+    key : jax PRNG key, optional
+        Random key for tangent sampling. Defaults to ``brainstate.random.split_key()`` each step.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import braintools
+        >>> import jax.numpy as jnp
+        >>>
+        >>> class Cell(brainstate.nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.wh = brainstate.nn.Linear(4, 4)
+        ...         self.wx = brainstate.nn.Linear(3, 4)
+        ...         self.wo = brainstate.nn.Linear(4, 2)
+        ...     def __call__(self, latent, inp):
+        ...         new_latent = self.wh(latent) + self.wx(inp)
+        ...         return new_latent, self.wo(new_latent)
+        >>>
+        >>> cell = Cell()
+        >>> loss_fn = lambda pred, y: jnp.mean((pred - y) ** 2)
+        >>> opt = braintools.optim.SOFOScan(cell, loss_fn, lr=1e-2, tangent_size=64)
+        >>> opt.register_trainable_weights(cell.states(brainstate.ParamState))
+        >>> xs = jnp.ones((5, 4, 3)); ys = jnp.zeros((5, 4, 2)); z0 = jnp.zeros((4, 4))
+        >>> loss = opt.step(z0, (xs, ys))  # doctest: +SKIP
+    """
+    __module__ = 'braintools.optim'
+
+    def __init__(
+        self,
+        rnn_cell: Callable,
+        loss_fn: Callable,
+        lr: float = 1e-3,
+        loss: str = 'mse',
+        tangent_size: int = 100,
+        damping: float = 1e-5,
+        momentum: float = 0.0,
+        nesterov: bool = False,
+        weight_decay: float = 0.0,
+        grad_clip_norm: Optional[float] = None,
+        grad_clip_value: Optional[float] = None,
+        key=None,
+    ):
+        self.rnn_cell = rnn_cell
+        self.loss_fn = loss_fn
+        self.loss = loss
+        self.tangent_size = tangent_size
+        self.damping = damping
+        self.momentum = momentum
+        self.nesterov = nesterov
+        self.key = key
+        self._grad_states = None
+        super().__init__(
+            tx=None, lr=lr, weight_decay=weight_decay,
+            grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value,
+        )
+
+    # reuse SOFO's SGD-style chain (same hyperparameters)
+    default_tx = SOFO.default_tx
+
+    def register_trainable_weights(self, param_states):
+        super().register_trainable_weights(param_states)
+        self._grad_states = self.param_states.to_pytree()
+        return self
+
+    def _scan_model(self, inputs_seq, z_init):
+        def body(latent, inp):
+            new_latent, output = self.rnn_cell(latent, inp)
+            return new_latent, output
+
+        _, outs = brainstate.transform.scan(body, z_init, inputs_seq)  # outs: (T, batch, ...)
+        return _collapse_time(outs)  # (T * batch, ...)
+
+    def _make_grad_fn(self, labels_seq):
+        flat_targets = _collapse_time(labels_seq)
+        step_loss_fn = lambda preds: self.loss_fn(preds, flat_targets)
+        return GradientTransform(
+            target=self._scan_model,
+            transform=_sofo_grad_impl,
+            grad_states=self._grad_states,
+            argnums=None,
+            return_value=True,
+            has_aux=False,
+            transform_params=dict(
+                loss=self.loss, tangent_size=self.tangent_size,
+                damping=self.damping, loss_fn=step_loss_fn, key=self.key,
+            ),
+        )
+
+    def _compute_direction(self, z_init, batch):
+        """Return ``(grads, predictions_flat)`` without applying the update (for tests)."""
+        if self.opt_state is None:
+            raise ValueError("register_trainable_weights must be called before step.")
+        inputs_seq, labels_seq = batch
+        return self._make_grad_fn(labels_seq)(inputs_seq, z_init)
+
+    def step(self, z_init, batch):
+        inputs_seq, labels_seq = batch
+        grads, predictions = self._compute_direction(z_init, batch)
+        super().step(grads)
+        return self.loss_fn(predictions, _collapse_time(labels_seq))
+
+    def update(self, z_init, batch):
+        return self.step(z_init, batch)

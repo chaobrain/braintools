@@ -129,3 +129,104 @@ def test_sofo_deterministic_with_fixed_key():
     g3, _ = opt2._compute_direction(x, y)
     l3 = jax.tree.leaves(g3)
     assert any(not jnp.allclose(a, b) for a, b in zip(l1, l3))
+
+
+# ---------------------------------------------------------------------------
+# SOFOScan
+# ---------------------------------------------------------------------------
+
+class LinearRNN(brainstate.nn.Module):
+    """h_t = W_h h_{t-1} + W_x x_t ; output = W_o h_t. Latent passed explicitly.
+
+    Uses default (affine) Linear layers -- the mse GGN is identity regardless of the bias, so
+    the direction test is unaffected. Avoids relying on a bias-disable kwarg whose name may
+    differ across brainstate versions.
+    """
+
+    def __init__(self, n_in, n_hidden, n_out):
+        super().__init__()
+        self.wh = brainstate.nn.Linear(n_hidden, n_hidden)
+        self.wx = brainstate.nn.Linear(n_in, n_hidden)
+        self.wo = brainstate.nn.Linear(n_hidden, n_out)
+
+    def __call__(self, latent, inputs):
+        new_latent = self.wh(latent) + self.wx(inputs)
+        output = self.wo(new_latent)
+        return new_latent, output
+
+
+def _seq_batch(T=5, batch=4, n_in=3, n_out=2, seed=0):
+    rng = brainstate.random.RandomState(seed)
+    xs = rng.randn(T, batch, n_in)
+    ys = rng.randn(T, batch, n_out)
+    return xs, ys
+
+
+def test_sofoscan_reduces_loss():
+    brainstate.random.seed(0)
+    n_in, n_hidden, n_out, batch = 3, 6, 2, 4
+    cell = LinearRNN(n_in, n_hidden, n_out)
+    loss_fn = lambda out, label: jnp.mean((out - label) ** 2)
+    opt = braintools.optim.SOFOScan(cell, loss_fn, lr=1e-2, loss='mse',
+                                    tangent_size=64, damping=1e-5, key=jax.random.PRNGKey(0))
+    opt.register_trainable_weights(cell.states(brainstate.ParamState))
+    xs, ys = _seq_batch(T=5, batch=batch, n_in=n_in, n_out=n_out)
+    z0 = jnp.zeros((batch, n_hidden))
+
+    @brainstate.transform.jit
+    def step(z, b):
+        return opt.step(z, b)
+
+    first = float(step(z0, (xs, ys)))
+    last = first
+    for _ in range(30):
+        last = float(step(z0, (xs, ys)))
+    assert last < first
+
+
+def test_sofoscan_direction_matches_gradient_under_high_damping():
+    """In the high-damping limit SOFO reduces to (subspace-projected) gradient descent, so its
+    direction must align with the true gradient. This validates the scan + forward-mode-JVP math
+    (at low damping the natural-gradient direction differs from the plain gradient by the GGN
+    preconditioner, so it is not a good oracle)."""
+    brainstate.random.seed(3)
+    n_in, n_hidden, n_out, batch = 3, 5, 2, 4
+    cell = LinearRNN(n_in, n_hidden, n_out)
+    loss_fn = lambda out, label: jnp.mean((out - label) ** 2)
+    opt = braintools.optim.SOFOScan(cell, loss_fn, lr=1e-2, loss='mse',
+                                    tangent_size=400, damping=10.0, key=jax.random.PRNGKey(0))
+    params = cell.states(brainstate.ParamState)
+    opt.register_trainable_weights(params)
+    xs, ys = _seq_batch(T=4, batch=batch, n_in=n_in, n_out=n_out, seed=5)
+    z0 = jnp.zeros((batch, n_hidden))
+
+    h, _ = opt._compute_direction(z0, (xs, ys))
+
+    # true gradient of the total (collapsed) scan loss via reverse-mode
+    def total_loss():
+        latent = z0
+        outs = []
+        for t in range(xs.shape[0]):
+            latent, out = cell(latent, xs[t])
+            outs.append(out)
+        preds = jnp.concatenate(outs, axis=0)
+        return jnp.mean((preds - ys.reshape(-1, ys.shape[-1])) ** 2)
+
+    true_grads = brainstate.transform.grad(total_loss, grad_states=params)()
+
+    lh, lt = jax.tree.leaves(h), jax.tree.leaves(true_grads)
+    dot = sum(jnp.sum(a * b) for a, b in zip(lh, lt))
+    nh = jnp.sqrt(sum(jnp.sum(a ** 2) for a in lh))
+    ng = jnp.sqrt(sum(jnp.sum(b ** 2) for b in lt))
+    cos = float(dot / (nh * ng + 1e-12))
+    assert cos > 0.7
+
+
+def test_sofoscan_step_before_register_raises():
+    cell = LinearRNN(3, 4, 2)
+    loss_fn = lambda out, label: jnp.mean((out - label) ** 2)
+    opt = braintools.optim.SOFOScan(cell, loss_fn)
+    xs = jnp.zeros((2, 4, 3))
+    ys = jnp.zeros((2, 4, 2))
+    with pytest.raises(ValueError):
+        opt.step(jnp.zeros((4, 4)), (xs, ys))

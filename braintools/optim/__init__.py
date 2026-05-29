@@ -400,6 +400,7 @@ from ._optax_optimizer import (
 # SOFO optimizers
 from ._sofo_optimizer import (
     SOFO,
+    SOFOScan,
 )
 
 __all__ = [
@@ -464,4 +465,5 @@ __all__ = [
 
     # SOFO optimizers
     'SOFO',
+    'SOFOScan',
 ]
