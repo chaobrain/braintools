@@ -397,6 +397,11 @@ from ._optax_optimizer import (
     Fromage,
 )
 
+# SOFO optimizers
+from ._sofo_optimizer import (
+    SOFO,
+)
+
 __all__ = [
     # Base classes
     'Optimizer',
@@ -456,4 +461,7 @@ __all__ = [
     'SM3',
     'Novograd',
     'Fromage',
+
+    # SOFO optimizers
+    'SOFO',
 ]
