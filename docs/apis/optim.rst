@@ -89,6 +89,24 @@ offer improved stability in challenging optimization landscapes.
    Novograd
    Fromage
 
+Forward-Mode Optimizers
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+These optimizers compute their own search direction with forward-mode automatic
+differentiation rather than accepting precomputed gradients. SOFO ("Second-Order
+Forward-mode Optimization") samples random tangent vectors, builds a Generalised
+Gauss-Newton matrix in that subspace, and projects a damped natural-gradient direction
+back to parameter space. ``SOFO`` targets feed-forward models; ``SOFOScan`` targets
+stateful one-step recurrent modules scanned over a sequence.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   SOFO
+   SOFOScan
+
 Learning Rate Schedulers
 ------------------------
 
