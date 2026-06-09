@@ -37,7 +37,15 @@ jobs:
           python -m pip install -e ".[testing]"
       - name: Run pytest (POSIX)
         if: runner.os != 'Windows'
-        run: pytest --maxfail=1 --disable-warnings
+        run: pytest --maxfail=1 --disable-warnings --cov --cov-report=xml
       - name: Run pytest (Windows)
         if: runner.os == 'Windows'
-        run: pytest --maxfail=1 --disable-warnings -p no:faulthandler
+        run: pytest --maxfail=1 --disable-warnings -p no:faulthandler --cov --cov-report=xml
+      - name: Upload coverage to Codecov
+        if: runner.os == 'Linux'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

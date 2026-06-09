@@ -52,6 +52,7 @@ dependencies = [
 [project.optional-dependencies]
 testing = [
     "pytest",
+    "pytest-cov",
     "absl-py",
     "nevergrad",
 ]
@@ -107,3 +108,28 @@ exclude = [
 
 [tool.setuptools.dynamic]
 version = { attr = "braintools._version.__version__" }
+
+[tool.coverage.run]
+# `sysmon` uses CPython's sys.monitoring (3.12+); it is faster and avoids a
+# native-tracer crash when jaxlib is imported under the C tracer.
+core = "sysmon"
+source = ["braintools"]
+omit = [
+    "*/_version.py",
+    "*_test.py",
+    # Optional/visual/hardware backends that cannot run in the standard CI
+    # environment (their extra dependencies are not installed there):
+    "*/visualize/_interactive.py",  # requires plotly
+    "*/visualize/_three_d.py",      # requires pyvista
+    "*/trainer/_distributed.py",    # requires a multi-device/multi-host setup
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@(abc\\.)?abstractmethod",
+]
