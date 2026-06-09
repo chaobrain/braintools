@@ -1,0 +1,44 @@
+name: Type Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_call:
+
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  mypy:
+    name: mypy (public API surface)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[type-check]"
+      - name: Run mypy on the typed public surface
+        # The full package is still being annotated incrementally; this gate
+        # enforces type-correctness of the maintained public API. The
+        # [tool.mypy] config in pyproject.toml applies (follow_imports=skip,
+        # ignore_missing_imports).
+        run: |
+          mypy \
+            braintools/__init__.py \
+            braintools/_misc.py \
+            braintools/_spike_operation.py \
+            braintools/_spike_encoder.py \
+            braintools/tree.py
