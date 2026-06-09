@@ -62,6 +62,12 @@ class TestColormapsExtra(unittest.TestCase):
         self.assertIsInstance(cmap, LinearSegmentedColormap)
         self.assertIn('extra_test_cmap', plt.colormaps)
 
+    def test_create_neural_colormap_idempotent(self):
+        # Registering the same name twice must not raise (force=True).
+        braintools.visualize.create_neural_colormap('extra_dup', ['#000000', '#FFFFFF'])
+        braintools.visualize.create_neural_colormap('extra_dup', ['#FFFFFF', '#000000'])
+        self.assertIn('extra_dup', plt.colormaps)
+
     # ------------------------------------------------------------------
     # brain_colormaps
     # ------------------------------------------------------------------

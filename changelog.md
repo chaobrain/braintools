@@ -101,6 +101,19 @@ assets are migrated to the new `brainx.chaobrain.com` host.
     correctly under `brainstate.transform.vmap2`.
   - Minor fixes to the input encoder and the working-memory task library.
   - Added regression tests covering all of the above.
+- **`braintools.trainer`**:
+  - `LightningModule.device` no longer raises on array-backed parameters;
+    `Array.devices()` returns a set, which is now handled correctly (#92).
+  - `ModelCheckpoint` saves through `braintools.file.msgpack_save` instead of
+    a state-restore helper, so checkpoints are written correctly (#95).
+- **`braintools.visualize`**:
+  - `animate_2D` reshapes the value grid before drawing the first frame,
+    fixing a `pcolor` crash on the initial step (#93).
+  - `correlation_matrix(method='kendall')` builds the matrix pairwise instead
+    of passing a 2-D array to `kendalltau` (#94).
+  - `remove_axis` uses `ax.spines` instead of the non-existent `ax.spine` (#96).
+  - `create_neural_colormap` / `brain_colormaps` register with `force=True`,
+    making them idempotent rather than raising on re-use (#97).
 
 ### Infrastructure
 
@@ -116,7 +129,8 @@ assets are migrated to the new `brainx.chaobrain.com` host.
 - **Test coverage**: new test suites cover the previously-untested trainer,
   visualize, file, and surrogate modules, raising overall coverage to ~92%.
   CI runs `pytest` with `--cov` and uploads results to Codecov, and the
-  README carries a coverage badge.
+  README carries a coverage badge. `tqdm` and `rich` were added to the
+  `testing` extra so the progress-bar tests run in CI.
 
 
 ## Version 0.1.9 (2026-05-21)

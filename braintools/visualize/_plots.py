@@ -363,7 +363,7 @@ def animate_2D(
     num_step, num_neuron = values.shape
     height, width = net_size
 
-    values = np.asarray(values)
+    values = np.asarray(values).reshape((num_step, height, width))
     val_min = values.min() if val_min is None else val_min
     val_max = values.max() if val_max is None else val_max
 
@@ -387,7 +387,6 @@ def animate_2D(
         title.set_text("Time: {:.2f} ms".format((t + 1) * dt))
         return [mesh, title]
 
-    values = values.reshape((num_step, height, width))
     anim = animation.FuncAnimation(fig=fig,
                                    func=frame,
                                    frames=list(range(1, num_step, frame_step)),
@@ -626,4 +625,4 @@ def remove_axis(ax, *pos):
     for p in pos:
         if p not in ['left', 'right', 'top', 'bottom']:
             raise ValueError
-        ax.spine[p].set_visible(False)
+        ax.spines[p].set_visible(False)

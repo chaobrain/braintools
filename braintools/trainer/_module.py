@@ -221,7 +221,9 @@ class LightningModule(brainstate.nn.Module):
                 if hasattr(state, 'value') and hasattr(state.value, 'devices'):
                     devices = state.value.devices()
                     if devices:
-                        return devices[0]
+                        # ``jax.Array.devices()`` returns a set, which is not
+                        # subscriptable; take an arbitrary element instead.
+                        return next(iter(devices))
         return None
 
     # -------------------------------------------------------------------------

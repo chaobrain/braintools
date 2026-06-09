@@ -461,7 +461,7 @@ class ModelCheckpoint(Callback):
 
     def _save_checkpoint(self, trainer: Any, module: Any, filepath: str):
         """Save a checkpoint."""
-        from braintools.file import msgpack_from_state_dict
+        from braintools.file import msgpack_save
 
         checkpoint = {
             'epoch': module.current_epoch,
@@ -490,7 +490,7 @@ class ModelCheckpoint(Callback):
                 checkpoint['callbacks'][callback.state_key] = cb_state
 
         # Serialize and save
-        msgpack_from_state_dict(checkpoint, filepath)
+        msgpack_save(filepath, checkpoint, verbose=False)
 
         if self.verbose:
             print(f"Saved checkpoint to {filepath}")
