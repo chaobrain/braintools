@@ -1,6 +1,100 @@
 # Release Notes
 
 
+## Version 0.1.10 (2026-06-09)
+
+This release adds two forward-mode second-order optimizers — `SOFO` and
+`SOFOScan` — to `braintools.optim`, and hardens the `braintools.cogtask`
+task engine so that conditional combinators, categorical labels, and
+metadata batching behave correctly under `brainstate.transform.jit` and
+`brainstate.transform.vmap2`. Documentation links and assets are migrated to
+the new `brainx.chaobrain.com` host.
+
+### Highlights
+
+- **New optimizers `SOFO` and `SOFOScan`**: Second-Order Forward-mode
+  Optimization for feedforward and recurrent models. Both build a
+  Generalised Gauss-Newton matrix in a random tangent subspace from
+  forward-mode JVPs and apply the resulting direction through the standard
+  optax update path, so learning-rate schedules, momentum, weight decay, and
+  gradient clipping continue to work unchanged.
+- **Hardened `cogtask` dispatch**: `Switch` now works in both eager and
+  traced execution, `While` fails loudly on unsupported traced conditions,
+  and a new `num_classes` parameter decouples categorical-head sizing from
+  `num_outputs`.
+
+### Added
+
+#### `braintools.optim` — forward-mode second-order optimizers
+
+- **`SOFO`**: Second-Order Forward-mode Optimization for a model
+  `model(inputs) -> predictions` paired with `loss_fn(predictions, targets)`.
+  It samples random tangent vectors, takes forward-mode JVPs through the
+  model and loss, builds a damped Generalised Gauss-Newton system in the
+  random subspace, solves it, and projects the solution back to parameter
+  space. Supports `'mse'` and `'ce'` loss forms, a configurable
+  `tangent_size` and `damping`, `momentum` / `nesterov`, decoupled
+  `weight_decay`, and norm/value gradient clipping.
+- **`SOFOScan`**: a recurrent variant for a stateful one-step cell
+  `rnn_cell(latent, inputs) -> (new_latent, output)`. The cell is scanned
+  over the input sequence with `brainstate.transform.scan`, and forward-mode
+  JVPs propagate the tangents through `lax.scan`, accumulating the
+  Gauss-Newton matrix over every `(timestep, batch)` sample before a single
+  solve. Both optimizers are exported from `braintools.optim` and documented
+  in the API reference.
+
+#### `braintools.cogtask`
+
+- **`Task` categorical sizing**: a new `num_classes` argument, decoupled from
+  `num_outputs`, sizes categorical output heads independently of the raw
+  output dimension.
+- **`Task` feature ergonomics**: `Task` now accepts a lone `Feature` in place
+  of a `FeatureSet`, and requires features to be supplied whenever `phases`
+  are given.
+
+### Changed
+
+- **`cogtask` conditional dispatch**:
+  - `Switch` uses dual-mode packed dispatch — a concrete `key in cases`
+    lookup in eager mode and a `lax.switch` over ordered branches under
+    `jit` / `vmap` — and coerces 0-d concrete array keys (e.g.
+    `ctx.rng.choice(...)` selectors) so eager `sample_trial` no longer
+    raises `unhashable type: 'ArrayImpl'`.
+  - `While` raises a clear `NotImplementedError` for data-dependent (traced)
+    conditions under `jit` / `vmap` instead of surfacing a cryptic
+    `TracerBoolConversionError`.
+- **Documentation links**: chaobrain-ecosystem documentation URLs
+  (`brainstate`, `brainunit`, `braincell`, `brainmass`, `brainevent`,
+  `braintrace`, `braintools`, and related packages) were rewritten from
+  `*.readthedocs.io` to the new `brainx.chaobrain.com` host, stripping
+  `/latest`, `/en/latest`, and `/en/stable` path prefixes and
+  `?badge=latest` query strings. Third-party ReadTheDocs links are left
+  intact.
+- **README logo**: the project logo is now served from
+  `brainx.chaobrain.com` as WebP instead of a raw GitHub asset.
+
+### Fixed
+
+- **`braintools.cogtask`**:
+  - Categorical labels that are statically out of range for the declared
+    `num_classes` are now validated and rejected up front.
+  - Packed-mode phases expose `phase_start` / `phase_end` before `on_enter`
+    runs, matching the contract already provided in fixed-length mode.
+  - String leaves are dropped from batched metadata so `return_meta` works
+    correctly under `brainstate.transform.vmap2`.
+  - Minor fixes to the input encoder and the working-memory task library.
+  - Added regression tests covering all of the above.
+
+### Infrastructure
+
+- **Publish workflow**: reads the package version directly from
+  `braintools/_version.py` (the single source of truth) and verifies that the
+  release tag matches before publishing.
+- **Docs deployment**: the `push: main` trigger was removed; documentation is
+  now deployed only on a GitHub release (`released`) or via a manual
+  `workflow_dispatch`.
+
+
 ## Version 0.1.9 (2026-05-21)
 
 This release introduces `braintools.cogtask`, a composable framework for
