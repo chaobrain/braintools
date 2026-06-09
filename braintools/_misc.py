@@ -21,19 +21,19 @@ import brainunit as u
 import jax
 
 
-def set_module_as(module: str):
-    def wrapper(fun: callable):
+def set_module_as(module: str) -> Callable[[Callable], Callable]:
+    def wrapper(fun: Callable) -> Callable:
         fun.__module__ = module
         return fun
 
     return wrapper
 
 
-def tree_map(f: Callable[..., Any], tree: Any, *rest: Any):
+def tree_map(f: Callable[..., Any], tree: Any, *rest: Any) -> Any:
     return jax.tree.map(f, tree, *rest, is_leaf=u.math.is_quantity)
 
 
-def randn_like(y):
+def randn_like(y: brainstate.typing.ArrayLike) -> jax.Array:
     return brainstate.random.randn(*u.math.shape(y))
 
 

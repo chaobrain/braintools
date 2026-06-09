@@ -55,6 +55,9 @@ testing = [
     "absl-py",
     "nevergrad",
 ]
+type-check = [
+    "mypy>=1.8",
+]
 cpu = [
     "jax[cpu]",
 ]
@@ -105,5 +108,21 @@ exclude = [
     "braintools.egg-info*"
 ]
 
+[tool.setuptools.package-data]
+# Ship the PEP 561 marker so type checkers consume braintools' inline types.
+braintools = ["py.typed"]
+
 [tool.setuptools.dynamic]
 version = { attr = "braintools._version.__version__" }
+
+[tool.mypy]
+python_version = "3.11"
+# Many scientific dependencies (jax, brainunit, optax, scipy, ...) ship partial
+# or no type information; don't fail on their missing stubs.
+ignore_missing_imports = true
+# Incremental typing: modules reached via import (third-party and internal code
+# not yet annotated) are treated as untyped rather than reported. This keeps the
+# explicitly type-checked public surface green while annotation coverage grows.
+follow_imports = "skip"
+warn_redundant_casts = true
+warn_unused_ignores = false
