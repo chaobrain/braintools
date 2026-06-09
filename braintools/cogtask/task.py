@@ -24,6 +24,7 @@ import numpy as np
 
 from typing import Optional, Callable, Tuple, Dict, Any, Literal
 from .context import Context
+from .feature import Feature, FeatureSet
 from .phase import (
     Phase,
     Sequence,
@@ -42,6 +43,24 @@ OutputMode = Literal['categorical', 'vector']
 # Sentinel for "no explicit seed". A Task without a seed will draw fresh
 # randomness from brainstate's default RNG on every call.
 _NO_SEED = object()
+
+
+def _drop_string_leaves(meta):
+    """Recursively drop string/bytes leaves from a meta structure.
+
+    ``batch_sample(return_meta=True)`` stacks per-trial meta with ``vmap2``, which
+    requires every leaf to be a JAX type. Tasks that fall back to the default
+    ``get_trial_meta`` return the whole ``trial_state`` dict, which can include
+    descriptive strings (e.g. ``output_mode``). Such constant strings cannot be
+    batched, so they are dropped from the batched meta; numeric fields are kept.
+    """
+    if isinstance(meta, dict):
+        return {k: _drop_string_leaves(v) for k, v in meta.items()
+                if not isinstance(v, (str, bytes))}
+    if isinstance(meta, (list, tuple)):
+        kept = [_drop_string_leaves(v) for v in meta if not isinstance(v, (str, bytes))]
+        return type(meta)(kept)
+    return meta
 
 
 class Task:
@@ -124,6 +143,7 @@ class Task:
         name: Optional[str] = None,
         output_mode: OutputMode = 'categorical',
         seed: Optional[int] = None,
+        num_classes: Optional[int] = None,
         **kwargs
     ):
         for key, value in kwargs.items():
@@ -135,14 +155,38 @@ class Task:
             trial_init = self._class_trial_init
 
         self.phases = phases
-        self.input_features = input_features
-        self.output_features = output_features
+        # Accept a lone Feature in place of a FeatureSet: phases look features
+        # up by name (``name in features``) and slice them (``features[name]``),
+        # which only FeatureSet supports. Wrap so single-channel tasks work.
+        self.input_features = FeatureSet(input_features) if isinstance(input_features, Feature) else input_features
+        self.output_features = FeatureSet(output_features) if isinstance(output_features, Feature) else output_features
+
+        # When phases are supplied directly (instance-based path), features are
+        # mandatory: the phases bind feature slices by name and fail with a
+        # cryptic ``NoneType`` error otherwise. Surface a clear message instead.
+        if self.input_features is None or self.output_features is None:
+            raise ValueError(
+                "When `phases` is provided, both `input_features` and "
+                "`output_features` must be given (got "
+                f"input_features={self.input_features!r}, "
+                f"output_features={self.output_features!r})."
+            )
+
         self._trial_init_func = trial_init
         self.name = name or self.__class__.__name__
 
         if output_mode not in ('categorical', 'vector'):
             raise ValueError(f"Unknown output_mode: {output_mode}")
         self.output_mode: OutputMode = output_mode
+
+        # Number of categorical classes for the 1-D label target. Independent
+        # of the output-feature dimensionality (see the ``num_classes``
+        # property). Set explicitly via the ``num_classes=`` argument or by a
+        # subclass assigning ``self._num_classes`` before ``super().__init__``;
+        # falls back to ``num_outputs`` when left unset.
+        self._num_classes: Optional[int] = (
+            num_classes if num_classes is not None else getattr(self, '_num_classes', None)
+        )
 
         self.seed = seed
         self._root_key: Optional[jax.Array] = (
@@ -227,6 +271,27 @@ class Task:
     @property
     def num_outputs(self) -> int:
         return self.output_features.num
+
+    @property
+    def num_classes(self) -> Optional[int]:
+        """Number of classes for the categorical 1-D label target.
+
+        In ``output_mode='categorical'`` the target ``Y`` is a 1-D integer
+        label array, and the size of a classifier head is the number of
+        distinct label values — which is **independent of**
+        :attr:`num_outputs` (the summed output-feature dimensionality).
+        ``num_outputs`` only coincidentally equals the class count in the
+        default configurations and drifts apart when e.g. ``cue_dim`` changes,
+        so prefer ``num_classes`` when wiring a categorical model head.
+
+        Returns the explicit value passed as ``num_classes=`` when set,
+        otherwise falls back to :attr:`num_outputs` (preserving historical
+        behaviour). Returns ``None`` in ``output_mode='vector'``, where the
+        target is a continuous vector of width :attr:`num_outputs`.
+        """
+        if self.output_mode != 'categorical':
+            return None
+        return self._num_classes if self._num_classes is not None else self.num_outputs
 
     @property
     def dt(self):
@@ -375,7 +440,12 @@ class Task:
         from .phase import DeclarativePhase
 
         if isinstance(phase, DeclarativePhase):
-            phase.bind_features(self.input_features, self.output_features)
+            # Pass the *explicit* class count (None unless the user declared
+            # it) so labels are validated only against a sound upper bound.
+            phase.bind_features(
+                self.input_features, self.output_features,
+                num_classes=self._num_classes if self.output_mode == 'categorical' else None,
+            )
         for child in phase.children():
             self._bind_features_to_phases(child)
 
@@ -414,8 +484,11 @@ class Task:
         mask_axis = 1 if time_first else 0
         if return_mask:
             if return_meta:
+                def _one_mask_meta(i):
+                    X, Y, mask, meta = self.__getitem_with_mask_and_meta__(i)
+                    return X, Y, mask, _drop_string_leaves(meta)
                 X, Y, mask, meta = brainstate.transform.vmap2(
-                    lambda i: self.__getitem_with_mask_and_meta__(i),
+                    _one_mask_meta,
                     out_axes=(out_axes_xy, out_axes_xy, mask_axis, 0)
                 )(indices)
                 return X, Y, mask, meta
@@ -426,8 +499,11 @@ class Task:
                 )(indices)
                 return X, Y, mask
         if return_meta:
+            def _one_meta(i):
+                X, Y, meta = self.__getitem_with_meta__(i)
+                return X, Y, _drop_string_leaves(meta)
             X, Y, meta = brainstate.transform.vmap2(
-                lambda i: self.__getitem_with_meta__(i),
+                _one_meta,
                 out_axes=(out_axes_xy, out_axes_xy, 0)
             )(indices)
             return X, Y, meta
@@ -481,6 +557,7 @@ def create_task(
     name: Optional[str] = None,
     seed: Optional[int] = None,
     output_mode: OutputMode = 'categorical',
+    num_classes: Optional[int] = None,
 ) -> Task:  # noqa: D401
     """
     Convenience factory for creating tasks.
@@ -501,6 +578,10 @@ def create_task(
         Random seed.
     output_mode: OutputMode, optional
         Output mode.
+    num_classes : int, optional
+        Number of categorical classes for the 1-D label target. Used to size a
+        classifier head in ``output_mode='categorical'``; falls back to
+        ``num_outputs`` when unset. Ignored in ``output_mode='vector'``.
 
     Returns
     -------
@@ -520,4 +601,5 @@ def create_task(
     ...     num_trial=1000
     ... )
     """
-    return Task(phases, input_features, output_features, trial_init, name, output_mode=output_mode, seed=seed)
+    return Task(phases, input_features, output_features, trial_init, name,
+                output_mode=output_mode, seed=seed, num_classes=num_classes)

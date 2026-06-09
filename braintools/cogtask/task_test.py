@@ -130,14 +130,23 @@ def test_batch_sample_start_index_changes_trials():
 
 
 def test_batch_sample_with_meta_returns_three_values():
-    # DelayMatchSample overrides get_trial_meta to return (sample_idx, test_idx)
-    # — only such tasks are vmap-safe with return_meta=True, since the default
-    # implementation returns the whole trial_state dict (containing strings).
+    # DelayMatchSample overrides get_trial_meta to return (sample_idx, test_idx).
     task = ct.DelayMatchSample(seed=0)
     X, Y, meta = task.batch_sample(2, return_meta=True)
     assert X.shape[1] == 2
     assert Y.shape[1] == 2
     assert meta is not None
+
+
+def test_batch_sample_with_default_meta_drops_string_leaves():
+    # Tasks that fall back to the default get_trial_meta return the whole
+    # trial_state dict, which includes a string (output_mode). batch_sample
+    # must drop such non-JAX leaves so the numeric meta can be vmap-stacked.
+    task = ct.PerceptualDecisionMaking(seed=0)
+    X, Y, meta = task.batch_sample(4, return_meta=True)
+    assert isinstance(meta, dict)
+    assert 'output_mode' not in meta  # string leaf dropped
+    assert np.asarray(meta['ground_truth']).shape[0] == 4
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +197,26 @@ def test_unknown_output_mode_rejected():
         )
 
 
+def test_single_feature_accepted_without_featureset_wrapper():
+    """A lone Feature (not wrapped in FeatureSet) is accepted as input/output
+    features and normalized internally, so a single-channel task is usable."""
+    fix = ct.Feature(1, 'fixation')
+    task = ct.Task(
+        phases=ct.concat([
+            ct.Fixation(10 * u.ms, inputs={'fixation': 1.0}, outputs={'label': 0}),
+            ct.Response(10 * u.ms, inputs={'fixation': 0.0}, outputs={'label': 1}),
+        ]),
+        input_features=fix,
+        output_features=fix,
+        seed=0,
+    )
+    assert isinstance(task.input_features, FeatureSet)
+    assert isinstance(task.output_features, FeatureSet)
+    X, Y = task[0]
+    assert X.shape == (20, 1)
+    assert Y.shape == (20,)
+
+
 def test_create_task_factory_returns_task_instance():
     fix = ct.Feature(1, 'fix')
     out = ct.Feature(1, 'out')
@@ -197,6 +226,88 @@ def test_create_task_factory_returns_task_instance():
     assert isinstance(task, ct.Task)
     X, Y = task[0]
     assert X.shape[0] == 5
+
+
+# ---------------------------------------------------------------------------
+# num_classes (categorical class count, decoupled from num_outputs)
+# ---------------------------------------------------------------------------
+
+def test_num_classes_defaults_to_num_outputs_categorical():
+    """Backward-compatible default: categorical num_classes == num_outputs."""
+    task = ct.PerceptualDecisionMaking(seed=0)
+    assert task.output_mode == 'categorical'
+    assert task.num_classes == task.num_outputs
+
+
+def test_num_classes_is_none_in_vector_mode():
+    task = ct.DelayDirectionReproduction(seed=0)
+    assert task.output_mode == 'vector'
+    assert task.num_classes is None
+
+
+def test_num_classes_explicit_decouples_from_num_outputs():
+    """An explicit num_classes is independent of the output-feature width,
+    which otherwise grows with e.g. cue_dim while the label space does not."""
+    fix = ct.Feature(1, 'fix')
+    p = ct.concat([
+        ct.Fixation(5 * u.ms, inputs={'fix': 1.0}, outputs={'label': 0}),
+        ct.Response(5 * u.ms, outputs={'label': 1}),
+    ])
+    task = ct.Task(
+        phases=p, input_features=fix, output_features=fix + ct.Feature(4, 'r'),
+        num_classes=3, seed=0,
+    )
+    assert task.num_outputs == 5   # 1 + 4 output-feature dims
+    assert task.num_classes == 3   # but only 3 label classes
+
+    from braintools.cogtask.task import create_task
+    t2 = create_task(p, fix, fix + ct.Feature(4, 'r'), num_classes=2, seed=0)
+    assert t2.num_classes == 2
+
+
+def test_phases_without_features_raises_clear_error():
+    p = ct.Fixation(5 * u.ms, inputs={'fix': 1.0}, outputs={'label': 0})
+    with pytest.raises(ValueError, match="input_features.*output_features"):
+        ct.Task(phases=p, seed=0)
+
+
+def test_out_of_range_literal_label_rejected_when_num_classes_declared():
+    """A literal int label outside [0, num_classes) is caught at bind time when
+    the task declares num_classes (the only sound bound; output dim is not)."""
+    fix = ct.Feature(1, 'fix')
+    p = ct.concat([
+        ct.Fixation(3 * u.ms, inputs={'fix': 1.0}, outputs={'label': 0}),
+        ct.Response(3 * u.ms, outputs={'label': 99}),   # 99 >= num_classes (3)
+    ])
+    with pytest.raises(ValueError, match="out of range"):
+        ct.Task(phases=p, input_features=fix, output_features=fix + ct.Feature(2, 'r'),
+                num_classes=3, seed=0)
+
+
+def test_in_range_literal_label_accepted_with_num_classes():
+    fix = ct.Feature(1, 'fix')
+    p = ct.concat([
+        ct.Fixation(3 * u.ms, inputs={'fix': 1.0}, outputs={'label': 0}),
+        ct.Response(3 * u.ms, outputs={'label': 2}),    # within [0, 3)
+    ])
+    task = ct.Task(phases=p, input_features=fix, output_features=fix + ct.Feature(2, 'r'),
+                   num_classes=3, seed=0)
+    _, Y = task[0]
+    assert int(np.asarray(Y).max()) == 2
+
+
+def test_label_not_validated_without_num_classes():
+    """Without an explicit num_classes there is no sound upper bound (output
+    dim != class count), so literal labels are left unchecked — preserving
+    tasks that encode N classes in fewer output dims."""
+    fix = ct.Feature(1, 'fix')
+    p = ct.concat([
+        ct.Fixation(3 * u.ms, inputs={'fix': 1.0}, outputs={'label': 0}),
+        ct.Response(3 * u.ms, outputs={'label': 1}),    # 1 classes into a 1-dim output
+    ])
+    task = ct.Task(phases=p, input_features=fix, output_features=fix, seed=0)  # num_outputs == 1
+    _, Y = task[0]
+    assert int(np.asarray(Y).max()) == 1
 
 
 def test_class_based_task_without_define_features_raises():

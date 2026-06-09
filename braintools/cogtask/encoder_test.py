@@ -197,6 +197,17 @@ def test_identity_rejects_shape_mismatch():
         enc(_ctx(payload=jnp.zeros(4)), Feature(3, 'x'))
 
 
+def test_identity_broadcasts_scalar_to_feature_num():
+    """A 0-d scalar is broadcast to (feature.num,). This is what makes
+    DelayComparison(value_encoding='identity') work: the trial stores a scalar
+    sample/test value while the stimulus feature has num == 1."""
+    enc = identity('payload')
+    out1 = np.asarray(enc(_ctx(payload=0.7), Feature(1, 'x')))
+    np.testing.assert_allclose(out1, [0.7])
+    out3 = np.asarray(enc(_ctx(payload=0.7), Feature(3, 'x')))
+    np.testing.assert_allclose(out3, [0.7, 0.7, 0.7])
+
+
 # ---------------------------------------------------------------------------
 # cos_sin
 # ---------------------------------------------------------------------------

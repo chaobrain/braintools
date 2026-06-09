@@ -246,6 +246,38 @@ def test_if_packed_branches():
     assert bool(jnp.all(M))
 
 
+def test_on_enter_sees_slot_position_in_packed_mode():
+    """In packed (variable-length) mode, a leaf's ``on_enter`` hook must see
+    ``phase_start``/``phase_end`` pointing at its trial slot — the same
+    contract as fixed-mode ``execute_phase`` — not stale values from the
+    previous phase."""
+    fix = Feature(1, 'fixation')
+    seen = {}
+
+    def record(ctx):
+        seen['start'] = int(ctx.phase_start)
+        seen['end'] = int(ctx.phase_end)
+
+    phases = concat([
+        Fixation(50 * u.ms, inputs={'fixation': 1.0}),
+        VariableDuration(
+            min_duration=20 * u.ms, max_duration=200 * u.ms, ctx_key='delay',
+            inputs={'fixation': 1.0}, on_enter=record,
+        ),
+    ])
+
+    def init(ctx):
+        ctx['delay'] = ctx.rng.uniform(20.0, 200.0)
+
+    task = Task(phases=phases, input_features=fix, output_features=Feature(1, 'o'),
+                trial_init=init, seed=0)
+    _, _, info = task.sample_trial(0)
+    # The variable phase starts right after the 50-step fixation.
+    assert seen['start'] == 50
+    # phase_end reflects the phase's own actual (clipped) length, not 0/stale.
+    assert seen['end'] > seen['start']
+
+
 def test_variable_duration_samplers_have_bounds():
     te = ct.TruncExp(500 * u.ms, 200 * u.ms, 1000 * u.ms)
     assert te.is_variable is True

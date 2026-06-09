@@ -699,7 +699,7 @@ class DelayMatchCategory(Task):
     num_categories : int
         Number of categories (default: 2).
     num_exemplars : int
-        Number of exemplars per category (default: 6).
+        Number of exemplars per category (default: 4).
     match_prob : float
         Probability that sample and comparison stimuli belong to the
         same category (default: 0.5).

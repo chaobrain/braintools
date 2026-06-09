@@ -17,6 +17,7 @@ expose the right context keys (``switch_key``, ``while_iteration``,
 import brainunit as u
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import braintools.cogtask as ct
 from braintools.cogtask.conditional import If, Switch, While
@@ -173,6 +174,78 @@ def test_switch_with_unknown_key_and_no_default_yields_zero_duration():
     assert int(jnp.sum(info['mask'])) == 3
 
 
+def test_switch_dispatches_under_vmap_with_traced_int_selector():
+    """Under ``batch_sample`` the selector returns a traced int, so Switch must
+    dispatch via ``lax.switch`` rather than a Python ``key in cases`` lookup.
+    Even-index trials take case 0 (short), odd-index trials take case 1 (long)."""
+    fix = ct.Feature(1, 'fixation')
+    a = ct.Feature(1, 'a')
+    out = ct.Feature(1, 'out')
+    phases = ct.concat([
+        Fixation(5 * u.ms, inputs={'fixation': 1.0}, outputs={'label': 0}),
+        Switch(
+            lambda ctx: jnp.asarray(ctx['trial_index']) % 2,
+            cases={
+                0: Stimulus(10 * u.ms, name='case0', inputs={'a': 1.0}, outputs={'label': 1}),
+                1: Stimulus(40 * u.ms, name='case1', inputs={'a': 1.0}, outputs={'label': 2}),
+            },
+        ),
+    ])
+    task = ct.Task(
+        phases=phases, input_features=fix + a, output_features=fix + out,
+        trial_init=lambda ctx: None, seed=0,
+    )
+    X, Y, mask = task.batch_sample(8, return_mask=True)
+    valid = np.asarray(mask.sum(0))
+    # case0 -> 5 + 10 = 15 valid steps; case1 -> 5 + 40 = 45 valid steps.
+    np.testing.assert_array_equal(valid[0::2], 15)
+    np.testing.assert_array_equal(valid[1::2], 45)
+    # Correct branch labels land in the post-fixation region.
+    Y = np.asarray(Y)
+    assert (Y[6, 0::2] == 1).all()   # even trials -> case0 label
+    assert (Y[6, 1::2] == 2).all()   # odd trials  -> case1 label
+
+
+def test_switch_random_rule_works_eager_and_vmap_with_same_selector():
+    """Regression: a Switch driven by a random rule (``rng.choice`` -> a 0-d
+    JAX array) must dispatch correctly with the *same* selector in BOTH eager
+    ``sample_trial`` and ``batch_sample``. Eager used to crash with
+    ``TypeError: unhashable type: 'ArrayImpl'`` because a concrete-but-array
+    key was fed straight into ``key in cases``."""
+    fix = ct.Feature(1, 'fixation')
+    choice = ct.Feature(2, 'choice')
+
+    def mk(marker):
+        return Stimulus(30 * u.ms, inputs={'fixation': float(marker)}, outputs={'label': 0})
+
+    phases = ct.concat([
+        Fixation(10 * u.ms, inputs={'fixation': 9.0}, outputs={'label': 0}),
+        Switch(lambda ctx: ctx['rule'], cases={0: mk(1), 1: mk(2), 2: mk(3)}),
+    ])
+    task = ct.Task(
+        phases=phases, input_features=FeatureSet(fix), output_features=fix + choice,
+        trial_init=lambda ctx: ctx.update(rule=ctx.rng.choice(3).astype(jnp.int32)),
+        seed=5,
+    )
+
+    # Eager path (array key) — the case marker written into the fixation
+    # channel must equal rule + 1.
+    eager = {}
+    for i in range(12):
+        X, _, info = task.sample_trial(i)
+        rule = int(info['trial_state']['rule'])
+        marker = int(round(float(np.asarray(X)[10:40, 0].mean())))
+        assert marker == rule + 1, f"eager trial {i}: rule={rule} marker={marker}"
+        eager[i] = rule
+
+    # Batched path (traced key) — same selector, must match eager per index.
+    Xb, _, _ = task.batch_sample(12, return_mask=True)
+    Xb = np.asarray(Xb)
+    for i in range(12):
+        marker = int(round(float(Xb[10:40, i, 0].mean())))
+        assert marker == eager[i] + 1, f"vmap trial {i}: expected {eager[i] + 1} got {marker}"
+
+
 # ---------------------------------------------------------------------------
 # While
 # ---------------------------------------------------------------------------
@@ -216,6 +289,34 @@ def test_while_respects_max_iterations_safety_limit():
     )
     _, _, info = task.sample_trial(0)
     assert info['trial_state']['while_total_iterations'] == 3
+
+
+def test_while_raises_clear_error_under_vmap_with_traced_condition():
+    """A While whose condition reads a traced value (e.g. an rng-sampled
+    threshold) cannot be traced. ``batch_sample`` must raise an informative
+    error, while eager ``sample_trial`` keeps working."""
+    fix = ct.Feature(1, 'fixation')
+    out = ct.Feature(1, 'out')
+    body = Stimulus(
+        10 * u.ms, inputs={'fixation': 1.0}, outputs={'label': 1},
+        on_exit=lambda ctx: ctx.update(acc=ctx.get('acc', 0.0) + 0.3),
+    )
+
+    def mk():
+        return ct.Task(
+            phases=While(lambda ctx: ctx.get('acc', 0.0) < ctx['thresh'],
+                         body=body, max_iterations=10),
+            input_features=FeatureSet(fix), output_features=fix + out,
+            trial_init=lambda ctx: ctx.update(thresh=ctx.rng.uniform(0.5, 2.5), acc=0.0),
+            seed=0,
+        )
+
+    # Eager path still works (condition is concrete for a single trial).
+    _, _, info = mk().sample_trial(0)
+    assert info['trial_state']['while_total_iterations'] >= 1
+    # Traced (vmap) path raises a clear, actionable error.
+    with pytest.raises(NotImplementedError, match="data-dependent"):
+        mk().batch_sample(4)
 
 
 def test_while_get_duration_uses_max_iterations_as_upper_bound():
