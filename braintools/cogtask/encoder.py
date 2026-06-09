@@ -461,6 +461,11 @@ def identity(
 
         value = jnp.asarray(value)
 
+        # A 0-d scalar is broadcast to (feature.num,) so callers can store a
+        # plain scalar (e.g. a sampled magnitude) against a single-dim feature.
+        if value.ndim == 0:
+            return jnp.broadcast_to(value, (feature.num,))
+
         # Validate shape
         if value.shape != (feature.num,):
             raise ValueError(

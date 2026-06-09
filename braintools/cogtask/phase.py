@@ -601,6 +601,12 @@ def execute_phase_packed(phase: Phase, ctx: Context) -> None:
     ctx.phase_max_steps = max_dur
     ctx.phase_step_count = actual
     ctx.current_phase = phase.name
+    # Expose the phase's trial-level position before ``on_enter`` so hooks see
+    # the same (phase_start, phase_end) contract as the fixed-mode path in
+    # ``execute_phase``. Leaf encoding temporarily repoints these at a local
+    # block and restores them to the slot afterwards.
+    ctx.phase_start = slot_start
+    ctx.phase_end = slot_start + actual
 
     phase.on_enter(ctx)
 
@@ -765,6 +771,12 @@ class DeclarativePhase(Phase):
         Output specification (see shape conventions above).
     noise : dict, optional
         Mapping of feature name → noise sigma (Quantity with unit ms**0.5).
+        Noise is scaled as ``sigma / sqrt(dt)``. The implementation strips
+        units and uses the bare mantissas of ``sigma`` and ``dt``, so it
+        assumes ``dt`` is expressed in milliseconds (the framework default).
+        If you change ``brainstate.environ`` to a non-ms ``dt`` (e.g.
+        seconds), the noise magnitude will be scaled incorrectly — pass
+        ``sigma`` already matched to that unit, or keep ``dt`` in ms.
     on_enter : callable, optional
         Hook called when phase begins.
     on_exit : callable, optional
@@ -798,7 +810,8 @@ class DeclarativePhase(Phase):
         self._task_input_features: Optional[FeatureSet] = None
         self._task_output_features: Optional[FeatureSet] = None
 
-    def bind_features(self, input_features: FeatureSet, output_features: FeatureSet):
+    def bind_features(self, input_features: FeatureSet, output_features: FeatureSet,
+                      num_classes: Optional[int] = None):
         self._task_input_features = input_features
         self._task_output_features = output_features
 
@@ -827,6 +840,23 @@ class DeclarativePhase(Phase):
                 raise ValueError(
                     f"Unknown output feature '{name}' in phase '{self.name}'. "
                     f"Available output features: {[f.name for f in output_features]}"
+                )
+
+        # Catch a *statically* out-of-range categorical label early (e.g. a
+        # typo like ``outputs={'label': 99}``). The only sound upper bound is
+        # ``num_classes`` — the output-feature dimensionality is unrelated to
+        # the label space (that is exactly what ``Task.num_classes`` exists to
+        # decouple). So this only fires when the task declared ``num_classes``
+        # explicitly. Callable / array label specs are data-dependent and
+        # skipped here.
+        label_spec = self._output_specs.get('label')
+        if (num_classes is not None
+                and isinstance(label_spec, int) and not isinstance(label_spec, bool)):
+            if not (0 <= label_spec < num_classes):
+                raise ValueError(
+                    f"Phase '{self.name}': categorical label {label_spec} is out "
+                    f"of range; expected 0 <= label < num_classes "
+                    f"({num_classes})."
                 )
 
     def on_enter(self, ctx: Context) -> None:

@@ -56,9 +56,13 @@ FIXED_DURATION_TASKS = [
     ct.EvidenceAccumulation,
 ]
 
-# Tasks with phases whose duration depends on a value sampled in
-# ``trial_init``. They are valid via ``sample_trial`` but unsafe to vmap
-# because each trial would allocate a different total timestep count.
+# Tasks with phases whose actual duration depends on a value sampled in
+# ``trial_init`` (they contain a VariableDuration / conditional phase). They
+# run in packed mode: buffers are sized to the static ``max_trial_duration``
+# and a per-timestep mask marks the valid steps, so they ARE vmap-safe via
+# ``batch_sample(return_mask=True)`` — see
+# ``task_variable_length_test.test_migrated_builtin_tasks_packed``. They are
+# kept separate only because their valid length varies per trial.
 VARIABLE_DURATION_TASKS = [
     ct.HierarchicalReasoning,
     ct.IntervalDiscrimination,
