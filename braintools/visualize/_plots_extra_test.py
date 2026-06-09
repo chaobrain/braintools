@@ -27,6 +27,7 @@ from braintools.visualize._plots import (
     line_plot,
     raster_plot,
     animate_1D,
+    animate_2D,
     remove_axis,
 )
 
@@ -311,13 +312,24 @@ class TestRemoveAxis(unittest.TestCase):
         with self.assertRaises(ValueError):
             remove_axis(ax, 'not-a-side')
 
-    def test_valid_position_executes_body(self):
-        # A valid position passes the validation check and reaches the body.
-        # The source references ``ax.spine`` (an Axes has ``spines``), so the
-        # statement executes and raises AttributeError - covering that line.
+    def test_valid_position_hides_spine(self):
+        # Valid positions hide the corresponding spines.
         fig, ax = plt.subplots()
-        with self.assertRaises(AttributeError):
-            remove_axis(ax, 'left')
+        remove_axis(ax, 'left', 'top')
+        self.assertFalse(ax.spines['left'].get_visible())
+        self.assertFalse(ax.spines['top'].get_visible())
+
+
+class TestAnimate2D(unittest.TestCase):
+
+    def tearDown(self):
+        plt.close('all')
+
+    def test_animate_2d_runs(self):
+        # values: (num_step, num_neuron) reshaped to a (height, width) grid.
+        values = np.random.rand(5, 12)
+        anim = animate_2D(values, net_size=(3, 4), dt=0.1, show=False)
+        self.assertIsNotNone(anim)
 
 
 if __name__ == '__main__':

@@ -204,6 +204,17 @@ class TestLightningModuleProperties:
         # so the device lookup falls through to None.
         assert model.device is None
 
+    def test_device_property_with_array_param(self):
+        # A ParamState holding a raw JAX array exercises the device lookup;
+        # ``Array.devices()`` returns a set, so the property must not index it.
+        class _ArrModel(braintools.trainer.LightningModule):
+            def __init__(self):
+                super().__init__()
+                self.p = brainstate.ParamState(jnp.ones(3))
+
+        model = _ArrModel()
+        assert model.device is not None
+
 
 class TestLogging:
     """Tests for the logging methods."""

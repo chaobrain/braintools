@@ -274,21 +274,20 @@ class TestCallbackList:
 
 @pytest.fixture
 def patched_save(monkeypatch):
-    """Replace braintools.file.msgpack_from_state_dict with a real file writer.
+    """Record ModelCheckpoint saves without serializing to disk.
 
-    The production ``_save_checkpoint`` calls ``msgpack_from_state_dict`` with a
-    ``(checkpoint_dict, filepath)`` pair, which the real merge-oriented function
-    does not support.  We patch it with a tiny serializer so the decision logic
-    in ModelCheckpoint can be exercised honestly while still producing files.
+    ``_save_checkpoint`` calls ``braintools.file.msgpack_save(filepath, checkpoint)``.
+    We replace it with a tiny recorder so the decision logic in ModelCheckpoint can
+    be exercised quickly while still producing files.
     """
     saved = []
 
-    def fake(target, path):
+    def fake(path, target, *args, **kwargs):
         saved.append((target, path))
         with open(path, 'wb') as f:
             f.write(b'ckpt')
 
-    monkeypatch.setattr(bf, 'msgpack_from_state_dict', fake)
+    monkeypatch.setattr(bf, 'msgpack_save', fake)
     return saved
 
 
@@ -425,6 +424,20 @@ class TestModelCheckpointSaving:
             cb._save_checkpoint(trainer, model, fp)
             ckpt = patched_save[0][0]
             assert stateful.state_key in ckpt['callbacks']
+
+    def test_save_checkpoint_real_roundtrip(self):
+        # Exercise the real msgpack_save path (no patching) and load it back.
+        with tempfile.TemporaryDirectory() as tmp:
+            cb = ModelCheckpoint(dirpath=tmp)
+            model = FakeModule(current_epoch=3, global_step=42)
+            trainer = FakeTrainer(callbacks=[cb])
+            fp = os.path.join(tmp, 'real.ckpt')
+            cb._save_checkpoint(trainer, model, fp)
+            assert os.path.exists(fp)
+            assert os.path.getsize(fp) > len(b'ckpt')  # real msgpack, not a stub
+            restored = bf.msgpack_load(fp, verbose=False)
+            assert int(restored['epoch']) == 3
+            assert int(restored['global_step']) == 42
 
     def test_on_train_epoch_end_saves_best_min(self, patched_save):
         with tempfile.TemporaryDirectory() as tmp:
@@ -931,13 +944,12 @@ class TestPrintCallback:
 
 class TestIntegration:
     def test_fit_with_callbacks(self, monkeypatch):
-        # Patch the checkpoint serializer so a real fit run can save without
-        # hitting the merge-oriented msgpack_from_state_dict signature.
-        def fake(target, path):
+        # Patch the checkpoint serializer to keep the integration run fast.
+        def fake(path, target, *args, **kwargs):
             with open(path, 'wb') as f:
                 f.write(b'ckpt')
 
-        monkeypatch.setattr(bf, 'msgpack_from_state_dict', fake)
+        monkeypatch.setattr(bf, 'msgpack_save', fake)
 
         with tempfile.TemporaryDirectory() as tmp:
             X = jnp.ones((32, 4))

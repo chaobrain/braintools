@@ -246,7 +246,9 @@ def create_neural_colormap(
         Custom colormap.
     """
     cmap = LinearSegmentedColormap.from_list(name, colors, N=n_bins)
-    plt.colormaps.register(cmap, name=name)
+    # ``force=True`` keeps the call idempotent: re-registering an existing
+    # name overrides it instead of raising.
+    plt.colormaps.register(cmap, name=name, force=True)
     return cmap
 
 

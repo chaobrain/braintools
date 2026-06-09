@@ -45,13 +45,11 @@ class TestStatisticalExtra(unittest.TestCase):
         self.assertIsInstance(ax, plt.Axes)
 
     def test_correlation_matrix_kendall(self):
-        # scipy.stats.kendalltau does not accept a single 2D matrix the way
-        # spearmanr does, so the 'kendall' branch raises for matrix input.
-        # We still exercise the dispatch + call line and assert it errors.
-        with self.assertRaises(Exception):
-            braintools.visualize.correlation_matrix(
-                self.data[:, :3], method='kendall', show_values=False
-            )
+        # The 'kendall' branch builds the matrix pairwise over feature columns.
+        ax = braintools.visualize.correlation_matrix(
+            self.data[:, :3], method='kendall', show_values=False
+        )
+        self.assertIsInstance(ax, plt.Axes)
 
     def test_correlation_matrix_mask_diagonal_and_no_colorbar(self):
         fig, ax = plt.subplots()

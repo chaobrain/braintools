@@ -100,7 +100,14 @@ def correlation_matrix(
     elif method == 'spearman':
         corr_matrix = stats.spearmanr(data)[0]
     elif method == 'kendall':
-        corr_matrix = stats.kendalltau(data)[0]
+        # ``kendalltau`` only compares two 1-D samples, so build the
+        # feature-by-feature matrix pairwise.
+        n_features = data.shape[1]
+        corr_matrix = np.ones((n_features, n_features))
+        for i in range(n_features):
+            for j in range(i + 1, n_features):
+                tau = stats.kendalltau(data[:, i], data[:, j])[0]
+                corr_matrix[i, j] = corr_matrix[j, i] = tau
     else:
         raise ValueError(f"Unknown correlation method: {method}")
 

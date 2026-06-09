@@ -55,6 +55,8 @@ testing = [
     "pytest-cov",
     "absl-py",
     "nevergrad",
+    "tqdm",
+    "rich",
 ]
 type-check = [
     "mypy>=1.8",
