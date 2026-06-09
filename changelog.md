@@ -114,6 +114,9 @@ assets are migrated to the new `brainx.chaobrain.com` host.
   - `remove_axis` uses `ax.spines` instead of the non-existent `ax.spine` (#96).
   - `create_neural_colormap` / `brain_colormaps` register with `force=True`,
     making them idempotent rather than raising on re-use (#97).
+  - `roc_curve` / `precision_recall_curve` resolve `np.trapezoid` when
+    available (falling back to `np.trapz`), fixing an `AttributeError` on
+    NumPy >= 2.4 where `np.trapz` was removed (#99).
 
 ### Infrastructure
 

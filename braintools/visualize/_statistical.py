@@ -23,6 +23,11 @@ import scipy.stats as stats
 from braintools._misc import set_module_as
 from braintools.tree import as_numpy
 
+# ``np.trapz`` was renamed to ``np.trapezoid`` in NumPy 2.0 and removed
+# outright in NumPy 2.4, so resolve whichever name the installed NumPy
+# provides (falling back to ``np.trapz`` for NumPy < 2.0).
+_trapezoid = getattr(np, 'trapezoid', None) or np.trapz
+
 __all__ = [
     'correlation_matrix',
     'distribution_plot',
@@ -922,7 +927,7 @@ def roc_curve(
     fpr = np.array(fpr)
 
     # Calculate AUC
-    auc = np.trapz(tpr, fpr)
+    auc = _trapezoid(tpr, fpr)
 
     # Plot ROC curve
     ax.plot(fpr, tpr, color=color, linewidth=2, label=f'AUC = {auc:.3f}', **kwargs)
@@ -1003,7 +1008,7 @@ def precision_recall_curve(
     recall = np.array(recall)
 
     # Calculate average precision
-    ap = np.trapz(precision, recall)
+    ap = _trapezoid(precision, recall)
 
     # Plot PR curve
     ax.plot(recall, precision, color=color, linewidth=2,
