@@ -12,6 +12,7 @@
   </a>
   <a href="https://badge.fury.io/py/braintools"><img alt="PyPI version" src="https://badge.fury.io/py/braintools.svg"></a>
   <a href="https://github.com/chaobrain/braintools/actions/workflows/CI.yml"><img alt="Continuous Integration" src="https://github.com/chaobrain/braintools/actions/workflows/CI.yml/badge.svg"></a>
+  <a href="https://codecov.io/gh/chaobrain/braintools"><img alt="Test Coverage" src="https://codecov.io/gh/chaobrain/braintools/graph/badge.svg"></a>
   <a href="https://doi.org/10.5281/zenodo.17110064"><img src="https://zenodo.org/badge/776629792.svg" alt="DOI"></a>
 </p>
 
