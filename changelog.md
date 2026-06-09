@@ -7,8 +7,9 @@ This release adds two forward-mode second-order optimizers — `SOFO` and
 `SOFOScan` — to `braintools.optim`, and hardens the `braintools.cogtask`
 task engine so that conditional combinators, categorical labels, and
 metadata batching behave correctly under `brainstate.transform.jit` and
-`brainstate.transform.vmap2`. Documentation links and assets are migrated to
-the new `brainx.chaobrain.com` host.
+`brainstate.transform.vmap2`. The package now ships inline type information
+(PEP 561), test coverage is raised to ~92%, and documentation links and
+assets are migrated to the new `brainx.chaobrain.com` host.
 
 ### Highlights
 
@@ -22,6 +23,9 @@ the new `brainx.chaobrain.com` host.
   traced execution, `While` fails loudly on unsupported traced conditions,
   and a new `num_classes` parameter decouples categorical-head sizing from
   `num_outputs`.
+- **PEP 561 typing**: `braintools` ships a `py.typed` marker and inline
+  annotations on its public API, so downstream static type checkers consume
+  its types directly.
 
 ### Added
 
@@ -51,6 +55,19 @@ the new `brainx.chaobrain.com` host.
 - **`Task` feature ergonomics**: `Task` now accepts a lone `Feature` in place
   of a `FeatureSet`, and requires features to be supplied whenever `phases`
   are given.
+- **`Task` time step**: `Task` and `make_task` accept an optional `dt`
+  argument. When set, it is pinned around trial generation via
+  `brainstate.environ.context`, so phase durations and buffer sizes are
+  computed against that `dt` and the reported `dt` stays consistent
+  regardless of the ambient environment. When omitted, the ambient
+  `brainstate.environ.get_dt()` is used (unchanged behaviour).
+
+#### Typing
+
+- **PEP 561 support**: a `braintools/py.typed` marker is shipped via package
+  data, and the top-level public API — spike bitwise ops, spike encoders
+  (with implicit-`Optional` defaults fixed), tree utilities, and `_misc`
+  helpers — now carries resolvable inline annotations.
 
 ### Changed
 
@@ -93,6 +110,13 @@ the new `brainx.chaobrain.com` host.
 - **Docs deployment**: the `push: main` trigger was removed; documentation is
   now deployed only on a GitHub release (`released`) or via a manual
   `workflow_dispatch`.
+- **Type-check workflow**: a new Type Check workflow runs `mypy` over the
+  annotated public surface, backed by a `[tool.mypy]` configuration and a
+  `type-check` optional-dependency group.
+- **Test coverage**: new test suites cover the previously-untested trainer,
+  visualize, file, and surrogate modules, raising overall coverage to ~92%.
+  CI runs `pytest` with `--cov` and uploads results to Codecov, and the
+  README carries a coverage badge.
 
 
 ## Version 0.1.9 (2026-05-21)
