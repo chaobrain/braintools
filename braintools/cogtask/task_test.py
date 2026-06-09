@@ -229,6 +229,51 @@ def test_create_task_factory_returns_task_instance():
 
 
 # ---------------------------------------------------------------------------
+# dt (task-level time step, decoupled from the ambient environ dt)
+# ---------------------------------------------------------------------------
+
+def _two_phase_task(**kwargs):
+    """A 10 ms + 10 ms task used to probe how dt resolves durations."""
+    fix = ct.Feature(1, 'fixation')
+    p = ct.concat([
+        ct.Fixation(10 * u.ms, inputs={'fixation': 1.0}, outputs={'label': 0}),
+        ct.Response(10 * u.ms, inputs={'fixation': 0.0}, outputs={'label': 1}),
+    ])
+    return ct.Task(phases=p, input_features=fix, output_features=fix, seed=0, **kwargs)
+
+
+def test_dt_defaults_to_environ_when_unset():
+    """Without dt=, the task resolves durations against the ambient environ dt
+    (pinned to 1 ms by the package fixture)."""
+    task = _two_phase_task()
+    assert task.dt == 1.0 * u.ms
+    X, _, info = task.sample_trial(0)
+    assert X.shape[0] == 20            # (10 + 10) ms / 1 ms
+    assert info['dt'] == 1.0 * u.ms
+
+
+def test_dt_overrides_environ_for_durations_and_reported_dt():
+    """A task-level dt drives buffer sizes and the reported dt, overriding the
+    ambient environ dt (1 ms here)."""
+    task = _two_phase_task(dt=2.0 * u.ms)
+    assert task.dt == 2.0 * u.ms
+    X, _, info = task.sample_trial(0)
+    assert X.shape[0] == 10            # (10 + 10) ms / 2 ms, despite ambient 1 ms
+    assert info['dt'] == 2.0 * u.ms
+
+
+def test_create_task_forwards_dt():
+    fix = ct.Feature(1, 'fix')
+    out = ct.Feature(1, 'out')
+    p = ct.Fixation(10 * u.ms, inputs={'fix': 1.0}, outputs={'label': 0})
+    from braintools.cogtask.task import create_task
+    task = create_task(p, FeatureSet(fix), fix + out, seed=0, dt=2.0 * u.ms)
+    assert task.dt == 2.0 * u.ms
+    X, _ = task[0]
+    assert X.shape[0] == 5             # 10 ms / 2 ms
+
+
+# ---------------------------------------------------------------------------
 # num_classes (categorical class count, decoupled from num_outputs)
 # ---------------------------------------------------------------------------
 

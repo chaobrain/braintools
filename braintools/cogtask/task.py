@@ -15,6 +15,8 @@
 
 """Task class for composable cognitive task construction."""
 
+import contextlib
+
 import brainstate
 import brainunit as u
 import jax
@@ -130,6 +132,12 @@ class Task:
         uses the trial_init() method.
     name : str, optional
         Task name (defaults to class name).
+    dt : float or Quantity, optional
+        Time step used to resolve phase durations into a timestep count. If
+        ``None`` (default), the ambient ``brainstate.environ.get_dt()`` is used,
+        preserving the previous behaviour. When set, the value is pinned for the
+        whole of trial generation so buffer sizes and the reported ``dt`` stay
+        consistent regardless of the ambient environment.
     **kwargs
         Override class attributes (e.g., t_fixation=500*u.ms, num_stimuli=16).
     """
@@ -144,6 +152,7 @@ class Task:
         output_mode: OutputMode = 'categorical',
         seed: Optional[int] = None,
         num_classes: Optional[int] = None,
+        dt=None,
         **kwargs
     ):
         for key, value in kwargs.items():
@@ -192,6 +201,12 @@ class Task:
         self._root_key: Optional[jax.Array] = (
             jax.random.PRNGKey(seed) if seed is not None else None
         )
+
+        # Task-level time step. ``None`` means "defer to the ambient
+        # brainstate.environ dt". When set, it is pinned around trial
+        # generation (see ``_dt_environ``) so phase durations and buffer sizes
+        # are computed against this dt rather than the global one.
+        self._dt = dt
 
         self._bind_features_to_phases(phases)
 
@@ -295,7 +310,23 @@ class Task:
 
     @property
     def dt(self):
-        return brainstate.environ.get_dt()
+        """Task time step.
+
+        Returns the value passed as ``dt=`` at construction, or falls back to
+        the ambient ``brainstate.environ.get_dt()`` when none was given.
+        """
+        return self._dt if self._dt is not None else brainstate.environ.get_dt()
+
+    def _dt_environ(self):
+        """Pin ``brainstate.environ`` to the task's ``dt`` during sampling.
+
+        Returns a no-op context manager when ``dt`` was not set, so the ambient
+        environment dt is used (the historical behaviour). When set, phases read
+        this dt via ``ctx.dt`` so durations/buffer sizes match the reported dt.
+        """
+        if self._dt is None:
+            return contextlib.nullcontext()
+        return brainstate.environ.context(dt=self._dt)
 
     @property
     def is_variable_length(self) -> bool:
@@ -316,9 +347,10 @@ class Task:
         :class:`VariableDuration`). The result is a Python ``int`` and is
         safe to use as a static buffer dimension under JIT/vmap.
         """
-        if ctx is None:
-            ctx = Context(key=self._root_key)
-        return int(self.phases.max_steps(ctx))
+        with self._dt_environ():
+            if ctx is None:
+                ctx = Context(key=self._root_key)
+            return int(self.phases.max_steps(ctx))
 
     def sample_trial(
         self,
@@ -337,46 +369,47 @@ class Task:
         key : jax.Array, optional
             Explicit PRNG key. Overrides the (seed, index) derivation when given.
         """
-        trial_key = self._trial_key(index, key)
-        ctx = Context(key=trial_key)
-        ctx['trial_index'] = index
+        with self._dt_environ():
+            trial_key = self._trial_key(index, key)
+            ctx = Context(key=trial_key)
+            ctx['trial_index'] = index
 
-        if self._trial_init_func:
-            self._trial_init_func(ctx)
+            if self._trial_init_func:
+                self._trial_init_func(ctx)
 
-        if self._is_variable_length:
-            return self._sample_trial_packed(ctx, index)
+            if self._is_variable_length:
+                return self._sample_trial_packed(ctx, index)
 
-        # Dry-run pass: compute total duration without mutating ctx state. Note
-        # that ``get_duration`` must be pure with respect to ctx.rng — predicate
-        # functions and variable-duration phases should read state set by
-        # ``trial_init``, not sample new randomness.
-        total_duration = self._compute_duration(ctx)
+            # Dry-run pass: compute total duration without mutating ctx state. Note
+            # that ``get_duration`` must be pure with respect to ctx.rng — predicate
+            # functions and variable-duration phases should read state set by
+            # ``trial_init``, not sample new randomness.
+            total_duration = self._compute_duration(ctx)
 
-        # allocate buffers
-        ctx.inputs = jnp.zeros((total_duration, self.num_inputs), dtype=jnp.float32)
+            # allocate buffers
+            ctx.inputs = jnp.zeros((total_duration, self.num_inputs), dtype=jnp.float32)
 
-        if self.output_mode == 'categorical':
-            ctx.outputs = jnp.zeros((total_duration,), dtype=jnp.int32)
-        else:
-            ctx.outputs = jnp.zeros((total_duration, self.num_outputs), dtype=jnp.float32)
+            if self.output_mode == 'categorical':
+                ctx.outputs = jnp.zeros((total_duration,), dtype=jnp.int32)
+            else:
+                ctx.outputs = jnp.zeros((total_duration, self.num_outputs), dtype=jnp.float32)
 
-        # expose mode to phases
-        ctx['output_mode'] = self.output_mode
+            # expose mode to phases
+            ctx['output_mode'] = self.output_mode
 
-        # second pass
-        ctx.current_step = 0
-        ctx.phase_history.clear()
-        execute_phase(self.phases, ctx)
+            # second pass
+            ctx.current_step = 0
+            ctx.phase_history.clear()
+            execute_phase(self.phases, ctx)
 
-        info = {
-            'phase_history': ctx.phase_history.copy(),
-            'trial_state': ctx.state,
-            'dt': self.dt,
-            'index': index,
-            'mask': None,
-        }
-        return ctx.inputs, ctx.outputs, info
+            info = {
+                'phase_history': ctx.phase_history.copy(),
+                'trial_state': ctx.state,
+                'dt': self.dt,
+                'index': index,
+                'mask': None,
+            }
+            return ctx.inputs, ctx.outputs, info
 
     def _sample_trial_packed(self, ctx: Context, index: int):
         """Variable-length trial generation.
@@ -558,6 +591,7 @@ def create_task(
     seed: Optional[int] = None,
     output_mode: OutputMode = 'categorical',
     num_classes: Optional[int] = None,
+    dt=None,
 ) -> Task:  # noqa: D401
     """
     Convenience factory for creating tasks.
@@ -582,6 +616,9 @@ def create_task(
         Number of categorical classes for the 1-D label target. Used to size a
         classifier head in ``output_mode='categorical'``; falls back to
         ``num_outputs`` when unset. Ignored in ``output_mode='vector'``.
+    dt : float or Quantity, optional
+        Time step used to resolve phase durations. Defaults to
+        ``brainstate.environ.get_dt()`` when not given.
 
     Returns
     -------
@@ -590,7 +627,7 @@ def create_task(
 
     Note
     ----
-    The time step (dt) is obtained from brainstate.environ.get_dt().
+    The time step (dt) defaults to brainstate.environ.get_dt() when not set.
 
     Examples
     --------
@@ -602,4 +639,4 @@ def create_task(
     ... )
     """
     return Task(phases, input_features, output_features, trial_init, name,
-                output_mode=output_mode, seed=seed, num_classes=num_classes)
+                output_mode=output_mode, seed=seed, num_classes=num_classes, dt=dt)
