@@ -397,7 +397,7 @@ def split(
 
 def idx(
     tree: PyTree[ArrayLike],
-    idx,
+    idx: int | slice | ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
@@ -423,7 +423,7 @@ def idx(
 
 def expand(
     tree: PyTree[ArrayLike],
-    axis,
+    axis: int,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:
     """
@@ -449,7 +449,7 @@ def expand(
 
 def take(
     tree: PyTree[ArrayLike],
-    idx,
+    idx: int | slice | ArrayLike,
     axis: int,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> PyTree:

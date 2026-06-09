@@ -14,6 +14,8 @@
 # ==============================================================================
 
 
+from brainstate.typing import ArrayLike
+
 from braintools._misc import set_module_as
 
 __all__ = [
@@ -28,7 +30,7 @@ __all__ = [
 
 
 @set_module_as('braintools')
-def spike_bitwise_or(x, y):
+def spike_bitwise_or(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     """
     Perform a bitwise OR operation on spike tensors.
 
@@ -52,7 +54,7 @@ def spike_bitwise_or(x, y):
 
 
 @set_module_as('braintools')
-def spike_bitwise_and(x, y):
+def spike_bitwise_and(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     """
     Perform a bitwise AND operation on spike tensors.
 
@@ -75,7 +77,7 @@ def spike_bitwise_and(x, y):
 
 
 @set_module_as('braintools')
-def spike_bitwise_iand(x, y):
+def spike_bitwise_iand(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     """
     Perform a bitwise IAND (Inverse AND) operation on spike tensors.
 
@@ -98,7 +100,7 @@ def spike_bitwise_iand(x, y):
 
 
 @set_module_as('braintools')
-def spike_bitwise_not(x):
+def spike_bitwise_not(x: ArrayLike) -> ArrayLike:
     """
     Perform a bitwise NOT operation on spike tensors.
 
@@ -120,7 +122,7 @@ def spike_bitwise_not(x):
 
 
 @set_module_as('braintools')
-def spike_bitwise_xor(x, y):
+def spike_bitwise_xor(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     """
     Perform a bitwise XOR operation on spike tensors.
 
@@ -143,7 +145,7 @@ def spike_bitwise_xor(x, y):
 
 
 @set_module_as('braintools')
-def spike_bitwise_ixor(x, y):
+def spike_bitwise_ixor(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     """
     Perform a bitwise IXOR (Inverse XOR) operation on spike tensors.
 
@@ -166,7 +168,7 @@ def spike_bitwise_ixor(x, y):
 
 
 @set_module_as('braintools')
-def spike_bitwise(x, y, op: str):
+def spike_bitwise(x: ArrayLike, y: ArrayLike, op: str) -> ArrayLike:
     r"""
     Perform bitwise operations on spike tensors.
 

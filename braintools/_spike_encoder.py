@@ -87,14 +87,14 @@ class LatencyEncoder:
 
     def __init__(
         self,
-        min_val: float = None,
-        max_val: float = None,
+        min_val: Optional[float] = None,
+        max_val: Optional[float] = None,
         method: str = 'log',
         threshold: float = 0.01,
         clip: bool = False,
-        tau: float = 1. * u.ms,
+        tau: brainstate.typing.ArrayLike = 1. * u.ms,
         normalize: bool = False,
-        first_spk_time: float = 0. * u.ms,
+        first_spk_time: brainstate.typing.ArrayLike = 0. * u.ms,
         epsilon: float = 1e-7,
     ):
         super().__init__()
@@ -114,7 +114,11 @@ class LatencyEncoder:
         self.first_spk_step = int(u.get_mantissa(first_spk_time) / u.get_mantissa(brainstate.environ.get_dt()))
         self.epsilon = epsilon
 
-    def __call__(self, data, n_time: Optional[brainstate.typing.ArrayLike] = None):
+    def __call__(
+        self,
+        data: brainstate.typing.ArrayLike,
+        n_time: Optional[brainstate.typing.ArrayLike] = None,
+    ) -> jax.Array:
         """Generate latency spikes according to the given input data.
 
         Ensuring x in [0., 1.].
@@ -190,10 +194,10 @@ class RateEncoder:
         gain: float = 100.0,
         method: str = 'linear',
         min_rate: float = 0.0,
-        max_rate: float = None,
+        max_rate: Optional[float] = None,
         normalize: bool = False,
-        min_val: float = None,
-        max_val: float = None,
+        min_val: Optional[float] = None,
+        max_val: Optional[float] = None,
     ):
         if method not in ['linear', 'exponential', 'sqrt']:
             raise ValueError('Method must be "linear", "exponential", or "sqrt"')
@@ -206,7 +210,7 @@ class RateEncoder:
         self.min_val = min_val
         self.max_val = max_val
 
-    def __call__(self, data, n_time: int):
+    def __call__(self, data: brainstate.typing.ArrayLike, n_time: int) -> jax.Array:
         """Generate rate-encoded spikes.
         
         Args:
@@ -272,7 +276,7 @@ class PoissonEncoder:
         self.normalize = normalize
         self.max_rate = max_rate
 
-    def __call__(self, data, n_time: int):
+    def __call__(self, data: brainstate.typing.ArrayLike, n_time: int) -> jax.Array:
         """Generate Poisson spike trains.
         
         Args:
@@ -325,7 +329,7 @@ class PopulationEncoder:
         n_neurons: int,
         min_val: float = 0.0,
         max_val: float = 1.0,
-        sigma: float = None,
+        sigma: Optional[float] = None,
         max_rate: float = 100.0,
     ):
         self.n_neurons = n_neurons
@@ -337,7 +341,7 @@ class PopulationEncoder:
         # Create neuron preferred values (centers of receptive fields)
         self.centers = u.math.linspace(min_val, max_val, n_neurons)
 
-    def __call__(self, data, n_time: int):
+    def __call__(self, data: brainstate.typing.ArrayLike, n_time: int) -> jax.Array:
         """Generate population-encoded spikes.
         
         Args:
@@ -405,15 +409,15 @@ class BernoulliEncoder:
         self,
         scale: float = 1.0,
         normalize: bool = True,
-        min_val: float = None,
-        max_val: float = None,
+        min_val: Optional[float] = None,
+        max_val: Optional[float] = None,
     ):
         self.scale = scale
         self.normalize = normalize
         self.min_val = min_val
         self.max_val = max_val
 
-    def __call__(self, data, n_time: int):
+    def __call__(self, data: brainstate.typing.ArrayLike, n_time: int) -> jax.Array:
         """Generate Bernoulli-encoded spikes.
         
         Args:
@@ -469,7 +473,7 @@ class DeltaEncoder:
         self.absolute = absolute
         self.normalize = normalize
 
-    def __call__(self, data):
+    def __call__(self, data: brainstate.typing.ArrayLike) -> jax.Array:
         """Generate delta-encoded spikes.
         
         Args:
@@ -528,8 +532,8 @@ class StepCurrentEncoder:
         current_scale: float = 10.0,  # nA
         offset: float = 0.0,
         normalize: bool = True,
-        min_val: float = None,
-        max_val: float = None,
+        min_val: Optional[float] = None,
+        max_val: Optional[float] = None,
     ):
         self.current_scale = current_scale
         self.offset = offset
@@ -537,7 +541,7 @@ class StepCurrentEncoder:
         self.min_val = min_val
         self.max_val = max_val
 
-    def __call__(self, data, n_time: int):
+    def __call__(self, data: brainstate.typing.ArrayLike, n_time: int) -> jax.Array:
         """Generate step current signals.
         
         Args:
@@ -591,7 +595,7 @@ class SpikeCountEncoder:
         self.distribution = distribution
         self.normalize = normalize
 
-    def __call__(self, data, n_time: int):
+    def __call__(self, data: brainstate.typing.ArrayLike, n_time: int) -> jax.Array:
         """Generate spike count-encoded trains.
         
         Args:
@@ -665,7 +669,7 @@ class TemporalEncoder:
         # Pre-define temporal patterns
         self.patterns = self._create_patterns()
 
-    def _create_patterns(self):
+    def _create_patterns(self) -> dict:
         """Create distinct temporal patterns for each input value."""
         patterns = {}
         for i in range(self.n_patterns):
@@ -677,7 +681,7 @@ class TemporalEncoder:
             patterns[i] = pattern_times
         return patterns
 
-    def __call__(self, data):
+    def __call__(self, data: brainstate.typing.ArrayLike) -> jax.Array:
         """Generate temporally-encoded spikes.
         
         Args:
@@ -741,7 +745,7 @@ class RankOrderEncoder:
         self.normalize = normalize
         self.invert = invert
 
-    def __call__(self, data, n_time: int):
+    def __call__(self, data: brainstate.typing.ArrayLike, n_time: int) -> jax.Array:
         """Generate rank-order encoded spikes.
         
         Args:
