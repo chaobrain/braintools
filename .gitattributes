@@ -1,3 +1,31 @@
+# Normalize all text files to LF in the repository; auto-detect text vs binary.
 * text=auto eol=lf
-*.bat text eol=crlf
-*.cmd text eol=crlf
+
+# Windows-specific scripts must keep CRLF line endings.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Unix scripts must keep LF (defensive; matches the default above).
+*.sh   text eol=lf
+
+# Jupyter notebooks are JSON text; keep LF.
+*.ipynb text eol=lf
+
+# Binary files: never convert line endings or attempt textual diffs.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.svg   binary
+*.npy   binary
+*.npz   binary
+*.mat   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.zip   binary
+*.gz    binary
