@@ -144,7 +144,7 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 # Many scientific dependencies (jax, brainunit, optax, scipy, ...) ship partial
 # or no type information; don't fail on their missing stubs.
 ignore_missing_imports = true
