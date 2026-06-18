@@ -164,6 +164,25 @@ class Surrogate(PrettyObject):
     `surrogate_grad` method. This straight-through estimator approach enables
     gradient-based training of spiking neural networks.
 
+    Implementing ``surrogate_fun`` is **optional** -- it is used only for
+    visualization/analysis. Gradient-only surrogates (e.g. ``ReluGrad``,
+    ``GaussianGrad``, ``MultiGaussianGrad``, ``InvSquareGrad``, ``SlayerGrad``)
+    do not define it, so calling ``surrogate_fun`` on them raises
+    ``NotImplementedError``. When both are defined, ``surrogate_grad`` is the
+    exact derivative of ``surrogate_fun``.
+
+    The input ``x`` is expected to be a **dimensionless** array (typically the
+    membrane potential minus the threshold, in matching units). Passing a
+    unitful ``brainunit.Quantity`` is not supported by the underlying primitive.
+
+    Differentiating the output with respect to the **input** ``x`` yields the
+    surrogate gradient, as intended. Differentiating with respect to a
+    **surrogate parameter** (e.g. ``alpha``) returns the derivative of the
+    surrogate-gradient function w.r.t. that parameter (a side effect of the
+    custom JVP rule), *not* the mathematically-true ``0`` of the Heaviside
+    output -- so surrogate parameters cannot be trained as ordinary
+    ``ParamState`` weights through this output.
+
     """
     __module__ = 'braintools.surrogate'
 

@@ -324,7 +324,7 @@ class PiecewiseQuadratic(Surrogate):
         jax.Array
             Gradient of the surrogate function.
         """
-        dx = jnp.where(jnp.abs(x) > 1 / self.alpha, 0., (-(self.alpha * x) ** 2 + self.alpha))
+        dx = jnp.where(jnp.abs(x) > 1 / self.alpha, 0., self.alpha - self.alpha ** 2 * jnp.abs(x))
         return dx
 
     def __repr__(self):
@@ -715,7 +715,7 @@ class Arctan(Surrogate):
         return dx
 
     def surrogate_fun(self, x):
-        return jnp.arctan2(jnp.pi / 2 * self.alpha * x,  jnp.pi) + 0.5
+        return jnp.arctan(jnp.pi / 2 * self.alpha * x) / jnp.pi + 0.5
 
     def __repr__(self):
         return f'{self.__class__.__name__}(alpha={self.alpha})'
@@ -928,7 +928,7 @@ class ERF(Surrogate):
         return dx
 
     def surrogate_fun(self, x):
-        return sci.special.erf(-self.alpha * x) * 0.5
+        return 0.5 * (1. - sci.special.erf(-self.alpha * x))
 
     def __repr__(self):
         return f'{self.__class__.__name__}(alpha={self.alpha})'
@@ -1061,7 +1061,7 @@ class PiecewiseLeakyRelu(Surrogate):
         return z
 
     def surrogate_grad(self, x):
-        dx = jnp.where(jnp.abs(x) > self.w, self.c, 1 / self.w)
+        dx = jnp.where(jnp.abs(x) > self.w, self.c, 1 / (2 * self.w))
         return dx
 
     def __repr__(self):
@@ -1100,7 +1100,7 @@ class SquarewaveFourierSeries(Surrogate):
 
     .. math::
 
-       g(x) = 0.5 + \frac{1}{\pi}*\sum_{i=1}^n {\sin\left({(2i-1)*2\pi}*x/T\right) \over 2i-1 }
+       g(x) = 0.5 + \frac{2}{\pi}*\sum_{i=1}^n {\sin\left({(2i-1)*2\pi}*x/T\right) \over 2i-1 }
 
     Backward function:
 
@@ -1166,7 +1166,7 @@ class SquarewaveFourierSeries(Surrogate):
 
         w = jnp.pi * 2. / self.t_period
         dx = jnp.cos(w * x)
-        for i in range(2, self.n):
+        for i in range(2, self.n + 1):
             dx += jnp.cos((2 * i - 1.) * w * x)
         dx *= 4. / self.t_period
         return dx
@@ -1175,7 +1175,7 @@ class SquarewaveFourierSeries(Surrogate):
 
         w = jnp.pi * 2. / self.t_period
         ret = jnp.sin(w * x)
-        for i in range(2, self.n):
+        for i in range(2, self.n + 1):
             c = (2 * i - 1.)
             ret += jnp.sin(c * w * x) / c
         z = 0.5 + 2. / jnp.pi * ret
@@ -1338,7 +1338,10 @@ class S2NN(Surrogate):
 
     def surrogate_grad(self, x):
         sg = sci.special.expit(self.alpha * x)
-        dx = jnp.where(x < 0., self.alpha * sg * (1. - sg), self.beta / (x + 1.))
+        # Guard the dead ``x >= 0`` branch so it stays finite at x <= -1
+        # (jnp.where evaluates both branches; an ``inf`` here poisons gradients).
+        x_safe = jnp.where(x < 0., 1.0, x)
+        dx = jnp.where(x < 0., self.alpha * sg * (1. - sg), self.beta / (x_safe + 1.))
         return dx
 
     def __repr__(self):
@@ -1383,17 +1386,22 @@ class QPseudoSpike(Surrogate):
 
     .. math::
 
-       \begin{split}g_{origin}(x) =
-        \begin{cases}
-        \frac{1}{2}(1-\frac{2x}{\alpha-1})^{1-\alpha}, & x < 0 \\
-        1 - \frac{1}{2}(1+\frac{2x}{\alpha-1})^{1-\alpha}, & x \geq 0.
-        \end{cases}\end{split}
+       g_{origin}(x) = \frac{1}{2} + \mathrm{sign}(x)\,
+       \frac{\alpha+1}{2(1-\alpha)}\left[\left(1+\frac{2|x|}{\alpha+1}\right)^{1-\alpha} - 1\right]
+
+    (the antiderivative of the backward gradient below, with a removable
+    singularity at :math:`\alpha = 1` where it equals
+    :math:`0.5 + \mathrm{sign}(x)\,\frac{\alpha+1}{2}\ln(1+\frac{2|x|}{\alpha+1})`).
 
     Backward gradient:
 
     .. math::
 
-       g'(x) = (1+\frac{2|x|}{\alpha-1})^{-\alpha}
+       g'(x) = (1+\frac{2|x|}{\alpha+1})^{-\alpha}
+
+    The :math:`\alpha+1` denominator (rather than :math:`\alpha-1`) keeps the
+    gradient finite for every :math:`\alpha > 0`, including the heavy-tailed
+    :math:`\alpha < 1` regime.
 
     .. plot::
        :include-source: True
@@ -1491,12 +1499,20 @@ class QPseudoSpike(Surrogate):
         return dx
 
     def surrogate_fun(self, x):
-        z = jnp.where(
-            x < 0.,
-            0.5 * jnp.power(1 - 2 / (self.alpha - 1) * jnp.abs(x), 1 - self.alpha),
-            1. - 0.5 * jnp.power(1 + 2 / (self.alpha - 1) * jnp.abs(x), 1 - self.alpha)
+        # Antiderivative of ``surrogate_grad`` = (1 + 2|x|/(alpha+1))^(-alpha),
+        # centred at (0, 0.5). The base is always >= 1 (finite for all alpha > 0),
+        # and the (1 - alpha) denominator has a removable singularity at alpha == 1
+        # (where the integral is (alpha + 1)/2 * log(base)).
+        a = self.alpha
+        base = 1. + 2. / (a + 1.) * jnp.abs(x)
+        one_minus_a = 1. - a
+        safe = jnp.where(one_minus_a == 0., 1., one_minus_a)
+        integral = jnp.where(
+            one_minus_a == 0.,
+            (a + 1.) / 2. * jnp.log(base),
+            (a + 1.) / (2. * safe) * (jnp.power(base, one_minus_a) - 1.)
         )
-        return z
+        return 0.5 + jnp.sign(x) * integral
 
     def __repr__(self):
         return f'{self.__class__.__name__}(alpha={self.alpha})'
@@ -1807,8 +1823,11 @@ class LogTailedRelu(Surrogate):
         return z
 
     def surrogate_grad(self, x):
+        # Guard the dead ``x > 1`` branch so 1/x stays finite at x <= 0
+        # (jnp.where evaluates both branches; an ``inf`` here poisons gradients).
+        x_safe = jnp.where(x > 1, x, 1.0)
         dx = jnp.where(x > 1,
-                       1 / x,
+                       1 / x_safe,
                        jnp.where(x > 0,
                                  1.,
                                  self.alpha))
@@ -2097,7 +2116,7 @@ class GaussianGrad(Surrogate):
         self.alpha = alpha
 
     def surrogate_grad(self, x):
-        dx = jnp.exp(-(x ** 2) / 2 * jnp.power(self.sigma, 2)) / (jnp.sqrt(2 * jnp.pi) * self.sigma)
+        dx = jnp.exp(-(x ** 2) / (2 * jnp.power(self.sigma, 2))) / (jnp.sqrt(2 * jnp.pi) * self.sigma)
         return self.alpha * dx
 
     def __repr__(self):
