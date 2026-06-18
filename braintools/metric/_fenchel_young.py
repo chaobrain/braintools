@@ -42,28 +42,53 @@ def make_fenchel_young_loss(
     learning for structured prediction tasks and provide a principled way to
     construct losses that encourage sparsity or specific structure in predictions.
 
-    The Fenchel-Young loss is defined as:
+    Given a strictly convex regularizer :math:`\Omega`, its convex conjugate
+    (a.k.a. the *max function* or log-partition / soft-max function) is
 
     .. math::
 
-        \ell_{FY}(y, \theta) = \Omega(\theta) - \langle y, \theta \rangle
+        \Omega^*(\theta) = \max_{\mu \in \mathcal{C}}
+            \; \langle \theta, \mu \rangle - \Omega(\mu),
 
-    where :math:`\Omega` is a convex regularizer (the max function), 
-    :math:`\theta` are the scores, and :math:`y` are the targets.
+    and the associated Fenchel-Young loss is
+
+    .. math::
+
+        \ell_{FY}(\theta, y) = \Omega^*(\theta) - \langle \theta, y \rangle,
+
+    where :math:`\theta` are the scores and :math:`y` is the target. ``max_fun``
+    is exactly this conjugate :math:`\Omega^*` (NOT the regularizer
+    :math:`\Omega` itself). The loss is convex in :math:`\theta`, non-negative,
+    and minimized when the prediction matches the target. Its gradient w.r.t.
+    the scores is
+
+    .. math::
+
+        \nabla_\theta \ell_{FY}(\theta, y) = \hat{y}(\theta) - y,
+        \qquad \hat{y}(\theta) = \nabla \Omega^*(\theta),
+
+    i.e. the prediction :math:`\hat{y}(\theta) = \nabla \Omega^*(\theta)` minus
+    the target. For ``max_fun = logsumexp`` we have
+    :math:`\nabla \Omega^*(\theta) = \mathrm{softmax}(\theta)`, recovering the
+    softmax cross-entropy loss.
 
     Parameters
     ----------
     max_fun : MaxFun
-        The max function (convex regularizer) on which the Fenchel-Young loss
-        is built. Common choices include ``jax.scipy.special.logsumexp`` for
-        softmax-based losses or custom max functions for structured outputs.
+        The max function :math:`\Omega^*` (the convex conjugate of the
+        regularizer) on which the Fenchel-Young loss is built. It must map a
+        score vector over the last dimension to a scalar, consistent with the
+        ``vectorize`` signature ``"(n)->()"``. Common choices include
+        ``jax.scipy.special.logsumexp`` for softmax-based losses or custom max
+        functions for structured outputs.
 
     Returns
     -------
     callable
-        A Fenchel-Young loss function with signature 
+        A Fenchel-Young loss function with signature
         ``fenchel_young_loss(scores, targets, *args, **kwargs)`` that computes
-        the loss between scores and targets.
+        the loss between scores and targets. Any extra ``*args``/``**kwargs``
+        are forwarded to ``max_fun``.
 
     Notes
     -----
@@ -72,11 +97,25 @@ def make_fenchel_young_loss(
         and accepts arbitrary leading dimensions. This differs from some other
         implementations that flatten inputs into 1D vectors.
 
+    .. warning::
+        The gradient :math:`\hat{y}(\theta) - y` is obtained by *autodiff* of
+        ``max_fun``. This is only correct when :math:`\Omega^*` is smooth (i.e.
+        differentiable), as it is for ``logsumexp``. Sparse / piecewise-linear
+        conjugates such as ``sparsemax`` or ``entmax`` are non-smooth: their
+        argmax is set-valued at kink points and plain autodiff of ``max_fun``
+        gives a wrong or undefined gradient. Supporting those correctly
+        requires registering a ``custom_vjp`` whose backward pass returns the
+        sparse prediction oracle :math:`\hat{y}(\theta) - y`; this is *not*
+        implemented here (future work). Only pass a smooth, differentiable
+        ``max_fun``.
+
     The choice of max function determines the properties of the resulting loss:
-    
+
     - ``logsumexp``: Creates a softmax-based cross-entropy loss
-    - ``max``: Creates a max-margin loss
-    - Custom functions: Can create structured losses for specific applications
+    - ``max``: Creates a (non-smooth) max-margin loss; use only for the forward
+      value, not for gradients (see warning above)
+    - Custom smooth functions: Can create structured losses for specific
+      applications
 
     Examples
     --------
@@ -91,12 +130,21 @@ def make_fenchel_young_loss(
     >>> scores = jnp.array([[2.0, 1.0, 0.5], [1.5, 2.5, 1.0]])
     >>> targets = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     >>> loss = fy_loss(scores, targets)
-    >>> print(f"Fenchel-Young loss: {loss}")
+    >>> print(loss.shape)
+    (2,)
 
-    Create a custom max function for structured prediction:
+    The gradient is the softmax prediction minus the target:
+
+    >>> import jax
+    >>> grad = jax.grad(lambda s, t: fy_loss(s, t).sum())(scores, targets)
+    >>> print(jnp.allclose(grad, jax.nn.softmax(scores, axis=-1) - targets))
+    True
+
+    Create a custom smooth max function for structured prediction. The function
+    must return a SCALAR per core call (consistent with ``"(n)->()"``):
 
     >>> def custom_max(x):
-    ...     return jnp.max(x) + 0.1 * jnp.sum(x**2)  # L2 regularized max
+    ...     return logsumexp(x) + 0.1 * jnp.sum(x ** 2)  # L2-regularized soft-max
     >>> structured_loss = braintools.metric.make_fenchel_young_loss(max_fun=custom_max)
 
     See Also
@@ -106,17 +154,24 @@ def make_fenchel_young_loss(
 
     References
     ----------
-    .. [1] Blondel, Mathieu, André FT Martins, and Vlad Niculae. 
-           "Learning with Fenchel-Young losses." Journal of Machine Learning 
+    .. [1] Blondel, Mathieu, André FT Martins, and Vlad Niculae.
+           "Learning with Fenchel-Young losses." Journal of Machine Learning
            Research 21.35 (2020): 1-69.
            https://arxiv.org/pdf/1901.02324.pdf
     """
 
-    vdot_last_dim = jnp.vectorize(jnp.vdot, signature="(n),(n)->()")
-    max_fun_last_dim = jnp.vectorize(max_fun, signature="(n)->()")
-
     def fenchel_young_loss(scores, targets, *args, **kwargs):
-        max_value = max_fun_last_dim(scores, *args, **kwargs)
-        return max_value - vdot_last_dim(targets, scores)
+        # Bind the extra arguments BEFORE vectorizing. ``jnp.vectorize`` treats
+        # every positional passed to the vectorized callable as an additional
+        # core input, so forwarding ``*args`` through it would mis-broadcast or
+        # raise. Closing over them here keeps a single core input ``s``.
+        mf = lambda s: max_fun(s, *args, **kwargs)
+        max_fun_last_dim = jnp.vectorize(mf, signature="(n)->()")
+        max_value = max_fun_last_dim(scores)
+        # Use an explicit (non-conjugating) inner product over the last
+        # dimension. ``jnp.vdot`` conjugates its first argument, which would be
+        # wrong for complex inputs.
+        inner = jnp.sum(targets * scores, axis=-1)
+        return max_value - inner
 
     return fenchel_young_loss

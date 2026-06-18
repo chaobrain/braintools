@@ -2,7 +2,9 @@ import math
 import unittest
 
 import brainstate
+import brainunit as u
 import jax.numpy as jnp
+import numpy as np
 
 from braintools.metric import (
     unitary_LFP, power_spectral_density, coherence_analysis,
@@ -17,7 +19,7 @@ class TestUnitaryLFP(unittest.TestCase):
         spikes = jnp.ones((100, 10))
         with self.assertRaises(ValueError) as context:
             unitary_LFP(times, spikes, 'invalid_type')
-        self.assertIn('"spike_type" should be "exc or ""inh".', str(context.exception))
+        self.assertIn('"spike_type" should be "exc" or "inh"', str(context.exception))
 
     def test_basic_functionality(self):
         """Test basic LFP generation from spikes."""
@@ -375,3 +377,135 @@ class TestLFPPhaseCoherence(unittest.TestCase):
         # Both should be high for identical signals, just check they're valid
         self.assertGreaterEqual(coherence_beta[0, 1], 0.8)
         self.assertGreaterEqual(coherence_alpha[0, 1], 0.8)
+
+
+class TestLFPRegressionAndFeatures(unittest.TestCase):
+    """Stronger assertions targeting the bugs the original suite masked."""
+
+    def setUp(self):
+        self.dt = 0.001
+        self.t = np.arange(4000) * self.dt
+        self.rng = np.random.RandomState(0)
+
+    def test_psd_peak_frequency(self):
+        # A 10 Hz sine -> PSD peak at 10 Hz (D1/D2).
+        sig = np.sin(2 * np.pi * 10 * self.t)
+        freqs, psd = power_spectral_density(sig, self.dt)
+        self.assertAlmostEqual(float(freqs[jnp.argmax(psd)]), 10.0, delta=1.0)
+
+    def test_psd_power_calibration(self):
+        # One-sided PSD must integrate (approx) to the signal variance.
+        sig = np.sin(2 * np.pi * 10 * self.t)  # variance 0.5
+        freqs, psd = power_spectral_density(sig, self.dt, nperseg=1024)
+        integral = float(jnp.trapezoid(psd, freqs))
+        self.assertAlmostEqual(integral, 0.5, delta=0.1)
+
+    def test_psd_quantity_dt(self):
+        sig = np.sin(2 * np.pi * 10 * self.t)
+        f_float, psd_float = power_spectral_density(sig, self.dt)
+        f_q, psd_q = power_spectral_density(sig, 1.0 * u.ms)  # 1 ms == 0.001 s
+        np.testing.assert_allclose(np.asarray(f_float), np.asarray(f_q), rtol=1e-5)
+        np.testing.assert_allclose(np.asarray(psd_float), np.asarray(psd_q), rtol=1e-4)
+
+    def test_psd_freq_range_empty(self):
+        sig = np.sin(2 * np.pi * 10 * self.t)
+        freqs, psd = power_spectral_density(sig, self.dt, freq_range=(1e5, 2e5))
+        self.assertEqual(freqs.shape[0], 1)
+        self.assertEqual(float(psd[0]), 0.0)
+
+    def test_coherence_discriminates(self):
+        # D11 regression: identical -> ~1, uncorrelated -> low (was identically 1).
+        sig = np.sin(2 * np.pi * 10 * self.t) + 0.1 * self.rng.randn(self.t.size)
+        _, coh_same = coherence_analysis(sig, sig, self.dt)
+        _, coh_unc = coherence_analysis(self.rng.randn(self.t.size),
+                                        self.rng.randn(self.t.size), self.dt)
+        self.assertGreater(float(jnp.mean(coh_same)), 0.95)
+        self.assertLess(float(jnp.mean(coh_unc)), 0.3)
+
+    def test_coherence_freq_range(self):
+        sig = np.sin(2 * np.pi * 10 * self.t)
+        freqs, coh = coherence_analysis(sig, sig, self.dt, freq_range=(5, 15))
+        self.assertTrue(bool(jnp.all(freqs >= 5)))
+        self.assertTrue(bool(jnp.all(freqs <= 15)))
+
+    def test_pac_coupled_greater_than_uncoupled(self):
+        # D13 regression: coupled signal must give a larger MI than noise.
+        phase = 2 * np.pi * 6 * self.t
+        amp = 1 + np.cos(phase)
+        coupled = np.sin(phase) + amp * np.sin(2 * np.pi * 50 * self.t)
+        mi_c, _, _ = phase_amplitude_coupling(coupled, self.dt)
+        mi_n, _, _ = phase_amplitude_coupling(self.rng.randn(self.t.size), self.dt)
+        self.assertGreater(float(mi_c), float(mi_n))
+        self.assertGreater(float(mi_c), 0.01)
+
+    def test_csd_curved_profile_nonzero(self):
+        # A curved (sinusoidal) laminar profile has a non-zero 2nd derivative.
+        profile = np.sin(np.linspace(0, np.pi, 16))
+        lam = np.tile(profile, (50, 1))  # (time, 16 electrodes)
+        csd = current_source_density(lam, electrode_spacing=0.1)
+        self.assertEqual(csd.shape, (50, 14))
+        self.assertGreater(float(jnp.max(jnp.abs(csd))), 0.0)
+
+    def test_csd_axis_and_conductivity(self):
+        profile = np.sin(np.linspace(0, np.pi, 16))
+        lam_tf = np.tile(profile, (50, 1))            # (time, elec)
+        csd_default = current_source_density(lam_tf, 0.1)
+        # channels-first via axis=0 should match the transpose.
+        csd_axis0 = current_source_density(lam_tf.T, 0.1, axis=0)
+        np.testing.assert_allclose(np.asarray(csd_default), np.asarray(csd_axis0).T, rtol=1e-6)
+        # conductivity scales linearly.
+        csd_sigma = current_source_density(lam_tf, 0.1, conductivity=2.0)
+        np.testing.assert_allclose(np.asarray(csd_sigma), 2.0 * np.asarray(csd_default), rtol=1e-6)
+
+    def test_csd_quantity_spacing(self):
+        lam = np.tile(np.sin(np.linspace(0, np.pi, 6)), (20, 1))
+        csd_mm = current_source_density(lam, 0.1)
+        csd_q = current_source_density(lam, 100.0 * u.um)  # 100 um == 0.1 mm
+        np.testing.assert_allclose(np.asarray(csd_mm), np.asarray(csd_q), rtol=1e-5)
+
+    def test_csd_too_few_electrodes_raises(self):
+        with self.assertRaises(ValueError):
+            current_source_density(np.ones((10, 2)), 0.1)
+
+    def test_surface_location_alias(self):
+        times = jnp.arange(200) * 0.1
+        spikes = jnp.zeros((200, 5)).at[50, :].set(1.0)
+        lfp_a = unitary_LFP(times, spikes, 'exc', location='surface', seed=3)
+        lfp_b = unitary_LFP(times, spikes, 'exc', location='surface layer', seed=3)
+        np.testing.assert_allclose(np.asarray(lfp_a), np.asarray(lfp_b), rtol=1e-6)
+
+    def test_unitary_lfp_shape_errors(self):
+        times = jnp.arange(100) * 0.1
+        with self.assertRaises(ValueError):  # not 2-D
+            unitary_LFP(times, jnp.ones(100), 'exc')
+        with self.assertRaises(ValueError):  # times/spikes mismatch
+            unitary_LFP(times, jnp.ones((50, 5)), 'exc')
+
+    def test_unknown_location_raises(self):
+        times = jnp.arange(50) * 0.1
+        spikes = jnp.ones((50, 3))
+        with self.assertRaises(NotImplementedError):
+            unitary_LFP(times, spikes, 'exc', location='nowhere')
+
+    def test_spectral_entropy_short_signal(self):
+        # A signal whose retained band has <= 1 frequency bin returns 0.
+        se = spectral_entropy(np.ones(8), 0.001, freq_range=(1, 2))
+        self.assertEqual(float(se), 0.0)
+
+    def test_spectral_entropy_periodic_vs_random(self):
+        periodic = np.sin(2 * np.pi * 10 * self.t)
+        random = self.rng.randn(self.t.size)
+        self.assertLess(float(spectral_entropy(periodic, self.dt)),
+                        float(spectral_entropy(random, self.dt)))
+
+    def test_lfp_phase_coherence_requires_2d(self):
+        with self.assertRaises(ValueError):
+            lfp_phase_coherence(np.sin(2 * np.pi * 10 * self.t), self.dt)
+
+    def test_spectral_entropy_multichannel(self):
+        # 2-D input is averaged across channels into one spectrum.
+        sigs = np.stack([np.sin(2 * np.pi * 10 * self.t),
+                         np.sin(2 * np.pi * 20 * self.t)], axis=1)
+        se = spectral_entropy(sigs, self.dt)
+        self.assertGreaterEqual(float(se), 0.0)
+        self.assertLessEqual(float(se), 1.0)
