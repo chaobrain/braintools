@@ -676,10 +676,16 @@ def interactive_correlation_matrix(
     _check_plotly()
 
     data = as_numpy(data)
+    if data.ndim == 1:
+        data = data.reshape(-1, 1)
 
     # Calculate correlation matrix
-    if method == 'pearson':
-        corr_matrix = np.corrcoef(data.T)
+    if data.shape[1] == 1:
+        # A single feature has the trivial 1x1 correlation matrix; the methods
+        # below would return a 0-d scalar that breaks the heatmap.
+        corr_matrix = np.array([[1.0]])
+    elif method == 'pearson':
+        corr_matrix = np.atleast_2d(np.corrcoef(data.T))
     elif method == 'spearman':
         from scipy.stats import spearmanr
         # spearmanr returns a scalar for exactly two columns; build the 2x2
@@ -688,7 +694,7 @@ def interactive_correlation_matrix(
             rho = spearmanr(data[:, 0], data[:, 1])[0]
             corr_matrix = np.array([[1.0, rho], [rho, 1.0]])
         else:
-            corr_matrix = np.asarray(spearmanr(data)[0])
+            corr_matrix = np.atleast_2d(spearmanr(data)[0])
     else:
         raise ValueError(f"Unknown correlation method: {method}")
 
