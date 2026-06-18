@@ -344,9 +344,17 @@ def param(
         return init
 
     # Check if the parameter is a callable function
+    #
+    # For a callable, the batch axis is incorporated by prepending it to ``sizes``
+    # and letting the initializer fill the full batched shape (so a random
+    # initializer draws independently per batch element). The shared trailing
+    # batch-expansion below must therefore NOT run again for this path, otherwise
+    # the batch axis is applied twice (``(batch, batch, *sizes)``).
+    batch_applied_by_callable = False
     if callable(init):
         if batch_size is not None:
             sizes = (batch_size,) + sizes
+            batch_applied_by_callable = True
         init = init(sizes, **param_kwargs)
     else:
         # Check if the parameter is a scalar value
@@ -366,7 +374,7 @@ def param(
 
     # Expand the parameter to match the given batch size
     param_value = init.value if isinstance(init, State) else init
-    if batch_size is not None:
+    if batch_size is not None and not batch_applied_by_callable:
         if param_value.ndim <= len(sizes):
             # add a new axis to the params so that it matches the dimensionality of the given shape ``sizes``
             param_value = _expand_params_to_match_sizes(param_value, sizes)
