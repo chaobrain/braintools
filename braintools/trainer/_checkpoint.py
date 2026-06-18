@@ -333,15 +333,21 @@ class CheckpointManager:
 
         if metrics:
             for key, value in metrics.items():
-                # Clean metric name for filename
+                # Clean metric name for filename, and coerce array-like values
+                # to float so numeric format specs (e.g. ``{val_loss:.4f}``)
+                # work. (T-28)
                 clean_key = key.replace('/', '_').replace(' ', '_')
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    pass
                 format_dict[clean_key] = value
                 format_dict['metric'] = value  # Generic metric
 
         try:
             filename = self.filename_template.format(**format_dict)
-        except KeyError:
-            # Fall back to simple format
+        except (KeyError, ValueError, TypeError, IndexError):
+            # Fall back to a simple, always-valid format.
             filename = f'checkpoint-epoch={epoch:04d}'
 
         return filename

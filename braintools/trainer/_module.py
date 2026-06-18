@@ -36,19 +36,35 @@ __all__ = [
 
 def _to_scalar(value: Any) -> Any:
     """
-    Convert a value to a Python scalar if it's a JAX array.
+    Convert a value to a Python scalar if it is a 0-d/size-1 array.
 
-    This is safe to call outside of JIT-traced code.
+    Multi-element arrays are returned unchanged rather than raising, so callers
+    can safely pass through metrics that happen to be vectors. This is safe to
+    call outside of JIT-traced code.
     """
-    import jax.numpy as jnp
+    # Plain Python scalars pass through unchanged.
+    if isinstance(value, (bool, int, float)):
+        return value
+
+    # Only scalar (size-1) arrays can be converted; anything larger is returned
+    # as-is. ``getattr`` guards against objects that lack a ``size`` attribute.
+    size = getattr(value, 'size', None)
+    if size is not None and size != 1:
+        return value
 
     if hasattr(value, 'item'):
         try:
             return value.item()
         except Exception:
+            pass
+
+    # Last resort: objects that define ``__float__`` (but not strings/bytes,
+    # which would coerce surprisingly or raise).
+    if not isinstance(value, (str, bytes)):
+        try:
             return float(value)
-    elif isinstance(value, jnp.ndarray) and value.ndim == 0:
-        return float(value)
+        except (TypeError, ValueError):
+            return value
     return value
 
 
@@ -173,6 +189,10 @@ class LightningModule(brainstate.nn.Module):
         self._logged_metrics: Dict[str, Any] = {}
         self._prog_bar_metrics: Dict[str, Any] = {}
         self._logger_metrics: Dict[str, Any] = {}
+
+        # Names of parameters that should not be trained. The Trainer excludes
+        # these from gradient computation and optimizer updates.
+        self._frozen_params: set = set()
 
     # -------------------------------------------------------------------------
     # Properties
@@ -675,19 +695,85 @@ class LightningModule(brainstate.nn.Module):
     # Utility Methods
     # -------------------------------------------------------------------------
 
-    def freeze(self):
-        """Freeze all parameters (make non-trainable)."""
-        param_states = self.states(brainstate.ParamState)
-        for state in param_states.values():
-            if hasattr(state, 'requires_grad'):
-                state.requires_grad = False
+    def freeze(self, names: Optional[Union[str, List[str]]] = None):
+        """Freeze parameters so they are not updated during training.
 
-    def unfreeze(self):
-        """Unfreeze all parameters (make trainable)."""
+        ``brainstate.ParamState`` has no ``requires_grad`` flag, so freezing is
+        recorded by name on the module. The :class:`Trainer` reads these names
+        when it sets up training and excludes the corresponding states from both
+        gradient computation and optimizer updates. Call this *before*
+        ``trainer.fit(model)``.
+
+        Parameters
+        ----------
+        names : str or list of str, optional
+            Parameter name(s) to freeze. If ``None`` (default), all parameters
+            are frozen. Names correspond to the keys of
+            ``model.states(brainstate.ParamState)``.
+
+        See Also
+        --------
+        unfreeze : Reverse the effect of this method.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            >>> model.freeze()                 # freeze everything
+            >>> model.unfreeze('decoder.bias')  # then re-enable one parameter
+        """
         param_states = self.states(brainstate.ParamState)
-        for state in param_states.values():
-            if hasattr(state, 'requires_grad'):
-                state.requires_grad = True
+        if names is None:
+            self._frozen_params = set(param_states.keys())
+        else:
+            self._frozen_params.update(self._coerce_param_names(names))
+
+    def unfreeze(self, names: Optional[Union[str, List[str]]] = None):
+        """Unfreeze parameters so they are trained again.
+
+        Parameters
+        ----------
+        names : str or list of str, optional
+            Parameter name(s) to unfreeze. If ``None`` (default), all
+            parameters are unfrozen.
+
+        See Also
+        --------
+        freeze : Mark parameters as non-trainable.
+        """
+        if names is None:
+            self._frozen_params.clear()
+        else:
+            self._frozen_params.difference_update(self._coerce_param_names(names))
+
+    def _coerce_param_names(self, names: Any) -> List[Any]:
+        """Normalize ``names`` into a list of parameter keys.
+
+        Parameter keys may be plain strings or tuples (e.g. ``('lin',
+        'weight')``). A single key is wrapped in a list; an iterable of keys is
+        returned as a list. The ambiguity between a single tuple-key and a list
+        of keys is resolved by checking membership in the model's actual
+        parameter keys.
+        """
+        if isinstance(names, str):
+            return [names]
+        param_keys = set(self.states(brainstate.ParamState).keys())
+        try:
+            if names in param_keys:
+                return [names]
+        except TypeError:
+            # Unhashable (e.g. a list) -> it is a collection of names.
+            pass
+        return list(names)
+
+    def is_frozen(self, name: Any) -> bool:
+        """Return whether the parameter ``name`` is currently frozen."""
+        return name in self._frozen_params
+
+    @property
+    def frozen_parameters(self) -> set:
+        """Set of parameter names currently frozen."""
+        return set(self._frozen_params)
 
     def print_summary(self, input_shape: Optional[Tuple[int, ...]] = None):
         """
@@ -696,7 +782,9 @@ class LightningModule(brainstate.nn.Module):
         Parameters
         ----------
         input_shape : Tuple[int, ...], optional
-            Shape of input tensor for shape inference.
+            Reserved for future shape-inference support. Currently unused; the
+            summary reports parameter counts from the model's existing states
+            regardless of this argument.
         """
         print(f"\n{'='*60}")
         print(f"Model: {self.__class__.__name__}")

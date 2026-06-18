@@ -547,9 +547,11 @@ class TestEarlyStopping:
         with pytest.raises(ValueError, match="mode must be"):
             EarlyStopping(mode='bad')
 
-    def test_min_delta_sign_flipped_for_min_mode(self):
+    def test_min_delta_kept_as_positive_magnitude(self):
+        # min_delta is stored as a non-negative magnitude in both modes
+        # (regression test for the old sign-flip bug, T-1).
         cb = EarlyStopping(mode='min', min_delta=0.1)
-        assert cb.min_delta == -0.1
+        assert cb.min_delta == 0.1
         cb_max = EarlyStopping(mode='max', min_delta=0.1)
         assert cb_max.min_delta == 0.1
 
@@ -560,6 +562,16 @@ class TestEarlyStopping:
         cmax = EarlyStopping(mode='max', min_delta=0.0)
         assert cmax._is_improvement(0.2, 0.1)
         assert not cmax._is_improvement(0.1, 0.2)
+
+    def test_min_delta_requires_meaningful_improvement(self):
+        # With min_delta=0.1 and mode='min', a value only 0.05 lower than the
+        # best does NOT count as improvement; a value 0.2 lower does (T-1).
+        cmin = EarlyStopping(mode='min', min_delta=0.1)
+        assert not cmin._is_improvement(0.95, 1.0)   # only 0.05 better -> no
+        assert cmin._is_improvement(0.80, 1.0)       # 0.20 better -> yes
+        cmax = EarlyStopping(mode='max', min_delta=0.1)
+        assert not cmax._is_improvement(1.05, 1.0)   # only 0.05 better -> no
+        assert cmax._is_improvement(1.20, 1.0)       # 0.20 better -> yes
 
     def test_plateau_triggers_stop(self):
         cb = EarlyStopping(monitor='val_loss', patience=2, mode='min', verbose=True)

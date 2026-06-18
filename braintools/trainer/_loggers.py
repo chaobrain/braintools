@@ -552,6 +552,9 @@ class CSVLogger(Logger):
         self._file = None
         self._writer = None
         self._fieldnames: List[str] = ['step']
+        # Columns actually written to the file's header so far; used to detect
+        # when new metrics require rewriting the file with a wider header.
+        self._written_fieldnames: List[str] = []
 
     @property
     def root_dir(self) -> str:
@@ -580,7 +583,9 @@ class CSVLogger(Logger):
     ):
         self._init_csv()
 
-        row = {'step': step or self._step_count}
+        # Use ``step`` even when it is 0; only fall back to the internal counter
+        # when no step was supplied. (T-14)
+        row = {'step': step if step is not None else self._step_count}
         row.update(metrics)
         self._metrics_buffer.append(row)
 
@@ -611,18 +616,45 @@ class CSVLogger(Logger):
                     f.write(f"{key}: {value}\n")
 
     def save(self):
-        """Flush buffered metrics to CSV."""
+        """Flush buffered metrics to CSV.
+
+        If metrics with new column names have appeared since the header was
+        written, the whole file is rewritten with the wider header so that
+        late-appearing metrics are not silently dropped and earlier rows stay
+        column-aligned. (T-14)
+        """
         if not self._metrics_buffer:
             return
 
-        file_exists = os.path.exists(self.metrics_file_path)
+        self._init_csv()
+        path = self.metrics_file_path
+        file_exists = os.path.exists(path)
 
-        with open(self.metrics_file_path, 'a', newline='') as f:
+        needs_rewrite = (
+            file_exists
+            and self._written_fieldnames
+            and any(f not in self._written_fieldnames for f in self._fieldnames)
+        )
+
+        if needs_rewrite:
+            with open(path, 'r', newline='') as f:
+                existing_rows = list(csv.DictReader(f))
+            with open(path, 'w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=self._fieldnames, extrasaction='ignore')
+                writer.writeheader()
+                for row in existing_rows:
+                    writer.writerow(row)
+                for row in self._metrics_buffer:
+                    writer.writerow(row)
+            self._written_fieldnames = list(self._fieldnames)
+            self._metrics_buffer.clear()
+            return
+
+        with open(path, 'a', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=self._fieldnames, extrasaction='ignore')
-
             if not file_exists:
                 writer.writeheader()
-
+                self._written_fieldnames = list(self._fieldnames)
             for row in self._metrics_buffer:
                 writer.writerow(row)
 

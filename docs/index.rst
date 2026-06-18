@@ -91,4 +91,5 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobr
     apis/optim.rst
     apis/quad.rst
     apis/surrogate.rst
+    apis/trainer.rst
     apis/visualize.rst

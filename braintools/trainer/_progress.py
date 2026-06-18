@@ -183,9 +183,11 @@ class SimpleProgressBar(ProgressBar):
         """Print the progress bar."""
         # Calculate progress
         if self._total and self._total > 0:
-            fraction = self._n / self._total
+            # Clamp so an overshoot (n > total) cannot produce a negative
+            # remainder or a bar wider than ``width``. (T-30)
+            fraction = max(0.0, min(1.0, self._n / self._total))
             percent = fraction * 100
-            filled = int(self.width * fraction)
+            filled = min(int(self.width * fraction), self.width - 1)
             bar = '=' * filled + '>' + '-' * (self.width - filled - 1)
         else:
             percent = 0
@@ -313,6 +315,7 @@ class RichProgressBarWrapper(ProgressBar):
         self._kwargs = kwargs
         self._progress = None
         self._task_id = None
+        self._desc = ''
 
     def start(
         self,
@@ -320,6 +323,7 @@ class RichProgressBarWrapper(ProgressBar):
         desc: str = '',
         unit: str = 'it',
     ):
+        self._desc = desc
         try:
             from rich.progress import (
                 Progress,
@@ -356,11 +360,16 @@ class RichProgressBarWrapper(ProgressBar):
                 self._progress.update(n, **kwargs)
 
     def set_postfix(self, metrics: Dict[str, Any]):
-        # Rich doesn't have postfix, but we can update description
+        # Rich has no postfix column, so fold the metrics into the description
+        # while preserving the original label (e.g. "Epoch 0"). (T-30)
         if self._progress is not None and self._task_id is not None:
             metrics_str = ', '.join(f'{k}={v:.4f}' if isinstance(v, float) else f'{k}={v}'
                                     for k, v in metrics.items())
-            self._progress.update(self._task_id, description=metrics_str)
+            description = f'{self._desc} {metrics_str}'.strip() if metrics_str else self._desc
+            self._progress.update(self._task_id, description=description)
+        elif self._progress is not None:
+            # Fell back to SimpleProgressBar.
+            self._progress.set_postfix(metrics)
 
     def close(self):
         if self._progress is not None:

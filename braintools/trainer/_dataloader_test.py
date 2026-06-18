@@ -150,6 +150,20 @@ class TestIterableDataset:
         with pytest.raises(IndexError):
             dataset[10]
 
+    def test_getitem_reiterable_distinct_items(self):
+        # A re-iterable source (e.g. a list) must yield distinct items by
+        # index. The previous implementation created a fresh iterator on every
+        # access and so returned the first element for every index.
+        dataset = IterableDataset([10, 20, 30], length=3)
+        assert dataset[0] == 10
+        assert dataset[1] == 20
+        assert dataset[2] == 30
+
+    def test_getitem_negative_index_raises(self):
+        dataset = IterableDataset([1, 2, 3], length=3)
+        with pytest.raises(IndexError):
+            dataset[-1]
+
 
 class TestSampler:
     """Tests for the abstract Sampler base class."""
@@ -383,13 +397,35 @@ class TestDataLoader:
         batch = next(iter(loader))[0]
         assert not jnp.all(batch[:10, 0] == jnp.arange(10))
 
-    def test_shuffle_reset_between_epochs(self):
+    def test_shuffle_varies_between_epochs(self):
+        # Successive epochs must reshuffle, otherwise every epoch sees the data
+        # in the exact same order (the classic "shuffle does nothing" bug).
         X = jnp.arange(20).reshape(20, 1)
         loader = DataLoader((X,), batch_size=20, shuffle=True, seed=5)
         epoch1 = next(iter(loader))[0]
         epoch2 = next(iter(loader))[0]
-        # reset() restores the same RNG state, so epochs match
-        assert jnp.all(epoch1 == epoch2)
+        assert not jnp.all(epoch1 == epoch2)
+
+    def test_shuffle_reproducible_across_loaders(self):
+        # The per-epoch ordering must be reproducible: a fresh loader with the
+        # same seed replays the identical sequence of epoch orderings.
+        X = jnp.arange(20).reshape(20, 1)
+        loader = DataLoader((X,), batch_size=20, shuffle=True, seed=5)
+        epoch1 = next(iter(loader))[0]
+        epoch2 = next(iter(loader))[0]
+
+        loader2 = DataLoader((X,), batch_size=20, shuffle=True, seed=5)
+        assert jnp.all(next(iter(loader2))[0] == epoch1)
+        assert jnp.all(next(iter(loader2))[0] == epoch2)
+
+    def test_shuffle_epoch_counter_advances(self):
+        # Even a partially-consumed iterator advances the epoch counter so the
+        # next pass reshuffles.
+        X = jnp.arange(20).reshape(20, 1)
+        loader = DataLoader((X,), batch_size=5, shuffle=True, seed=7)
+        assert loader._epoch == 0
+        next(iter(loader))  # pull only the first batch
+        assert loader._epoch == 1
 
     def test_drop_last(self):
         X = jnp.ones((100, 10))
