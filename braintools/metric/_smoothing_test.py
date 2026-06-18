@@ -45,7 +45,9 @@ class SmoothLabelsTest(parameterized.TestCase):
         np.testing.assert_allclose(braintools.metric.smooth_labels(self.ts, 1.), self.exp_alpha_one, atol=1e-4)
 
     def test_smooth_labels_assertion_error(self):
-        with self.assertRaises(AssertionError):
+        # Integer labels are rejected with an explicit ``TypeError`` (a real
+        # exception that survives ``python -O``, unlike a bare ``assert``).
+        with self.assertRaises(TypeError):
             braintools.metric.smooth_labels(jnp.array([[1, 0, 0], [0, 1, 0]]), 0.1)
 
     def test_alpha_very_small_positive(self):

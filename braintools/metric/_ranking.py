@@ -24,6 +24,7 @@ leading dimensions are considered batch dimensions.
 
 Standalone usage:
 
+>>> import jax.numpy as jnp
 >>> import braintools as braintools
 >>> scores = jnp.array([2., 1., 3.])
 >>> labels = jnp.array([1., 0., 0.])
@@ -279,6 +280,7 @@ def ranking_softmax_loss(
     >>> labels = jnp.array([1.0, 0.0, 2.0])
     >>> loss = braintools.metric.ranking_softmax_loss(logits, labels)
     >>> print(f"Loss: {loss:.4f}")
+    Loss: 2.2228
 
     Batch processing with masking:
 
@@ -289,12 +291,14 @@ def ranking_softmax_loss(
     >>> where = jnp.array([[True, True, False], [True, True, True]])
     >>> loss = braintools.metric.ranking_softmax_loss(logits, labels, where=where)
     >>> print(f"Batch loss: {loss:.4f}")
+    Batch loss: 0.4968
 
     Per-item weighting:
 
     >>> weights = jnp.array([1.0, 2.0, 1.0])  # Emphasize middle item
     >>> loss = braintools.metric.ranking_softmax_loss(logits[0], labels[0], weights=weights)
     >>> print(f"Weighted loss: {loss:.4f}")
+    Weighted loss: 0.4076
 
     Unreduced losses for analysis (legacy ``reduce_fn`` API):
 
@@ -302,6 +306,7 @@ def ranking_softmax_loss(
     ...     logits, labels, where=where, reduce_fn=None
     ... )
     >>> print(f"Individual losses: {batch_losses}")
+    Individual losses: [0.31326163 0.68026966]
 
     Using the ``reduction`` string API (preferred):
 

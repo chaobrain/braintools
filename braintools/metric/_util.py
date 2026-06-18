@@ -15,6 +15,9 @@
 
 
 def _reduce(outputs, reduction, axis=None):
+    # Note: ``axis`` only takes effect for the ``'mean'``/``'sum'`` reductions;
+    # with ``reduction='none'`` the input is returned unchanged and ``axis`` is
+    # ignored.
     if reduction == 'mean':
         return outputs.mean(axis)
     elif reduction == 'sum':

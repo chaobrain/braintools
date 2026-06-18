@@ -154,12 +154,14 @@ def firing_rate(
         spikes at the corresponding time step and neuron.
     width : float or brainunit.Quantity
         Width of the smoothing window. If a float, interpreted as time units
-        consistent with ``dt``. If a brainunit.Quantity, should have time dimensions
-        (e.g., milliseconds). Larger values produce more smoothing.
+        consistent with ``dt`` (assumed **seconds** when both are plain floats,
+        so the rate comes out in Hz). If a brainunit.Quantity, should have time
+        dimensions (e.g., milliseconds). Larger values produce more smoothing.
     dt : float or brainunit.Quantity, optional
         Time step between successive samples in the spike matrix. If None,
         uses the default time step from the brainstate environment
-        (``brainstate.environ.get_dt()``).
+        (``brainstate.environ.get_dt()``). A plain float is assumed to be in
+        seconds.
 
     Returns
     -------
@@ -312,10 +314,11 @@ def victor_purpura_distance(
            temporal coding in visual cortex: a metric-space analysis." 
            Journal of neurophysiology 76.2 (1996): 1310-1326.
     """
-    spikes1 = jnp.asarray(spike_times_1)
-    spikes2 = jnp.asarray(spike_times_2)
+    spikes1 = onp.asarray(u.get_magnitude(spike_times_1), dtype=float)
+    spikes2 = onp.asarray(u.get_magnitude(spike_times_2), dtype=float)
+    cost_factor = float(u.get_magnitude(cost_factor))
 
-    n1, n2 = len(spikes1), len(spikes2)
+    n1, n2 = spikes1.shape[0], spikes2.shape[0]
 
     # Handle empty spike trains
     if n1 == 0:
@@ -323,32 +326,26 @@ def victor_purpura_distance(
     if n2 == 0:
         return float(n1)
 
-    # Dynamic programming matrix
-    # dp[i][j] = minimum cost to transform spikes1[:i] to spikes2[:j]
-    dp = jnp.full((n1 + 1, n2 + 1), jnp.inf)
-
-    # Base cases
-    dp = dp.at[0, 0].set(0.0)
+    # Dynamic programming on host (NumPy) arrays with plain Python arithmetic.
+    # dp[i, j] = minimum cost to transform spikes1[:i] into spikes2[:j].
+    # Using JAX arrays here would force a host<->device round-trip for every
+    # ``.at[].set`` and ``dp[...]`` read, making the routine O(n^2) *device*
+    # operations; NumPy keeps it a fast in-memory fill.
+    dp = onp.empty((n1 + 1, n2 + 1), dtype=float)
+    dp[0, 0] = 0.0
     for i in range(1, n1 + 1):
-        dp = dp.at[i, 0].set(i)  # Delete all spikes in train 1
+        dp[i, 0] = i  # Delete all spikes in train 1
     for j in range(1, n2 + 1):
-        dp = dp.at[0, j].set(j)  # Insert all spikes in train 2
+        dp[0, j] = j  # Insert all spikes in train 2
 
-    # Fill the DP matrix
     for i in range(1, n1 + 1):
+        s1 = spikes1[i - 1]
         for j in range(1, n2 + 1):
-            # Cost to match spike i with spike j (temporal shift)
-            shift_cost = cost_factor * jnp.abs(spikes1[i - 1] - spikes2[j - 1])
-            match_cost = dp[i - 1, j - 1] + shift_cost
-
-            # Cost to delete spike i
+            # Match spike i with spike j (temporal shift), delete, or insert.
+            match_cost = dp[i - 1, j - 1] + cost_factor * abs(s1 - spikes2[j - 1])
             delete_cost = dp[i - 1, j] + 1.0
-
-            # Cost to insert spike j
             insert_cost = dp[i, j - 1] + 1.0
-
-            # Take minimum cost
-            dp = dp.at[i, j].set(jnp.min(jnp.array([match_cost, delete_cost, insert_cost])))
+            dp[i, j] = min(match_cost, delete_cost, insert_cost)
 
     return float(dp[n1, n2])
 
@@ -659,9 +656,11 @@ def burst_synchrony_index(
 
         for j, (neuron2, start2, end2) in enumerate(all_bursts):
             if i != j and neuron1 != neuron2:
-                # Check for temporal overlap
+                # Check for temporal overlap. ``>= 0`` (inclusive) counts bursts
+                # that touch at a single instant -- the strongest possible
+                # synchrony -- which a strict ``> 0`` would wrongly exclude.
                 overlap = min(end1, end2) - max(start1, start2)
-                if overlap > 0:
+                if overlap >= 0:
                     overlapping_neurons.add(neuron2)
 
         # If burst involves multiple neurons, it's synchronous
@@ -675,7 +674,7 @@ def burst_synchrony_index(
 def phase_locking_value(
     spike_matrix: brainstate.typing.ArrayLike,
     reference_freq: float,
-    dt: float = None
+    dt: Union[float, u.Quantity] = None
 ):
     r"""Calculate phase-locking value (PLV) for spike synchronization.
     
@@ -697,8 +696,11 @@ def phase_locking_value(
         Spike matrix with shape ``(n_time_steps, n_neurons)``.
     reference_freq : float
         Reference frequency for phase computation (in Hz).
-    dt : float, optional
-        Time step between successive samples. If None, uses brainstate default.
+    dt : float or brainunit.Quantity, optional
+        Time step between successive samples. If None, uses the brainstate
+        default. A plain float is assumed to be in **seconds** (so that it is
+        consistent with ``reference_freq`` in Hz); a ``brainunit.Quantity`` is
+        converted to seconds.
         
     Returns
     -------
@@ -743,10 +745,16 @@ def phase_locking_value(
         (5,)
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
+    # ``reference_freq`` is in Hz, so the time base must be in seconds. A
+    # ``brainunit.Quantity`` ``dt`` (e.g. the ``brainstate.environ.get_dt()``
+    # default, or ``0.1 * u.ms``) is converted to seconds; a plain float is
+    # assumed to already be in seconds.
+    if isinstance(dt, u.Quantity):
+        dt = float(dt.to_decimal(u.second))
     spikes = jnp.asarray(spike_matrix)
     n_time, n_neurons = spikes.shape
 
-    # Create time vector
+    # Create time vector (in seconds)
     times = jnp.arange(n_time) * dt
 
     # Reference phase signal
@@ -968,6 +976,8 @@ def correlation_index(
 
     # Bin size in samples (``window_size`` and ``dt`` must share a time unit).
     bin_size = max(1, int(u.get_magnitude(window_size) / u.get_magnitude(dt)))
+    # Only whole bins are used; any trailing samples that do not fill a complete
+    # bin are discarded so every bin has the same width.
     n_bins = n_time // bin_size
 
     if n_bins < 2:
@@ -977,7 +987,7 @@ def correlation_index(
     binned_spikes = jnp.zeros((n_bins, n_neurons))
     for i in range(n_bins):
         start_idx = i * bin_size
-        end_idx = min((i + 1) * bin_size, n_time)
+        end_idx = (i + 1) * bin_size
         binned_spikes = binned_spikes.at[i, :].set(jnp.sum(spikes[start_idx:end_idx, :], axis=0))
 
     # Calculate pairwise correlations
@@ -1000,4 +1010,6 @@ def correlation_index(
 
             correlations.append(corr)
 
-    return float(jnp.mean(jnp.array(correlations)))
+    # Clamp to the documented [-1, 1] range (guards against float round-off in
+    # ``corrcoef`` pushing the mean marginally outside the interval).
+    return float(jnp.clip(jnp.mean(jnp.array(correlations)), -1.0, 1.0))

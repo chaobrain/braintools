@@ -17,6 +17,7 @@
 
 import brainstate
 import brainunit as u
+import jax
 import jax.numpy as jnp
 
 from braintools._misc import set_module_as
@@ -28,7 +29,7 @@ __all__ = ['smooth_labels']
 def smooth_labels(
     labels: brainstate.typing.ArrayLike,
     alpha: float,
-) -> jnp.ndarray:
+) -> jax.Array:
     r"""Apply label smoothing regularization to one-hot encoded labels.
 
     Label smoothing is a regularization technique that prevents neural networks
@@ -73,6 +74,8 @@ def smooth_labels(
 
     Raises
     ------
+    TypeError
+        If ``labels`` is not a floating-point array.
     ValueError
         If ``alpha`` is outside the closed interval ``[0, 1]``.
 
@@ -152,7 +155,8 @@ def smooth_labels(
     .. [3] Pereyra, Gabriel, et al. "Regularizing neural networks by penalizing 
            confident output distributions." arXiv preprint arXiv:1701.06548 (2017).
     """
-    assert u.math.is_float(labels), f'labels should be of float type.'
+    if not u.math.is_float(labels):
+        raise TypeError('labels should be of float type.')
     if not (0.0 <= alpha <= 1.0):
         raise ValueError(f'alpha must be in the range [0, 1], but got {alpha}.')
     num_categories = labels.shape[-1]

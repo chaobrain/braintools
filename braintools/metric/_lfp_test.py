@@ -369,14 +369,18 @@ class TestLFPPhaseCoherence(unittest.TestCase):
         signal = jnp.sin(2 * jnp.pi * 25 * t)  # 25 Hz signal
         signals = jnp.column_stack([signal, signal])
 
-        # Test in beta band (should have high coherence)
+        # The 25 Hz tone lives in the beta band, so coherence there is genuine
+        # and high.
         coherence_beta = lfp_phase_coherence(signals, dt, freq_band=(20, 30))
-        # Test in alpha band (should have lower coherence)
+        # The alpha band carries no signal power; phase in an empty band is
+        # undefined, so the LFP-1 fix reports ~0 instead of a spurious high
+        # value (the previous expectation of >= 0.8 here was the bug).
         coherence_alpha = lfp_phase_coherence(signals, dt, freq_band=(8, 12))
 
-        # Both should be high for identical signals, just check they're valid
         self.assertGreaterEqual(coherence_beta[0, 1], 0.8)
-        self.assertGreaterEqual(coherence_alpha[0, 1], 0.8)
+        self.assertLessEqual(coherence_alpha[0, 1], 0.2)
+        # All coherence values stay within the valid [0, 1] range.
+        self.assertGreaterEqual(coherence_alpha[0, 1], 0.0)
 
 
 class TestLFPRegressionAndFeatures(unittest.TestCase):

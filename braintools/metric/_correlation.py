@@ -119,6 +119,8 @@ def cross_correlation(
     if bin_size < 1:
         raise ValueError(f'`bin` ({bin}) must be at least as large as `dt` ({dt}); '
                          f'got a bin width of {bin_size} samples.')
+    # Strip units so ``Quantity`` spike matrices behave like the other metrics.
+    spikes = jnp.asarray(u.get_magnitude(spikes))
     num_hist, num_neu = spikes.shape
     if num_neu < 2:
         # Coincidence is only defined for pairs; a single neuron has no pairs.
@@ -134,7 +136,7 @@ def cross_correlation(
         def _f(i, j):
             sqrt_ij = jnp.sqrt(jnp.sum(states[i]) * jnp.sum(states[j]))
             return lax.cond(sqrt_ij == 0.,
-                            lambda _: 0.,
+                            lambda _: jnp.zeros((), dtype=sqrt_ij.dtype),
                             lambda _: jnp.sum(states[i] * states[j]) / sqrt_ij,
                             None)
 
@@ -145,7 +147,7 @@ def cross_correlation(
         def _cc(i, j):
             sqrt_ij = jnp.sqrt(jnp.sum(states[i]) * jnp.sum(states[j]))
             return lax.cond(sqrt_ij == 0.,
-                            lambda _: 0.,
+                            lambda _: jnp.zeros((), dtype=sqrt_ij.dtype),
                             lambda _: jnp.sum(states[i] * states[j]) / sqrt_ij,
                             None)
 
@@ -213,9 +215,11 @@ def voltage_fluctuation(
     Returns
     -------
     jax.Array
-        Scalar (0-d array) synchronization index. Values > 1 indicate synchronized
-        activity, values ≈ 1 indicate asynchronous activity. By convention a
-        constant (zero-variance) population returns ``1.0``.
+        Scalar (0-d array) synchronization index, bounded in approximately
+        ``[1/N, 1]``. Values near ``1`` indicate strong synchrony; values near
+        ``1/N`` indicate asynchronous activity. (The ratio of the population-mean
+        variance to the mean single-neuron variance cannot exceed 1.) By
+        convention a constant (zero-variance) population returns ``1.0``.
 
     Examples
     --------
@@ -449,11 +453,14 @@ def functional_connectivity_dynamics(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> import brainstate as brainstate
-    >>> activities = brainstate.random.rand(200, 10)
-    >>> fcd = braintools.metric.functional_connectivity_dynamics(activities)
+    .. code-block:: python
+
+        >>> import braintools
+        >>> import brainstate
+        >>> activities = brainstate.random.rand(200, 10)
+        >>> fcd = braintools.metric.functional_connectivity_dynamics(activities)
+        >>> fcd.shape
+        (35, 35)
     """
 
     if activities.ndim != 2:
@@ -552,24 +559,18 @@ def weighted_correlation(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Perfect linear relationship
-    >>> x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
-    >>> y = jnp.array([2.0, 4.0, 6.0, 8.0, 10.0])
-    >>> # Weight middle points more heavily
-    >>> w = jnp.array([1.0, 1.0, 2.0, 2.0, 1.0])
-    >>> corr = braintools.metric.weighted_correlation(x, y, w)
-    >>> print(f"Weighted correlation: {corr:.3f}")
-    >>>
-    >>> # Compare with unweighted correlation
-    >>> unweighted = jnp.corrcoef(x, y)[0, 1]
-    >>> print(f"Unweighted correlation: {unweighted:.3f}")
-    >>>
-    >>> # Example with reliability weights (higher for more reliable measurements)
-    >>> reliability = jnp.array([0.5, 0.8, 0.9, 0.7, 0.6])
-    >>> corr_reliable = braintools.metric.weighted_correlation(x, y, reliability)
-    >>> print(f"Reliability-weighted: {corr_reliable:.3f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Perfect linear relationship y = 2x.
+        >>> x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        >>> y = jnp.array([2.0, 4.0, 6.0, 8.0, 10.0])
+        >>> # Weight middle points more heavily.
+        >>> w = jnp.array([1.0, 1.0, 2.0, 2.0, 1.0])
+        >>> corr = braintools.metric.weighted_correlation(x, y, w)
+        >>> print(f"Weighted correlation: {corr:.3f}")
+        Weighted correlation: 1.000
     """
 
     x = jnp.asarray(u.get_magnitude(x))

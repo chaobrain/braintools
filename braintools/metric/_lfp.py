@@ -58,8 +58,15 @@ def _analytic_band(fft_vals: jax.Array, freqs: jax.Array, low: float, high: floa
     ``abs`` is the amplitude envelope. The earlier symmetric ``|f|`` mask produced an
     almost-real band-passed signal whose phase was degenerate (≈ 0 or π).
     """
-    mask = (freqs >= low) & (freqs <= high)  # positive frequencies only
-    band = jnp.where(mask, fft_vals, 0.0 + 0.0j) * 2.0
+    # Broadcast the per-frequency mask/factor against the frequency axis (axis 0),
+    # supporting both 1-D and (n_time, ...) inputs.
+    shape = (-1,) + (1,) * (fft_vals.ndim - 1)
+    mask = ((freqs >= low) & (freqs <= high)).reshape(shape)
+    # Double only strictly positive in-band bins. DC (f == 0) must NOT be doubled
+    # in the analytic-signal construction; doubling it distorts the phase of any
+    # band that includes 0 Hz.
+    factor = jnp.where(freqs == 0.0, 1.0, 2.0).reshape(shape)
+    band = jnp.where(mask, fft_vals * factor, 0.0 + 0.0j)
     return jnp.fft.ifft(band, axis=0)
 
 
@@ -288,6 +295,10 @@ def power_spectral_density(
     -----
     Supplying ``freq_range`` uses boolean-mask indexing (data-dependent output
     length), so that path is not ``jit``-compatible; the full-spectrum path is.
+
+    The window is ``jnp.hanning``, which is the *symmetric* Hann window;
+    ``scipy.signal.welch`` uses a *periodic* (``sym=False``) Hann window by
+    default, so PSD values differ marginally when comparing against scipy.
     """
     dt = _to_seconds(dt)
     lfp = jnp.asarray(u.get_magnitude(lfp))
@@ -399,7 +410,11 @@ def coherence_analysis(
     p12 = jnp.mean(f1 * jnp.conj(f2), axis=0)
     p11 = jnp.mean(jnp.abs(f1) ** 2, axis=0)
     p22 = jnp.mean(jnp.abs(f2) ** 2, axis=0)
-    coherence = jnp.abs(p12) ** 2 / (p11 * p22 + 1e-15)
+    # Scale-invariant guard: bins with zero power (denominator 0) yield 0 (their
+    # cross-power is also 0). Avoids the absolute ``+ 1e-15`` floor, which biased
+    # genuinely-coherent bins toward 0 for amplitude-downscaled signals.
+    denom = p11 * p22
+    coherence = jnp.abs(p12) ** 2 / jnp.where(denom > 0, denom, 1.0)
     coherence = jnp.clip(coherence, 0.0, 1.0)
 
     freqs = jnp.fft.rfftfreq(nperseg, dt)
@@ -407,6 +422,11 @@ def coherence_analysis(
         mask = (freqs >= freq_range[0]) & (freqs <= freq_range[1])
         freqs = freqs[mask]
         coherence = coherence[mask]
+        # Mirror power_spectral_density: never return empty arrays for an
+        # out-of-range band.
+        if freqs.size == 0:
+            freqs = jnp.array([freq_range[0]])
+            coherence = jnp.zeros((1,))
     return freqs, coherence
 
 
@@ -637,6 +657,14 @@ def lfp_phase_coherence(
     phase_coherence_matrix : jax.Array
         Symmetric coherence matrix with shape ``(n_channels, n_channels)`` and
         values in ``[0, 1]`` (diagonal exactly 1).
+
+    Notes
+    -----
+    The phase of a channel that carries negligible power in ``freq_band`` is
+    undefined. Such channels are detected (in-band power negligible relative to
+    their broadband power) and their off-diagonal coherence is reported as ``0``
+    rather than a spurious value (a zero band-limited signal would otherwise
+    appear perfectly phase-locked).
     """
     dt = _to_seconds(dt)
     lfp_signals = jnp.asarray(u.get_magnitude(lfp_signals))
@@ -660,6 +688,17 @@ def lfp_phase_coherence(
     # mathematically bounded in [0, 1]. Clip to remove float32 roundoff that
     # can push near-coherent pairs marginally above 1.0.
     coherence = jnp.clip(coherence, 0.0, 1.0)
+
+    # A channel with negligible power in ``freq_band`` has a degenerate (~0)
+    # analytic signal whose phase is undefined -- ``angle(0) == 0`` would make
+    # every such channel look perfectly phase-locked. Detect those channels
+    # (in-band power negligible relative to broadband power) and report their
+    # off-diagonal coherence as 0 instead of a spurious value.
+    in_band_power = jnp.mean(jnp.abs(analytic) ** 2, axis=0)      # (n_channels,)
+    total_power = jnp.mean(lfp_signals ** 2, axis=0)              # (n_channels,)
+    valid = in_band_power > 1e-6 * jnp.maximum(total_power, 1e-30)
+    coherence = jnp.where(valid[:, None] & valid[None, :], coherence, 0.0)
+
     # A channel is perfectly phase-locked with itself, so the diagonal is
     # exactly 1 by definition; set it explicitly to remove float32 drift that
     # can leave it marginally below 1.0.

@@ -36,7 +36,7 @@ def _safe_row_norm(a: jax.Array) -> jax.Array:
     double-``where`` construction below returns a norm of ``0`` for zero rows
     while keeping the gradient finite.
     """
-    sq = jnp.sum(a * a, axis=1, keepdims=True)
+    sq = jnp.sum(a * a, axis=-1, keepdims=True)
     is_zero = sq == 0.0
     safe_sq = jnp.where(is_zero, 1.0, sq)
     return jnp.where(is_zero, 0.0, jnp.sqrt(safe_sq))
@@ -78,8 +78,10 @@ def pairwise_cosine_similarity(
         Input array with shape ``(n_samples_Y, n_features)``. If ``None``,
         computes pairwise similarities within ``X``.
     eps : float, default=1e-8
-        Lower bound applied to the product of norms to avoid division by zero.
-        Pairs that involve a zero vector therefore yield a similarity of ``0``.
+        Lower bound applied to **each row norm** (not their product) to avoid
+        division by zero. Only norms below ``eps`` are affected, so similarities
+        between small but non-zero vectors are computed exactly; pairs that
+        involve a zero vector still yield a similarity of ``0``.
 
     Returns
     -------
@@ -99,10 +101,12 @@ def pairwise_cosine_similarity(
 
     Notes
     -----
-    The denominator is floored at ``eps`` (rather than having ``eps`` added to
-    it), so that the value **and** the gradient remain finite for zero vectors,
-    and non-zero vectors are unaffected. This avoids the NaN-gradient hazard of
-    the naive ``dot / (norm_product + eps)`` formulation.
+    Each row norm is floored at ``eps`` (rather than adding ``eps`` to the norm
+    product), so that the value **and** the gradient remain finite for zero
+    vectors while non-zero vectors -- including very small ones -- are
+    unaffected. This avoids both the NaN-gradient hazard of the naive
+    ``dot / (norm_product + eps)`` formulation and the magnitude-coupling bug of
+    flooring the *product* of the two norms.
 
     Examples
     --------
@@ -115,7 +119,7 @@ def pairwise_cosine_similarity(
         >>> print(sim_matrix)
         [[1.         0.         0.70710677]
          [0.         1.         0.70710677]
-         [0.70710677 0.70710677 1.        ]]
+         [0.70710677 0.70710677 1.0000001 ]]
 
         >>> Y = jnp.array([[1., 1., 1.], [0., 0., 1.]])
         >>> braintools.metric.pairwise_cosine_similarity(X, Y).shape
@@ -131,13 +135,16 @@ def pairwise_cosine_similarity(
     # Pairwise dot products: shape (n_samples_X, n_samples_Y)
     dot_products = X @ Y.T
 
-    # L2 norms for each sample (gradient-safe at zero vectors).
-    X_norms = _safe_row_norm(X)
-    Y_norms = _safe_row_norm(Y)
+    # L2 norms for each sample (gradient-safe at zero vectors). Floor *each row
+    # norm* at ``eps`` rather than their product: this engages only for genuine
+    # near-zero vectors, so the (scale-invariant) cosine stays correct for small
+    # but non-zero vectors, while the value and gradient remain finite at the
+    # origin (a zero row contributes a zero numerator, hence a similarity of 0).
+    X_norms = jnp.maximum(_safe_row_norm(X), eps)
+    Y_norms = jnp.maximum(_safe_row_norm(Y), eps)
     norm_products = X_norms @ Y_norms.T
 
-    # Floor the denominator (keeps value and gradient finite for zero vectors).
-    return dot_products / jnp.maximum(norm_products, eps)
+    return dot_products / norm_products
 
 
 @set_module_as('braintools.metric')
@@ -160,8 +167,8 @@ def pairwise_cosine_distance(
         Input array with shape ``(n_samples_Y, n_features)``. If ``None``,
         computes pairwise distances within ``X``.
     eps : float, default=1e-8
-        Lower bound applied to the product of norms to avoid division by zero.
-        Pairs involving a zero vector therefore yield a distance of ``1``.
+        Lower bound applied to each row norm to avoid division by zero. Pairs
+        involving a zero vector therefore yield a distance of ``1``.
 
     Returns
     -------

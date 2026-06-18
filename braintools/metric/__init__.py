@@ -427,6 +427,7 @@ from ._regression import (
     log_cosh,
     cosine_similarity,
     cosine_distance,
+    L1Loss,
 )
 
 # Smoothing utilities
@@ -502,6 +503,7 @@ __all__ = [
     'log_cosh',
     'cosine_similarity',
     'cosine_distance',
+    'L1Loss',
 
     # Smoothing utilities
     'smooth_labels',
