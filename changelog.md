@@ -1,6 +1,122 @@
 # Release Notes
 
 
+## Version 0.3.0 (2026-06-19)
+
+This release completes the library-wide correctness audit campaign begun in
+0.2.0. The two remaining major modules — `cogtask` and `metric` — received
+their first dedicated static audits, while `optim`, `trainer`, `visualize`,
+`surrogate`, and `init` underwent deeper second-pass re-audits whose findings
+were each verified against reference implementations (`optax` 0.2.6,
+`torch.optim`, PyTorch's NAdam) and numeric reproductions. Every fix is locked
+in behind a regression test suite. The changes are corrections to existing
+behavior — no intentional API breaks — but the breadth and the genuine
+numerical/algorithmic bugs corrected (double-applied SM3 momentum, a centered
+RMSprop that was a silent no-op, dropped `Parallel` branches in `cogtask`,
+distributed broadcast that failed on more than one device, and more) warrant
+the minor-version bump.
+
+### Highlights
+
+- **Audit campaign completed**: `cogtask` and `metric` are now audited, and the
+  five previously-audited modules were re-audited against their reference
+  implementations, replacing plausible-but-unverified behavior with
+  reference-checked correctness.
+- **Real algorithmic fixes**: SM3 no longer applies momentum twice;
+  `RMSprop(centered=True)` actually centers; `Nadam` honors `momentum_decay`;
+  `cogtask.Parallel` no longer silently drops compound (`>>` / `Repeat`)
+  branches; distributed `broadcast()` works on more than one device.
+- **Restored public API**: `cogtask.create_task` and `metric.L1Loss` are now
+  importable from their packages (both were documented but absent from
+  `__all__`).
+- **Regression coverage**: each audited module ships a dedicated regression
+  test suite (`visualize` exercised source at 99%, `surrogate` at 100%).
+
+### Added
+
+- **`braintools.cogtask.create_task`** is now exported from the package (#122).
+- **`braintools.metric.L1Loss`** is now exported (documented but previously
+  missing from `__all__`) (#121).
+
+### Fixed
+
+#### `braintools.optim` (#120) — re-audit verified against optax 0.2.6 / torch.optim
+
+- **SM3** no longer applies first-moment momentum twice; `momentum=0` now truly
+  disables it (matches `optax.sm3`).
+- **`RMSprop(centered=True)`** uses `scale_by_stddev` instead of silently
+  falling back to `scale_by_rms`.
+- **`Nadam`** implements PyTorch-style scheduled momentum so `momentum_decay`
+  takes effect (verified against `torch.optim.NAdam`).
+- **`LBFGS`** reads the live LR schedule each step instead of freezing the LR at
+  construction; **`CosineAnnealingWarmRestarts.step(epoch=...)`** recomputes
+  `T_cur`/`T_i` from the absolute epoch.
+- Fail-fast validation of optimizer hyperparameters and scheduler enums;
+  `default_tx` uses coupled weight decay; several non-runnable docstring
+  examples corrected.
+
+#### `braintools.trainer` (#119)
+
+- Metrics logged via `module.log()` from callbacks/hooks (e.g.
+  `LearningRateMonitor`) survive the JIT loss reset and now reach loggers and
+  the progress bar.
+- **`ModelCheckpoint(save_top_k=k)`** saves before pruning so evicted
+  checkpoints are deleted and the on-disk count respects `save_top_k`.
+- Resuming a checkpoint saved with `step=None` no longer crashes the loop.
+- **`broadcast()`** reimplemented via `lax.all_gather()[src]` (it raised on more
+  than one device); FSDP auto-mesh uses a balanced 2-D factorization;
+  `sync_batch_norm` pools variance via `E[x²] − E[x]²`.
+
+#### `braintools.metric` (#121)
+
+- **`phase_locking_value`** accepts a `brainunit.Quantity` `dt` (including the
+  `environ.get_dt()` default) instead of crashing.
+- **`pairwise_cosine_similarity`** floors each row norm at `eps` (not the norm
+  product), so small non-zero vectors are no longer corrupted.
+- **`cross_correlation`** strips units so `Quantity` input works;
+  **`lfp_phase_coherence`** suppresses spurious coherence on negligible-power
+  channels.
+- `voltage_fluctuation` Returns docstring corrected; `smooth_labels` raises a
+  real `TypeError` on bad dtype; `victor_purpura_distance` builds its DP table
+  on host NumPy (functionally identical, far faster).
+
+#### `braintools.cogtask` (#122)
+
+- **`Parallel.execute`** dispatches compound children through `execute_phase`,
+  so e.g. `(A >> B) | C` no longer silently writes nothing for the `A >> B`
+  branch.
+- **`make_encoder(mode="scalar", feature_per_direction>1)`** is handled up front
+  instead of raising a misleading `Unknown mode=scalar`.
+- Runnable-example fixes across the `__init__` quickstart and the `Task`,
+  `create_task`, `Feature.__mul__`, and `Context` docstrings.
+
+#### `braintools.visualize` (#118)
+
+- Edge-case robustness fixes across `line_plot`, `spike_raster`,
+  `animate_1D`/`animate_2D`, `confusion_matrix`, `regression_plot`,
+  `neural_trajectory`, `correlation_matrix`, `roc_curve`, `brain_surface_3d`,
+  and `volume_rendering` — non-`ndarray` input, length mismatches, empty-row
+  normalization, constant-`y` R², and signed/colormap handling no longer crash
+  or produce `NaN`. Exercised source at 99% coverage.
+
+#### `braintools.surrogate` (#117)
+
+- **`LogTailedRelu.surrogate_fun`** is now continuous and C¹ at `x = 1`
+  (`1 + log(x)`, per Cai et al. 2017); it previously jumped `1.0 → 0.0`. The
+  surrogate gradient (`1/x`) is unchanged, so training behavior is unaffected.
+  Docstring and plot examples corrected.
+
+#### `braintools.init` (#115, #116)
+
+- **`param()`** no longer double-applies the batch dimension for
+  callable/`Initialization` initializers (it returned `(batch, batch, *sizes)`).
+- **`TruncatedNormal`** handles array-valued `std` (including zero entries)
+  without raising; `param()` consistently returns the updated `State` and
+  validates shape against the State's value. Documentation corrected for
+  `Kaiming{Uniform,Normal}` `scale`, `Identity` 1-D behavior, and the
+  `Orthogonal`/`DeltaOrthogonal` deprecation warnings.
+
+
 ## Version 0.2.0 (2026-06-18)
 
 This is a codebase-wide correctness, test-coverage, and documentation
