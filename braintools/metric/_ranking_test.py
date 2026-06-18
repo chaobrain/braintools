@@ -240,3 +240,179 @@ class RankingLossesTest(parameterized.TestCase):
         expected = loss_fn(scores[0, :], labels[0, :])
 
         np.testing.assert_allclose(output, expected, rtol=1e-3)
+
+    def test_pinned_numeric_value(self):
+        # Pin the loss on a small known input against an explicit float64
+        # logsumexp reference (raw labels weighting log_softmax, no label
+        # normalization).
+        scores = jnp.asarray([2.0, 1.0, 3.0])
+        labels = jnp.asarray([1.0, 0.0, 0.0])
+
+        loss = braintools.metric.ranking_softmax_loss(
+            scores, labels, reduction='sum'
+        )
+
+        scores_np = np.asarray(scores, dtype=np.float64)
+        labels_np = np.asarray(labels, dtype=np.float64)
+        log_softmax = scores_np - np.log(np.sum(np.exp(scores_np)))
+        ref = -np.sum(labels_np * log_softmax)
+        np.testing.assert_allclose(float(loss), float(ref), rtol=1e-5)
+        # Matches the module docstring's pinned value of 1.408.
+        np.testing.assert_allclose(float(loss), 1.408, atol=1e-3)
+
+    def test_labels_are_raw_weights_not_normalized(self):
+        # F9: doubling a single label should double its contribution to the
+        # loss (raw multiplicative weighting), which would NOT hold if labels
+        # were softmax-normalized.
+        scores = jnp.asarray([2.0, 1.0, 3.0])
+        labels1 = jnp.asarray([1.0, 0.0, 0.0])
+        labels2 = jnp.asarray([2.0, 0.0, 0.0])
+
+        loss1 = braintools.metric.ranking_softmax_loss(
+            scores, labels1, reduction='sum'
+        )
+        loss2 = braintools.metric.ranking_softmax_loss(
+            scores, labels2, reduction='sum'
+        )
+        np.testing.assert_allclose(float(loss2), 2.0 * float(loss1), rtol=1e-5)
+
+    @parameterized.parameters(['none', 'mean', 'sum'])
+    def test_reduction_string_options(self, reduction):
+        scores = jnp.array([[2.0, 1.0, 3.0], [1.0, 0.5, 1.5]])
+        labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+
+        out = braintools.metric.ranking_softmax_loss(
+            scores, labels, reduction=reduction
+        )
+        per_list = braintools.metric.ranking_softmax_loss(
+            scores, labels, reduction='none'
+        )
+        if reduction == 'none':
+            self.assertEqual(out.shape, (2,))
+        elif reduction == 'sum':
+            np.testing.assert_allclose(float(out), float(jnp.sum(per_list)), rtol=1e-5)
+        elif reduction == 'mean':
+            np.testing.assert_allclose(float(out), float(jnp.mean(per_list)), rtol=1e-5)
+
+    def test_reduction_string_matches_reduce_fn(self):
+        scores = jnp.array([[2.0, 1.0, 3.0], [1.0, 0.5, 1.5]])
+        labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+
+        for reduction, reduce_fn in [('mean', jnp.mean), ('sum', jnp.sum)]:
+            a = braintools.metric.ranking_softmax_loss(
+                scores, labels, reduction=reduction
+            )
+            b = braintools.metric.ranking_softmax_loss(
+                scores, labels, reduce_fn=reduce_fn
+            )
+            np.testing.assert_allclose(float(a), float(b), rtol=1e-6)
+
+    def test_invalid_reduction_raises(self):
+        scores = jnp.array([2.0, 1.0, 3.0])
+        labels = jnp.array([1.0, 0.0, 0.0])
+        with self.assertRaises(ValueError):
+            braintools.metric.ranking_softmax_loss(
+                scores, labels, reduction='median'
+            )
+
+    def test_accepts_python_list_inputs(self):
+        # F13: Python list inputs must not raise AttributeError.
+        list_loss = braintools.metric.ranking_softmax_loss(
+            [2.0, 1.0, 3.0], [1.0, 0.0, 0.0], reduction='sum'
+        )
+        array_loss = braintools.metric.ranking_softmax_loss(
+            jnp.asarray([2.0, 1.0, 3.0]),
+            jnp.asarray([1.0, 0.0, 0.0]),
+            reduction='sum',
+        )
+        np.testing.assert_allclose(float(list_loss), float(array_loss), rtol=1e-6)
+
+    def test_list_inputs_with_where_and_weights(self):
+        loss = braintools.metric.ranking_softmax_loss(
+            [2.0, 1.0, 3.0, 0.0],
+            [1.0, 0.0, 1.0, 0.0],
+            where=[True, True, True, False],
+            weights=[1.0, 1.0, 2.0, 1.0],
+            reduction='sum',
+        )
+        self.assertFalse(bool(jnp.isnan(loss)))
+
+    def test_empty_mask_row_no_nan_value(self):
+        # F14: a fully-masked list must not yield NaN in the forward value,
+        # even though masked logits are set to -inf (0 * -inf = NaN without the
+        # explicit pre-sum guard).
+        scores = jnp.asarray([[0.0, 3.0, 1.0, 2.0], [3.0, 1.0, 4.0, 2.0]])
+        labels = jnp.asarray([[0.0, 0.0, 1.0, 1.0], [2.0, 0.0, 1.0, 0.0]])
+        where = jnp.asarray([[True, True, True, True], [False, False, False, False]])
+
+        per_list = braintools.metric.ranking_softmax_loss(
+            scores, labels, where=where, reduction='none'
+        )
+        self.assertFalse(bool(jnp.any(jnp.isnan(per_list))))
+        # The fully-masked second list contributes exactly 0.
+        np.testing.assert_allclose(float(per_list[1]), 0.0, atol=1e-6)
+
+    def test_empty_mask_grad_no_nan(self):
+        scores = jnp.asarray([0.0, 3.0, 1.0, 2.0])
+        labels = jnp.asarray([0.0, 0.0, 1.0, 1.0])
+        where = jnp.asarray([False, False, False, False])
+
+        grads = jax.grad(
+            lambda s, l: braintools.metric.ranking_softmax_loss(
+                s, l, where=where, reduction='mean'
+            )
+        )(scores, labels)
+        self.assertFalse(bool(jnp.any(jnp.isnan(grads))))
+
+    def test_robust_mean_with_partial(self):
+        # F10/F11: the empty-mask guard must trigger for a functools.partial of
+        # jnp.mean (the old identity check `reduce_fn is jnp.mean` would fail).
+        scores = jnp.asarray([[0.0, 3.0, 1.0, 2.0], [3.0, 1.0, 4.0, 2.0]])
+        labels = jnp.asarray([[0.0, 0.0, 1.0, 1.0], [2.0, 0.0, 1.0, 0.0]])
+        where = jnp.asarray([[True, True, True, True], [False, False, False, False]])
+
+        partial_mean = functools.partial(jnp.mean)
+        out = braintools.metric.ranking_softmax_loss(
+            scores, labels, where=where, reduce_fn=partial_mean
+        )
+        self.assertFalse(bool(jnp.isnan(out)))
+        # Only the first (valid) list contributes; mean over valid lists equals
+        # that list's loss.
+        expected = braintools.metric.ranking_softmax_loss(
+            scores[0], labels[0], reduction='sum'
+        )
+        np.testing.assert_allclose(float(out), float(expected), rtol=1e-5)
+
+    def test_reduction_takes_precedence_over_reduce_fn(self):
+        scores = jnp.array([[2.0, 1.0, 3.0], [1.0, 0.5, 1.5]])
+        labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+        # reduction='sum' should override reduce_fn=jnp.mean.
+        out = braintools.metric.ranking_softmax_loss(
+            scores, labels, reduction='sum', reduce_fn=jnp.mean
+        )
+        ref = braintools.metric.ranking_softmax_loss(
+            scores, labels, reduce_fn=jnp.sum
+        )
+        np.testing.assert_allclose(float(out), float(ref), rtol=1e-6)
+
+    def test_jit_smoke(self):
+        scores = jnp.array([[2.0, 1.0, 3.0], [1.0, 0.5, 1.5]])
+        labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+        fn = jax.jit(
+            functools.partial(braintools.metric.ranking_softmax_loss, reduction='mean')
+        )
+        np.testing.assert_allclose(
+            float(fn(scores, labels)),
+            float(braintools.metric.ranking_softmax_loss(scores, labels, reduction='mean')),
+            rtol=1e-6,
+        )
+
+    def test_leading_dims_unreduced_shape(self):
+        # F17: unreduced loss has shape equal to ALL leading dims, not a single
+        # batch dim.
+        scores = jnp.zeros((2, 3, 4))
+        labels = jnp.zeros((2, 3, 4)).at[..., 0].set(1.0)
+        out = braintools.metric.ranking_softmax_loss(
+            scores, labels, reduction='none'
+        )
+        self.assertEqual(out.shape, (2, 3))

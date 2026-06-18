@@ -163,8 +163,11 @@ class TestVoltageFluctuation(unittest.TestCase):
         voltages = jnp.ones((100, 10))
         sync_index = braintools.metric.voltage_fluctuation(voltages)
 
-        # Constant signals have zero variance, should handle gracefully
+        # Constant signals have zero variance; by convention the index is 1.0.
+        # This previously returned -0.0 due to float32 cancellation in
+        # ``mean(s**2) - mean(s)**2`` slipping past the ``== 0`` guard (audit E18).
         self.assertFalse(math.isnan(float(sync_index)))
+        self.assertEqual(float(sync_index), 1.0)
 
     def test_voltage_fluctuation_methods(self):
         """Test that loop and vmap methods give same results."""
@@ -314,14 +317,19 @@ class TestMatrixCorrelation(unittest.TestCase):
         with self.assertRaises(ValueError):
             braintools.metric.matrix_correlation(jnp.array([1, 2, 3]), jnp.array([1, 2, 3]))
 
-        # Test mismatched shapes
+        # Mismatched shapes now raise a clear ValueError instead of silently
+        # comparing differently-sized upper triangles (audit E11).
         A = jnp.ones((3, 3))
         B = jnp.ones((4, 4))
-        # Should still work as long as both are 2D (correlation uses broadcasting)
-        try:
+        with self.assertRaises(ValueError):
             braintools.metric.matrix_correlation(A, B)
-        except Exception:
-            pass  # Expected to fail due to shape mismatch in triu_indices
+
+    def test_matrix_correlation_constant_returns_zero(self):
+        """Constant matrices give an ill-defined corrcoef (NaN) -> mapped to 0."""
+        A = jnp.ones((4, 4))
+        B = self.rng.random((4, 4))
+        # x is constant on the upper triangle -> corrcoef is NaN -> nan_to_num -> 0.
+        self.assertEqual(float(braintools.metric.matrix_correlation(A, B)), 0.0)
 
 
 class TestFunctionalConnectivityDynamics(unittest.TestCase):
@@ -501,3 +509,113 @@ class TestWeightedCorrelation(unittest.TestCase):
         corr2 = jit_weighted_corr(x, y, w)
 
         self.assertAlmostEqual(float(corr1), float(corr2), places=6)
+
+
+class TestCorrelationRegressions(unittest.TestCase):
+    """Targeted regression tests for the audit E-series fixes."""
+
+    def setUp(self):
+        self.rng = brainstate.random.RandomState(0)
+
+    # -- cross_correlation -------------------------------------------------
+    def test_cross_correlation_bin_smaller_than_dt_raises(self):
+        """A bin narrower than dt collapses to <1 sample and must error (E7)."""
+        spikes = jnp.ones((100, 5))
+        with self.assertRaises(ValueError):
+            braintools.metric.cross_correlation(spikes, bin=0.05, dt=0.1)
+
+    def test_cross_correlation_single_neuron_is_zero(self):
+        """A single neuron has no pairs -> exactly 0.0, never NaN (E8)."""
+        spikes = (self.rng.random((100, 1)) < 0.3).astype(float)
+        cc = braintools.metric.cross_correlation(spikes, 1.0, dt=1.0)
+        self.assertEqual(float(cc), 0.0)
+        self.assertFalse(jnp.isnan(cc))
+
+    def test_cross_correlation_non_divisible_padding(self):
+        """num_time not divisible by bin_size exercises the zero-pad branch."""
+        spikes = (self.rng.random((97, 6)) < 0.4).astype(float)
+        cc = braintools.metric.cross_correlation(spikes, bin=10.0, dt=1.0)
+        self.assertGreaterEqual(float(cc), 0.0)
+        self.assertLessEqual(float(cc), 1.0)
+
+    def test_cross_correlation_loop_equals_vmap(self):
+        """Loop and vmap paths must agree bit-for-bit-ish (E22)."""
+        spikes = (self.rng.random((200, 12)) < 0.3).astype(float)
+        loop = braintools.metric.cross_correlation(spikes, 5.0, dt=1.0, method='loop')
+        vmp = braintools.metric.cross_correlation(spikes, 5.0, dt=1.0, method='vmap')
+        self.assertAlmostEqual(float(loop), float(vmp), places=6)
+
+    # -- voltage_fluctuation ----------------------------------------------
+    def test_voltage_fluctuation_strips_units(self):
+        """Quantity-valued potentials are accepted via get_magnitude."""
+        import brainunit as u
+        raw = self.rng.normal(0, 5, size=(100, 8))
+        plain = braintools.metric.voltage_fluctuation(raw)
+        quantity = braintools.metric.voltage_fluctuation(raw * u.mV)
+        self.assertAlmostEqual(float(plain), float(quantity), places=5)
+
+    def test_voltage_fluctuation_loop_equals_vmap_random(self):
+        v = self.rng.normal(0, 3, size=(120, 9))
+        loop = braintools.metric.voltage_fluctuation(v, method='loop')
+        vmp = braintools.metric.voltage_fluctuation(v, method='vmap')
+        self.assertAlmostEqual(float(loop), float(vmp), places=5)
+
+    # -- matrix_correlation -----------------------------------------------
+    def test_matrix_correlation_second_arg_not_2d_raises(self):
+        """A 2D x with a non-2D y must raise (covers the y.ndim guard)."""
+        x = self.rng.random((4, 4))
+        y = jnp.array([1.0, 2.0, 3.0, 4.0])
+        with self.assertRaises(ValueError):
+            braintools.metric.matrix_correlation(x, y)
+
+    def test_matrix_correlation_strips_units(self):
+        import brainunit as u
+        A = self.rng.random((10, 10))
+        B = self.rng.random((10, 10))
+        plain = braintools.metric.matrix_correlation(A, B)
+        quantity = braintools.metric.matrix_correlation(A * u.mV, B * u.mV)
+        self.assertAlmostEqual(float(plain), float(quantity), places=5)
+
+    # -- functional_connectivity ------------------------------------------
+    def test_functional_connectivity_constant_column_diagonal_is_one(self):
+        """A constant column yields NaN corr; the diagonal must stay 1.0 (E13)."""
+        good = self.rng.normal(0, 1, size=(200, 1))
+        const = jnp.ones((200, 1))
+        activities = jnp.column_stack([good[:, 0], const[:, 0]])
+        fc = braintools.metric.functional_connectivity(activities)
+        self.assertFalse(jnp.any(jnp.isnan(fc)))
+        self.assertTrue(jnp.allclose(jnp.diag(fc), 1.0))
+
+    # -- functional_connectivity_dynamics ---------------------------------
+    def test_fcd_requires_two_signals(self):
+        """FCD with a single signal is undefined and must error (E15)."""
+        activities = self.rng.normal(0, 1, size=(100, 1))
+        with self.assertRaises(ValueError):
+            braintools.metric.functional_connectivity_dynamics(
+                activities, window_size=30, step_size=5)
+
+    # -- weighted_correlation ---------------------------------------------
+    def test_weighted_correlation_all_zero_weights_is_zero(self):
+        """All-zero weights give 0/0; the guard returns 0.0, not NaN (E17)."""
+        x = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        y = jnp.array([2.0, 1.0, 4.0, 3.0, 5.0])
+        w = jnp.zeros(5)
+        corr = braintools.metric.weighted_correlation(x, y, w)
+        self.assertFalse(math.isnan(float(corr)))
+        self.assertEqual(float(corr), 0.0)
+
+    def test_weighted_correlation_length_mismatch_raises(self):
+        """Differing lengths (all 1d) must raise a clear ValueError."""
+        x = jnp.array([1.0, 2.0, 3.0])
+        y = jnp.array([1.0, 2.0])
+        w = jnp.array([1.0, 1.0, 1.0])
+        with self.assertRaises(ValueError):
+            braintools.metric.weighted_correlation(x, y, w)
+
+    def test_weighted_correlation_constant_x_is_zero(self):
+        """A constant variable has zero weighted variance -> correlation 0."""
+        x = jnp.ones(6)
+        y = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        w = jnp.ones(6)
+        corr = braintools.metric.weighted_correlation(x, y, w)
+        self.assertEqual(float(corr), 0.0)

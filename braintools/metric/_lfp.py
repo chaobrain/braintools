@@ -15,7 +15,10 @@
 
 # -*- coding: utf-8 -*-
 
+from typing import Optional, Tuple, Union
+
 import brainstate
+import brainunit as u
 import jax
 from jax import numpy as jnp
 
@@ -31,6 +34,33 @@ __all__ = [
     'spectral_entropy',
     'lfp_phase_coherence',
 ]
+
+
+def _segment_starts(n_time: int, nperseg: int, noverlap: int):
+    """Return the list of (static) segment start indices for Welch segmentation."""
+    step = max(1, nperseg - noverlap)
+    starts = list(range(0, n_time - nperseg + 1, step))
+    return starts if starts else [0]
+
+
+def _to_seconds(dt: Union[float, u.Quantity]) -> float:
+    """Return the sampling interval in seconds (Quantity -> seconds, float as-is)."""
+    if isinstance(dt, u.Quantity):
+        return float(dt.to_decimal(u.second))
+    return float(dt)
+
+
+def _analytic_band(fft_vals: jax.Array, freqs: jax.Array, low: float, high: float) -> jax.Array:
+    """Reconstruct the band-limited analytic signal from a full FFT.
+
+    Keeping only the **positive** in-band frequency bins (and doubling them) yields a
+    complex analytic signal whose ``angle`` is the instantaneous phase and whose
+    ``abs`` is the amplitude envelope. The earlier symmetric ``|f|`` mask produced an
+    almost-real band-passed signal whose phase was degenerate (≈ 0 or π).
+    """
+    mask = (freqs >= low) & (freqs <= high)  # positive frequencies only
+    band = jnp.where(mask, fft_vals, 0.0 + 0.0j) * 2.0
+    return jnp.fft.ifft(band, axis=0)
 
 
 @set_module_as('braintools.metric')
@@ -70,19 +100,17 @@ def unitary_LFP(
     Parameters
     ----------
     times : brainstate.typing.ArrayLike
-        Time points of the recording with shape ``(n_time_steps,)``. These
-        represent the temporal sampling points for the LFP calculation,
-        typically in milliseconds.
+        Time points of the recording with shape ``(n_time_steps,)``, in
+        **milliseconds**.
     spikes : brainstate.typing.ArrayLike
         Binary spike matrix with shape ``(n_time_steps, n_neurons)`` where
-        non-zero values indicate spike occurrences. Each element
-        ``spikes[t, i]`` represents whether neuron ``i`` fired at time ``t``.
+        non-zero values indicate spike occurrences.
     spike_type : {'exc', 'inh'}
         Type of neurons generating the spikes:
-        
+
         - ``'exc'``: Excitatory neurons (positive contribution)
         - ``'inh'``: Inhibitory neurons (can be positive or negative depending on layer)
-        
+
     xmax : float, default=0.2
         Spatial extent of the neuron population in the x-dimension (mm).
         Neurons are randomly distributed within a rectangle of size
@@ -95,117 +123,68 @@ def unitary_LFP(
         range from 100-500 mm/s for cortical neurons.
     lambda_ : float, default=0.2
         Spatial decay constant in mm. Controls how quickly the LFP amplitude
-        decreases with distance from the electrode. Smaller values result
-        in more localized LFP signals.
+        decreases with distance from the electrode.
     sig_i : float, default=2.1
         Standard deviation of the inhibitory neuron kernel in ms.
-        Determines the temporal width of inhibitory contributions to the LFP.
     sig_e : float, default=3.15
-        Standard deviation of the excitatory neuron kernel in ms.
-        Default is ``2.1 * 1.5``, making excitatory contributions broader
-        than inhibitory ones.
+        Standard deviation of the excitatory neuron kernel in ms
+        (default ``2.1 * 1.5``).
     location : {'soma layer', 'deep layer', 'superficial layer', 'surface'}, default='soma layer'
         Recording electrode location relative to the cortical layers:
-        
+
         - ``'soma layer'``: At the soma level (excitatory: +0.48, inhibitory: +3.0)
         - ``'deep layer'``: Below soma layer (excitatory: -0.16, inhibitory: -0.2)
         - ``'superficial layer'``: Above soma layer (excitatory: +0.24, inhibitory: -1.2)
-        - ``'surface'``: At cortical surface (excitatory: -0.08, inhibitory: +0.3)
-        
-        Values in parentheses indicate the base amplitude scaling factors.
+        - ``'surface'`` (alias ``'surface layer'``): At cortical surface
+          (excitatory: -0.08, inhibitory: +0.3)
+
     seed : brainstate.typing.SeedOrKey, optional
-        Random seed for reproducible neuron positioning. If None, positions
-        are generated randomly. Use for consistent results across runs.
+        Random seed for reproducible neuron positioning.
 
     Returns
     -------
     jax.Array
         Unitary LFP signal with shape ``(n_time_steps,)`` representing the
         contribution of the specified neuron population to the local field
-        potential. Units are typically in microvolts (μV).
+        potential, in microvolts (μV).
 
     Raises
     ------
     ValueError
-        If ``spike_type`` is not 'exc' or 'inh', if ``spikes`` is not 2D,
-        or if ``times`` and ``spikes`` have incompatible shapes.
+        If ``spike_type`` is not ``'exc'`` or ``'inh'``, if ``spikes`` is not 2-D,
+        or if ``times`` and ``spikes`` have incompatible first axes.
     NotImplementedError
         If ``location`` is not one of the supported options.
 
     Notes
     -----
     This implementation focuses on spike-triggered LFP contributions and does
-    not account for:
-    
-    - Subthreshold synaptic currents
-    - Dendritic voltage-dependent ion channels  
-    - Volume conduction effects from distant sources
-    - Frequency-dependent propagation
-    
-    For realistic LFP modeling, combine contributions from both excitatory
-    and inhibitory populations and consider using multiple electrode locations.
+    not account for subthreshold synaptic currents, dendritic active channels,
+    volume conduction from distant sources, or frequency-dependent propagation.
 
-    The neuron positions are randomly generated within the specified spatial
-    bounds, and the electrode is positioned at the center ``(xmax/2, ymax/2)``.
-    Each neuron's contribution is weighted by distance and scaled according
-    to the recording location and neuron type.
+    The per-neuron peak delay is :math:`\delta_i = 10.4\,\text{ms} + d_i / v_a`,
+    where :math:`d_i` is the neuron-electrode distance (mm) and :math:`v_a` the
+    axonal velocity (mm/s); the ``d_i / v_a`` term (seconds) is converted to
+    milliseconds so it is commensurate with the 10.4 ms peak constant of
+    Telenczuk et al. (2020).
+
+    This function runs on host (concrete) arrays — it uses ``jnp.where(spikes)``
+    (data-dependent output shape), so it is not ``jit``/``vmap``-compatible.
 
     Examples
     --------
-    Calculate LFP from excitatory and inhibitory populations:
+    .. code-block:: python
 
-    >>> import brainstate as brainstate
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Set up simulation parameters
-    >>> brainstate.random.seed(42)
-    >>> n_time, n_exc, n_inh = 1000, 100, 25
-    >>> dt = 0.1  # ms
-    >>> times = jnp.arange(n_time) * dt
-    >>> # Generate sparse random spike trains
-    >>> exc_spikes = (brainstate.random.random((n_time, n_exc)) < 0.02).astype(float)
-    >>> inh_spikes = (brainstate.random.random((n_time, n_inh)) < 0.04).astype(float)
-    >>> # Calculate LFP components
-    >>> lfp_exc = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', seed=42)
-    >>> lfp_inh = braintools.metric.unitary_LFP(times, inh_spikes, 'inh', seed=42)
-    >>> total_lfp = lfp_exc + lfp_inh
-    >>> print(f"LFP shape: {total_lfp.shape}")
-    >>> print(f"LFP range: {total_lfp.min():.3f} to {total_lfp.max():.3f}")
-
-    Compare different recording locations:
-
-    >>> # Same spike data, different recording depths
-    >>> lfp_soma = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
-    ...                                  location='soma layer')
-    >>> lfp_deep = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
-    ...                                  location='deep layer')
-    >>> lfp_surface = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
-    ...                                      location='surface')
-
-    Analyze the effect of spatial parameters:
-
-    >>> # Larger population area
-    >>> lfp_large = braintools.metric.unitary_LFP(times, exc_spikes, 'exc',
-    ...                                   xmax=0.5, ymax=0.5)
-    >>> # Faster conduction velocity
-    >>> lfp_fast = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', va=500.0)
-
-    Visualize the results:
-
-    >>> import matplotlib.pyplot as plt
-    >>> plt.figure(figsize=(10, 6))
-    >>> plt.plot(times[:500], total_lfp[:500], 'k-', linewidth=1)
-    >>> plt.xlabel('Time (ms)')
-    >>> plt.ylabel('LFP Amplitude (μV)')
-    >>> plt.title('Simulated Local Field Potential')
-    >>> plt.grid(True, alpha=0.3)
-    >>> plt.show()
-
-    See Also
-    --------
-    braintools.metric.firing_rate : Calculate population firing rates
-    braintools.metric.raster_plot : Extract spike timing data
-    jax.numpy.convolve : Alternative smoothing approach for LFP
+        >>> import brainstate
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> brainstate.random.seed(42)
+        >>> n_time, n_exc = 1000, 100
+        >>> times = jnp.arange(n_time) * 0.1  # ms
+        >>> exc_spikes = (brainstate.random.random((n_time, n_exc)) < 0.02).astype(float)
+        >>> lfp = braintools.metric.unitary_LFP(times, exc_spikes, 'exc', seed=42)
+        >>> lfp.shape
+        (1000,)
 
     References
     ----------
@@ -216,244 +195,283 @@ def unitary_LFP(
     .. [2] Einevoll, Gaute T., et al. "Modelling and analysis of local field
            potentials for studying the function of cortical circuits."
            Nature Reviews Neuroscience 14.11 (2013): 770-785.
-    .. [3] Buzsáki, György, Costas A. Anastassiou, and Christof Koch.
-           "The origin of extracellular fields and currents—EEG, ECoG, LFP
-           and spikes." Nature Reviews Neuroscience 13.6 (2012): 407-420.
     """
-    if spike_type not in ['exc', 'inh']:
-        raise ValueError('"spike_type" should be "exc or ""inh". ')
+    if spike_type not in ('exc', 'inh'):
+        raise ValueError(f'"spike_type" should be "exc" or "inh", but we got {spike_type!r}.')
+    spikes = jnp.asarray(spikes)
+    times = jnp.asarray(times)
     if spikes.ndim != 2:
-        raise ValueError('"E_spikes" should be a matrix with shape of (num_time, num_neuron). '
-                         f'But we got {spikes.shape}')
+        raise ValueError('"spikes" should be a matrix with shape (num_time, num_neuron), '
+                         f'but we got {spikes.shape}.')
     if times.shape[0] != spikes.shape[0]:
-        raise ValueError('times and spikes should be consistent at the firs axis. '
-                         f'But we got {times.shape[0]} != {spikes.shape}.')
+        raise ValueError('"times" and "spikes" should be consistent along the first axis, '
+                         f'but we got {times.shape[0]} != {spikes.shape[0]}.')
 
-    # Distributing cells in a 2D grid
+    # Distributing cells in a 2D grid.
     rng = brainstate.random.RandomState(seed)
     num_neuron = spikes.shape[1]
     pos_xs, pos_ys = rng.rand(2, num_neuron) * jnp.array([[xmax], [ymax]])
     pos_xs, pos_ys = jnp.asarray(pos_xs), jnp.asarray(pos_ys)
 
-    # distance/coordinates
-    xe, ye = xmax / 2, ymax / 2  # coordinates of electrode
-    dist = jnp.sqrt((pos_xs - xe) ** 2 + (pos_ys - ye) ** 2)  # distance to electrode in mm
+    # Distance of each neuron to the electrode at the population center (mm).
+    xe, ye = xmax / 2, ymax / 2
+    dist = jnp.sqrt((pos_xs - xe) ** 2 + (pos_ys - ye) ** 2)
 
-    # amplitude
+    # Layer-/type-specific amplitude.
     if location == 'soma layer':
-        amp_e, amp_i = 0.48, 3.  # exc/inh uLFP amplitude (soma layer)
+        amp_e, amp_i = 0.48, 3.
     elif location == 'deep layer':
-        amp_e, amp_i = -0.16, -0.2  # exc/inh uLFP amplitude (deep layer)
+        amp_e, amp_i = -0.16, -0.2
     elif location == 'superficial layer':
-        amp_e, amp_i = 0.24, -1.2  # exc/inh uLFP amplitude (superficial layer)
-    elif location == 'surface layer':
-        amp_e, amp_i = -0.08, 0.3  # exc/inh uLFP amplitude (surface)
+        amp_e, amp_i = 0.24, -1.2
+    elif location in ('surface layer', 'surface'):
+        amp_e, amp_i = -0.08, 0.3
     else:
-        raise NotImplementedError
+        raise NotImplementedError(
+            f"Unknown location {location!r}. Choose from 'soma layer', 'deep layer', "
+            "'superficial layer', or 'surface'."
+        )
     A = jnp.exp(-dist / lambda_) * (amp_e if spike_type == 'exc' else amp_i)
 
-    # delay
-    delay = 10.4 + dist / va  # delay to peak (in ms)
+    # Peak delay (ms): 10.4 ms constant + distance[mm] / velocity[mm/s] converted s -> ms.
+    delay = 10.4 + (dist / va) * 1e3
 
-    # LFP Calculation
+    # LFP calculation: sum a Gaussian bump per spike.
     iis, ids = jnp.where(spikes)
     tts = times[iis] + delay[ids]
-    exc_amp = A[ids]
+    amp = A[ids]
     tau = (2 * sig_e * sig_e) if spike_type == 'exc' else (2 * sig_i * sig_i)
-    return brainstate.compile.for_loop(lambda t: jnp.sum(exc_amp * jnp.exp(-(t - tts) ** 2 / tau)), times)
+    return brainstate.transform.for_loop(
+        lambda t: jnp.sum(amp * jnp.exp(-(t - tts) ** 2 / tau)), times
+    )
 
 
 @set_module_as('braintools.metric')
 def power_spectral_density(
     lfp: brainstate.typing.ArrayLike,
-    dt: float,
-    nperseg: int = None,
-    noverlap: int = None,
-    freq_range: tuple = None
-) -> tuple:
-    """Compute power spectral density (PSD) of LFP signals using Welch's method.
-    
+    dt: Union[float, u.Quantity],
+    nperseg: Optional[int] = None,
+    noverlap: Optional[int] = None,
+    freq_range: Optional[Tuple[float, float]] = None
+) -> Tuple[jax.Array, jax.Array]:
+    """Estimate the one-sided power spectral density (PSD) using Welch's method.
+
+    The signal is split into overlapping Hann-windowed segments; the periodogram of
+    each segment is averaged. Power is normalized by ``fs * sum(window**2)`` and the
+    one-sided spectrum doubles every bin except DC (and Nyquist for even-length
+    segments), so the PSD integrates to the signal variance.
+
     Parameters
     ----------
     lfp : brainstate.typing.ArrayLike
-        LFP signal array with shape (n_time,) or (n_time, n_channels).
-    dt : float
-        Sampling interval in seconds.
+        LFP signal with shape ``(n_time,)`` or ``(n_time, n_channels)``.
+        ``brainunit.Quantity`` inputs are accepted (the magnitude is used).
+    dt : float or brainunit.Quantity
+        Sampling interval. If a float, it is taken to be in **seconds** (so ``fs``
+        is in Hz); if a ``Quantity``, it is converted to seconds.
     nperseg : int, optional
-        Length of each segment for PSD calculation. Default: n_time // 8.
+        Length of each segment. Default: ``n_time // 8``.
     noverlap : int, optional
-        Number of points to overlap between segments. Default: nperseg // 2.
-    freq_range : tuple, optional
-        Frequency range (f_min, f_max) in Hz to extract. If None, returns all frequencies.
-    
+        Number of points to overlap between segments. Default: ``nperseg // 2``.
+    freq_range : tuple of float, optional
+        ``(f_min, f_max)`` in Hz to retain. If None, returns all frequencies.
+
     Returns
     -------
     freqs : jax.Array
-        Array of sample frequencies.
+        One-sided sample frequencies in Hz, shape ``(nperseg // 2 + 1,)``.
     psd : jax.Array
-        Power spectral density estimate.
-    """
-    lfp = jnp.asarray(lfp)
-    if lfp.ndim == 1:
-        lfp = lfp[:, None]
+        Power spectral density: shape ``(n_freqs,)`` for 1-D input or
+        ``(n_freqs, n_channels)`` for 2-D input.
 
+    Notes
+    -----
+    Supplying ``freq_range`` uses boolean-mask indexing (data-dependent output
+    length), so that path is not ``jit``-compatible; the full-spectrum path is.
+    """
+    dt = _to_seconds(dt)
+    lfp = jnp.asarray(u.get_magnitude(lfp))
+    squeeze = lfp.ndim == 1
+    if squeeze:
+        lfp = lfp[:, None]
     n_time, n_channels = lfp.shape
-    fs = 1.0 / dt
 
     if nperseg is None:
-        nperseg = n_time // 8
+        nperseg = max(1, n_time // 8)
+    nperseg = int(min(nperseg, n_time))
     if noverlap is None:
         noverlap = nperseg // 2
+    noverlap = int(min(noverlap, nperseg - 1)) if nperseg > 1 else 0
 
-    # Simple periodogram approach (more JAX-friendly than Welch's method)
-    n_fft = 2 ** int(jnp.ceil(jnp.log2(nperseg)))
-    freqs = jnp.fft.fftfreq(n_fft, dt)[:n_fft // 2]
+    fs = 1.0 / dt
+    window = jnp.hanning(nperseg)
+    win_power = jnp.sum(window ** 2)
+    starts = _segment_starts(n_time, nperseg, noverlap)
 
-    # Compute FFT-based PSD
-    windowed_fft = jnp.fft.fft(lfp[:nperseg] * jnp.hanning(nperseg)[:, None], n=n_fft, axis=0)
-    psd = (jnp.abs(windowed_fft[:n_fft // 2]) ** 2) / (fs * nperseg)
+    segs = jnp.stack([lfp[s:s + nperseg] for s in starts], axis=0)  # (n_seg, nperseg, n_ch)
+    segs = segs * window[None, :, None]
+    spectra = jnp.fft.rfft(segs, axis=1)                           # (n_seg, n_freq, n_ch)
+    psd = jnp.mean(jnp.abs(spectra) ** 2, axis=0) / (fs * win_power)
+
+    # One-sided scaling: double every bin except DC (and Nyquist for even nperseg).
+    psd = psd.at[1:].multiply(2.0)
+    if nperseg % 2 == 0:
+        psd = psd.at[-1].divide(2.0)
+
+    freqs = jnp.fft.rfftfreq(nperseg, dt)
 
     if freq_range is not None:
-        freq_mask = (freqs >= freq_range[0]) & (freqs <= freq_range[1])
-        freqs = freqs[freq_mask]
-        psd = psd[freq_mask]
-
-        # Handle case where no frequencies are in range
+        mask = (freqs >= freq_range[0]) & (freqs <= freq_range[1])
+        freqs = freqs[mask]
+        psd = psd[mask]
         if freqs.size == 0:
             freqs = jnp.array([freq_range[0]])
-            psd = jnp.zeros((1, n_channels)) if n_channels > 1 else jnp.array([0.0])
+            psd = jnp.zeros((1, n_channels))
 
-    return freqs, psd.squeeze() if n_channels == 1 else psd
+    return freqs, (psd[:, 0] if squeeze else psd)
 
 
 @set_module_as('braintools.metric')
 def coherence_analysis(
     lfp1: brainstate.typing.ArrayLike,
     lfp2: brainstate.typing.ArrayLike,
-    dt: float,
-    nperseg: int = None
-) -> tuple:
-    """Compute coherence between two LFP signals.
-    
+    dt: Union[float, u.Quantity],
+    nperseg: Optional[int] = None,
+    noverlap: Optional[int] = None,
+    freq_range: Optional[Tuple[float, float]] = None
+) -> Tuple[jax.Array, jax.Array]:
+    r"""Compute the magnitude-squared coherence between two LFP signals (Welch).
+
+    Coherence is estimated by averaging cross- and auto-spectra over overlapping
+    Hann-windowed segments:
+
+    .. math::
+
+        C_{xy}(f) = \frac{|\langle P_{xy}(f) \rangle|^2}
+                         {\langle P_{xx}(f) \rangle \, \langle P_{yy}(f) \rangle}
+
     Parameters
     ----------
     lfp1, lfp2 : brainstate.typing.ArrayLike
-        LFP signals with shape (n_time,).
-    dt : float
-        Sampling interval in seconds.
+        LFP signals with shape ``(n_time,)``.
+    dt : float or brainunit.Quantity
+        Sampling interval (seconds if a float; converted if a ``Quantity``).
     nperseg : int, optional
-        Length of each segment. Default: n_time // 8.
-    
+        Length of each segment. Default: ``n_time // 8``.
+    noverlap : int, optional
+        Overlap between segments. Default: ``nperseg // 2``.
+    freq_range : tuple of float, optional
+        ``(f_min, f_max)`` in Hz to retain. If None, returns all frequencies.
+
     Returns
     -------
     freqs : jax.Array
-        Array of sample frequencies.
+        One-sided sample frequencies in Hz.
     coherence : jax.Array
-        Magnitude-squared coherence.
+        Magnitude-squared coherence in ``[0, 1]``.
+
+    Notes
+    -----
+    Averaging over segments is **essential**: with a single segment the estimator
+    is identically 1 at every frequency. The default ``nperseg = n_time // 8`` with
+    50% overlap yields ~15 segments. Choose ``nperseg`` so at least two segments
+    fit, otherwise the result is degenerate.
     """
-    lfp1, lfp2 = jnp.asarray(lfp1), jnp.asarray(lfp2)
-    n_time = len(lfp1)
+    dt = _to_seconds(dt)
+    lfp1 = jnp.asarray(u.get_magnitude(lfp1))
+    lfp2 = jnp.asarray(u.get_magnitude(lfp2))
+    n_time = lfp1.shape[0]
 
     if nperseg is None:
-        nperseg = n_time // 8
+        nperseg = max(1, n_time // 8)
+    nperseg = int(min(nperseg, n_time))
+    if noverlap is None:
+        noverlap = nperseg // 2
+    noverlap = int(min(noverlap, nperseg - 1)) if nperseg > 1 else 0
 
-    n_fft = 2 ** int(jnp.ceil(jnp.log2(nperseg)))
-    freqs = jnp.fft.fftfreq(n_fft, dt)[:n_fft // 2]
-
-    # Apply window and compute FFTs
     window = jnp.hanning(nperseg)
-    fft1 = jnp.fft.fft(lfp1[:nperseg] * window, n=n_fft)[:n_fft // 2]
-    fft2 = jnp.fft.fft(lfp2[:nperseg] * window, n=n_fft)[:n_fft // 2]
+    starts = _segment_starts(n_time, nperseg, noverlap)
+    s1 = jnp.stack([lfp1[s:s + nperseg] for s in starts], axis=0) * window[None, :]
+    s2 = jnp.stack([lfp2[s:s + nperseg] for s in starts], axis=0) * window[None, :]
 
-    # Cross-spectral density
-    psd12 = fft1 * jnp.conj(fft2)
-    psd11 = jnp.abs(fft1) ** 2
-    psd22 = jnp.abs(fft2) ** 2
-
-    # Coherence (magnitude-squared coherence)
-    coherence = jnp.abs(psd12) ** 2 / (psd11 * psd22 + 1e-12)
-
-    # Ensure coherence is bounded between 0 and 1
+    f1 = jnp.fft.rfft(s1, axis=1)
+    f2 = jnp.fft.rfft(s2, axis=1)
+    p12 = jnp.mean(f1 * jnp.conj(f2), axis=0)
+    p11 = jnp.mean(jnp.abs(f1) ** 2, axis=0)
+    p22 = jnp.mean(jnp.abs(f2) ** 2, axis=0)
+    coherence = jnp.abs(p12) ** 2 / (p11 * p22 + 1e-15)
     coherence = jnp.clip(coherence, 0.0, 1.0)
 
+    freqs = jnp.fft.rfftfreq(nperseg, dt)
+    if freq_range is not None:
+        mask = (freqs >= freq_range[0]) & (freqs <= freq_range[1])
+        freqs = freqs[mask]
+        coherence = coherence[mask]
     return freqs, coherence
 
 
 @set_module_as('braintools.metric')
 def phase_amplitude_coupling(
     lfp: brainstate.typing.ArrayLike,
-    dt: float,
-    phase_freq_range: tuple = (4, 8),
-    amplitude_freq_range: tuple = (30, 100),
+    dt: Union[float, u.Quantity],
+    phase_freq_range: Tuple[float, float] = (4, 8),
+    amplitude_freq_range: Tuple[float, float] = (30, 100),
     n_bins: int = 18
-) -> tuple:
-    """Compute phase-amplitude coupling (PAC) using the modulation index.
-    
+) -> Tuple[jax.Array, jax.Array, jax.Array]:
+    r"""Compute phase-amplitude coupling (PAC) via the Tort modulation index.
+
+    The low-frequency phase and high-frequency amplitude are extracted from the
+    **analytic** band-limited signals (Hilbert construction in the frequency
+    domain). The amplitude is binned by phase and the modulation index is the
+    Kullback-Leibler divergence of the amplitude distribution from uniform,
+    normalized by ``log(n_bins)``.
+
     Parameters
     ----------
     lfp : brainstate.typing.ArrayLike
-        LFP signal with shape (n_time,).
-    dt : float
-        Sampling interval in seconds.
-    phase_freq_range : tuple, default=(4, 8)
-        Frequency range for phase extraction (low frequency, e.g., theta).
-    amplitude_freq_range : tuple, default=(30, 100)
-        Frequency range for amplitude extraction (high frequency, e.g., gamma).
+        LFP signal with shape ``(n_time,)``.
+    dt : float or brainunit.Quantity
+        Sampling interval (seconds if a float; converted if a ``Quantity``).
+    phase_freq_range : tuple of float, default=(4, 8)
+        Low-frequency band (Hz) for phase extraction, e.g. theta.
+    amplitude_freq_range : tuple of float, default=(30, 100)
+        High-frequency band (Hz) for amplitude extraction, e.g. gamma.
     n_bins : int, default=18
-        Number of phase bins for analysis.
-    
+        Number of phase bins.
+
     Returns
     -------
-    modulation_index : float
-        Normalized entropy-based modulation index.
+    modulation_index : jax.Array
+        Scalar modulation index in ``[0, 1]`` (0 = no coupling).
     phase_bins : jax.Array
-        Phase bin centers.
+        Phase bin centers, shape ``(n_bins,)``.
     mean_amplitudes : jax.Array
-        Mean amplitude in each phase bin.
+        Mean high-frequency amplitude in each phase bin, shape ``(n_bins,)``.
     """
-    lfp = jnp.asarray(lfp)
-
-    # Extract phase and amplitude using simplified filtering
-    # Low-pass for phase (simplified Butterworth approximation)
-    nyquist = 0.5 / dt
-    low_cutoff = jnp.mean(jnp.array(phase_freq_range)) / nyquist
-    high_cutoff = jnp.mean(jnp.array(amplitude_freq_range)) / nyquist
-
-    # Simple bandpass filtering using FFT
-    n_fft = len(lfp)
+    dt = _to_seconds(dt)
+    lfp = jnp.asarray(u.get_magnitude(lfp))
+    n_fft = lfp.shape[0]
     freqs = jnp.fft.fftfreq(n_fft, dt)
     fft_lfp = jnp.fft.fft(lfp)
 
-    # Phase component
-    phase_mask = (jnp.abs(freqs) >= phase_freq_range[0]) & (jnp.abs(freqs) <= phase_freq_range[1])
-    phase_fft = fft_lfp * phase_mask
-    phase_signal = jnp.fft.ifft(phase_fft)
+    phase_signal = _analytic_band(fft_lfp, freqs, phase_freq_range[0], phase_freq_range[1])
     instantaneous_phase = jnp.angle(phase_signal)
 
-    # Amplitude component  
-    amp_mask = (jnp.abs(freqs) >= amplitude_freq_range[0]) & (jnp.abs(freqs) <= amplitude_freq_range[1])
-    amp_fft = fft_lfp * amp_mask
-    amp_signal = jnp.fft.ifft(amp_fft)
+    amp_signal = _analytic_band(fft_lfp, freqs, amplitude_freq_range[0], amplitude_freq_range[1])
     instantaneous_amplitude = jnp.abs(amp_signal)
 
-    # Compute PAC using phase binning
+    # Bin amplitudes by phase using segment sums (jit-safe; empty bins -> 0).
     phase_bins = jnp.linspace(-jnp.pi, jnp.pi, n_bins + 1)
     bin_centers = (phase_bins[:-1] + phase_bins[1:]) / 2
+    bin_idx = jnp.clip(jnp.digitize(instantaneous_phase, phase_bins) - 1, 0, n_bins - 1)
+    sums = jax.ops.segment_sum(instantaneous_amplitude, bin_idx, num_segments=n_bins)
+    counts = jax.ops.segment_sum(jnp.ones_like(instantaneous_amplitude), bin_idx, num_segments=n_bins)
+    mean_amplitudes = sums / jnp.maximum(counts, 1.0)
 
-    mean_amplitudes = jnp.array([
-        jnp.mean(instantaneous_amplitude[
-                     (instantaneous_phase >= phase_bins[i]) &
-                     (instantaneous_phase < phase_bins[i + 1])
-                     ]) for i in range(n_bins)
-    ])
-
-    # Handle NaN values
-    mean_amplitudes = jnp.nan_to_num(mean_amplitudes, nan=0.0)
-
-    # Modulation index (normalized entropy)
-    p_normalized = mean_amplitudes / (jnp.sum(mean_amplitudes) + 1e-12)
-    p_normalized = jnp.where(p_normalized > 0, p_normalized, 1e-12)
-    entropy = -jnp.sum(p_normalized * jnp.log(p_normalized))
+    # Tort modulation index: normalized KL divergence from the uniform distribution.
+    p = mean_amplitudes / (jnp.sum(mean_amplitudes) + 1e-12)
+    p = jnp.where(p > 0, p, 1e-12)
+    entropy = -jnp.sum(p * jnp.log(p))
     max_entropy = jnp.log(n_bins)
     modulation_index = (max_entropy - entropy) / max_entropy
 
@@ -463,21 +481,21 @@ def phase_amplitude_coupling(
 @set_module_as('braintools.metric')
 def theta_gamma_coupling(
     lfp: brainstate.typing.ArrayLike,
-    dt: float
-) -> float:
+    dt: Union[float, u.Quantity]
+) -> jax.Array:
     """Compute theta-gamma coupling strength using standard frequency bands.
-    
+
     Parameters
     ----------
     lfp : brainstate.typing.ArrayLike
-        LFP signal with shape (n_time,).
-    dt : float
-        Sampling interval in seconds.
-    
+        LFP signal with shape ``(n_time,)``.
+    dt : float or brainunit.Quantity
+        Sampling interval (seconds if a float; converted if a ``Quantity``).
+
     Returns
     -------
-    coupling_strength : float
-        Theta-gamma coupling modulation index.
+    coupling_strength : jax.Array
+        Scalar theta-gamma (4-8 Hz phase, 30-80 Hz amplitude) modulation index.
     """
     return phase_amplitude_coupling(
         lfp, dt,
@@ -489,132 +507,153 @@ def theta_gamma_coupling(
 @set_module_as('braintools.metric')
 def current_source_density(
     lfp_laminar: brainstate.typing.ArrayLike,
-    electrode_spacing: float
+    electrode_spacing: Union[float, u.Quantity],
+    conductivity: float = 1.0,
+    axis: int = -1
 ) -> jax.Array:
-    """Compute current source density (CSD) from laminar LFP recordings.
-    
+    r"""Compute current source density (CSD) from laminar LFP recordings.
+
+    The CSD is the (negative, conductivity-scaled) second spatial derivative of the
+    potential along the electrode axis:
+
+    .. math::
+
+        \text{CSD}(z) \approx -\sigma\, \frac{\phi(z+h) - 2\phi(z) + \phi(z-h)}{h^2}
+
     Parameters
     ----------
     lfp_laminar : brainstate.typing.ArrayLike
-        Laminar LFP data with shape (n_time, n_electrodes).
-        Electrodes should be ordered from superficial to deep layers.
-    electrode_spacing : float
-        Spacing between electrodes in mm.
-    
+        Laminar LFP data. The electrode axis (selected by ``axis``) must be ordered
+        from superficial to deep and have at least 3 electrodes.
+    electrode_spacing : float or brainunit.Quantity
+        Spacing :math:`h` between adjacent electrodes. A float is taken to be in
+        **mm**; a ``Quantity`` is converted to mm. The CSD is therefore expressed in
+        ``[lfp] / mm^2`` (scaled by ``conductivity``).
+    conductivity : float, default=1.0
+        Tissue conductivity :math:`\sigma` (assumed constant).
+    axis : int, default=-1
+        Axis along which electrodes are arranged. Use ``axis=0`` for
+        channels-first ``(n_electrodes, n_time)`` data, or the default ``axis=-1``
+        for ``(n_time, n_electrodes)`` data.
+
     Returns
     -------
     csd : jax.Array
-        Current source density with shape (n_time, n_electrodes-2).
-        First and last electrodes are excluded due to boundary conditions.
+        Current source density with the electrode axis reduced by 2 (the boundary
+        electrodes are dropped).
+
+    Raises
+    ------
+    ValueError
+        If fewer than 3 electrodes are present along ``axis``.
     """
-    lfp_laminar = jnp.asarray(lfp_laminar)
+    if isinstance(electrode_spacing, u.Quantity):
+        spacing = float(electrode_spacing.to_decimal(u.mm))
+    else:
+        spacing = float(electrode_spacing)
+    lfp_laminar = jnp.asarray(u.get_magnitude(lfp_laminar))
 
-    # Second spatial derivative approximation
-    # CSD ≈ -σ * ∂²φ/∂z² ≈ -σ * (φ[z+h] - 2φ[z] + φ[z-h]) / h²
-    # where σ is tissue conductivity (assumed constant)
+    n_elec = lfp_laminar.shape[axis]
+    if n_elec < 3:
+        raise ValueError(
+            f"current_source_density requires at least 3 electrodes along axis {axis}, "
+            f"but got {n_elec}."
+        )
 
-    # Apply second derivative operator
-    csd = -(lfp_laminar[:, 2:] - 2 * lfp_laminar[:, 1:-1] + lfp_laminar[:, :-2])
-    csd = csd / (electrode_spacing ** 2)
-
-    return csd
+    x = jnp.moveaxis(lfp_laminar, axis, -1)
+    csd = -conductivity * (x[..., 2:] - 2 * x[..., 1:-1] + x[..., :-2]) / (spacing ** 2)
+    return jnp.moveaxis(csd, -1, axis)
 
 
 @set_module_as('braintools.metric')
 def spectral_entropy(
     lfp: brainstate.typing.ArrayLike,
-    dt: float,
-    freq_range: tuple = (1, 100)
-) -> float:
-    """Compute spectral entropy of LFP signal as a complexity measure.
-    
+    dt: Union[float, u.Quantity],
+    freq_range: Tuple[float, float] = (1, 100)
+) -> jax.Array:
+    """Compute the normalized spectral entropy of an LFP signal.
+
     Parameters
     ----------
     lfp : brainstate.typing.ArrayLike
-        LFP signal with shape (n_time,).
-    dt : float
-        Sampling interval in seconds.
-    freq_range : tuple, default=(1, 100)
-        Frequency range for entropy calculation.
-    
+        LFP signal with shape ``(n_time,)`` (multi-channel input is averaged into a
+        single spectrum before the entropy is computed).
+    dt : float or brainunit.Quantity
+        Sampling interval (seconds if a float; converted if a ``Quantity``).
+    freq_range : tuple of float, default=(1, 100)
+        Frequency range (Hz) for the entropy calculation.
+
     Returns
     -------
-    entropy : float
-        Normalized spectral entropy (0 = most regular, 1 = most random).
+    entropy : jax.Array
+        Normalized spectral entropy in ``[0, 1]`` (0 = most regular / peaked,
+        1 = flat / most random).
     """
     freqs, psd = power_spectral_density(lfp, dt, freq_range=freq_range)
+    psd = jnp.asarray(psd)
+    if psd.ndim > 1:
+        psd = jnp.mean(psd, axis=-1)
 
-    # Handle edge cases
-    if jnp.sum(psd) == 0 or psd.size == 0:
-        return 0.0
+    n = psd.shape[0] if psd.ndim > 0 else 1
+    if n <= 1:
+        return jnp.asarray(0.0)
 
-    # Normalize PSD to get probability distribution
-    psd_norm = psd / jnp.sum(psd)
-    psd_norm = jnp.where(psd_norm > 0, psd_norm, 1e-12)
-
-    # Shannon entropy
+    total = jnp.sum(psd)
+    # Fall back to a uniform distribution when the band carries no power.
+    psd_norm = jnp.where(total > 0, psd / jnp.where(total > 0, total, 1.0), 1.0 / n)
+    psd_norm = jnp.maximum(psd_norm, 1e-12)
     entropy = -jnp.sum(psd_norm * jnp.log2(psd_norm))
-    max_entropy = jnp.log2(psd_norm.shape[0] if psd_norm.ndim > 0 else 1)
-
-    # Handle edge cases
-    if max_entropy == 0:
-        return 0.0
-
-    return entropy / max_entropy
+    return entropy / jnp.log2(n)
 
 
 @set_module_as('braintools.metric')
 def lfp_phase_coherence(
     lfp_signals: brainstate.typing.ArrayLike,
-    dt: float,
-    freq_band: tuple = (8, 12)
+    dt: Union[float, u.Quantity],
+    freq_band: Tuple[float, float] = (8, 12)
 ) -> jax.Array:
-    """Compute phase coherence between multiple LFP signals in a frequency band.
-    
+    r"""Compute pairwise phase coherence between LFP channels in a frequency band.
+
+    For each channel the band-limited analytic signal is built (Hilbert
+    construction), and the pairwise phase-locking value
+
+    .. math::
+
+        \text{PLV}_{ij} = \left| \frac{1}{T} \sum_t e^{\,i(\phi_i(t) - \phi_j(t))} \right|
+
+    is returned for every channel pair.
+
     Parameters
     ----------
     lfp_signals : brainstate.typing.ArrayLike
-        Multiple LFP signals with shape (n_time, n_channels).
-    dt : float
-        Sampling interval in seconds.
-    freq_band : tuple, default=(8, 12)
-        Frequency band for phase extraction (e.g., alpha band).
-    
+        Multiple LFP signals with shape ``(n_time, n_channels)``.
+    dt : float or brainunit.Quantity
+        Sampling interval (seconds if a float; converted if a ``Quantity``).
+    freq_band : tuple of float, default=(8, 12)
+        Frequency band (Hz) for phase extraction (e.g. the alpha band).
+
     Returns
     -------
     phase_coherence_matrix : jax.Array
-        Phase coherence matrix with shape (n_channels, n_channels).
-        Values range from 0 (no coherence) to 1 (perfect coherence).
+        Symmetric coherence matrix with shape ``(n_channels, n_channels)`` and
+        values in ``[0, 1]`` (diagonal exactly 1).
     """
-    lfp_signals = jnp.asarray(lfp_signals)
+    dt = _to_seconds(dt)
+    lfp_signals = jnp.asarray(u.get_magnitude(lfp_signals))
+    if lfp_signals.ndim != 2:
+        raise ValueError(
+            "lfp_phase_coherence expects a 2-D array of shape (n_time, n_channels), "
+            f"but got shape {lfp_signals.shape}."
+        )
     n_time, n_channels = lfp_signals.shape
 
-    # Extract phase for each channel using bandpass filtering
     freqs = jnp.fft.fftfreq(n_time, dt)
-    band_mask = (jnp.abs(freqs) >= freq_band[0]) & (jnp.abs(freqs) <= freq_band[1])
+    mask = (freqs >= freq_band[0]) & (freqs <= freq_band[1])  # positive band -> analytic
+    fft = jnp.fft.fft(lfp_signals, axis=0)
+    analytic = jnp.fft.ifft(jnp.where(mask[:, None], fft, 0.0 + 0.0j) * 2.0, axis=0)
+    phases = jnp.angle(analytic)                       # (n_time, n_channels)
 
-    phases = []
-    for ch in range(n_channels):
-        fft_signal = jnp.fft.fft(lfp_signals[:, ch])
-        band_fft = fft_signal * band_mask
-        analytic_signal = jnp.fft.ifft(band_fft)
-        phase = jnp.angle(analytic_signal)
-        phases.append(phase)
-
-    phases = jnp.array(phases)  # Shape: (n_channels, n_time)
-
-    # Compute pairwise phase coherence
-    coherence_matrix = jnp.zeros((n_channels, n_channels))
-
-    for i in range(n_channels):
-        for j in range(n_channels):
-            if i == j:
-                coherence_matrix = coherence_matrix.at[i, j].set(1.0)
-            else:
-                # Phase difference
-                phase_diff = phases[i] - phases[j]
-                # Circular mean of complex exponentials
-                mean_coherence = jnp.abs(jnp.mean(jnp.exp(1j * phase_diff)))
-                coherence_matrix = coherence_matrix.at[i, j].set(mean_coherence)
-
-    return coherence_matrix
+    z = jnp.exp(1j * phases)                           # unit phasors
+    # (i, j) = mean_t conj(z_i) z_j = mean_t exp(i(phi_j - phi_i)); |.| is the PLV.
+    coherence = jnp.abs(jnp.conj(z).T @ z) / n_time
+    return coherence

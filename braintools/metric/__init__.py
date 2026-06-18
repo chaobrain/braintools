@@ -68,24 +68,26 @@ analysis, and local field potential (LFP) analysis.
 .. code-block:: python
 
     import brainunit as u
+    import brainstate
     import jax.numpy as jnp
     from braintools.metric import (
         firing_rate, victor_purpura_distance,
         spike_train_synchrony
     )
 
-    # Calculate firing rate
-    spike_times = jnp.array([0.1, 0.3, 0.5, 0.7]) * u.second
-    rate = firing_rate(spike_times, duration=1.0 * u.second)
+    # Population firing rate from a spike matrix ``(num_time, num_neurons)``,
+    # smoothed with a sliding window of the given ``width``.
+    spikes = (brainstate.random.rand(1000, 50) < 0.1).astype(float)
+    rate = firing_rate(spikes, width=10.0 * u.ms, dt=1.0 * u.ms)
 
-    # Victor-Purpura distance between spike trains
-    train1 = jnp.array([0.1, 0.3, 0.5]) * u.second
-    train2 = jnp.array([0.12, 0.31, 0.52]) * u.second
-    distance = victor_purpura_distance(train1, train2, cost=1.0)
+    # Victor-Purpura distance between two spike-time trains (unitless times).
+    train1 = jnp.array([0.1, 0.3, 0.5])
+    train2 = jnp.array([0.12, 0.31, 0.52])
+    distance = victor_purpura_distance(train1, train2, cost_factor=1.0)
 
-    # Spike train synchrony
-    spike_matrix = jnp.array([[1, 0, 1, 0], [0, 1, 1, 0], [1, 1, 0, 0]])
-    synchrony = spike_train_synchrony(spike_matrix)
+    # Spike-train synchrony over a sliding window.
+    spike_matrix = (brainstate.random.rand(1000, 10) < 0.1).astype(float)
+    synchrony = spike_train_synchrony(spike_matrix, window_size=5.0 * u.ms, dt=1.0 * u.ms)
 
 **Classification Losses:**
 
@@ -164,6 +166,7 @@ analysis, and local field potential (LFP) analysis.
 .. code-block:: python
 
     import brainunit as u
+    import brainstate
     import jax.numpy as jnp
     from braintools.metric import (
         raster_plot,
@@ -177,34 +180,35 @@ analysis, and local field potential (LFP) analysis.
         correlation_index
     )
 
-    # Raster plot data extraction
-    spike_matrix = jnp.array([[1, 0, 1, 0], [0, 1, 1, 0]])
+    # Raster plot data extraction (spike matrix is ``(num_time, num_neurons)``).
+    spike_matrix = jnp.array([[1, 0], [0, 1], [1, 1], [0, 0]])
     times = jnp.arange(4) * 0.1 * u.second
     neuron_ids, spike_times = raster_plot(spike_matrix, times)
 
-    # Firing rate calculation
-    spikes = jnp.array([1, 0, 1, 1, 0, 0, 1, 0])
-    rate = firing_rate(spikes, window_size=100 * u.ms, dt=10 * u.ms)
+    # Smoothed population firing rate.
+    spikes = (brainstate.random.rand(1000, 20) < 0.1).astype(float)
+    rate = firing_rate(spikes, width=100.0 * u.ms, dt=1.0 * u.ms)
 
-    # Distance metrics between spike trains
-    train1 = jnp.array([0.1, 0.3, 0.5]) * u.second
-    train2 = jnp.array([0.12, 0.31, 0.52]) * u.second
-    vp_dist = victor_purpura_distance(train1, train2, cost=1.0)
-    vr_dist = van_rossum_distance(train1, train2, tau=0.01 * u.second)
+    # Distance metrics between two spike-time trains (unitless times).
+    train1 = jnp.array([0.1, 0.3, 0.5])
+    train2 = jnp.array([0.12, 0.31, 0.52])
+    vp_dist = victor_purpura_distance(train1, train2, cost_factor=1.0)
+    vr_dist = van_rossum_distance(train1, train2, tau=0.01)
 
-    # Synchrony measures
-    spike_matrix = jnp.array([[1, 0, 1, 0], [0, 1, 1, 0], [1, 1, 0, 0]])
-    synchrony = spike_train_synchrony(spike_matrix)
-    burst_sync = burst_synchrony_index(spike_matrix)
-    plv = phase_locking_value(spike_matrix)
-    sttc = spike_time_tiling_coefficient(train1, train2, dt=0.05 * u.second)
-    corr_idx = correlation_index(spike_matrix)
+    # Population synchrony measures (all operate on a spike matrix).
+    sm = (brainstate.random.rand(1000, 10) < 0.1).astype(float)
+    synchrony = spike_train_synchrony(sm, window_size=5.0 * u.ms, dt=1.0 * u.ms)
+    burst_sync = burst_synchrony_index(sm, dt=1.0 * u.ms)
+    plv = phase_locking_value(sm, reference_freq=40.0 * u.Hz, dt=1.0 * u.ms)
+    sttc = spike_time_tiling_coefficient(sm, dt=1.0 * u.ms, tau=0.005)
+    corr_idx = correlation_index(sm, window_size=5.0 * u.ms, dt=1.0 * u.ms)
 
 **LFP Analysis:**
 
 .. code-block:: python
 
     import brainunit as u
+    import brainstate
     import jax.numpy as jnp
     from braintools.metric import (
         unitary_LFP,
@@ -217,46 +221,50 @@ analysis, and local field potential (LFP) analysis.
         lfp_phase_coherence
     )
 
-    # Unitary LFP from spike trains
-    times = jnp.arange(1000) * 0.001 * u.second
-    spikes = jnp.random.randint(0, 2, (100, 1000))
-    ulfp = unitary_LFP(times, spikes, spike_type='excitatory')
+    # All spectral functions take the sampling step ``dt`` (not a rate ``fs``).
+    dt = 1.0 * u.ms
+    t = jnp.arange(2000) * 0.001  # seconds
+    lfp_signal = jnp.sin(2 * jnp.pi * 10 * t)  # 10 Hz oscillation
 
-    # Power spectral density
-    lfp_signal = jnp.sin(2 * jnp.pi * 10 * times.mantissa)  # 10 Hz signal
-    freqs, psd = power_spectral_density(lfp_signal, fs=1000 * u.Hz)
+    # Unitary LFP from a spike matrix ``(num_time, num_neurons)``; pass 'exc'/'inh'.
+    times = jnp.arange(2000) * 0.001  # ms time base (unitless)
+    spikes = (brainstate.random.rand(100, 2000) < 0.02).astype(float)
+    ulfp = unitary_LFP(times, spikes, 'exc', seed=42)
 
-    # Coherence analysis
-    signal1 = jnp.sin(2 * jnp.pi * 10 * times.mantissa)
-    signal2 = jnp.sin(2 * jnp.pi * 10 * times.mantissa + 0.1)
-    freqs, coherence = coherence_analysis(signal1, signal2, fs=1000 * u.Hz)
+    # Power spectral density (Welch).
+    freqs, psd = power_spectral_density(lfp_signal, dt=dt)
 
-    # Phase-amplitude coupling
-    pac = phase_amplitude_coupling(
-        lfp_signal,
-        phase_freq=(4, 8),  # Theta band
-        amp_freq=(30, 80),  # Gamma band
-        fs=1000 * u.Hz
+    # Magnitude-squared coherence between two signals.
+    signal2 = jnp.sin(2 * jnp.pi * 10 * t + 0.1)
+    freqs, coherence = coherence_analysis(lfp_signal, signal2, dt=dt)
+
+    # Phase-amplitude coupling (Tort modulation index).
+    modulation_index, bin_centers, mean_amplitudes = phase_amplitude_coupling(
+        lfp_signal, dt=dt,
+        phase_freq_range=(4, 8),       # theta band
+        amplitude_freq_range=(30, 80)  # gamma band
     )
 
-    # Theta-gamma coupling
-    tgc = theta_gamma_coupling(lfp_signal, fs=1000 * u.Hz)
+    # Theta-gamma coupling (scalar modulation index).
+    tgc = theta_gamma_coupling(lfp_signal, dt=dt)
 
-    # Current source density
-    lfp_channels = jnp.random.randn(16, 1000)  # 16 channels
-    csd = current_source_density(lfp_channels, spacing=100 * u.um)
+    # Current source density along the laminar (channel) axis.
+    lfp_laminar = brainstate.random.randn(16, 2000)  # 16 channels x time
+    csd = current_source_density(lfp_laminar, electrode_spacing=100.0 * u.um, axis=0)
 
-    # Spectral entropy
-    entropy = spectral_entropy(lfp_signal, fs=1000 * u.Hz)
+    # Spectral entropy.
+    entropy = spectral_entropy(lfp_signal, dt=dt)
 
-    # Phase coherence
-    phase_coh = lfp_phase_coherence(signal1, signal2, freq_band=(8, 12))
+    # Phase coherence across a multi-channel signal ``(num_time, num_channels)``.
+    multi_channel = brainstate.random.randn(2000, 4)
+    phase_coh = lfp_phase_coherence(multi_channel, dt=dt, freq_band=(8, 12))
 
 **Correlation Analysis:**
 
 .. code-block:: python
 
     import jax.numpy as jnp
+    import brainstate
     from braintools.metric import (
         cross_correlation,
         voltage_fluctuation,
@@ -266,29 +274,30 @@ analysis, and local field potential (LFP) analysis.
         functional_connectivity_dynamics
     )
 
-    # Cross-correlation between spike trains
-    spikes = jnp.array([[1, 0, 1, 0], [0, 1, 1, 0], [1, 1, 0, 0]])
+    # Cross-correlation synchrony index from a spike matrix ``(num_time, num_neurons)``.
+    spikes = (brainstate.random.rand(1000, 10) < 0.1).astype(float)
     cc = cross_correlation(spikes, bin=10, dt=1)
 
-    # Voltage fluctuation correlation
-    voltages = jnp.random.randn(100, 1000)  # 100 neurons, 1000 time points
-    vf_corr = voltage_fluctuation(voltages)
+    # Voltage-fluctuation synchrony index ``(num_time, num_neurons)``.
+    voltages = brainstate.random.randn(1000, 100)
+    vf = voltage_fluctuation(voltages)
 
-    # Correlation matrix
-    data = jnp.random.randn(50, 100)  # 50 samples, 100 features
-    corr_matrix = matrix_correlation(data)
+    # Correlation between the upper triangles of two square matrices.
+    a = brainstate.random.randn(20, 20)
+    b = brainstate.random.randn(20, 20)
+    corr = matrix_correlation(a, b)
 
-    # Weighted correlation
-    x = jnp.array([1, 2, 3, 4, 5])
-    y = jnp.array([2, 4, 5, 4, 5])
-    weights = jnp.array([1, 1, 2, 2, 1])
+    # Weighted Pearson correlation between two 1-D series.
+    x = jnp.array([1., 2., 3., 4., 5.])
+    y = jnp.array([2., 4., 5., 4., 5.])
+    weights = jnp.array([1., 1., 2., 2., 1.])
     w_corr = weighted_correlation(x, y, weights)
 
-    # Functional connectivity
-    time_series = jnp.random.randn(10, 1000)  # 10 regions, 1000 time points
-    fc = functional_connectivity(time_series, method='pearson')
+    # Functional connectivity matrix from ``(num_time, num_signals)`` data.
+    time_series = brainstate.random.randn(1000, 10)  # 1000 samples, 10 regions
+    fc = functional_connectivity(time_series)
 
-    # Dynamic functional connectivity
+    # Dynamic functional connectivity across sliding windows.
     fc_dynamics = functional_connectivity_dynamics(
         time_series,
         window_size=100,
@@ -300,15 +309,15 @@ analysis, and local field potential (LFP) analysis.
 .. code-block:: python
 
     import jax.numpy as jnp
+    from jax.scipy.special import logsumexp
     from braintools.metric import make_fenchel_young_loss
 
-    # Create custom loss from max function
-    def max_fun(scores):
-        return jnp.max(scores, axis=-1, keepdims=True)
-
-    loss_fn = make_fenchel_young_loss(max_fun)
-    scores = jnp.array([2.0, 1.0, 3.0])
-    targets = jnp.array([1.0, 0.0, 0.0])
+    # ``max_fun`` is applied over the last axis via ``jnp.vectorize`` with
+    # signature ``(n)->()``, so it must map a 1-D score vector to a scalar.
+    # ``logsumexp`` recovers the softmax cross-entropy Fenchel-Young loss.
+    loss_fn = make_fenchel_young_loss(max_fun=logsumexp)
+    scores = jnp.array([[2.0, 1.0, 3.0], [1.5, 2.5, 1.0]])
+    targets = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     loss = loss_fn(scores, targets)
 
 **Ranking Losses:**
@@ -396,8 +405,9 @@ from ._lfp import (
 )
 
 # Pairwise metrics
-from ._pariwise import (
-    cosine_similarity as _cosine_similarity_pairwise,
+from ._pairwise import (
+    pairwise_cosine_similarity,
+    pairwise_cosine_distance,
 )
 
 # Ranking losses
@@ -412,6 +422,7 @@ from ._regression import (
     l1_loss,
     l2_loss,
     l2_norm,
+    safe_norm,
     huber_loss,
     log_cosh,
     cosine_similarity,
@@ -473,6 +484,10 @@ __all__ = [
     'spectral_entropy',
     'lfp_phase_coherence',
 
+    # Pairwise metrics
+    'pairwise_cosine_similarity',
+    'pairwise_cosine_distance',
+
     # Ranking losses
     'ranking_softmax_loss',
 
@@ -482,6 +497,7 @@ __all__ = [
     'l1_loss',
     'l2_loss',
     'l2_norm',
+    'safe_norm',
     'huber_loss',
     'log_cosh',
     'cosine_similarity',

@@ -623,3 +623,215 @@ class SigmoidFocalLossTest(parameterized.TestCase):
         ce_loss = braintools.metric.sigmoid_binary_cross_entropy(self.ys, self.ts)
         assert all(ce_loss[self.ts == 0] > 0)
         assert all(focal_loss[self.ts == 0] == 0)
+
+    def test_alpha_none_equals_unweighted(self):
+        """alpha=None must take the unweighted (no class re-weighting) path."""
+        # alpha=None should be identical to passing alpha that disables weighting.
+        loss_none = braintools.metric.sigmoid_focal_loss(
+            self.ys, self.ts, alpha=None, gamma=2.0
+        )
+        p = jax.nn.sigmoid(self.ys)
+        ce_loss = braintools.metric.sigmoid_binary_cross_entropy(self.ys, self.ts)
+        p_t = p * self.ts + (1 - p) * (1 - self.ts)
+        expected = ce_loss * ((1 - p_t) ** 2.0)
+        np.testing.assert_allclose(loss_none, expected, rtol=self._rtol)
+
+    def test_alpha_negative_path(self):
+        """A negative alpha (< 0) disables weighting just like alpha=None."""
+        loss_neg = braintools.metric.sigmoid_focal_loss(
+            self.ys, self.ts, alpha=-1.0, gamma=2.0
+        )
+        loss_none = braintools.metric.sigmoid_focal_loss(
+            self.ys, self.ts, alpha=None, gamma=2.0
+        )
+        np.testing.assert_allclose(loss_neg, loss_none, rtol=self._rtol)
+
+    def test_docstring_example_values(self):
+        """Pin the values used in the de-indented docstring example (A14)."""
+        logits = jnp.array([2.0, -1.0, 0.5, -2.0])
+        labels = jnp.array([1.0, 0.0, 1.0, 0.0])
+        loss = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=0.25, gamma=2.0)
+        np.testing.assert_allclose(
+            loss, [0.00045089, 0.01699354, 0.01689337, 0.00135267], rtol=1e-4
+        )
+        loss_unweighted = braintools.metric.sigmoid_focal_loss(
+            logits, labels, alpha=None, gamma=2.0
+        )
+        np.testing.assert_allclose(
+            loss_unweighted, [0.00180356, 0.02265805, 0.06757348, 0.00180356], rtol=1e-4
+        )
+
+
+class NLLLossTest(parameterized.TestCase):
+    """Tests for ``nll_loss`` (A16/A17, TEST-A)."""
+
+    def test_docstring_scalar_value(self):
+        # A17 sign bug regression: target=1, log_probs=log([0.1,0.7,0.2])
+        # NLL must be -log(0.7) = +0.35667497 (positive!).
+        log_probs = jnp.log(jnp.array([0.1, 0.7, 0.2]))
+        loss = braintools.metric.nll_loss(log_probs, 1)
+        np.testing.assert_allclose(float(loss), 0.35667497, rtol=1e-5)
+        # explicitly assert it is the *negative* log-likelihood, i.e. positive.
+        self.assertGreater(float(loss), 0.0)
+
+    def test_nll_is_nonnegative(self):
+        # log-probabilities are <= 0, so the negative log-likelihood is >= 0.
+        log_probs = jax.nn.log_softmax(
+            jnp.array([[2.0, 1.0, 0.1], [0.3, -1.2, 4.0]]), axis=-1
+        )
+        loss = braintools.metric.nll_loss(log_probs, jnp.array([0, 2]))
+        self.assertTrue(bool(jnp.all(loss >= 0.0)))
+
+    def test_batch_values(self):
+        log_probs = jnp.log(jnp.array([[0.1, 0.7, 0.2], [0.3, 0.3, 0.4]]))
+        targets = jnp.array([1, 2])
+        loss = braintools.metric.nll_loss(log_probs, targets)
+        np.testing.assert_allclose(
+            loss, [-np.log(0.7), -np.log(0.4)], rtol=1e-5
+        )
+
+    def test_equivalence_with_integer_label_cross_entropy(self):
+        # nll_loss(log_softmax(logits), labels) == softmax_cross_entropy_with_integer_labels
+        logits = jnp.array([[10., 1., -2.], [1., 4., 0.2]])
+        labels = jnp.array([1, 0])
+        nll = braintools.metric.nll_loss(jax.nn.log_softmax(logits, axis=-1), labels)
+        ce = braintools.metric.softmax_cross_entropy_with_integer_labels(logits, labels)
+        np.testing.assert_allclose(nll, ce, rtol=1e-5)
+
+    def test_nd_targets(self):
+        # PyTorch convention: log_probs (N, C, d1), target (N, d1); classes on axis=1.
+        log_probs = jax.nn.log_softmax(
+            jax.random.normal(jax.random.PRNGKey(0), (2, 3, 4)), axis=1
+        )
+        target = jnp.array([[0, 1, 2, 0], [2, 2, 1, 0]])
+        loss = braintools.metric.nll_loss(log_probs, target)
+        self.assertEqual(loss.shape, (2, 4))
+        # spot check against an explicit gather
+        for n in range(2):
+            for d in range(4):
+                np.testing.assert_allclose(
+                    float(loss[n, d]),
+                    float(-log_probs[n, int(target[n, d]), d]),
+                    rtol=1e-5,
+                )
+
+    def test_invalid_shape_raises(self):
+        # scalar target requires 1-D log_probs
+        with self.assertRaises(ValueError):
+            braintools.metric.nll_loss(jnp.zeros((2, 3)), jnp.asarray(1))
+        # 1-D target requires 2-D log_probs
+        with self.assertRaises(ValueError):
+            braintools.metric.nll_loss(jnp.zeros((3,)), jnp.array([0, 1]))
+        # N-D target requires log_probs with exactly one extra (class) axis
+        with self.assertRaises(ValueError):
+            braintools.metric.nll_loss(jnp.zeros((2, 3)), jnp.zeros((2, 4), dtype=jnp.int32))
+
+    def test_jit_smoke(self):
+        log_probs = jax.nn.log_softmax(
+            jnp.array([[2.0, 1.0, 0.1], [0.3, -1.2, 4.0]]), axis=-1
+        )
+        targets = jnp.array([0, 2])
+        jitted = jax.jit(braintools.metric.nll_loss)
+        np.testing.assert_allclose(
+            jitted(log_probs, targets),
+            braintools.metric.nll_loss(log_probs, targets),
+            rtol=1e-6,
+        )
+
+
+class KLDivergenceGradientTest(parameterized.TestCase):
+    """Gradient (NaN-safety) tests for the KL variants at exact zeros (A8, TEST-KL)."""
+
+    def test_kl_divergence_grad_at_zero_targets(self):
+        log_preds = jnp.log(jnp.array([0.6, 0.3, 0.1]))
+        targets = jnp.array([0.7, 0.3, 0.0])  # contains an exact zero
+        grad = jax.grad(
+            lambda t: braintools.metric.kl_divergence(log_preds, t).sum()
+        )(targets)
+        # The single-`where` form would leak a NaN here; the double-`where` keeps
+        # the gradient finite everywhere, including at the exact zero target.
+        self.assertTrue(bool(jnp.all(jnp.isfinite(grad))))
+        # With log(t) frozen to 0 on the zero branch, the local gradient at the
+        # zero target reduces to d/dt [t*(0 - log p)] = -log p (finite).
+        np.testing.assert_allclose(float(grad[2]), float(-log_preds[2]), rtol=1e-5)
+
+    def test_kl_divergence_grad_wrt_log_predictions(self):
+        log_preds = jnp.log(jnp.array([0.6, 0.3, 0.1]))
+        targets = jnp.array([0.7, 0.3, 0.0])
+        grad = jax.grad(
+            lambda lp: braintools.metric.kl_divergence(lp, targets).sum()
+        )(log_preds)
+        self.assertTrue(bool(jnp.all(jnp.isfinite(grad))))
+        # d/d log_pred [t*(log t - log_pred)] = -t
+        np.testing.assert_allclose(grad, -targets, rtol=1e-5)
+
+    def test_kl_divergence_with_log_targets_grad_at_neg_inf(self):
+        log_preds = jnp.log(jnp.array([0.6, 0.3, 0.1]))
+        log_targets = jnp.log(jnp.array([0.7, 0.3, 0.0]))  # last entry is -inf
+        grad = jax.grad(
+            lambda lp: braintools.metric.kl_divergence_with_log_targets(lp, log_targets).sum()
+        )(log_preds)
+        self.assertTrue(bool(jnp.all(jnp.isfinite(grad))))
+        # d/d log_pred [exp(log_t)*(log_t - log_pred)] = -exp(log_t) = -target
+        np.testing.assert_allclose(grad, -jnp.exp(log_targets), rtol=1e-5)
+
+    def test_convex_kl_divergence_grad_at_zero_targets(self):
+        log_preds = jnp.log(jnp.array([0.6, 0.3, 0.1]))
+        targets = jnp.array([0.7, 0.3, 0.0])
+        grad = jax.grad(
+            lambda t: braintools.metric.convex_kl_divergence(log_preds, t).sum()
+        )(targets)
+        self.assertTrue(bool(jnp.all(jnp.isfinite(grad))))
+
+    def test_kl_divergence_value_hand_computed(self):
+        # KL(P||Q) = sum_i P_i (log P_i - log Q_i), with the 0*log0 term = 0.
+        log_preds = jnp.log(jnp.array([0.6, 0.3, 0.1]))
+        targets = jnp.array([0.7, 0.3, 0.0])
+        expected = (
+            0.7 * (np.log(0.7) - np.log(0.6))
+            + 0.3 * (np.log(0.3) - np.log(0.3))
+            + 0.0  # zero target contributes nothing
+        )
+        np.testing.assert_allclose(
+            float(braintools.metric.kl_divergence(log_preds, targets)),
+            expected,
+            rtol=1e-5,
+        )
+
+
+class HingeLossDocstringTest(parameterized.TestCase):
+    """Pin the corrected hinge_loss docstring output (A19)."""
+
+    def test_expected_output(self):
+        predictions = jnp.array([1.0, -0.5, 2.0])
+        targets = jnp.array([1, -1, 1])
+        loss = braintools.metric.hinge_loss(predictions, targets)
+        # 1 - (-0.5)*(-1) = 0.5 for the middle element (not 1.5).
+        np.testing.assert_allclose(loss, [0.0, 0.5, 0.0], atol=1e-6)
+
+
+class AssertDtypeHelpersTest(parameterized.TestCase):
+    """assert_is_float / assert_is_int raise explicit errors, not bare assert (A6)."""
+
+    def test_assert_is_float_raises_typeerror_on_int(self):
+        from braintools.metric._classification import assert_is_float
+        with self.assertRaises(TypeError):
+            assert_is_float(jnp.array([1, 2, 3], dtype=jnp.int32))
+
+    def test_assert_is_float_passes_on_float(self):
+        from braintools.metric._classification import assert_is_float
+        # should not raise
+        assert_is_float(jnp.array([1.0, 2.0], dtype=jnp.float32))
+
+    def test_assert_is_int_raises_typeerror_on_float(self):
+        from braintools.metric._classification import assert_is_int
+        with self.assertRaises(TypeError):
+            assert_is_int(jnp.array([1.0, 2.0], dtype=jnp.float32))
+
+    def test_softmax_ce_with_integer_labels_does_not_mutate_input(self):
+        # A3: ensure the function does not mutate a NumPy caller array in place.
+        logits = np.array([[2.0, 1.0, 0.1], [1.0, 4.0, 0.2]], dtype=np.float32)
+        original = logits.copy()
+        labels = np.array([0, 1], dtype=np.int32)
+        braintools.metric.softmax_cross_entropy_with_integer_labels(logits, labels)
+        np.testing.assert_array_equal(logits, original)

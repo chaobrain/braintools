@@ -109,8 +109,9 @@ def raster_plot(
     braintools.metric.firing_rate : Calculate population firing rates
     matplotlib.pyplot.scatter : For creating raster plot visualizations
     """
-    times = onp.asarray(times)
-    elements = onp.where(sp_matrix > 0.)
+    # Locate spikes from the (unit-stripped) matrix, but index ``times`` directly so
+    # that ``brainunit.Quantity`` time axes keep their units in the returned array.
+    elements = onp.where(onp.asarray(u.get_magnitude(sp_matrix)) > 0.)
     index = elements[1]
     time = times[elements[0]]
     return index, time
@@ -210,8 +211,15 @@ def firing_rate(
     the convolution operation. For critical applications, consider using
     alternative boundary conditions or trimming the results.
 
-    The function converts brainunit.Quantity objects to appropriate numerical
-    values when necessary, ensuring compatibility with the JAX computation backend.
+    The result is always expressed in **Hz**. When ``width``/``dt`` are
+    :class:`brainunit.Quantity` objects the conversion is exact for any time unit.
+    When they are plain floats they are assumed to be in **seconds**, so the
+    returned rate is ``mean_spike_fraction / window_duration_seconds``. Pass
+    ``width`` and ``dt`` in the *same* time unit.
+
+    ``width`` and ``dt`` must be concrete (static) values: the window length is
+    computed with Python ``int``, so this function is usable inside ``jit`` only
+    when ``width``/``dt`` are static.
 
     See Also
     --------
@@ -226,11 +234,21 @@ def firing_rate(
            Elife 8 (2019): e47314.
     """
     dt = brainstate.environ.get_dt() if (dt is None) else dt
-    width1 = int(width / 2 / dt) * 2 + 1
-    window = u.math.ones(width1) / width
-    if isinstance(window, u.Quantity):
-        window = window.to_decimal(u.Hz)
-    return jnp.convolve(jnp.mean(spikes, axis=1), window, mode='same')
+    # Number of samples in the (odd-sized) smoothing window. ``width / dt`` must be
+    # dimensionless; ``u.get_magnitude`` strips the unit when both are Quantities.
+    width1 = int(u.get_magnitude(width / 2 / dt)) * 2 + 1
+    # Normalize by the *realized* window duration (``width1 * dt``) rather than the
+    # nominal ``width`` so the kernel integrates spike counts to a rate over exactly
+    # the samples that are used.
+    duration = width1 * dt
+    inv_duration = 1.0 / duration
+    if isinstance(inv_duration, u.Quantity):
+        # Quantity time step -> express the rate in Hz (spikes per second).
+        inv_duration = inv_duration.to_decimal(u.Hz)
+    # Float ``dt``/``width`` are taken to be in seconds, so ``1 / duration`` is Hz.
+    window = jnp.ones(width1) * inv_duration
+    rate = jnp.mean(jnp.asarray(u.get_magnitude(spikes)), axis=1)
+    return jnp.convolve(rate, window, mode='same')
 
 
 @set_module_as('braintools.metric')
@@ -268,17 +286,26 @@ def victor_purpura_distance(
     -------
     float
         Victor-Purpura distance between the two spike trains.
-        
+
+    Notes
+    -----
+    This function runs on host (concrete) arrays: it fills a dynamic-programming
+    table with Python loops and ``len`` and returns a Python ``float``, so it is not
+    ``jit``/``vmap``/``grad``-compatible. ``cost_factor`` and the spike times must
+    use consistent units (the distance has units of ``cost_factor * time + count``).
+
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Similar spike trains
-    >>> spikes1 = jnp.array([1.0, 2.0, 3.0])
-    >>> spikes2 = jnp.array([1.1, 2.1, 3.1])
-    >>> distance = braintools.metric.victor_purpura_distance(spikes1, spikes2, cost_factor=10.0)
-    >>> print(f"VP distance: {distance:.3f}")
-    
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> spikes1 = jnp.array([1.0, 2.0, 3.0])
+        >>> spikes2 = jnp.array([1.1, 2.1, 3.1])
+        >>> d = braintools.metric.victor_purpura_distance(spikes1, spikes2, cost_factor=10.0)
+        >>> bool(d >= 0.0)
+        True
+
     References
     ----------
     .. [1] Victor, Jonathan D., and Keith P. Purpura. "Nature and precision of 
@@ -364,16 +391,33 @@ def van_rossum_distance(
     -------
     float
         van Rossum distance between the two spike trains.
-        
+
+    Notes
+    -----
+    Convention: each spike train is convolved with the *rate-normalized* kernel
+    :math:`K(t) = \frac{1}{\tau} e^{-t/\tau} H(t)` and the distance is
+    :math:`\sqrt{\int (f_1 - f_2)^2\, dt}` (no extra :math:`1/\tau` prefactor on the
+    integral). Other texts use :math:`K(t) = e^{-t/\tau}` with a :math:`1/\tau`
+    integral prefactor; both differ only by an overall scale. The integral is
+    truncated at ``t_max`` (default ``max(spike_time) + 5*tau``) and discretized at
+    ``dt = tau / 20``; the ``5*tau`` tail captures >99% of the exponential.
+
+    This function runs on host (concrete) arrays (Python loop over spikes, ``len``)
+    and returns a Python ``float``, so it is not ``jit``/``vmap``/``grad``-compatible.
+    ``tau``, ``t_max`` and the spike times must use consistent time units.
+
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> spikes1 = jnp.array([1.0, 3.0, 5.0])
-    >>> spikes2 = jnp.array([1.2, 3.2, 5.2])
-    >>> distance = braintools.metric.van_rossum_distance(spikes1, spikes2, tau=0.5)
-    >>> print(f"van Rossum distance: {distance:.3f}")
-    
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> spikes1 = jnp.array([1.0, 3.0, 5.0])
+        >>> spikes2 = jnp.array([1.2, 3.2, 5.2])
+        >>> d = braintools.metric.van_rossum_distance(spikes1, spikes2, tau=0.5)
+        >>> bool(d >= 0.0)
+        True
+
     References
     ----------
     .. [1] van Rossum, Mark CW. "A novel spike distance." 
@@ -432,30 +476,36 @@ def spike_train_synchrony(
     by counting coincident events within sliding time windows and normalizing by the
     total number of possible coincidences.
     
-    The synchrony index is computed as:
-    
+    The synchrony index is the average over neuron pairs of a symmetric
+    coincidence ratio:
+
     .. math::
-    
-        S = \frac{1}{N(N-1)} \sum_{i \neq j} \frac{C_{ij}}{min(N_i, N_j)}
-        
-    where :math:`C_{ij}` is the number of coincidences between trains i and j,
-    and :math:`N_i` is the number of spikes in train i.
-    
+
+        S = \frac{1}{N_{pairs}} \sum_{i < j} \frac{C_{i \to j} + C_{j \to i}}{N_i + N_j}
+
+    where :math:`C_{i \to j}` is the number of spikes in train :math:`i` that have at
+    least one spike of train :math:`j` within half the coincidence window, and
+    :math:`N_i` is the number of spikes in train :math:`i`. Counting coincidences in
+    both directions and normalizing by the total spike count guarantees
+    :math:`S \in [0, 1]`.
+
     Parameters
     ----------
     spike_matrix : brainstate.typing.ArrayLike
         Spike matrix with shape ``(n_time_steps, n_neurons)`` where non-zero values
         indicate spike occurrences.
-    window_size : float
-        Size of the coincidence detection window.
-    dt : float, optional
+    window_size : float or brainunit.Quantity
+        Full width of the coincidence-detection window. Two spikes are coincident
+        when they are at most ``window_size / 2`` apart. Must use the same time unit
+        as ``dt``.
+    dt : float or brainunit.Quantity, optional
         Time step between successive samples. If None, uses brainstate default.
-        
+
     Returns
     -------
     float
         Spike train synchrony index between 0 (no synchrony) and 1 (perfect synchrony).
-        
+
     Examples
     --------
     >>> import jax.numpy as jnp
@@ -472,47 +522,39 @@ def spike_train_synchrony(
            Journal of neuroscience methods 165.1 (2007): 151-161.
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
-    spikes = jnp.asarray(spike_matrix)
+    spikes = onp.asarray(u.get_magnitude(spike_matrix))
     n_time, n_neurons = spikes.shape
 
     if n_neurons < 2:
         return 0.0
 
-    # Convert window size to time steps
-    window_steps = int(window_size / dt)
+    # Half-coincidence window in samples. ``window_size`` and ``dt`` must share the
+    # same time unit; only their magnitudes are compared.
+    half_steps = u.get_magnitude(window_size) / (2.0 * u.get_magnitude(dt))
 
-    # Extract spike times for each neuron
-    spike_times_list = []
-    for i in range(n_neurons):
-        spike_indices = jnp.where(spikes[:, i] > 0)[0]
-        spike_times_list.append(spike_indices * dt)
+    # Spike sample indices for each neuron.
+    spike_idx_list = [onp.where(spikes[:, i] > 0)[0] for i in range(n_neurons)]
 
     total_synchrony = 0.0
     n_pairs = 0
-
-    # Calculate pairwise synchrony
     for i in range(n_neurons):
         for j in range(i + 1, n_neurons):
-            spikes_i = spike_times_list[i]
-            spikes_j = spike_times_list[j]
-
-            if len(spikes_i) == 0 or len(spikes_j) == 0:
+            idx_i = spike_idx_list[i]
+            idx_j = spike_idx_list[j]
+            n_i, n_j = len(idx_i), len(idx_j)
+            if n_i == 0 or n_j == 0:
                 continue
 
-            # Count coincidences
-            coincidences = 0
-            for spike_time_i in spikes_i:
-                # Check if any spike in j is within window
-                time_diffs = jnp.abs(spikes_j - spike_time_i)
-                if jnp.any(time_diffs <= window_size / 2):
-                    coincidences += 1
-
-            # Normalize by minimum number of spikes
-            min_spikes = min(len(spikes_i), len(spikes_j))
-            if min_spikes > 0:
-                pair_synchrony = coincidences / min_spikes
-                total_synchrony += pair_synchrony
-                n_pairs += 1
+            # A spike is "coincident" if the *other* train has any spike within the
+            # half-window. Counting coincidences symmetrically in both directions and
+            # normalizing by the total spike count bounds the ratio to [0, 1] (the
+            # earlier ``min(N_i, N_j)`` normalization with one-directional counting
+            # could exceed 1).
+            within = onp.abs(idx_i[:, None] - idx_j[None, :]) <= half_steps
+            coin_i = int(onp.any(within, axis=1).sum())
+            coin_j = int(onp.any(within, axis=0).sum())
+            total_synchrony += (coin_i + coin_j) / (n_i + n_j)
+            n_pairs += 1
 
     return float(total_synchrony / n_pairs) if n_pairs > 0 else 0.0
 
@@ -538,36 +580,45 @@ def burst_synchrony_index(
         Spike matrix with shape ``(n_time_steps, n_neurons)``.
     burst_threshold : int, default=3
         Minimum number of spikes required to constitute a burst.
-    max_isi : float, default=100.0
-        Maximum inter-spike interval within a burst (in time units).
-    dt : float, optional
+    max_isi : float or brainunit.Quantity, default=100.0
+        Maximum inter-spike interval within a burst. Must use the same time unit
+        as ``dt``.
+    dt : float or brainunit.Quantity, optional
         Time step between successive samples. If None, uses brainstate default.
-        
+
     Returns
     -------
     float
         Burst synchrony index between 0 (no burst synchrony) and 1 (perfect burst synchrony).
-        
+
+    Notes
+    -----
+    This function runs on host (concrete) arrays (Python loops, ``len``), so it is
+    not ``jit``/``vmap``/``grad``-compatible.
+
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Create spike matrix with bursts
-    >>> spikes = jnp.zeros((1000, 10))
-    >>> # Add synchronized bursts
-    >>> for start in [100, 300, 600]:
-    >>>     for i in range(10):
-    >>>         spikes = spikes.at[start:start+5, i].set(1)
-    >>> sync_idx = braintools.metric.burst_synchrony_index(spikes)
-    >>> print(f"Burst synchrony: {sync_idx:.3f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> spikes = jnp.zeros((1000, 10))
+        >>> for start in [100, 300, 600]:
+        ...     for i in range(10):
+        ...         spikes = spikes.at[start:start + 5, i].set(1)
+        >>> sync_idx = braintools.metric.burst_synchrony_index(spikes, max_isi=5.0, dt=1.0)
+        >>> bool(0.0 <= sync_idx <= 1.0)
+        True
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
-    spikes = jnp.asarray(spike_matrix)
+    spikes = onp.asarray(u.get_magnitude(spike_matrix))
     n_time, n_neurons = spikes.shape
+    dt_m = u.get_magnitude(dt)
+    max_isi_m = u.get_magnitude(max_isi)
 
     def detect_bursts(spike_train):
         """Detect burst events in a single spike train."""
-        spike_times = jnp.where(spike_train > 0)[0] * dt
+        spike_times = onp.where(spike_train > 0)[0] * dt_m
         if len(spike_times) < burst_threshold:
             return []
 
@@ -576,7 +627,7 @@ def burst_synchrony_index(
 
         for i in range(1, len(spike_times)):
             isi = spike_times[i] - spike_times[i - 1]
-            if isi <= max_isi:
+            if isi <= max_isi_m:
                 current_burst.append(spike_times[i])
             else:
                 if len(current_burst) >= burst_threshold:
@@ -654,25 +705,42 @@ def phase_locking_value(
     jnp.ndarray
         Phase-locking values for each neuron. Shape ``(n_neurons,)``.
         Values range from 0 (no phase locking) to 1 (perfect phase locking).
-        
+
+    Notes
+    -----
+    This computes the **vector strength** (Rayleigh resultant length) of each
+    neuron's spikes relative to an *external* reference oscillation of frequency
+    ``reference_freq``. It is therefore a spike–field locking measure, **not** the
+    Lachaux et al. (1999) pairwise PLV between two continuous signals.
+
+    Vector strength is biased upward for small spike counts: a neuron with a single
+    spike trivially yields ``PLV = 1``, and a handful of spikes can give a large
+    value by chance. Interpret values with caution when spike counts are low, and
+    consider a Rayleigh-style bias correction or a minimum-spike threshold.
+
+    This function runs on host (concrete) arrays (Python loop over neurons,
+    boolean-mask indexing), so it is not ``jit``/``vmap``/``grad``-compatible.
+
+    References
+    ----------
+    .. [1] Lachaux, Jean-Philippe, et al. "Measuring phase synchrony in brain
+           signals." Human brain mapping 8.4 (1999): 194-208.
+
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Create phase-locked spikes
-    >>> n_time, n_neurons = 1000, 5
-    >>> spikes = jnp.zeros((n_time, n_neurons))
-    >>> freq = 10.0  # 10 Hz reference
-    >>> dt = 0.001   # 1 ms
-    >>> # Add spikes at preferred phases
-    >>> for i in range(n_neurons):
-    >>>     phase_pref = i * jnp.pi / 4  # Different preferred phases
-    >>>     for cycle in range(10):
-    >>>         t_spike = int((cycle / freq + phase_pref / (2*jnp.pi*freq)) / dt)
-    >>>         if t_spike < n_time:
-    >>>             spikes = spikes.at[t_spike, i].set(1)
-    >>> plv = braintools.metric.phase_locking_value(spikes, freq, dt)
-    >>> print(f"PLV: {plv}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> n_time, n_neurons = 1000, 5
+        >>> spikes = jnp.zeros((n_time, n_neurons))
+        >>> freq, dt = 10.0, 0.001  # 10 Hz reference, 1 ms step
+        >>> # Place one spike per 10 Hz cycle for neuron 0 (strong locking).
+        >>> idx = (jnp.arange(10) / freq / dt).astype(int)
+        >>> spikes = spikes.at[idx, 0].set(1.0)
+        >>> plv = braintools.metric.phase_locking_value(spikes, freq, dt)
+        >>> plv.shape
+        (5,)
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
     spikes = jnp.asarray(spike_matrix)
@@ -732,29 +800,41 @@ def spike_time_tiling_coefficient(
     ----------
     spike_matrix : brainstate.typing.ArrayLike
         Spike matrix with shape ``(n_time_steps, n_neurons)``.
-    dt : float, optional
+    dt : float or brainunit.Quantity, optional
         Time step between successive samples. If None, uses brainstate default.
-    tau : float, default=0.005
-        Half-width of the temporal window for coincidence detection (in seconds).
-        
+    tau : float or brainunit.Quantity, default=0.005
+        Half-width of the temporal window for coincidence detection. Must use the
+        same time unit as ``dt`` (default assumes seconds).
+
     Returns
     -------
     jnp.ndarray
         STTC matrix with shape ``(n_neurons, n_neurons)``. Diagonal elements are 1.
         Values range from -1 to 1, where 1 indicates perfect synchrony.
-        
+
+    Notes
+    -----
+    The time-coverage terms :math:`T_A`, :math:`T_B` use the **union** of the
+    per-spike :math:`[\,s - \tau,\ s + \tau\,]` windows, so overlapping windows are
+    not double-counted (the defining quantity in Cutts & Eglen, 2014). Each STTC
+    term is guarded independently against a zero denominator.
+
+    This function runs on host (concrete) arrays (Python loops, ``len``,
+    boolean-mask indexing), so it is not ``jit``/``vmap``/``grad``-compatible.
+
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Create correlated spike trains
-    >>> spikes = jnp.zeros((1000, 3))
-    >>> # Add some synchronized spikes
-    >>> sync_times = [100, 300, 500, 700]
-    >>> for t in sync_times:
-    >>>     spikes = spikes.at[t:t+3, :].set(1)
-    >>> sttc = braintools.metric.spike_time_tiling_coefficient(spikes)
-    >>> print(f"STTC matrix:\\n{sttc}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> spikes = jnp.zeros((1000, 3))
+        >>> sync_times = [100, 300, 500, 700]
+        >>> for t in sync_times:
+        ...     spikes = spikes.at[t:t + 3, :].set(1)
+        >>> sttc = braintools.metric.spike_time_tiling_coefficient(spikes, dt=1.0, tau=2.0)
+        >>> sttc.shape
+        (3, 3)
     
     References
     ----------
@@ -763,74 +843,51 @@ def spike_time_tiling_coefficient(
            retina." Journal of Neuroscience 34.43 (2014): 14288-14303.
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
-    spikes = jnp.asarray(spike_matrix)
+    spikes = onp.asarray(u.get_magnitude(spike_matrix))
     n_time, n_neurons = spikes.shape
 
-    # Total recording time
-    T_total = n_time * dt
+    # Coincidence half-window in samples. ``tau`` and ``dt`` must share a time unit;
+    # only their magnitudes are used.
+    tau_steps = int(round(u.get_magnitude(tau) / u.get_magnitude(dt)))
 
-    # Convert tau to time steps
-    tau_steps = int(tau / dt)
+    def covered_fraction(idx):
+        # Fraction of the recording covered by the *union* of [s - tau, s + tau]
+        # windows around each spike. Summing per-spike window lengths (the previous
+        # behaviour) double-counts overlapping windows and inflates T; the union is
+        # the quantity defined by Cutts & Eglen (2014).
+        covered = onp.zeros(n_time, dtype=bool)
+        for s in idx:
+            lo = max(0, s - tau_steps)
+            hi = min(n_time, s + tau_steps + 1)
+            covered[lo:hi] = True
+        return covered.sum() / n_time
 
-    sttc_matrix = jnp.eye(n_neurons)  # Diagonal is 1 by definition
-
+    sttc_matrix = onp.eye(n_neurons)  # Diagonal is 1 by definition
     for i in range(n_neurons):
         for j in range(i + 1, n_neurons):
-            spikes_i = jnp.where(spikes[:, i] > 0)[0]
-            spikes_j = jnp.where(spikes[:, j] > 0)[0]
-
-            n_i, n_j = len(spikes_i), len(spikes_j)
+            idx_i = onp.where(spikes[:, i] > 0)[0]
+            idx_j = onp.where(spikes[:, j] > 0)[0]
+            n_i, n_j = len(idx_i), len(idx_j)
 
             if n_i == 0 or n_j == 0:
-                sttc_matrix = sttc_matrix.at[i, j].set(0.0)
-                sttc_matrix = sttc_matrix.at[j, i].set(0.0)
+                sttc_matrix[i, j] = sttc_matrix[j, i] = 0.0
                 continue
 
-            # Calculate P_A: proportion of spikes in i that have spike in j within tau
-            coincident_i = 0
-            for spike_i in spikes_i:
-                # Check if any spike in j is within tau_steps
-                time_diffs = jnp.abs(spikes_j - spike_i)
-                if jnp.any(time_diffs <= tau_steps):
-                    coincident_i += 1
-            P_A = coincident_i / n_i
+            within = onp.abs(idx_i[:, None] - idx_j[None, :]) <= tau_steps
+            P_A = onp.any(within, axis=1).sum() / n_i  # spikes in i near a j spike
+            P_B = onp.any(within, axis=0).sum() / n_j  # spikes in j near an i spike
+            T_A = covered_fraction(idx_i)
+            T_B = covered_fraction(idx_j)
 
-            # Calculate P_B: proportion of spikes in j that have spike in i within tau
-            coincident_j = 0
-            for spike_j in spikes_j:
-                time_diffs = jnp.abs(spikes_i - spike_j)
-                if jnp.any(time_diffs <= tau_steps):
-                    coincident_j += 1
-            P_B = coincident_j / n_j
+            # Guard each term independently: a single degenerate denominator should
+            # zero only its own term, not the whole coefficient.
+            term1 = (P_A - T_B) / (1.0 - P_A * T_B) if (1.0 - P_A * T_B) != 0 else 0.0
+            term2 = (P_B - T_A) / (1.0 - P_B * T_A) if (1.0 - P_B * T_A) != 0 else 0.0
+            sttc_value = 0.5 * (term1 + term2)
 
-            # Calculate T_A: proportion of time covered by windows around spikes in i
-            covered_time_i = 0
-            for spike_i in spikes_i:
-                window_start = max(0, spike_i - tau_steps)
-                window_end = min(n_time - 1, spike_i + tau_steps)
-                covered_time_i += (window_end - window_start + 1)
-            T_A = min(1.0, covered_time_i * dt / T_total)
+            sttc_matrix[i, j] = sttc_matrix[j, i] = sttc_value
 
-            # Calculate T_B: proportion of time covered by windows around spikes in j
-            covered_time_j = 0
-            for spike_j in spikes_j:
-                window_start = max(0, spike_j - tau_steps)
-                window_end = min(n_time - 1, spike_j + tau_steps)
-                covered_time_j += (window_end - window_start + 1)
-            T_B = min(1.0, covered_time_j * dt / T_total)
-
-            # Calculate STTC
-            if P_A * T_B < 1 and P_B * T_A < 1:
-                term1 = (P_A - T_B) / (1 - P_A * T_B)
-                term2 = (P_B - T_A) / (1 - P_B * T_A)
-                sttc_value = 0.5 * (term1 + term2)
-            else:
-                sttc_value = 0.0  # Avoid division by zero
-
-            sttc_matrix = sttc_matrix.at[i, j].set(sttc_value)
-            sttc_matrix = sttc_matrix.at[j, i].set(sttc_value)
-
-    return sttc_matrix
+    return jnp.asarray(sttc_matrix)
 
 
 @set_module_as('braintools.metric')
@@ -842,52 +899,75 @@ def correlation_index(
     r"""Calculate correlation index for spike train synchrony.
     
     The correlation index measures the strength of pairwise correlations in spike
-    trains by computing correlation coefficients between binned spike counts.
-    
+    trains by computing the average Pearson correlation coefficient between binned
+    spike counts.
+
     The index is computed as:
-    
+
     .. math::
-    
+
         CI = \frac{1}{N(N-1)} \sum_{i \neq j} \rho_{ij}
-        
+
     where :math:`\rho_{ij}` is the Pearson correlation coefficient between
     the binned spike counts of neurons i and j.
-    
+
     Parameters
     ----------
     spike_matrix : brainstate.typing.ArrayLike
         Spike matrix with shape ``(n_time_steps, n_neurons)``.
-    window_size : float
-        Size of time windows for binning spikes (in time units).
-    dt : float, optional
+    window_size : float or brainunit.Quantity
+        Size of the time windows used to bin spikes. Must use the same time unit
+        as ``dt``.
+    dt : float or brainunit.Quantity, optional
         Time step between successive samples. If None, uses brainstate default.
-        
+
     Returns
     -------
     float
-        Correlation index representing average pairwise correlation.
+        Correlation index representing the average pairwise correlation.
         Values range from -1 to 1, where positive values indicate synchrony.
-        
+
+    Notes
+    -----
+    This is the **mean pairwise Pearson correlation** of binned spike counts. It is
+    distinct from the Wong–Meister/Mastronarde "correlation index", which is a
+    coincidence-rate ratio (expected-vs-observed near-coincident firings) with a
+    different range and interpretation. Use this function when a normalized
+    [-1, 1] linear-correlation summary is desired.
+
+    This function runs on host (concrete) arrays — it uses Python loops and
+    :func:`numpy.corrcoef`, so it is not ``jit``/``vmap``/``grad``-compatible.
+
+    References
+    ----------
+    .. [1] Pearson, Karl. "Notes on regression and inheritance in the case of two
+           parents." Proceedings of the Royal Society of London 58 (1895): 240-242.
+
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Create correlated spike trains
-    >>> spikes = (jnp.random.random((1000, 10)) < 0.1).astype(float)
-    >>> # Add some correlation by copying spikes between neurons
-    >>> spikes = spikes.at[:, 1].set(spikes[:, 0] * 0.7 + spikes[:, 1] * 0.3)
-    >>> ci = braintools.metric.correlation_index(spikes, window_size=50.0)
-    >>> print(f"Correlation index: {ci:.3f}")
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import braintools
+        >>> # Two correlated trains and one independent train.
+        >>> base = (brainstate.random.rand(1000, 1) < 0.1).astype(float)
+        >>> noise = (brainstate.random.rand(1000, 1) < 0.1).astype(float)
+        >>> third = (brainstate.random.rand(1000, 1) < 0.1).astype(float)
+        >>> import jax.numpy as jnp
+        >>> spikes = jnp.concatenate([base, jnp.clip(base + noise, 0, 1), third], axis=1)
+        >>> ci = braintools.metric.correlation_index(spikes, window_size=50.0, dt=1.0)
+        >>> bool(-1.0 <= ci <= 1.0)
+        True
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
-    spikes = jnp.asarray(spike_matrix)
+    spikes = jnp.asarray(u.get_magnitude(spike_matrix))
     n_time, n_neurons = spikes.shape
 
     if n_neurons < 2:
         return 0.0
 
-    # Bin size in time steps
-    bin_size = int(window_size / dt)
+    # Bin size in samples (``window_size`` and ``dt`` must share a time unit).
+    bin_size = max(1, int(u.get_magnitude(window_size) / u.get_magnitude(dt)))
     n_bins = n_time // bin_size
 
     if n_bins < 2:

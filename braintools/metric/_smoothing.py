@@ -56,21 +56,40 @@ def smooth_labels(
         one-hot encoding.
     alpha : float
         Smoothing parameter in the range [0, 1] controlling the degree of smoothing:
-        
+
         - ``alpha = 0.0``: No smoothing (original hard labels)
         - ``alpha = 0.1``: Light smoothing (common choice)
         - ``alpha = 1.0``: Maximum smoothing (uniform distribution)
-        
+
         Typical values range from 0.05 to 0.2 depending on the task complexity.
+        Values outside ``[0, 1]`` raise a :class:`ValueError`.
 
     Returns
     -------
     jax.Array
         Smoothed label distribution with the same shape as input. Each row sums
-        to 1.0 and contains the smoothed probability distribution over classes.
+        to 1.0 **provided the corresponding input row is itself a valid
+        probability distribution** (i.e. its entries sum to 1.0); see Notes.
+
+    Raises
+    ------
+    ValueError
+        If ``alpha`` is outside the closed interval ``[0, 1]``.
 
     Notes
     -----
+    **Row-sum precondition.** The smoothing is
+    :math:`\tilde{y} = (1 - \alpha) y + \alpha / K`. Summing over the :math:`K`
+    classes gives :math:`(1 - \alpha) \sum_k y_k + \alpha`. This equals 1.0
+    **only when** :math:`\sum_k y_k = 1` for the input row (e.g. proper one-hot
+    or probability rows). If the input rows do not sum to 1, the smoothed rows
+    will not sum to 1 either; this function does not normalize the input.
+
+    ``alpha`` is validated to lie in ``[0, 1]``. Note that ``alpha`` is treated
+    as a static Python float; passing a traced JAX value will raise during the
+    bounds check, so keep ``alpha`` concrete (or mark it static under
+    ``jax.jit``).
+
     Label smoothing provides several benefits:
     
     - **Improved calibration**: Reduces overconfident predictions
@@ -95,52 +114,25 @@ def smooth_labels(
     --------
     Basic label smoothing for 3-class classification:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # One-hot labels for 2 samples, 3 classes
-    >>> labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    >>> smoothed = braintools.metric.smooth_labels(labels, alpha=0.1)
-    >>> print("Original:")
-    >>> print(labels)
-    >>> print("Smoothed:")
-    >>> print(smoothed)
-    [[0.93333334 0.03333333 0.03333333]
-     [0.03333333 0.93333334 0.03333333]]
+    .. code-block:: python
 
-    Effect of different smoothing parameters:
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # One-hot labels for 2 samples, 3 classes
+        >>> labels = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        >>> braintools.metric.smooth_labels(labels, alpha=0.1)
+        Array([[0.93333334, 0.03333334, 0.03333334],
+               [0.03333334, 0.93333334, 0.03333334]], dtype=float32)
 
-    >>> single_label = jnp.array([[1.0, 0.0, 0.0]])
-    >>> # Light smoothing
-    >>> light = braintools.metric.smooth_labels(single_label, alpha=0.05)
-    >>> print(f"Light smoothing (α=0.05): {light[0]}")
-    >>> # Moderate smoothing  
-    >>> moderate = braintools.metric.smooth_labels(single_label, alpha=0.1)
-    >>> print(f"Moderate smoothing (α=0.1): {moderate[0]}")
-    >>> # Heavy smoothing
-    >>> heavy = braintools.metric.smooth_labels(single_label, alpha=0.5)
-    >>> print(f"Heavy smoothing (α=0.5): {heavy[0]}")
+    Verify probability distribution properties for valid one-hot inputs:
 
-    Batch processing with different numbers of classes:
+    .. code-block:: python
 
-    >>> # 5-class problem
-    >>> labels_5class = jnp.eye(5)  # Identity matrix as one-hot labels
-    >>> smoothed_5class = braintools.metric.smooth_labels(labels_5class, alpha=0.1)
-    >>> print(f"5-class smoothed shape: {smoothed_5class.shape}")
-    >>> print(f"Row sum (should be ~1.0): {jnp.sum(smoothed_5class[0]):.6f}")
-
-    Integration with cross-entropy loss:
-
-    >>> # Typical usage in training loop
-    >>> logits = jnp.array([[2.0, 1.0, 0.5]])  # Model predictions
-    >>> hard_labels = jnp.array([[1.0, 0.0, 0.0]])
-    >>> smooth_labels_result = braintools.metric.smooth_labels(hard_labels, alpha=0.1)
-    >>> # Use smooth_labels_result with cross-entropy loss function
-
-    Verify probability distribution properties:
-
-    >>> smoothed = braintools.metric.smooth_labels(jnp.eye(4), alpha=0.2)
-    >>> print(f"All rows sum to 1: {jnp.allclose(jnp.sum(smoothed, axis=1), 1.0)}")
-    >>> print(f"All values non-negative: {jnp.all(smoothed >= 0)}")
+        >>> smoothed = braintools.metric.smooth_labels(jnp.eye(4), alpha=0.2)
+        >>> bool(jnp.allclose(jnp.sum(smoothed, axis=1), 1.0))
+        True
+        >>> bool(jnp.all(smoothed >= 0))
+        True
 
     See Also
     --------
@@ -161,5 +153,7 @@ def smooth_labels(
            confident output distributions." arXiv preprint arXiv:1701.06548 (2017).
     """
     assert u.math.is_float(labels), f'labels should be of float type.'
+    if not (0.0 <= alpha <= 1.0):
+        raise ValueError(f'alpha must be in the range [0, 1], but got {alpha}.')
     num_categories = labels.shape[-1]
     return (1.0 - alpha) * labels + alpha / num_categories
