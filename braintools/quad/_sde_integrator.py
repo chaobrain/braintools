@@ -114,7 +114,7 @@ def sde_euler_step(
     assert sde_type in ['ito']
 
     dt = brainstate.environ.get_dt()
-    dt_sqrt = jnp.sqrt(dt)
+    dt_sqrt = u.math.sqrt(dt)
     y_bars = tree_map(
         lambda y0, drift, diffusion: y0 + drift * dt + diffusion * randn_like(y0) * dt_sqrt,
         y,
@@ -235,14 +235,13 @@ def sde_expeuler_step(
     t : float or brainunit.Quantity
         Current time.
     *args
-        Extra arguments forwarded to ``df`` and ``dg``. The first extra argument
-        is used solely to determine the shape for ``random.randn_like`` when
-        sampling the diffusion noise.
+        Extra arguments forwarded to ``df`` and ``dg``.
 
     Returns
     -------
     PyTree
-        The updated state ``y_{n+1}`` with the same structure as ``y``.
+        The updated state ``y_{n+1}`` with the same structure as ``y``. The
+        Brownian increment is sampled with the shape of ``y``.
 
     See Also
     --------
@@ -261,18 +260,20 @@ def sde_expeuler_step(
     if u.math.get_dtype(y) not in [jnp.float32, jnp.float64, jnp.float16, jnp.bfloat16]:
         raise ValueError(
             f'The input data type should be float64, float32, float16, or bfloat16 '
-            f'when using Exponential Euler method. But we got {y.dtype}.'
+            f'when using Exponential Euler method. But we got {u.math.get_dtype(y)}.'
         )
 
     # drift
     dt = brainstate.environ.get('dt')
     linear, derivative = brainstate.transform.vector_grad(df, argnums=0, return_value=True)(y, t, *args, **kwargs)
-    linear = u.Quantity(u.get_mantissa(linear), u.get_unit(derivative) / u.get_unit(linear))
+    # Divide by the *state* unit, not the Jacobian's own unit, so ``dt * linear``
+    # stays dimensionless for ``u.math.exprel`` (see ``ode_expeuler_step``).
+    linear = u.Quantity(u.get_mantissa(linear), u.get_unit(derivative) / u.get_unit(y))
     phi = u.math.exprel(dt * linear)
     x_next = y + dt * phi * derivative
 
-    # diffusion
-    diffusion_part = dg(y, t, *args, **kwargs) * u.math.sqrt(dt) * randn_like(args[0])
+    # diffusion: sample the Brownian increment with the shape of the state ``y``
+    diffusion_part = dg(y, t, *args, **kwargs) * u.math.sqrt(dt) * randn_like(y)
     if u.get_dim(x_next) != u.get_dim(diffusion_part):
         drift_unit = u.get_unit(x_next)
         time_unit = u.get_unit(dt)
@@ -407,7 +408,10 @@ def sde_tamed_euler_step(
     f0 = df(y, t, *args, **kwargs)
     g0 = dg(y, t, *args, **kwargs)
 
-    f_tamed = tree_map(lambda a: a / (1.0 + dt * u.math.abs(a)), f0)
+    # The taming factor ``1 / (1 + dt*|f|)`` must be a pure number. ``dt*|f|``
+    # carries the state's unit, so take its mantissa; this reduces exactly to the
+    # classical scheme when the state is dimensionless.
+    f_tamed = tree_map(lambda a: a / (1.0 + u.get_mantissa(dt * u.math.abs(a))), f0)
     y_next = tree_map(
         lambda y0, a, b: y0 + a * dt + b * randn_like(y0) * dt_sqrt,
         y, f_tamed, g0
@@ -452,8 +456,12 @@ def sde_implicit_euler_step(
 
     Notes
     -----
-    - Uses a simple Picard iteration; for stiff problems increase ``max_iter``
-      or provide a more robust nonlinear solver.
+    - The implicit drift stage is solved by a simple Picard (fixed-point)
+      iteration. This iteration converges only when the drift is contractive
+      over the step, i.e. roughly ``|∂f/∂y| dt < 1``. For stiff problems
+      (``|∂f/∂y| dt >= 1``) it *diverges* regardless of ``max_iter``; reduce
+      ``dt`` or supply a true nonlinear solver (e.g. Newton) instead. Increasing
+      ``max_iter`` only refines an already-converging iteration.
     - Diffusion is treated explicitly with ``g(y_n, t_n) dW``.
     """
     assert callable(df), 'The drift function should be callable.'
