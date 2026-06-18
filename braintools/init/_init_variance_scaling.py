@@ -31,8 +31,14 @@ import numpy as np
 import brainunit as u
 import jax.numpy as jnp
 from brainstate.typing import ArrayLike
+from jax.scipy.special import ndtr, ndtri
 
 from ._init_base import Initialization
+
+# Standard deviation of a standard normal truncated to [-2, 2]. Sampling a
+# truncated normal and dividing the target stddev by this constant restores the
+# target variance (see Flax/JAX variance_scaling).
+_TRUNCATED_NORMAL_STDDEV = 0.8796256610342398
 
 __all__ = [
     'VarianceScaling',
@@ -74,13 +80,36 @@ class VarianceScaling(Initialization):
         distribution: Literal['uniform', 'normal', 'truncated_normal'] = 'normal',
         unit: u.Unit = None,
     ):
+        if mode not in ('fan_in', 'fan_out', 'fan_avg'):
+            raise ValueError(
+                f"Invalid mode: {mode!r}. Expected one of 'fan_in', 'fan_out', 'fan_avg'."
+            )
+        if distribution not in ('uniform', 'normal', 'truncated_normal'):
+            raise ValueError(
+                f"Invalid distribution: {distribution!r}. Expected one of "
+                "'uniform', 'normal', 'truncated_normal'."
+            )
         self.scale = scale
         self.mode = mode
         self.distribution = distribution
         self.unit = u.UNITLESS if unit is None else unit
 
     def _compute_fans(self, shape):
-        """Compute number of input and output units from shape."""
+        """Compute number of input and output units from shape.
+
+        Notes
+        -----
+        The fan convention is dimensionality-dependent:
+
+        - 1D ``(n,)``: ``fan_in == fan_out == n``.
+        - 2D ``(in, out)``: ``fan_in = shape[0]``, ``fan_out = shape[1]``
+          (the dense-layer convention where weights map inputs to outputs).
+        - 3D+ ``(out, in, *spatial)``: ``fan_in = shape[1] * prod(spatial)`` and
+          ``fan_out = shape[0] * prod(spatial)`` (the convolution-kernel
+          convention, matching PyTorch). Note the leading-axis meaning differs
+          between the 2D and 3D+ cases, so reshaping a conv kernel to 2D changes
+          the computed fans.
+        """
         if len(shape) < 1:
             fan_in = fan_out = 1
         elif len(shape) == 1:
@@ -121,10 +150,17 @@ class VarianceScaling(Initialization):
             stddev = jnp.sqrt(variance)
             samples = rng.normal(0.0, stddev, shape)
         elif self.distribution == 'truncated_normal':
-            stddev = jnp.sqrt(variance)
-            # Truncate at 2 standard deviations
-            samples = rng.normal(0.0, stddev, shape)
-            samples = jnp.clip(samples, -2 * stddev, 2 * stddev)
+            # Sample a standard normal truncated to [-2, 2] via inverse-CDF, then
+            # scale so the achieved variance equals the target. A plain clip at
+            # +-2 sigma would leave the variance ~8% low, so divide the target
+            # stddev by the truncated-normal stddev to compensate.
+            stddev = jnp.sqrt(variance) / _TRUNCATED_NORMAL_STDDEV
+            cdf_lo = ndtr(-2.0)
+            cdf_hi = ndtr(2.0)
+            u_samples = rng.uniform(0.0, 1.0, shape)
+            p = cdf_lo + u_samples * (cdf_hi - cdf_lo)
+            p = jnp.clip(p, 1e-7, 1.0 - 1e-7)
+            samples = ndtri(p) * stddev
         else:
             raise ValueError(f"Invalid distribution: {self.distribution}")
 
@@ -178,12 +214,15 @@ class KaimingUniform(VarianceScaling):
         negative_slope: float = 0.01,
         unit: u.Unit = None,
     ):
-        # Compute scale based on nonlinearity
+        # Compute scale based on nonlinearity. VarianceScaling treats `scale` as a
+        # variance multiplier (variance = scale / fan), so the He variance of
+        # gain**2 / fan requires scale = gain**2 (= 2 for ReLU), NOT the gain
+        # sqrt(2) itself. (bug C1)
         if scale is None:
             if nonlinearity == 'relu':
-                scale = jnp.sqrt(2.0)
+                scale = 2.0
             elif nonlinearity == 'leaky_relu':
-                scale = jnp.sqrt(2.0 / (1 + negative_slope ** 2))
+                scale = 2.0 / (1 + negative_slope ** 2)
             else:
                 raise ValueError(f"Unsupported nonlinearity: {nonlinearity}")
 
@@ -236,12 +275,15 @@ class KaimingNormal(VarianceScaling):
         negative_slope: float = 0.01,
         unit: u.Unit = None,
     ):
-        # Compute scale based on nonlinearity
+        # Compute scale based on nonlinearity. VarianceScaling treats `scale` as a
+        # variance multiplier (variance = scale / fan), so the He variance of
+        # gain**2 / fan requires scale = gain**2 (= 2 for ReLU), NOT the gain
+        # sqrt(2) itself. (bug C1)
         if scale is None:
             if nonlinearity == 'relu':
-                scale = jnp.sqrt(2.0)
+                scale = 2.0
             elif nonlinearity == 'leaky_relu':
-                scale = jnp.sqrt(2.0 / (1 + negative_slope ** 2))
+                scale = 2.0 / (1 + negative_slope ** 2)
             else:
                 raise ValueError(f"Unsupported nonlinearity: {nonlinearity}")
 

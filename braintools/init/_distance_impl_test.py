@@ -27,6 +27,7 @@ This test suite covers:
 import unittest
 
 import brainunit as u
+import jax
 import numpy as np
 
 from braintools.init import (
@@ -753,3 +754,116 @@ class TestMexicanHatProfile(unittest.TestCase):
         repr_str = repr(profile)
         self.assertIn('MexicanHatProfile', repr_str)
         self.assertIn('50', repr_str)
+
+
+class TestScalarDistance(unittest.TestCase):
+    """Profiles must accept a scalar distance with max_distance set (bug H7)."""
+
+    def test_gaussian_scalar_with_max_distance(self):
+        profile = GaussianProfile(sigma=50.0 * u.um, max_distance=100.0 * u.um)
+        # scalar inside the cutoff
+        p_in = profile.probability(50.0 * u.um)
+        self.assertTrue(np.isfinite(np.asarray(u.get_mantissa(p_in))).all())
+        # scalar outside the cutoff -> 0
+        p_out = profile.probability(150.0 * u.um)
+        self.assertAlmostEqual(float(np.asarray(u.get_mantissa(p_out))), 0.0, delta=1e-6)
+
+    def test_exponential_scalar_with_max_distance(self):
+        profile = ExponentialProfile(decay_constant=100.0 * u.um, max_distance=200.0 * u.um)
+        p = profile.probability(300.0 * u.um)
+        self.assertAlmostEqual(float(np.asarray(u.get_mantissa(p))), 0.0, delta=1e-6)
+
+    def test_mexican_hat_scalar_with_max_distance(self):
+        profile = MexicanHatProfile(sigma=50.0 * u.um, max_distance=100.0 * u.um)
+        p = profile.probability(200.0 * u.um)
+        self.assertAlmostEqual(float(np.asarray(u.get_mantissa(p))), 0.0, delta=1e-6)
+
+
+class TestPowerLawScaleInvariance(unittest.TestCase):
+    """PowerLaw must be scale-invariant in the distance unit (bug C3)."""
+
+    def test_same_physical_distance_same_probability(self):
+        profile = PowerLawProfile(exponent=2.0, min_distance=1.0 * u.um)
+        p_um = np.asarray(u.get_mantissa(profile.probability(np.array([100.0]) * u.um)))
+        p_mm = np.asarray(u.get_mantissa(profile.probability(np.array([0.1]) * u.mm)))
+        np.testing.assert_allclose(p_um, p_mm, rtol=1e-4)
+
+    def test_peaks_at_one_within_reference(self):
+        profile = PowerLawProfile(exponent=2.0, min_distance=10.0 * u.um)
+        # at/below the reference length the probability saturates at 1.0
+        p = np.asarray(u.get_mantissa(profile.probability(np.array([1.0, 10.0]) * u.um)))
+        np.testing.assert_allclose(p, 1.0, rtol=1e-5)
+
+
+class TestMexicanHatScaleInvariance(unittest.TestCase):
+    """MexicanHat peak must equal the amplitude and be scale-invariant (bug C4)."""
+
+    def test_peak_equals_amplitude(self):
+        profile = MexicanHatProfile(sigma=50.0 * u.um, amplitude=1.0)
+        peak = float(np.asarray(u.get_mantissa(profile.probability(0.0 * u.um))))
+        self.assertAlmostEqual(peak, 1.0, delta=1e-5)
+
+    def test_peak_scale_invariant(self):
+        p_um = float(np.asarray(u.get_mantissa(
+            MexicanHatProfile(sigma=50.0 * u.um).probability(0.0 * u.um))))
+        p_mm = float(np.asarray(u.get_mantissa(
+            MexicanHatProfile(sigma=0.05 * u.mm).probability(0.0 * u.mm))))
+        self.assertAlmostEqual(p_um, p_mm, delta=1e-5)
+
+
+class TestProfileValidation(unittest.TestCase):
+    """Profiles validate positive length parameters eagerly (bug M6)."""
+
+    def test_gaussian_nonpositive_sigma_raises(self):
+        with self.assertRaises(ValueError):
+            GaussianProfile(sigma=-50.0 * u.um)
+
+    def test_exponential_nonpositive_decay_raises(self):
+        with self.assertRaises(ValueError):
+            ExponentialProfile(decay_constant=0.0 * u.um)
+
+    def test_gaussian_nonpositive_max_distance_raises(self):
+        with self.assertRaises(ValueError):
+            GaussianProfile(sigma=50.0 * u.um, max_distance=-10.0 * u.um)
+
+    def test_dog_nonpositive_sigma_raises(self):
+        with self.assertRaises(ValueError):
+            DoGProfile(sigma_center=-30.0 * u.um, sigma_surround=90.0 * u.um)
+
+    def test_mexican_hat_nonpositive_sigma_raises(self):
+        with self.assertRaises(ValueError):
+            MexicanHatProfile(sigma=0.0 * u.um)
+
+
+class TestBimodalDefaults(unittest.TestCase):
+    """Bimodal center1/center2 default to 0 as documented (bug L9)."""
+
+    def test_default_centers(self):
+        profile = BimodalProfile(sigma1=30.0 * u.um, sigma2=50.0 * u.um)
+        probs = profile.probability(np.array([0.0, 100.0]) * u.um)
+        probs = np.asarray(u.get_mantissa(probs))
+        # both peaks default to distance 0, so probability is maximal there
+        self.assertTrue(probs[0] > probs[1])
+
+
+class TestProfileJitTraceable(unittest.TestCase):
+    """Profile evaluation must be jit-traceable (bug H8)."""
+
+    def test_gaussian_jit(self):
+        profile = GaussianProfile(sigma=50.0 * u.um, max_distance=150.0 * u.um)
+        distances = np.array([0.0, 50.0, 200.0]) * u.um
+        out = jax.jit(profile.probability)(distances)
+        out = np.asarray(u.get_mantissa(out))
+        self.assertAlmostEqual(out[0], 1.0, delta=1e-5)
+        self.assertAlmostEqual(out[2], 0.0, delta=1e-6)
+
+    def test_sigmoid_jit(self):
+        profile = SigmoidProfile(midpoint=100.0 * u.um, slope=0.05)
+        distances = np.array([0.0, 100.0, 200.0]) * u.um
+        out = jax.jit(profile.probability)(distances)
+        out = np.asarray(u.get_mantissa(out))
+        self.assertAlmostEqual(out[1], 0.5, delta=1e-3)
+
+
+if __name__ == '__main__':
+    unittest.main()

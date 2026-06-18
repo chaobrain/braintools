@@ -260,6 +260,86 @@ class TestClipped(unittest.TestCase):
         self.assertIn('Clipped', repr(init))
 
 
+class TestConditionalMultiDim(unittest.TestCase):
+    """Conditional must support multi-dimensional sizes (bug H1)."""
+
+    def setUp(self):
+        self.rng = np.random.default_rng(0)
+
+    def test_conditional_2d_size(self):
+        def is_low(idx):
+            return idx < 6
+
+        init = Conditional(is_low, Constant(0.5 * u.siemens), Constant(1.0 * u.siemens))
+        weights = init((3, 4), rng=self.rng)
+        self.assertEqual(weights.shape, (3, 4))
+        # First 6 flattened entries are "true" (0.5), the rest "false" (1.0).
+        flat = weights.mantissa.reshape(-1)
+        self.assertTrue(np.all(np.abs(flat[:6] - 0.5) < 1e-6))
+        self.assertTrue(np.all(np.abs(flat[6:] - 1.0) < 1e-6))
+
+    def test_conditional_mask_length_mismatch_raises(self):
+        def bad(idx):
+            return np.array([True, False])  # wrong length
+
+        init = Conditional(bad, Constant(0.5 * u.siemens), Constant(1.0 * u.siemens))
+        with self.assertRaises(ValueError):
+            init(10, rng=self.rng)
+
+
+class TestClippedUnitless(unittest.TestCase):
+    """Clipped must work on a unitless base distribution (bug H2)."""
+
+    def setUp(self):
+        self.rng = np.random.default_rng(0)
+
+    def test_clipped_unitless_base(self):
+        base = Normal(0.0, 1.0)  # unitless
+        init = Clipped(base, min_val=0.0, max_val=1.0)
+        weights = np.asarray(init(1000, rng=self.rng))
+        self.assertTrue(np.all(weights >= 0.0))
+        self.assertTrue(np.all(weights <= 1.0))
+
+    def test_clipped_unitless_min_only(self):
+        base = Normal(0.0, 1.0)
+        init = Clipped(base, min_val=0.0)
+        weights = np.asarray(init(1000, rng=self.rng))
+        self.assertTrue(np.all(weights >= 0.0))
+
+
+class TestMixtureValidation(unittest.TestCase):
+    """Mixture must validate its inputs and handle edge sizes (bug M3/M4)."""
+
+    def setUp(self):
+        self.rng = np.random.default_rng(0)
+
+    def test_empty_distributions_raises(self):
+        with self.assertRaises(ValueError):
+            Mixture(distributions=[])
+
+    def test_weights_length_mismatch_raises(self):
+        with self.assertRaises(ValueError):
+            Mixture([Constant(0.5 * u.siemens), Constant(1.0 * u.siemens)], weights=[1.0])
+
+    def test_weights_not_sum_to_one_raises(self):
+        with self.assertRaises(ValueError):
+            Mixture([Constant(0.5 * u.siemens), Constant(1.0 * u.siemens)], weights=[0.5, 0.2])
+
+    def test_negative_weights_raises(self):
+        with self.assertRaises(ValueError):
+            Mixture([Constant(0.5 * u.siemens), Constant(1.0 * u.siemens)], weights=[1.5, -0.5])
+
+    def test_mixture_size_zero(self):
+        init = Mixture([Constant(0.5 * u.siemens), Constant(1.0 * u.siemens)])
+        weights = init(0, rng=self.rng)
+        self.assertEqual(u.math.shape(weights), (0,))
+
+    def test_mixture_2d_size(self):
+        init = Mixture([Constant(0.5 * u.siemens), Constant(1.0 * u.siemens)])
+        weights = init((3, 4), rng=self.rng)
+        self.assertEqual(weights.shape, (3, 4))
+
+
 class TestCompositeScenarios(unittest.TestCase):
     """
     Test complex composite scenarios combining multiple initialization strategies.
