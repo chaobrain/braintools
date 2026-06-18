@@ -149,7 +149,12 @@ def _sofo_grad_impl(
             raise ValueError(f'Unknown loss function: {loss}.')
 
         u_, s_, _ = jnp.linalg.svd(vg_gv)
+        # Damp the singular values, with an absolute floor so the denominator can never
+        # be zero. Without the floor, a degenerate GGN whose singular values all vanish
+        # (e.g. an all-zero tangent batch) gives ``damped_s == 0`` and the subsequent
+        # division produces inf/nan.
         damped_s = s_ + damping * jnp.max(s_)
+        damped_s = jnp.maximum(damped_s, jnp.finfo(damped_s.dtype).eps)
         vggv_vg = (u_ / damped_s) @ (u_.T @ vg)
         h = jax.tree.map(lambda v_: jnp.einsum('i,i...->...', vggv_vg, v_), v)
         if return_loss:
@@ -285,7 +290,11 @@ class SOFO(OptaxOptimizer):
             has_aux=False,
             transform_params=dict(
                 loss=self.loss, tangent_size=self.tangent_size,
-                damping=self.damping, loss_fn=step_loss_fn, key=self.key,
+                damping=self.damping, loss_fn=step_loss_fn,
+                # Fold the step count into a user-supplied key so each step samples fresh
+                # tangents; without this a fixed ``key`` reused identical tangents forever.
+                key=(None if self.key is None
+                     else jax.random.fold_in(self.key, self.step_count.value)),
             ),
         )
 
@@ -296,11 +305,30 @@ class SOFO(OptaxOptimizer):
         return self._make_grad_fn(targets)(inputs)
 
     def step(self, inputs, targets):
+        """Compute the SOFO direction and apply one optimization step.
+
+        Unlike the base optimizer (whose ``step``/``update`` take precomputed
+        gradients), SOFO computes its own search direction internally, so this method
+        takes the model ``inputs`` and ``targets`` instead.
+
+        Parameters
+        ----------
+        inputs : array or pytree
+            Inputs passed to ``model``.
+        targets : array or pytree
+            Targets passed to ``loss_fn``.
+
+        Returns
+        -------
+        jax.Array
+            The loss evaluated at the parameters *before* this update.
+        """
         grads, predictions = self._compute_direction(inputs, targets)
         super().step(grads)
         return self.loss_fn(predictions, targets)
 
     def update(self, inputs, targets):
+        """Alias of :meth:`step` taking ``(inputs, targets)`` (not gradients)."""
         return self.step(inputs, targets)
 
 
@@ -435,7 +463,11 @@ class SOFOScan(OptaxOptimizer):
             has_aux=False,
             transform_params=dict(
                 loss=self.loss, tangent_size=self.tangent_size,
-                damping=self.damping, loss_fn=step_loss_fn, key=self.key,
+                damping=self.damping, loss_fn=step_loss_fn,
+                # Fold the step count into a user-supplied key so each step samples fresh
+                # tangents; without this a fixed ``key`` reused identical tangents forever.
+                key=(None if self.key is None
+                     else jax.random.fold_in(self.key, self.step_count.value)),
             ),
         )
 
@@ -447,10 +479,25 @@ class SOFOScan(OptaxOptimizer):
         return self._make_grad_fn(labels_seq)(inputs_seq, z_init)
 
     def step(self, z_init, batch):
+        """Compute the recurrent SOFO direction and apply one optimization step.
+
+        Parameters
+        ----------
+        z_init : array or pytree
+            Initial hidden ("latent") state for the scan over the sequence.
+        batch : tuple
+            ``(inputs_seq, labels_seq)`` with leading ``(time, batch)`` axes.
+
+        Returns
+        -------
+        jax.Array
+            The loss evaluated at the parameters *before* this update.
+        """
         inputs_seq, labels_seq = batch
         grads, predictions = self._compute_direction(z_init, batch)
         super().step(grads)
         return self.loss_fn(predictions, _collapse_time(labels_seq))
 
     def update(self, z_init, batch):
+        """Alias of :meth:`step` taking ``(z_init, batch)`` (not gradients)."""
         return self.step(z_init, batch)
