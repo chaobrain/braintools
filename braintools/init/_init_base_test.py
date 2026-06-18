@@ -741,6 +741,59 @@ class TestParamBatching:
             param(np.ones((4, 5)), 5, batch_size=3)
 
 
+class TestParamCallableBatching:
+    """param() batch_size for callable / Initialization initializers.
+
+    Regression for the double-batching bug: a callable initializer with
+    ``batch_size`` must yield exactly ``(batch_size, *sizes)`` -- not
+    ``(batch_size, batch_size, *sizes)``.
+    """
+
+    def test_callable_with_batch_size_1d(self):
+        """A callable gains a single leading batch axis."""
+        result = param(SimpleInit(5.0), 3, batch_size=4)
+        assert u.math.shape(result) == (4, 3)
+        assert np.all(np.asarray(result) == 5.0)
+
+    def test_callable_with_batch_size_2d(self):
+        """A callable with 2-D sizes gains exactly one leading batch axis."""
+        result = param(SimpleInit(5.0), (3, 4), batch_size=2)
+        assert u.math.shape(result) == (2, 3, 4)
+        assert np.all(np.asarray(result) == 5.0)
+
+    def test_callable_quantity_with_batch_size(self):
+        """A callable returning a Quantity keeps its unit and batched shape."""
+        result = param(QuantityInit(2.0 * u.nS), 3, batch_size=4)
+        assert u.math.shape(result) == (4, 3)
+        assert u.get_unit(result) == u.nS
+        assert np.all(result.to_decimal(u.nS) == 2.0)
+
+    def test_callable_batch_size_none_unchanged(self):
+        """batch_size=None leaves the callable result un-batched."""
+        result = param(SimpleInit(5.0), 3, batch_size=None)
+        assert u.math.shape(result) == (3,)
+
+    def test_callable_random_independent_per_batch(self):
+        """A random initializer draws independently for each batch element."""
+        rng = np.random.default_rng(0)
+        result = param(RandomInit(0.0, 1.0), 3, batch_size=4, rng=rng)
+        assert u.math.shape(result) == (4, 3)
+        arr = np.asarray(result)
+        # Independent draws => batch rows must not all be identical.
+        assert not np.allclose(arr[0], arr[1])
+
+    def test_callable_forwards_kwargs_with_batch_size(self):
+        """**param_kwargs still reach the callable when batching."""
+
+        class KwargsInit(Initialization):
+            def __call__(self, size, fill=None, **kwargs):
+                return np.full(size, fill)
+
+        result = param(KwargsInit(), 3, batch_size=4, fill=7.0)
+        assert u.math.shape(result) == (4, 3)
+        assert np.all(np.asarray(result) == 7.0)
+
+
 class TestPipeInitRejectsInitialization:
     """PipeInit cannot pipe values into an Initialization right operand (bug H3)."""
 
