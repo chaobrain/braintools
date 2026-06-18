@@ -23,8 +23,9 @@ Base Classes
 ------------
 
 These classes provide the foundational architecture for all initialization strategies in the module.
-The ``Initialization`` class defines the common interface for weight and parameter initializations,
-while ``DistanceProfile`` serves as the base for distance-dependent connectivity patterns.
+The ``Initialization`` class defines the common interface for weight and parameter initializations.
+The ``DistanceProfile`` base class for distance-dependent connectivity patterns is documented in the
+:ref:`Distance Profiles <init-distance-profiles>` section below.
 
 .. autosummary::
    :toctree: generated/
@@ -32,7 +33,6 @@ while ``DistanceProfile`` serves as the base for distance-dependent connectivity
    :template: classtemplate.rst
 
    Initialization
-   DistanceProfile
 
 Utility Functions
 ~~~~~~~~~~~~~~~~~
@@ -45,6 +45,13 @@ Helper functions and type aliases that support initialization workflows.
 
    param
    Compose
+
+``Initializer`` is the type alias accepted everywhere an initializer is expected; it covers
+:class:`Initialization` instances as well as plain scalars, arrays, and unit-aware quantities.
+
+.. data:: Initializer
+
+   ``Union[Initialization, float, int, numpy.ndarray, jax.Array, brainunit.Quantity]``
 
 Basic Distributions
 -------------------
@@ -112,6 +119,16 @@ All variance scaling methods support three modes:
 - **fan_in**: Scale by number of input units (default for most methods)
 - **fan_out**: Scale by number of output units
 - **fan_avg**: Scale by average of input and output units
+
+The concrete strategies below are thin configurations of the shared ``VarianceScaling`` base class,
+which can also be used directly for custom ``scale``/``mode``/``distribution`` combinations.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   VarianceScaling
 
 Kaiming/He Initialization
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -236,6 +253,8 @@ where connection strength depends on neuronal proximity.
 
    DistanceModulated
 
+
+.. _init-distance-profiles:
 
 Distance Profiles
 -----------------
@@ -445,14 +464,14 @@ Distance-Dependent Connectivity
     gaussian_profile = GaussianProfile(sigma=100.0 * u.um)
 
     # Exponential decay profile
-    exp_profile = ExponentialProfile(length_scale=200.0 * u.um)
+    exp_profile = ExponentialProfile(decay_constant=200.0 * u.um)
 
-    # Distance-modulated weights
+    # Distance-modulated weights. Apply a weight floor by composing a clip
+    # (``DistanceModulated`` itself has no ``min_weight`` argument).
     init = DistanceModulated(
         base_dist=Normal(1.0 * u.nS, 0.2 * u.nS),
         distance_profile=gaussian_profile,
-        min_weight=0.01 * u.nS
-    )
+    ).clip(min_val=0.01 * u.nS)
 
     # Assuming distances is a distance matrix between neurons
     distances = np.random.uniform(0, 500, size=1000) * u.um
@@ -472,17 +491,18 @@ Helper Function Usage
 
 .. code-block:: python
 
-    from braintools.init import init_call, Normal, Compose
+    from braintools.init import param, Normal, Compose
 
-    # init_call provides a unified interface
+    # ``param`` provides a unified interface for resolving an initializer,
+    # scalar, or array into a concrete parameter value.
     init1 = Normal(0.5 * u.nS, 0.1 * u.nS)
-    weights1 = init_call(init1, 100, rng=rng)
+    weights1 = param(init1, 100, rng=rng)
 
     # Works with scalars
-    weights2 = init_call(0.5, 100)
+    weights2 = param(0.5, 100)
 
     # Works with arrays
-    weights3 = init_call(np.ones(100) * 0.5 * u.nS, 100)
+    weights3 = param(np.ones(100) * 0.5 * u.nS, 100)
 
     # Compose multiple initializations
     composed = Compose(

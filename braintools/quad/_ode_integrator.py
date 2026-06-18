@@ -264,26 +264,24 @@ def ode_expeuler_step(
     r"""
     One-step Exponential Euler method for ODEs with linearized drift.
 
-    Examples
-    --------
+    The drift ``f`` is linearized around the current state via its diagonal
+    Jacobian ``A = \partial f / \partial y`` and the linear part is integrated
+    exactly over one step:
 
-    >>> def fun(x, t):
-    ...     return -x
-    >>> x = 1.0
-    >>> exp_euler_step(fun, x， 0.)
+    .. math::
 
-    If the variable ( $x$ ) has units of ( $[X]$ ), then the drift term ( $\text{drift_fn}(x)$ ) should
-    have units of ( $[X]/[T]$ ), where ( $[T]$ ) is the unit of time.
+        y_{n+1} = y_n + \Delta t\, \varphi(\Delta t\, A)\, f(y_n, t_n),
+        \qquad \varphi(z) = \frac{e^{z} - 1}{z}.
 
-    If the variable ( x ) has units of ( [X] ), then the diffusion term ( \text{diffusion_fn}(x) )
-    should have units of ( [X]/\sqrt{[T]} ).
+    For a scalar linear ODE ``dy/dt = A y`` the method is exact. If the state
+    ``y`` has unit ``[X]``, the drift ``f(y, t)`` must have unit ``[X]/[T]``.
 
     Parameters
     ----------
     f : callable
         Drift function ``f(y, t, *args)`` used in the exponential update.
-    y : PyTree
-        Current state. Must have a floating dtype.
+    y : ArrayLike
+        Current state. Must have a floating dtype (float16/32/64 or bfloat16).
     t : float or brainunit.Quantity
         Current time.
     *args
@@ -291,18 +289,50 @@ def ode_expeuler_step(
 
     Returns
     -------
-    PyTree
+    ArrayLike
         The updated state ``y_{n+1}``.
+
+    Raises
+    ------
+    ValueError
+        If ``y`` does not have a floating dtype.
+
+    See Also
+    --------
+    ode_euler_step : Explicit (forward) Euler step.
+    sde_expeuler_step : Exponential Euler step for SDEs.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.quad import ode_expeuler_step
+        >>> def fun(x, t):
+        ...     return -x
+        >>> with brainstate.environ.context(dt=0.1):
+        ...     x_next = ode_expeuler_step(fun, 1.0, 0.0)
+        >>> float(x_next)  # exp(-0.1)
+        0.904837429523468
+
+        >>> with brainstate.environ.context(dt=0.1 * u.ms):
+        ...     v_next = ode_expeuler_step(lambda v, t: -v / (10.0 * u.ms),
+        ...                                -65.0 * u.mV, 0.0 * u.ms)
     """
     assert callable(f), 'The input function should be callable.'
     if u.math.get_dtype(y) not in [jnp.float32, jnp.float64, jnp.float16, jnp.bfloat16]:
         raise ValueError(
             f'The input data type should be float64, float32, float16, or bfloat16 '
-            f'when using Exponential Euler method. But we got {y.dtype}.'
+            f'when using Exponential Euler method. But we got {u.math.get_dtype(y)}.'
         )
     dt = brainstate.environ.get('dt')
     linear, derivative = brainstate.transform.vector_grad(f, argnums=0, return_value=True)(y, t, *args, **kwargs)
-    linear = u.Quantity(u.get_mantissa(linear), u.get_unit(derivative) / u.get_unit(linear))
+    # ``vector_grad`` returns the diagonal Jacobian ``J = df/dy`` whose physical
+    # unit is ``unit(f)/unit(y)``. Divide by the *state* unit (not the Jacobian's
+    # own unit) so ``dt * linear`` is dimensionless; otherwise ``u.math.exprel``
+    # rejects it for unitful states.
+    linear = u.Quantity(u.get_mantissa(linear), u.get_unit(derivative) / u.get_unit(y))
     phi = u.math.exprel(dt * linear)
     x_next = y + dt * phi * derivative
     return x_next
@@ -686,18 +716,8 @@ def ode_dopri5_step(
     )
     k6 = f(y6, t + dt * 1.0, *args, **kwargs)
 
-    # Compute k7 stage at t+dt
-    y7 = tree_map(
-        lambda x, _k1, _k3, _k4, _k5, _k6: x + dt * ((35.0 / 384.0) * _k1 +
-                                                     (500.0 / 1113.0) * _k3 +
-                                                     (125.0 / 192.0) * _k4 +
-                                                     (-2187.0 / 6784.0) * _k5 +
-                                                     (11.0 / 84.0) * _k6),
-        y, k1, k3, k4, k5, k6
-    )
-    k7 = f(y7, t + dt, *args, **kwargs)
-
-    # 5th-order solution (b5)
+    # 5th-order solution (b5). This is also the 7th stage point ``y7`` (the
+    # DOPRI5 pair is FSAL), so ``k7 = f(y5th, t + dt)`` below reuses it.
     y5th = tree_map(
         lambda x, _k1, _k3, _k4, _k5, _k6: x + dt * ((35.0 / 384.0) * _k1 +
                                                      (500.0 / 1113.0) * _k3 +
@@ -710,7 +730,8 @@ def ode_dopri5_step(
     if not return_error:
         return y5th
 
-    # 4th-order embedded (b4) uses k7
+    # 4th-order embedded (b4) uses k7 = f(y5th, t + dt) (FSAL: y7 == y5th)
+    k7 = f(y5th, t + dt, *args, **kwargs)
     y4th = tree_map(lambda x, _k1, _k3, _k4, _k5, _k6, _k7: x + dt * ((5179.0 / 57600.0) * _k1 +
                                                                       (7571.0 / 16695.0) * _k3 +
                                                                       (393.0 / 640.0) * _k4 +
@@ -1144,7 +1165,7 @@ def ode_dopri8_step(
             coeffs = [c for (_, c) in row]
             ks = [K[j] for (j, _) in row]
             y_s = affine_sum(y, coeffs, ks)
-        else:
+        else:  # pragma: no cover - unreachable: DOP853 stages 1..11 all have non-empty A rows
             y_s = y
         t_s = t + C[s] * dt
         K[s] = f(y_s, t_s, *args, **kwargs)

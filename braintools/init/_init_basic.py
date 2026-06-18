@@ -34,9 +34,10 @@ from typing import Optional
 
 import brainstate
 import brainunit as u
+import jax.numpy as jnp
 import numpy as np
 from brainstate.typing import ArrayLike
-from scipy.stats import truncnorm
+from jax.scipy.special import ndtr, ndtri
 
 from ._init_base import Initialization
 
@@ -52,6 +53,66 @@ __all__ = [
     'Beta',
     'Weibull',
 ]
+
+
+# =============================================================================
+# Parameter validation helpers
+# =============================================================================
+
+def _check_non_negative(value: ArrayLike, name: str) -> None:
+    """Raise if a (possibly unit-carrying) value is negative."""
+    if np.any(np.asarray(u.get_mantissa(value)) < 0):
+        raise ValueError(f'`{name}` must be non-negative, got {value!r}.')
+
+
+def _check_positive(value: ArrayLike, name: str) -> None:
+    """Raise if a (possibly unit-carrying) value is not strictly positive."""
+    if np.any(np.asarray(u.get_mantissa(value)) <= 0):
+        raise ValueError(f'`{name}` must be positive, got {value!r}.')
+
+
+def _check_dimensionless(value: ArrayLike, name: str) -> None:
+    """Raise if a shape-like parameter carries a physical unit."""
+    if isinstance(value, u.Quantity) and u.get_unit(value) != u.UNITLESS:
+        raise ValueError(f'`{name}` must be dimensionless, got {value!r}.')
+
+
+def _check_low_high(low: ArrayLike, high: ArrayLike) -> None:
+    """Raise if ``low`` is not strictly less than ``high`` (units allowed)."""
+    lo, unit = u.split_mantissa_unit(low)
+    hi = u.Quantity(high).to(unit).mantissa
+    if np.any(np.asarray(lo) >= np.asarray(hi)):
+        raise ValueError(
+            f'`low` must be strictly less than `high`, got low={low!r}, high={high!r}.'
+        )
+
+
+def _resolve_deprecated_unit(unit: Optional[u.Unit], *values: ArrayLike) -> u.Unit:
+    """Resolve the deprecated ``unit=`` argument into ``self.unit``.
+
+    Returns :data:`brainunit.UNITLESS` when ``unit`` is None. Otherwise emits a
+    ``DeprecationWarning`` and, if any supplied value already carries a physical
+    unit, raises ``ValueError`` (combining the two would silently create a
+    compound unit such as ``mS * nS``).
+    """
+    if unit is None:
+        return u.UNITLESS
+    warnings.warn(
+        'The `unit` parameter is deprecated and will be removed in a future '
+        'version. Specify units directly on the value arguments instead.',
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    for v in values:
+        if v is None:
+            continue
+        if isinstance(v, u.Quantity) and u.get_unit(v) != u.UNITLESS:
+            raise ValueError(
+                'The deprecated `unit` argument cannot be combined with a value '
+                'that already carries a unit; this would produce a compound unit. '
+                'Specify the unit directly on the value instead.'
+            )
+    return unit
 
 
 class Constant(Initialization):
@@ -79,15 +140,10 @@ class Constant(Initialization):
     __module__ = 'braintools.init'
 
     def __init__(self, value: ArrayLike, unit: u.Unit = None):
+        if value is None:
+            raise ValueError('`value` must not be None for Constant initialization.')
         self.value = value
-        if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please specify units directly in `value`.', DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
-        self.unit = unit
+        self.unit = _resolve_deprecated_unit(unit, value)
 
     def __call__(self, size, **kwargs):
         return u.maybe_decimal(u.math.full(size, self.value) * self.unit)
@@ -129,7 +185,10 @@ class ZeroInit(Constant):
     __module__ = 'braintools.init'
 
     def __init__(self, unit: u.Unit = u.UNITLESS):
-        super().__init__(0.0, unit=unit)
+        # ZeroInit's `unit` is a first-class argument (not deprecated), so set the
+        # attributes directly rather than routing through Constant's deprecated path.
+        self.value = 0.0
+        self.unit = u.UNITLESS if unit is None else unit
 
     def __repr__(self):
         return f'ZeroInit(unit={self.unit})'
@@ -163,16 +222,10 @@ class Uniform(Initialization):
     __module__ = 'braintools.init'
 
     def __init__(self, low: ArrayLike, high: ArrayLike, unit: u.Unit = None):
+        _check_low_high(low, high)
         self.low = low
         self.high = high
-        if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please specify units directly in `low` and `high`.', DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
-        self.unit = unit
+        self.unit = _resolve_deprecated_unit(unit, low, high)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -213,16 +266,10 @@ class Normal(Initialization):
     __module__ = 'braintools.init'
 
     def __init__(self, mean: ArrayLike, std: ArrayLike, unit: u.Unit = None):
+        _check_non_negative(std, 'std')
         self.mean = mean
         self.std = std
-        if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please specify units directly in `mean` and `std`.', DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
-        self.unit = unit
+        self.unit = _resolve_deprecated_unit(unit, mean, std)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -264,16 +311,13 @@ class LogNormal(Initialization):
     __module__ = 'braintools.init'
 
     def __init__(self, mean: ArrayLike, std: ArrayLike, unit: u.Unit = None):
+        # The linear-space parametrization requires a strictly positive mean
+        # (log(mean) and division by mean**2 are otherwise undefined).
+        _check_positive(mean, 'mean')
+        _check_non_negative(std, 'std')
         self.mean = mean
         self.std = std
-        if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please specify units directly in `mean` and `std`.', DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
-        self.unit = unit
+        self.unit = _resolve_deprecated_unit(unit, mean, std)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -318,16 +362,11 @@ class Gamma(Initialization):
     __module__ = 'braintools.init'
 
     def __init__(self, shape: float, scale: ArrayLike, unit: u.Unit = None):
+        _check_dimensionless(shape, 'shape')
+        _check_positive(shape, 'shape')
         self.shape = shape
         self.scale = scale
-        if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please specify units directly in `scale`.', DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
-        self.unit = unit
+        self.unit = _resolve_deprecated_unit(unit, scale)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -366,14 +405,7 @@ class Exponential(Initialization):
 
     def __init__(self, scale: ArrayLike, unit: u.Unit = None):
         self.scale = scale
-        if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please specify units directly in `scale`.', DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
-        self.unit = unit
+        self.unit = _resolve_deprecated_unit(unit, scale)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -390,14 +422,17 @@ class TruncatedNormal(Initialization):
     Truncated normal distribution initialization.
 
     Generates values from a normal distribution truncated to specified bounds.
-    Requires scipy to be installed.
+
+    Sampling uses the inverse-CDF (probability integral transform) method, so it
+    is backend-agnostic: it works with the default ``brainstate.random`` backend
+    as well as a NumPy :class:`numpy.random.Generator` passed via ``rng``.
 
     Parameters
     ----------
     mean : Quantity
         Mean of the underlying normal distribution.
     std : Quantity
-        Standard deviation of the underlying normal distribution.
+        Standard deviation of the underlying normal distribution (must be >= 0).
     low : Quantity, optional
         Lower bound (default: -inf).
     high : Quantity, optional
@@ -430,28 +465,45 @@ class TruncatedNormal(Initialization):
         high: Optional[ArrayLike] = None,
         unit: u.Unit = None,
     ):
+        _check_non_negative(std, 'std')
+        if low is not None and high is not None:
+            _check_low_high(low, high)
         self.mean = mean
         self.std = std
         self.low = low
         self.high = high
-        if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please specify units directly in `mean`, `std`, `low`, and `high`.', DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
-        self.unit = unit
+        self.unit = _resolve_deprecated_unit(unit, mean, std, low, high)
 
     def __call__(self, size, **kwargs):
-        rng = kwargs.get('rng', np.random)
+        rng = kwargs.get('rng', brainstate.random)
         mean, unit = u.split_mantissa_unit(self.mean)
         std = u.Quantity(self.std).to(unit).mantissa
 
-        a = -np.inf if self.low is None else (u.Quantity(self.low).to(unit).mantissa - mean) / std
-        b = np.inf if self.high is None else (u.Quantity(self.high).to(unit).mantissa - mean) / std
+        lo = None if self.low is None else u.Quantity(self.low).to(unit).mantissa
+        hi = None if self.high is None else u.Quantity(self.high).to(unit).mantissa
 
-        samples = truncnorm.rvs(a, b, loc=mean, scale=std, size=size, random_state=rng)
+        if std == 0:
+            # Degenerate distribution: all mass at the (clamped) mean.
+            samples = jnp.full(size, mean, dtype=float)
+        else:
+            a = -jnp.inf if lo is None else (lo - mean) / std
+            b = jnp.inf if hi is None else (hi - mean) / std
+            # Inverse-CDF sampling: draw u ~ U(0, 1), map into the truncated CDF
+            # interval [F(a), F(b)], then invert through the normal quantile.
+            cdf_a = 0.0 if lo is None else ndtr(a)
+            cdf_b = 1.0 if hi is None else ndtr(b)
+            u_samples = rng.uniform(0.0, 1.0, size)
+            p = cdf_a + u_samples * (cdf_b - cdf_a)
+            # Keep the quantile finite (avoids +-inf at the open ends).
+            p = jnp.clip(p, 1e-7, 1.0 - 1e-7)
+            samples = mean + std * ndtri(p)
+
+        if lo is not None or hi is not None:
+            samples = jnp.clip(
+                samples,
+                -jnp.inf if lo is None else lo,
+                jnp.inf if hi is None else hi,
+            )
         return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
@@ -497,18 +549,16 @@ class Beta(Initialization):
         high: ArrayLike,
         unit: u.Unit = None,
     ):
+        _check_dimensionless(alpha, 'alpha')
+        _check_positive(alpha, 'alpha')
+        _check_dimensionless(beta, 'beta')
+        _check_positive(beta, 'beta')
+        _check_low_high(low, high)
         self.alpha = alpha
         self.beta = beta
         self.low = low
         self.high = high
-        if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please specify units directly in `low` and `high`.', DeprecationWarning
-            )
-        else:
-            unit = u.UNITLESS
-        self.unit = unit
+        self.unit = _resolve_deprecated_unit(unit, low, high)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -530,7 +580,7 @@ class Weibull(Initialization):
     Parameters
     ----------
     shape : float
-        Shape parameter (k) of the Weibull distribution.
+        Shape parameter (k) of the Weibull distribution (must be > 0).
     scale : Quantity
         Scale parameter (lambda) of the Weibull distribution.
 
@@ -548,15 +598,18 @@ class Weibull(Initialization):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, shape: float, scale: ArrayLike):
+    def __init__(self, shape: float, scale: ArrayLike, unit: u.Unit = None):
+        _check_dimensionless(shape, 'shape')
+        _check_positive(shape, 'shape')
         self.shape = shape
         self.scale = scale
+        self.unit = _resolve_deprecated_unit(unit, scale)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
         scale, unit = u.split_mantissa_unit(self.scale)
         samples = rng.weibull(self.shape, size) * scale
-        return u.maybe_decimal(samples * unit)
+        return u.maybe_decimal(samples * unit * self.unit)
 
     def __repr__(self):
         return f'Weibull(shape={self.shape}, scale={self.scale})'

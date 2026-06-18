@@ -26,8 +26,18 @@ from typing import Optional
 import brainunit as u
 import numpy as np
 from brainstate.typing import ArrayLike
+from jax.scipy.special import expit
 
 from ._distance_base import DistanceProfile
+
+
+def _check_positive_length(value: ArrayLike, name: str) -> None:
+    """Raise if a length-like parameter is non-positive (ignores None)."""
+    if value is None:
+        return
+    if np.any(np.asarray(u.get_mantissa(value)) <= 0):
+        raise ValueError(f'`{name}` must be positive, got {value!r}.')
+
 
 __all__ = [
     # Distance profile classes
@@ -80,6 +90,8 @@ class GaussianProfile(DistanceProfile):
         sigma: ArrayLike,
         max_distance: Optional[ArrayLike] = None
     ):
+        _check_positive_length(sigma, 'sigma')
+        _check_positive_length(max_distance, 'max_distance')
         self.sigma = sigma
         self.max_distance = max_distance
 
@@ -87,11 +99,11 @@ class GaussianProfile(DistanceProfile):
         sigma, unit = u.split_mantissa_unit(self.sigma)
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        prob = np.exp(-0.5 * (dist_vals / sigma) ** 2)
+        prob = u.math.exp(-0.5 * (dist_vals / sigma) ** 2)
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa
-            prob[dist_vals > max_val] = 0.0
+            prob = u.math.where(dist_vals > max_val, 0.0, prob)
 
         return prob
 
@@ -134,6 +146,8 @@ class ExponentialProfile(DistanceProfile):
         decay_constant: ArrayLike,
         max_distance: Optional[ArrayLike] = None,
     ):
+        _check_positive_length(decay_constant, 'decay_constant')
+        _check_positive_length(max_distance, 'max_distance')
         self.decay_constant = decay_constant
         self.max_distance = max_distance
 
@@ -141,11 +155,11 @@ class ExponentialProfile(DistanceProfile):
         decay, unit = u.split_mantissa_unit(self.decay_constant)
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        prob = np.exp(-dist_vals / decay)
+        prob = u.math.exp(-dist_vals / decay)
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa
-            prob[dist_vals > max_val] = 0.0
+            prob = u.math.where(dist_vals > max_val, 0.0, prob)
 
         return prob
 
@@ -157,14 +171,20 @@ class PowerLawProfile(DistanceProfile):
     """
     Power-law distance profile.
 
-    Connection probability follows a power-law decay: p(d) = d^(-exponent).
+    Connection probability follows a scale-invariant power-law decay:
+    ``p(d) = (max(d, d0) / d0) ** (-exponent)``, where ``d0`` is the reference
+    length ``min_distance``. Expressed as a dimensionless ratio, the profile is
+    invariant to the unit in which distances are measured (100 um and 0.1 mm give
+    the same probability), peaks at 1 for ``d <= d0``, and is finite at ``d = 0``.
 
     Parameters
     ----------
     exponent : float
         Power-law exponent (positive values cause decay with distance).
     min_distance : Quantity, optional
-        Minimum distance to avoid division by zero (default: 1e-6).
+        Reference length ``d0`` below which the probability saturates at 1.0,
+        also avoiding division by zero (default: ``1.0 * u.um``, or ``1.0`` for
+        unitless distances).
     max_distance : Quantity, optional
         Maximum connection distance (connections beyond this are set to 0).
 
@@ -192,6 +212,8 @@ class PowerLawProfile(DistanceProfile):
         min_distance: Optional[ArrayLike] = None,
         max_distance: Optional[ArrayLike] = None
     ):
+        _check_positive_length(min_distance, 'min_distance')
+        _check_positive_length(max_distance, 'max_distance')
         self.exponent = exponent
         self.min_distance = min_distance
         self.max_distance = max_distance
@@ -199,14 +221,21 @@ class PowerLawProfile(DistanceProfile):
     def probability(self, distances: ArrayLike) -> np.ndarray:
         dist_vals, dist_unit = u.split_mantissa_unit(distances)
 
-        min_val = 1e-6 if self.min_distance is None else u.Quantity(self.min_distance).to(dist_unit).mantissa
-        dist_vals = np.maximum(dist_vals, min_val)
+        # Reference length d0 in the distance's own unit. Using a fixed physical
+        # length (1 um default) keeps the dimensionless ratio scale-invariant.
+        if self.min_distance is None:
+            d0 = 1.0 if dist_unit == u.UNITLESS else float(u.Quantity(1.0 * u.um).to(dist_unit).mantissa)
+        elif dist_unit == u.UNITLESS:
+            d0 = float(u.get_mantissa(self.min_distance))
+        else:
+            d0 = float(u.Quantity(self.min_distance).to(dist_unit).mantissa)
 
-        prob = dist_vals ** (-self.exponent)
+        ratio = u.math.maximum(dist_vals, d0) / d0
+        prob = ratio ** (-self.exponent)
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(dist_unit).mantissa
-            prob[dist_vals > max_val] = 0.0
+            prob = u.math.where(dist_vals > max_val, 0.0, prob)
 
         return prob
 
@@ -240,13 +269,14 @@ class LinearProfile(DistanceProfile):
     __module__ = 'braintools.init'
 
     def __init__(self, max_distance: ArrayLike):
+        _check_positive_length(max_distance, 'max_distance')
         self.max_distance = max_distance
 
     def probability(self, distances: ArrayLike) -> np.ndarray:
         max_val, unit = u.split_mantissa_unit(self.max_distance)
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        prob = np.maximum(0, 1 - dist_vals / max_val)
+        prob = u.math.maximum(0.0, 1 - dist_vals / max_val)
         return prob
 
     def __repr__(self):
@@ -291,6 +321,7 @@ class StepProfile(DistanceProfile):
                  threshold: ArrayLike,
                  inside_prob: float = 1.0,
                  outside_prob: float = 0.0):
+        _check_positive_length(threshold, 'threshold')
         self.threshold = threshold
         self.inside_prob = inside_prob
         self.outside_prob = outside_prob
@@ -299,7 +330,7 @@ class StepProfile(DistanceProfile):
         threshold, unit = u.split_mantissa_unit(self.threshold)
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        prob = np.where(dist_vals <= threshold, self.inside_prob, self.outside_prob)
+        prob = u.math.where(dist_vals <= threshold, self.inside_prob, self.outside_prob)
         return prob
 
     def __repr__(self):
@@ -346,6 +377,8 @@ class SigmoidProfile(DistanceProfile):
         slope: float = 0.05,
         max_distance: Optional[ArrayLike] = None
     ):
+        _check_positive_length(midpoint, 'midpoint')
+        _check_positive_length(max_distance, 'max_distance')
         self.midpoint = midpoint
         self.slope = slope
         self.max_distance = max_distance
@@ -354,11 +387,13 @@ class SigmoidProfile(DistanceProfile):
         midpoint, unit = u.split_mantissa_unit(self.midpoint)
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        prob = 1.0 / (1.0 + np.exp(self.slope * (dist_vals - midpoint)))
+        # expit is the numerically stable logistic sigmoid (no exp overflow for
+        # large slope * distance): 1 / (1 + exp(slope * (d - midpoint))).
+        prob = expit(-self.slope * (dist_vals - midpoint))
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa
-            prob[dist_vals > max_val] = 0.0
+            prob = u.math.where(dist_vals > max_val, 0.0, prob)
 
         return prob
 
@@ -413,6 +448,9 @@ class DoGProfile(DistanceProfile):
         amplitude_surround: float = 0.5,
         max_distance: Optional[ArrayLike] = None
     ):
+        _check_positive_length(sigma_center, 'sigma_center')
+        _check_positive_length(sigma_surround, 'sigma_surround')
+        _check_positive_length(max_distance, 'max_distance')
         self.sigma_center = sigma_center
         self.sigma_surround = sigma_surround
         self.amplitude_center = amplitude_center
@@ -424,16 +462,16 @@ class DoGProfile(DistanceProfile):
         sigma_s = u.Quantity(self.sigma_surround).to(unit).mantissa
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        center = self.amplitude_center * np.exp(-0.5 * (dist_vals / sigma_c) ** 2)
-        surround = self.amplitude_surround * np.exp(-0.5 * (dist_vals / sigma_s) ** 2)
+        center = self.amplitude_center * u.math.exp(-0.5 * (dist_vals / sigma_c) ** 2)
+        surround = self.amplitude_surround * u.math.exp(-0.5 * (dist_vals / sigma_s) ** 2)
         prob = center - surround
 
         # Clip negative values to 0
-        prob = np.maximum(prob, 0.0)
+        prob = u.math.maximum(prob, 0.0)
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa
-            prob[dist_vals > max_val] = 0.0
+            prob = u.math.where(dist_vals > max_val, 0.0, prob)
 
         return prob
 
@@ -483,6 +521,8 @@ class LogisticProfile(DistanceProfile):
         midpoint: ArrayLike,
         max_distance: Optional[ArrayLike] = None
     ):
+        _check_positive_length(midpoint, 'midpoint')
+        _check_positive_length(max_distance, 'max_distance')
         self.growth_rate = growth_rate
         self.midpoint = midpoint
         self.max_distance = max_distance
@@ -491,11 +531,12 @@ class LogisticProfile(DistanceProfile):
         midpoint, unit = u.split_mantissa_unit(self.midpoint)
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        prob = 1.0 / (1.0 + np.exp(self.growth_rate * (dist_vals - midpoint)))
+        # Stable logistic sigmoid: 1 / (1 + exp(growth_rate * (d - midpoint))).
+        prob = expit(-self.growth_rate * (dist_vals - midpoint))
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa
-            prob[dist_vals > max_val] = 0.0
+            prob = u.math.where(dist_vals > max_val, 0.0, prob)
 
         return prob
 
@@ -516,10 +557,10 @@ class BimodalProfile(DistanceProfile):
         Standard deviation of first Gaussian peak.
     sigma2 : Quantity
         Standard deviation of second Gaussian peak.
-    center1 : Quantity
-        Center position of first peak (default: 0).
-    center2 : Quantity
-        Center position of second peak.
+    center1 : Quantity, optional
+        Center position of first peak (default: ``0 * u.um``).
+    center2 : Quantity, optional
+        Center position of second peak (default: ``0 * u.um``).
     amplitude1 : float, optional
         Amplitude of first peak (default: 1.0).
     amplitude2 : float, optional
@@ -552,12 +593,15 @@ class BimodalProfile(DistanceProfile):
         self,
         sigma1: ArrayLike,
         sigma2: ArrayLike,
-        center1: ArrayLike,
-        center2: ArrayLike,
+        center1: ArrayLike = 0. * u.um,
+        center2: ArrayLike = 0. * u.um,
         amplitude1: float = 1.0,
         amplitude2: float = 1.0,
         max_distance: Optional[ArrayLike] = None
     ):
+        _check_positive_length(sigma1, 'sigma1')
+        _check_positive_length(sigma2, 'sigma2')
+        _check_positive_length(max_distance, 'max_distance')
         self.sigma1 = sigma1
         self.sigma2 = sigma2
         self.center1 = center1
@@ -573,13 +617,13 @@ class BimodalProfile(DistanceProfile):
         center2 = u.Quantity(self.center2).to(unit).mantissa
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        peak1 = self.amplitude1 * np.exp(-0.5 * ((dist_vals - center1) / sigma1) ** 2)
-        peak2 = self.amplitude2 * np.exp(-0.5 * ((dist_vals - center2) / sigma2) ** 2)
+        peak1 = self.amplitude1 * u.math.exp(-0.5 * ((dist_vals - center1) / sigma1) ** 2)
+        peak2 = self.amplitude2 * u.math.exp(-0.5 * ((dist_vals - center2) / sigma2) ** 2)
         prob = peak1 + peak2
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa
-            prob[dist_vals > max_val] = 0.0
+            prob = u.math.where(dist_vals > max_val, 0.0, prob)
 
         return prob
 
@@ -599,15 +643,22 @@ class MexicanHatProfile(DistanceProfile):
     at the center, negative values in the surround, and approaching zero at far distances.
     The negative values are clipped to zero for probability interpretation.
 
-    The Mexican hat function is defined as:
-        f(d) = (2 / (sqrt(3*sigma) * pi^(1/4))) * (1 - (d/sigma)^2) * exp(-(d/sigma)^2/2)
+    The (peak-normalized) Mexican hat function used here is:
+        f(d) = amplitude * (1 - (d/sigma)^2) * exp(-(d/sigma)^2 / 2)
+
+    This form peaks at ``amplitude`` when ``d = 0`` and is invariant to the unit
+    in which ``sigma``/``distances`` are expressed (it depends only on the
+    dimensionless ratio ``d/sigma``). The classical wavelet L2-normalization
+    constant ``2 / (sqrt(3*sigma) * pi^(1/4))`` is intentionally dropped because
+    it is unit-dependent and would make the peak height vary with the chosen
+    length unit.
 
     Parameters
     ----------
     sigma : Quantity
         Standard deviation controlling the width of the profile.
     amplitude : float, optional
-        Amplitude scaling factor (default: 1.0).
+        Amplitude scaling factor; equals the peak value at ``d = 0`` (default: 1.0).
     max_distance : Quantity, optional
         Maximum connection distance (connections beyond this are set to 0).
 
@@ -635,6 +686,8 @@ class MexicanHatProfile(DistanceProfile):
         amplitude: float = 1.0,
         max_distance: Optional[ArrayLike] = None
     ):
+        _check_positive_length(sigma, 'sigma')
+        _check_positive_length(max_distance, 'max_distance')
         self.sigma = sigma
         self.amplitude = amplitude
         self.max_distance = max_distance
@@ -643,20 +696,20 @@ class MexicanHatProfile(DistanceProfile):
         sigma, unit = u.split_mantissa_unit(self.sigma)
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
-        # Normalized distance
+        # Normalized (dimensionless) distance.
         d_norm = dist_vals / sigma
 
-        # Mexican hat function: A * (1 - d_norm^2) * exp(-d_norm^2 / 2)
-        # Normalization constant: 2 / (sqrt(3*sigma) * pi^(1/4))
-        norm_constant = 2.0 / (np.sqrt(3.0 * sigma) * np.pi ** 0.25)
-        prob = self.amplitude * norm_constant * (1 - d_norm ** 2) * np.exp(-d_norm ** 2 / 2)
+        # Peak-normalized Mexican hat: amplitude * (1 - d_norm^2) * exp(-d_norm^2 / 2).
+        # Peaks at `amplitude` when d == 0; scale-invariant (no unit-dependent
+        # normalization constant).
+        prob = self.amplitude * (1 - d_norm ** 2) * u.math.exp(-d_norm ** 2 / 2)
 
         # Clip negative values to 0 for probability interpretation
-        prob = np.maximum(prob, 0.0)
+        prob = u.math.maximum(prob, 0.0)
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa
-            prob[dist_vals > max_val] = 0.0
+            prob = u.math.where(dist_vals > max_val, 0.0, prob)
 
         return prob
 
