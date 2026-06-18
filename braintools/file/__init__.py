@@ -37,25 +37,28 @@ specifically designed for neuroscience and machine learning workflows.
     data = load_matfile('experiment_data.mat')
 
     # Save model checkpoint
-    msgpack_save('model_checkpoint.pkl', model_state)
+    msgpack_save('model_checkpoint.msgpack', model_state)
 
     # Load checkpoint back
-    restored_state = msgpack_load('model_checkpoint.pkl', target=model_state)
+    restored_state = msgpack_load('model_checkpoint.msgpack', target=model_state)
 
 **MATLAB File Loading:**
 
 .. code-block:: python
 
-    from braintools.file import load_matfile
+    from braintools.file import load_matfile, save_matfile
 
     # Load with default settings (excludes MATLAB headers)
     data = load_matfile('data.mat')
 
     # Include MATLAB metadata
-    data = load_matfile('data.mat', header_info=False)
+    data = load_matfile('data.mat', include_header=True)
 
     # Access nested structures (automatically converted to Python dicts/lists)
     spike_times = data['trial_data']['spike_times']
+
+    # Save data back to a MATLAB .mat file
+    save_matfile('out.mat', {'spike_times': spike_times})
 
 **Model Checkpointing:**
 
@@ -65,14 +68,14 @@ specifically designed for neuroscience and machine learning workflows.
     from braintools.file import msgpack_save, msgpack_load, AsyncManager
 
     # Simple synchronous save
-    msgpack_save('checkpoint.pkl', model.state_dict())
+    msgpack_save('checkpoint.msgpack', model.state_dict())
 
     # Load checkpoint with mismatch handling
-    state = msgpack_load('checkpoint.pkl', target=model.state_dict(), mismatch='warn')
+    state = msgpack_load('checkpoint.msgpack', target=model.state_dict(), mismatch='warn')
 
     # Async saving for large models (non-blocking)
     with AsyncManager() as manager:
-        msgpack_save('checkpoint.pkl', model.state_dict(), async_manager=manager)
+        msgpack_save('checkpoint.msgpack', model.state_dict(), async_manager=manager)
         # Continue training while save happens in background
 
     # Custom serialization for user-defined types
@@ -92,6 +95,7 @@ specifically designed for neuroscience and machine learning workflows.
 # MATLAB file I/O
 from ._matfile import (
     load_matfile,
+    save_matfile,
 )
 
 # Checkpointing utilities
@@ -102,11 +106,14 @@ from ._msg_checkpoint import (
     msgpack_save,
     msgpack_load,
     AsyncManager,
+    AlreadyExistsError,
+    InvalidCheckpointPath,
 )
 
 __all__ = [
     # MATLAB I/O
     'load_matfile',
+    'save_matfile',
 
     # Checkpointing
     'msgpack_from_state_dict',
@@ -115,4 +122,6 @@ __all__ = [
     'msgpack_save',
     'msgpack_load',
     'AsyncManager',
+    'AlreadyExistsError',
+    'InvalidCheckpointPath',
 ]

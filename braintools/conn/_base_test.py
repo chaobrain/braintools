@@ -892,12 +892,12 @@ class TestUtilityFunctions(unittest.TestCase):
     .. code-block:: python
 
         import numpy as np
-        from braintools.conn._conn_base import compute_csr_indices_indptr, merge_dict
+        from braintools.conn._base import compute_csr_indices_indptr, merge_dict
 
         # Test CSR computation
         pre_indices = np.array([0, 1, 2, 0])
         post_indices = np.array([1, 0, 1, 2])
-        indices, indptr = compute_csr_indices_indptr(pre_indices, post_indices, (3, 3))
+        indices, indptr, order = compute_csr_indices_indptr(pre_indices, post_indices, (3, 3))
 
         # Test dictionary merging
         dict1 = {'a': 1, 'b': 2}
@@ -914,13 +914,17 @@ class TestUtilityFunctions(unittest.TestCase):
         post_indices = np.array([1, 0, 1, 2, 2])
         shape = (3, 3)
 
-        indices, indptr = compute_csr_indices_indptr(pre_indices, post_indices, shape)
+        indices, indptr, order = compute_csr_indices_indptr(pre_indices, post_indices, shape)
 
         # Verify indptr has correct length
         self.assertEqual(len(indptr), shape[0] + 1)
 
         # Verify indices has correct length
         self.assertEqual(len(indices), len(pre_indices))
+
+        # Verify order is a valid permutation aligning data to the sorted indices
+        self.assertEqual(len(order), len(pre_indices))
+        np.testing.assert_array_equal(np.sort(order), np.arange(len(pre_indices)))
 
         # Verify structure makes sense
         self.assertEqual(indptr[0], 0)
@@ -1023,6 +1027,207 @@ class TestSubclassImplementations(unittest.TestCase):
         result = conn(pre_size=2, post_size=2)
 
         self.assertEqual(result.model_type, 'multi_compartment')
+
+
+class _FixedConn(Connectivity):
+    """Helper connectivity that returns a preset ConnectionResult."""
+
+    def __init__(self, result):
+        super().__init__(pre_size=result.pre_size, post_size=result.post_size)
+        self._fixed = result
+
+    def generate(self, pre_size=None, post_size=None, **kwargs):
+        return self._fixed
+
+
+def _mant(x):
+    return np.asarray(u.get_mantissa(x))
+
+
+class TestCompositeWeightedComprehensive(unittest.TestCase):
+    """Exercise the weight/delay merge branches of union/intersection/difference."""
+
+    def _r(self, pre, post, weights=None, delays=None, size=4,
+           model_type='point', pre_comp=None, post_comp=None):
+        return ConnectionResult(
+            np.asarray(pre, dtype=np.int64), np.asarray(post, dtype=np.int64),
+            pre_size=size, post_size=size, weights=weights, delays=delays,
+            model_type=model_type, pre_compartments=pre_comp, post_compartments=post_comp,
+        )
+
+    def test_union_weighted_delayed_point(self):
+        # Overlapping edges (1,1),(2,2); result1 has priority on overlaps.
+        r1 = self._r([0, 1, 2], [0, 1, 2], weights=np.array([1., 2., 3.]) * u.nS,
+                     delays=np.array([1., 2., 3.]) * u.ms)
+        r2 = self._r([1, 2, 3], [1, 2, 3], weights=np.array([10., 20., 30.]) * u.nS,
+                     delays=np.array([10., 20., 30.]) * u.ms)
+        out = (_FixedConn(r1) + _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.n_connections, 4)  # (0,0),(1,1),(2,2),(3,3)
+        # overlap weights come from result1 (priority)
+        dense = _mant(out.weight2dense())
+        self.assertAlmostEqual(dense[1, 1], 2.0)   # from r1, not 10
+        self.assertAlmostEqual(dense[3, 3], 30.0)  # only in r2
+
+    def test_union_one_side_missing_weights(self):
+        r1 = self._r([0, 1], [0, 1], weights=np.array([1., 2.]) * u.nS)
+        r2 = self._r([2, 3], [2, 3])  # no weights
+        out = (_FixedConn(r1) + _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.n_connections, 4)
+        self.assertIsNotNone(out.weights)
+
+    def test_union_differing_units(self):
+        # r1 in nS, r2 in uS -> exercises unit-conversion branch
+        r1 = self._r([0], [0], weights=np.array([1.]) * u.nS)
+        r2 = self._r([1], [1], weights=np.array([0.002]) * u.uS)  # 2 nS
+        out = (_FixedConn(r1) + _FixedConn(r2))(pre_size=4, post_size=4)
+        dense = _mant(out.weight2dense())
+        self.assertAlmostEqual(dense[0, 0], 1.0, places=5)
+        self.assertAlmostEqual(dense[1, 1], 2.0, places=5)  # converted uS->nS
+
+    def test_union_empty(self):
+        r1 = self._r([], [], weights=np.array([]) * u.nS)
+        r2 = self._r([], [], weights=np.array([]) * u.nS)
+        out = (_FixedConn(r1) + _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.n_connections, 0)
+
+    def test_intersection_weighted_delayed_point(self):
+        # weights multiply, delays average on common edges (1,1),(2,2)
+        r1 = self._r([0, 1, 2], [0, 1, 2], weights=np.array([1., 2., 3.]) * u.nS,
+                     delays=np.array([2., 4., 6.]) * u.ms)
+        r2 = self._r([1, 2, 3], [1, 2, 3], weights=np.array([10., 20., 30.]) * u.nS,
+                     delays=np.array([10., 20., 30.]) * u.ms)
+        out = (_FixedConn(r1) * _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.n_connections, 2)
+        wd = _mant(out.weight2dense())
+        self.assertAlmostEqual(wd[1, 1], 2.0 * 10.0)   # multiply
+        dd = _mant(out.delay2matrix())
+        self.assertAlmostEqual(dd[1, 1], (4.0 + 10.0) / 2.0)  # average
+
+    def test_intersection_empty(self):
+        r1 = self._r([0], [0], weights=np.array([1.]) * u.nS)
+        r2 = self._r([3], [3], weights=np.array([9.]) * u.nS)
+        out = (_FixedConn(r1) * _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.n_connections, 0)
+
+    def test_difference_weighted_delayed_point(self):
+        r1 = self._r([0, 1, 2], [0, 1, 2], weights=np.array([1., 2., 3.]) * u.nS,
+                     delays=np.array([1., 2., 3.]) * u.ms)
+        r2 = self._r([1, 2, 3], [1, 2, 3], weights=np.array([10., 20., 30.]) * u.nS)
+        out = (_FixedConn(r1) - _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.n_connections, 1)  # only (0,0) remains
+        self.assertAlmostEqual(_mant(out.weight2dense())[0, 0], 1.0)
+
+    def test_difference_empty(self):
+        r1 = self._r([1, 2], [1, 2], weights=np.array([1., 2.]) * u.nS)
+        r2 = self._r([1, 2], [1, 2], weights=np.array([5., 6.]) * u.nS)
+        out = (_FixedConn(r1) - _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.n_connections, 0)
+
+    def _mc(self, pre, post, pre_comp, post_comp, weights=None, delays=None, size=4):
+        return self._r(pre, post, weights=weights, delays=delays, size=size,
+                       model_type='multi_compartment',
+                       pre_comp=np.asarray(pre_comp, dtype=np.int64),
+                       post_comp=np.asarray(post_comp, dtype=np.int64))
+
+    def test_union_multicompartment(self):
+        r1 = self._mc([0, 1], [0, 1], [3, 3], [0, 1], weights=np.array([1., 2.]) * u.nS,
+                      delays=np.array([1., 2.]) * u.ms)
+        r2 = self._mc([1, 2], [1, 2], [3, 3], [1, 2], weights=np.array([20., 30.]) * u.nS,
+                      delays=np.array([20., 30.]) * u.ms)
+        out = (_FixedConn(r1) + _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.model_type, 'multi_compartment')
+        self.assertIsNotNone(out.pre_compartments)
+        self.assertEqual(out.n_connections, 3)  # (0,0),(1,1),(2,2)
+
+    def test_intersection_multicompartment(self):
+        r1 = self._mc([0, 1], [0, 1], [3, 3], [0, 1], weights=np.array([1., 2.]) * u.nS)
+        r2 = self._mc([1, 2], [1, 2], [3, 3], [1, 2], weights=np.array([20., 30.]) * u.nS)
+        out = (_FixedConn(r1) * _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.model_type, 'multi_compartment')
+        self.assertEqual(out.n_connections, 1)  # (1,1) common
+        self.assertIsNotNone(out.pre_compartments)
+
+    def test_difference_multicompartment(self):
+        r1 = self._mc([0, 1], [0, 1], [3, 3], [0, 1], weights=np.array([1., 2.]) * u.nS)
+        r2 = self._mc([1, 2], [1, 2], [3, 3], [1, 2], weights=np.array([20., 30.]) * u.nS)
+        out = (_FixedConn(r1) - _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(out.model_type, 'multi_compartment')
+        self.assertEqual(out.n_connections, 1)  # (0,0) only
+        self.assertIsNotNone(out.pre_compartments)
+
+
+class TestBaseRegressions(unittest.TestCase):
+    """Regression tests for the fixed base-level bugs."""
+
+    def test_weight2csr_alignment_unsorted_pre(self):
+        # BASE-1: per-edge weights must follow the row-sorted CSR order.
+        r = ConnectionResult(np.array([2, 0, 1]), np.array([0, 1, 2]), 3, 3,
+                             weights=np.array([10., 20., 30.]))
+        dense = _mant(r.weight2dense())
+        csr = _mant(r.weight2csr().todense())
+        np.testing.assert_allclose(dense, csr)
+
+    def test_delay2csr_alignment_unsorted_pre(self):
+        r = ConnectionResult(np.array([2, 0, 1]), np.array([0, 1, 2]), 3, 3,
+                             delays=np.array([10., 20., 30.]) * u.ms)
+        dense = _mant(r.delay2matrix())
+        csr = _mant(r.delay2csr().todense())
+        np.testing.assert_allclose(dense, csr)
+
+    def test_call_recomputes_on_changed_size(self):
+        # BASE-2: caching must not return a stale result for new sizes.
+        class P(Connectivity):
+            def generate(self, pre_size, post_size, **kwargs):
+                n = pre_size if isinstance(pre_size, int) else int(np.prod(pre_size))
+                return ConnectionResult(np.arange(n), np.arange(n), pre_size, post_size)
+
+        c = P()
+        self.assertEqual(c(pre_size=3, post_size=3).shape, (3, 3))
+        self.assertEqual(c(pre_size=7, post_size=7).shape, (7, 7))
+        # same args -> cached (same object)
+        a = c(pre_size=7, post_size=7)
+        b = c(pre_size=7, post_size=7)
+        self.assertIs(a, b)
+
+    def test_scaled_does_not_mutate_base(self):
+        # BASE-3: scaling must not mutate the base connectivity's cached result.
+        class P(Connectivity):
+            def generate(self, pre_size, post_size, **kwargs):
+                return ConnectionResult(np.array([0, 1]), np.array([0, 1]), pre_size, post_size,
+                                        weights=np.array([2., 2.]) * u.nS)
+
+        base = P()
+        r1 = base(pre_size=2, post_size=2)
+        scaled = (base * 3.0)(pre_size=2, post_size=2)
+        r2 = base(pre_size=2, post_size=2)
+        np.testing.assert_allclose(_mant(r2.weights), 2.0)
+        np.testing.assert_allclose(_mant(scaled.weights), 6.0)
+        self.assertIs(r1, r2)
+
+    def test_composite_accepts_tuple_vs_int_sizes(self):
+        # BASE-5: (10,10) and 100 denote the same population.
+        a = ConnectionResult(np.array([0]), np.array([0]), (10, 10), (10, 10))
+        b = ConnectionResult(np.array([1]), np.array([1]), 100, 100)
+        # Should not raise on size mismatch.
+        CompositeConnectivity(_FixedConn(a), _FixedConn(b), 'union')
+
+    def test_validate_weight_length_mismatch(self):
+        with self.assertRaises(ValueError):
+            ConnectionResult(np.array([0, 1]), np.array([0, 1]), 2, 2,
+                             weights=np.array([1., 2., 3.]))
+
+    def test_validate_delay_length_mismatch(self):
+        with self.assertRaises(ValueError):
+            ConnectionResult(np.array([0, 1]), np.array([0, 1]), 2, 2,
+                             delays=np.array([1., 2., 3.]) * u.ms)
+
+    def test_rng_isolated_when_seed_none(self):
+        # BASE-8: rng is an isolated RandomState even without a seed.
+        class P(Connectivity):
+            def generate(self, pre_size, post_size, **kwargs):
+                return ConnectionResult(np.array([0]), np.array([0]), pre_size, post_size)
+
+        self.assertIsInstance(P().rng, np.random.RandomState)
 
 
 if __name__ == '__main__':

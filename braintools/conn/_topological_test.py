@@ -167,6 +167,70 @@ class TestTopologicalPatterns(unittest.TestCase):
         # Should still work (extra neurons assigned to last module)
         self.assertGreater(result.n_connections, 0)
 
+    # ------------------------------------------------------------------
+    # Regression tests for topological validation/structure fixes.
+    # ------------------------------------------------------------------
+
+    def test_small_world_odd_k_raises(self):
+        # TOP-4: odd k must raise instead of being silently truncated to k-1.
+        with self.assertRaises(ValueError):
+            SmallWorld(k=3, seed=42)(pre_size=10, post_size=10)
+
+    def test_small_world_k_ge_n_raises(self):
+        # TOP-5: k >= n would create self-loops/duplicates; must raise.
+        with self.assertRaises(ValueError):
+            SmallWorld(k=10, seed=42)(pre_size=10, post_size=10)
+
+    def test_small_world_no_self_loops_no_duplicates(self):
+        # TOP-5: valid even k < n yields exactly n*k edges, no self-loops, no dups.
+        n, k = 20, 4
+        result = SmallWorld(k=k, p=0.3, seed=7)(pre_size=n, post_size=n)
+        self.assertEqual(result.n_connections, n * k)
+        self.assertTrue(np.all(result.pre_indices != result.post_indices))
+        edges = set(zip(result.pre_indices.tolist(), result.post_indices.tolist()))
+        self.assertEqual(len(edges), n * k)
+
+    def test_small_world_full_rewire_preserves_edge_count(self):
+        # TOP-5: rewiring (p=1) preserves edge count without self-loops/dups.
+        n, k = 15, 4
+        result = SmallWorld(k=k, p=1.0, seed=3)(pre_size=n, post_size=n)
+        self.assertEqual(result.n_connections, n * k)
+        self.assertTrue(np.all(result.pre_indices != result.post_indices))
+        edges = set(zip(result.pre_indices.tolist(), result.post_indices.tolist()))
+        self.assertEqual(len(edges), n * k)
+
+    def test_small_world_tuple_size_accepted(self):
+        # TOP-9: equivalent tuple/int sizes must be accepted.
+        result = SmallWorld(k=4, seed=1)(pre_size=(10, 10), post_size=100)
+        self.assertEqual(result.n_connections, 100 * 4)
+
+    def test_scale_free_m_ge_n_raises(self):
+        # TOP-3: m >= n would produce out-of-bounds indices; must raise.
+        with self.assertRaises(ValueError):
+            ScaleFree(m=5, seed=42)(pre_size=3, post_size=3)
+
+    def test_scale_free_m_too_small_raises(self):
+        # TOP-3: m must be at least 1.
+        with self.assertRaises(ValueError):
+            ScaleFree(m=0, seed=42)(pre_size=10, post_size=10)
+
+    def test_scale_free_indices_in_bounds(self):
+        # TOP-3: valid m < n keeps all indices within range.
+        n = 10
+        result = ScaleFree(m=3, seed=1)(pre_size=n, post_size=n)
+        self.assertTrue(np.all(result.pre_indices < n))
+        self.assertTrue(np.all(result.post_indices < n))
+
+    def test_modular_random_n_modules_gt_n_raises(self):
+        # TOP-6: n_modules > n collapsed to one module; must raise.
+        with self.assertRaises(ValueError):
+            ModularRandom(n_modules=11, seed=42)(pre_size=10, post_size=10)
+
+    def test_modular_random_tuple_size_accepted(self):
+        # TOP-9: equivalent tuple/int sizes must be accepted.
+        result = ModularRandom(n_modules=3, seed=1)(pre_size=(10, 10), post_size=100)
+        self.assertGreater(result.n_connections, 0)
+
 
 class TestModularGeneral(unittest.TestCase):
     """Comprehensive tests for ModularGeneral connectivity."""
@@ -534,6 +598,77 @@ class TestModularGeneral(unittest.TestCase):
         self.assertTrue(np.all(result.pre_indices < 5000))
         self.assertTrue(np.all(result.post_indices >= 0))
         self.assertTrue(np.all(result.post_indices < 5000))
+
+    def test_weighted_sub_conns_succeeds(self):
+        # TOP-1: scalar weights/delays on sub-connectivities must not crash and must
+        # be broadcast to a per-edge array of the correct length/unit.
+        intra = [
+            Random(prob=0.3, weight=1.0 * u.nS, seed=1),
+            Random(prob=0.3, weight=1.0 * u.nS, seed=2),
+        ]
+        inter = Random(prob=0.05, weight=0.1 * u.nS, seed=3)
+        result = ModularGeneral(intra_conn=intra, inter_conn=inter, seed=1)(20, 20)
+
+        self.assertGreater(result.n_connections, 0)
+        self.assertIsNotNone(result.weights)
+        self.assertEqual(u.math.size(result.weights), result.n_connections)
+        self.assertEqual(u.get_unit(result.weights), u.get_unit(1.0 * u.nS))
+
+    def test_weighted_sub_conns_with_delays(self):
+        # TOP-1: scalar delays are also broadcast correctly.
+        intra = [
+            Random(prob=0.4, weight=1.0 * u.nS, delay=1.0 * u.ms, seed=1),
+            Random(prob=0.4, weight=1.0 * u.nS, delay=2.0 * u.ms, seed=2),
+        ]
+        result = ModularGeneral(intra_conn=intra, inter_conn=None, seed=1)(20, 20)
+        self.assertEqual(u.math.size(result.weights), result.n_connections)
+        self.assertEqual(u.math.size(result.delays), result.n_connections)
+
+    def test_mixed_weights_some_missing(self):
+        # TOP-1: if some sub-results carry weights and others don't, the combined
+        # weights array still spans all edges (missing blocks filled with 0).
+        intra = [
+            Random(prob=0.5, weight=2.0 * u.nS, seed=1),
+            Random(prob=0.5, seed=2),  # no weights
+        ]
+        result = ModularGeneral(intra_conn=intra, inter_conn=None, seed=1)(20, 20)
+        self.assertIsNotNone(result.weights)
+        self.assertEqual(u.math.size(result.weights), result.n_connections)
+
+    def test_inter_module_blocks_not_identical(self):
+        # TOP-2: a single shared inter_conn instance must draw independently for each
+        # module pair (cached results would make all equal-size blocks identical).
+        intra = [Random(prob=0.3, seed=10), Random(prob=0.3, seed=11), Random(prob=0.3, seed=12)]
+        inter = Random(prob=0.3, seed=20)
+        result = ModularGeneral(intra_conn=intra, inter_conn=inter, seed=5)(30, 30)
+
+        def block(res, ps, pe, qs, qe):
+            m = ((res.pre_indices >= ps) & (res.pre_indices < pe) &
+                 (res.post_indices >= qs) & (res.post_indices < qe))
+            return set(zip((res.pre_indices[m] - ps).tolist(),
+                           (res.post_indices[m] - qs).tolist()))
+
+        # Modules of size 10 each; boundaries [0, 10, 20, 30].
+        block_0_1 = block(result, 0, 10, 10, 20)
+        block_0_2 = block(result, 0, 10, 20, 30)
+        self.assertNotEqual(block_0_1, block_0_2)
+
+    def test_does_not_mutate_sub_conn_rng(self):
+        # TOP-7: generation must not reassign the RNG of a user-supplied sub-conn.
+        sub = Random(prob=0.3, seed=1)
+        rng_before = sub.rng
+        inter = Random(prob=0.05, seed=2)
+        ModularGeneral(intra_conn=[sub, Random(prob=0.3, seed=3)], inter_conn=inter, seed=9)(20, 20)
+        self.assertIs(sub.rng, rng_before)
+
+    def test_tuple_size_accepted(self):
+        # TOP-9: equivalent tuple/int sizes must be accepted.
+        intra = [Random(prob=0.3, seed=1), Random(prob=0.3, seed=2)]
+        inter = Random(prob=0.05, seed=3)
+        result = ModularGeneral(intra_conn=intra, inter_conn=inter, seed=1)(
+            pre_size=(10, 10), post_size=100
+        )
+        self.assertGreater(result.n_connections, 0)
 
 
 class TestHierarchicalRandom(unittest.TestCase):

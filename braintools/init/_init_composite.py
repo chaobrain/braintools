@@ -29,10 +29,11 @@ from typing import Optional
 
 import brainstate
 import brainunit as u
+import jax.numpy as jnp
 import numpy as np
 from brainstate.typing import ArrayLike
 
-from ._init_base import Initialization
+from ._init_base import Initialization, ClipInit
 
 __all__ = [
     'Mixture',
@@ -77,29 +78,54 @@ class Mixture(Initialization):
     __module__ = 'braintools.init'
 
     def __init__(self, distributions: list, weights: Optional[list] = None):
+        if len(distributions) == 0:
+            raise ValueError('Mixture requires at least one distribution.')
+        if weights is None:
+            weights = [1.0 / len(distributions)] * len(distributions)
+        else:
+            if len(weights) != len(distributions):
+                raise ValueError(
+                    f'`weights` must have the same length as `distributions` '
+                    f'({len(distributions)}), got {len(weights)}.'
+                )
+            weights_arr = np.asarray(weights, dtype=float)
+            if np.any(weights_arr < 0):
+                raise ValueError('`weights` must be non-negative.')
+            total = float(weights_arr.sum())
+            if not np.isclose(total, 1.0):
+                raise ValueError(f'`weights` must sum to 1, got {total}.')
         self.distributions = distributions
-        self.weights = weights if weights is not None else [1.0 / len(distributions)] * len(distributions)
+        self.weights = weights
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
-        choices = rng.choice(len(self.distributions), size=size, p=self.weights)
+        shape = (size,) if isinstance(size, int) else tuple(size)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
 
-        if isinstance(size, int):
-            samples = np.zeros(size)
-            unit = None
-        else:
-            samples = np.zeros(size)
-            unit = None
+        choices = np.asarray(rng.choice(len(self.distributions), size=n, p=self.weights))
 
+        unit = None
+        flat = None
         for i, dist in enumerate(self.distributions):
-            mask = (choices == i)
-            if np.any(mask):
-                dist_samples = dist(np.sum(mask), **kwargs)
-                if unit is None:
-                    unit = dist_samples.unit
-                samples[mask] = dist_samples.to(unit).mantissa
+            idx = np.where(choices == i)[0]
+            if idx.size == 0:
+                continue
+            sample = dist(int(idx.size), **kwargs)
+            if unit is None:
+                mantissa, unit = u.split_mantissa_unit(sample)
+                flat = jnp.zeros(n, dtype=jnp.asarray(mantissa).dtype)
+            else:
+                # Reconcile units across components (raises on incompatibility).
+                mantissa = u.Quantity(sample).to(unit).mantissa
+            flat = flat.at[idx].set(mantissa)
 
-        return u.maybe_decimal(samples * unit)
+        if flat is None:
+            # Empty draw (size 0): use the first distribution to fix the unit/dtype.
+            mantissa, unit = u.split_mantissa_unit(self.distributions[0](0, **kwargs))
+            flat = jnp.zeros(n, dtype=jnp.asarray(mantissa).dtype)
+
+        result = flat.reshape(shape)
+        return u.maybe_decimal(result * unit)
 
     def __repr__(self):
         return f'Mixture(distributions={self.distributions}, weights={self.weights})'
@@ -152,24 +178,35 @@ class Conditional(Initialization):
         self.false_dist = false_dist
 
     def __call__(self, size, neuron_indices: Optional[np.ndarray] = None, **kwargs):
+        shape = (size,) if isinstance(size, int) else tuple(size)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+
         if neuron_indices is None:
-            neuron_indices = np.arange(size if isinstance(size, int) else np.prod(size))
+            neuron_indices = np.arange(n)
 
-        conditions = self.condition_fn(neuron_indices)
+        conditions = np.asarray(self.condition_fn(neuron_indices)).reshape(-1).astype(bool)
+        if conditions.shape[0] != n:
+            raise ValueError(
+                f'`condition_fn` must return a boolean array with one entry per '
+                f'element ({n}), got {conditions.shape[0]}.'
+            )
 
-        true_samples = self.true_dist(np.sum(conditions), **kwargs)
-        false_samples = self.false_dist(np.sum(~conditions), **kwargs)
+        true_idx = np.where(conditions)[0]
+        false_idx = np.where(~conditions)[0]
 
-        if isinstance(size, int):
-            samples = np.zeros(size)
-        else:
-            samples = np.zeros(size)
+        true_samples = self.true_dist(int(true_idx.size), **kwargs)
+        false_samples = self.false_dist(int(false_idx.size), **kwargs)
 
-        unit = true_samples.unit
-        samples[conditions] = true_samples.to(unit).mantissa
-        samples[~conditions] = false_samples.to(unit).mantissa
+        # Use the "true" branch to fix the unit; convert the "false" branch to match.
+        true_mantissa, unit = u.split_mantissa_unit(true_samples)
+        false_mantissa = u.Quantity(false_samples).to(unit).mantissa
 
-        return u.maybe_decimal(samples * unit)
+        flat = jnp.zeros(n, dtype=jnp.result_type(jnp.asarray(true_mantissa),
+                                                  jnp.asarray(false_mantissa)))
+        flat = flat.at[true_idx].set(true_mantissa)
+        flat = flat.at[false_idx].set(false_mantissa)
+
+        return u.maybe_decimal(flat.reshape(shape) * unit)
 
     def __repr__(self):
         return f'Conditional(condition_fn={self.condition_fn}, true_dist={self.true_dist}, false_dist={self.false_dist})'
@@ -260,17 +297,10 @@ class Clipped(Initialization):
         self.max_val = max_val
 
     def __call__(self, size, **kwargs):
-        samples = self.base_dist(size, **kwargs)
-
-        if self.min_val is not None:
-            min_val = u.Quantity(self.min_val).to(samples.unit).mantissa
-            samples = u.math.maximum(samples, min_val * samples.unit)
-
-        if self.max_val is not None:
-            max_val = u.Quantity(self.max_val).to(samples.unit).mantissa
-            samples = u.math.minimum(samples, max_val * samples.unit)
-
-        return samples
+        # Delegate to the base ``ClipInit`` so the unit-aware / unitless branching
+        # lives in one place (bug H2/M8: the previous code accessed ``.unit``
+        # unconditionally and crashed on unitless distributions).
+        return ClipInit(self.base_dist, self.min_val, self.max_val)(size, **kwargs)
 
     def __repr__(self):
         return f'Clipped(base_dist={self.base_dist}, min_val={self.min_val}, max_val={self.max_val})'

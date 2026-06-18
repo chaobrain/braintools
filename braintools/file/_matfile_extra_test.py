@@ -76,7 +76,7 @@ class TestLoadMatfileRoundTrip(unittest.TestCase):
             fn = os.path.join(d, "hdr2.mat")
             savemat(fn, {"a": np.array([1, 2, 3])})
 
-            out = load_matfile(fn, header_info=False, verbose=False)
+            out = load_matfile(fn, include_header=True, verbose=False)
 
             self.assertIn("a", out)
             self.assertIn("__header__", out)

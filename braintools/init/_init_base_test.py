@@ -709,6 +709,63 @@ class TestParamSupport:
             param(p, 5, batch_size=3)
 
 
+class TestParamBatching:
+    """Test param() batch_size expansion for plain arrays/quantities (bug C2)."""
+
+    def test_param_array_with_batch_size(self):
+        """A plain array must be broadcast across the batch dimension."""
+        result = param(np.ones(5), 5, batch_size=3)
+        assert u.math.shape(result) == (3, 5)
+        assert np.all(np.asarray(result) == 1.0)
+
+    def test_param_quantity_array_with_batch_size(self):
+        """A quantity array must be broadcast across the batch dimension."""
+        arr = np.ones(5) * u.nS
+        result = param(arr, 5, batch_size=3)
+        assert u.math.shape(result) == (3, 5)
+        assert u.get_unit(result) == u.nS
+
+    def test_param_2d_array_with_batch_size(self):
+        """A 2D array must gain a leading batch dimension."""
+        result = param(np.ones((3, 4)), (3, 4), batch_size=2)
+        assert u.math.shape(result) == (2, 3, 4)
+
+    def test_param_array_batch_already_expanded(self):
+        """An array whose leading dim already matches batch_size passes through."""
+        result = param(np.ones((3, 5)), 5, batch_size=3)
+        assert u.math.shape(result) == (3, 5)
+
+    def test_param_array_batch_mismatch(self):
+        """A leading dimension that disagrees with batch_size raises."""
+        with pytest.raises(ValueError, match="batch size"):
+            param(np.ones((4, 5)), 5, batch_size=3)
+
+
+class TestPipeInitRejectsInitialization:
+    """PipeInit cannot pipe values into an Initialization right operand (bug H3)."""
+
+    def test_pipe_rejects_initialization_right_operand(self):
+        init = SimpleInit(5.0) | SimpleInit(3.0)
+        with pytest.raises(TypeError):
+            init(4, rng=np.random.default_rng(0))
+
+
+class TestComposeRejectsLaterInitialization:
+    """Compose only accepts an Initialization as its first element (bug H5)."""
+
+    def test_compose_rejects_initialization_after_first(self):
+        init = Compose(SimpleInit(5.0), SimpleInit(3.0))
+        with pytest.raises(TypeError):
+            init((2, 3), rng=np.random.default_rng(0))
+
+    def test_compose_multidim_with_callables(self):
+        """Compose threads values (not lengths) through callable transforms."""
+        init = Compose(SimpleInit(5.0), lambda x: x * 2.0)
+        result = init((2, 3), rng=np.random.default_rng(0))
+        assert result.shape == (2, 3)
+        assert np.all(result == 10.0)
+
+
 class TestDocumentationExamples:
     """Test examples from documentation."""
 

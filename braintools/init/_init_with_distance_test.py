@@ -450,5 +450,84 @@ class TestDistanceModulatedMatrixShape(unittest.TestCase):
         self.assertTrue(np.all(weights.mantissa >= 0))
 
 
+class TestDistanceModulatedFlat1DPositions(unittest.TestCase):
+    """Genuinely flat ``(N,)`` positions must be accepted (bug H6).
+
+    ``scipy.spatial.distance.cdist`` requires 2-D ``(N, d)`` inputs and raises
+    on a 1-D ``(N,)`` array. A user describing neurons along a line naturally
+    writes ``np.array([0, 100, 200]) * u.um`` (no trailing axis), so
+    ``DistanceModulated`` must promote those to ``(N, 1)`` before ``cdist``.
+    """
+
+    def setUp(self):
+        self.rng = np.random.default_rng(42)
+
+    def test_flat_1d_positions_accepted(self):
+        profile = GaussianProfile(sigma=50.0 * u.um)
+        init = DistanceModulated(base_dist=Constant(1.0 * u.nS), distance_profile=profile)
+
+        # Flat (N,) coordinate vectors, no trailing dimension.
+        pre_positions = np.array([0.0, 100.0]) * u.um
+        post_positions = np.array([0.0, 100.0]) * u.um
+
+        weights = init((2, 2), pre_positions=pre_positions,
+                       post_positions=post_positions, rng=self.rng)
+
+        self.assertEqual(weights.shape, (2, 2))
+        # Diagonal (distance 0) keeps the full base weight.
+        self.assertAlmostEqual(weights[0, 0].mantissa, 1.0, delta=0.01)
+        self.assertAlmostEqual(weights[1, 1].mantissa, 1.0, delta=0.01)
+        # Off-diagonal (distance 100 um) is attenuated and symmetric.
+        self.assertTrue(weights[0, 0] > weights[0, 1])
+        self.assertAlmostEqual(weights[0, 1].mantissa, weights[1, 0].mantissa, delta=1e-6)
+
+    def test_flat_1d_matches_column_vector(self):
+        """A flat ``(N,)`` vector and its ``(N, 1)`` column form are equivalent."""
+        profile = ExponentialProfile(decay_constant=100.0 * u.um)
+        init = DistanceModulated(base_dist=Constant(2.0 * u.nS), distance_profile=profile)
+
+        flat = np.array([0.0, 50.0, 120.0]) * u.um
+        column = flat.reshape(3, 1)
+
+        w_flat = init((3, 3), pre_positions=flat, post_positions=flat, rng=self.rng)
+        w_col = init((3, 3), pre_positions=column, post_positions=column, rng=self.rng)
+
+        np.testing.assert_allclose(w_flat.mantissa, w_col.mantissa, rtol=1e-6)
+
+
+class TestDistanceModulatedDeterministicGain(unittest.TestCase):
+    """``DistanceModulated`` is a deterministic weight modulator, not a
+    stochastic connectivity mask (bug H6).
+
+    The profile multiplies the base weights; it never drops connections via
+    Bernoulli sampling. These tests pin that contract so the documented
+    semantics cannot silently regress to stochastic masking.
+    """
+
+    def setUp(self):
+        self.rng = np.random.default_rng(0)
+
+    def test_output_equals_base_times_profile(self):
+        profile = GaussianProfile(sigma=50.0 * u.um)
+        base = Constant(2.0 * u.nS)
+        init = DistanceModulated(base_dist=base, distance_profile=profile)
+
+        distances = np.array([0.0, 50.0, 100.0]) * u.um
+        weights = init(3, distances=distances, rng=self.rng)
+
+        expected = 2.0 * np.asarray(profile.weight_scaling(distances))
+        np.testing.assert_allclose(weights.to(u.nS).mantissa, expected, rtol=1e-5)
+
+    def test_no_zeros_introduced_by_modulation(self):
+        # A profile that never reaches zero must not yield any zero weights:
+        # there is no stochastic drop-out.
+        profile = ExponentialProfile(decay_constant=100.0 * u.um)
+        init = DistanceModulated(base_dist=Constant(1.0 * u.nS), distance_profile=profile)
+
+        distances = np.linspace(0, 300, 50) * u.um
+        weights = init(50, distances=distances, rng=self.rng)
+        self.assertTrue(np.all(weights.mantissa > 0))
+
+
 if __name__ == '__main__':
     unittest.main()

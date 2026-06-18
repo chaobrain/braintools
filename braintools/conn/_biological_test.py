@@ -478,3 +478,39 @@ class TestExcitatoryInhibitory(unittest.TestCase):
             if n_inh > 0:
                 ratio = n_exc / n_inh
                 self.assertGreater(ratio, 1.0)  # More excitatory than inhibitory
+
+    def test_mixed_weight_units_raises(self):
+        """BIO-1: exc/inh weights differing in dimensionality raise a clear ValueError."""
+        with self.assertRaises(ValueError) as ctx:
+            conn = ExcitatoryInhibitory(
+                exc_ratio=0.8, exc_prob=0.5, inh_prob=0.5,
+                exc_weight=1.0 * u.nS,
+                inh_weight=-0.8,  # dimensionless, mismatched
+                seed=42
+            )
+            conn(pre_size=20, post_size=20)
+        self.assertIn("dimensionality", str(ctx.exception))
+
+    def test_mixed_delay_units_raises(self):
+        """BIO-1: exc/inh delays differing in dimensionality raise a clear ValueError."""
+        with self.assertRaises(ValueError) as ctx:
+            conn = ExcitatoryInhibitory(
+                exc_ratio=0.8, exc_prob=0.5, inh_prob=0.5,
+                exc_weight=1.0 * u.nS, inh_weight=-0.8 * u.nS,
+                exc_delay=1.0 * u.ms,
+                inh_delay=0.5,  # dimensionless, mismatched
+                seed=42
+            )
+            conn(pre_size=20, post_size=20)
+        self.assertIn("dimensionality", str(ctx.exception))
+
+    def test_parameter_range_validation(self):
+        """BIO-2: out-of-range ratios/probabilities raise a clear ValueError."""
+        with self.assertRaises(ValueError):
+            ExcitatoryInhibitory(exc_ratio=1.5)
+        with self.assertRaises(ValueError):
+            ExcitatoryInhibitory(exc_ratio=-0.1)
+        with self.assertRaises(ValueError):
+            ExcitatoryInhibitory(exc_prob=1.2)
+        with self.assertRaises(ValueError):
+            ExcitatoryInhibitory(inh_prob=-0.5)

@@ -226,10 +226,12 @@ class ComposedProfile(DistanceProfile):
         self,
         obj: Union[DistanceProfile, ArrayLike],
         distances: ArrayLike,
+        method: str,
     ) -> np.ndarray:
-        """Helper to evaluate a profile or return a constant."""
+        """Evaluate a profile via ``method`` (``'probability'`` or
+        ``'weight_scaling'``) or return a constant operand unchanged."""
         if isinstance(obj, DistanceProfile):
-            return obj.weight_scaling(distances)
+            return getattr(obj, method)(distances)
         elif isinstance(obj, ArrayLike):
             return obj
         elif hasattr(obj, '__array__'):
@@ -238,12 +240,14 @@ class ComposedProfile(DistanceProfile):
             raise TypeError(f"Operand must be DistanceProfile, scalar, or Quantity. Got {type(obj)}")
 
     def probability(self, distances: ArrayLike) -> np.ndarray:
-        left_val = self._evaluate(self.left, distances)
-        right_val = self._evaluate(self.right, distances)
+        left_val = self._evaluate(self.left, distances, 'probability')
+        right_val = self._evaluate(self.right, distances, 'probability')
         return self.op(left_val, right_val)
 
     def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
-        return self.probability(distances)
+        left_val = self._evaluate(self.left, distances, 'weight_scaling')
+        right_val = self._evaluate(self.right, distances, 'weight_scaling')
+        return self.op(left_val, right_val)
 
     def __repr__(self):
         return f"({self.left} {self.op_symbol} {self.right})"
@@ -325,25 +329,30 @@ class PipeProfile(DistanceProfile):
         self.base = base
         self.func = func
 
-    def probability(self, distances: ArrayLike) -> np.ndarray:
-        values = self.base.probability(distances)
+    def _check_func(self) -> None:
         if isinstance(self.func, DistanceProfile):
-            # For chaining profiles, apply the second profile to the same distances
-            # and combine with the first profile's output
-            return self.func.probability(distances)
-        elif callable(self.func):
-            return self.func(values)
-        else:
-            raise TypeError(f"Right operand must be DistanceProfile or callable. Got {type(self.func)}")
+            raise TypeError(
+                "Right operand of the pipe operator must be a callable transform "
+                "that maps a profile's output array to a new array, not a "
+                f"DistanceProfile. Got {type(self.func)}. A DistanceProfile "
+                "consumes distances, not piped values, so chaining it would "
+                "silently discard the left profile. Use arithmetic operators "
+                "(+, *, ...) to combine two profiles instead."
+            )
+        if not callable(self.func):
+            raise TypeError(
+                f"Right operand of pipe must be callable. Got {type(self.func)}"
+            )
+
+    def probability(self, distances: ArrayLike) -> np.ndarray:
+        self._check_func()
+        values = self.base.probability(distances)
+        return self.func(values)
 
     def weight_scaling(self, distances: ArrayLike) -> np.ndarray:
+        self._check_func()
         values = self.base.weight_scaling(distances)
-        if isinstance(self.func, DistanceProfile):
-            return self.func.weight_scaling(distances)
-        elif callable(self.func):
-            return self.func(values)
-        else:
-            raise TypeError(f"Right operand must be DistanceProfile or callable. Got {type(self.func)}")
+        return self.func(values)
 
     def __repr__(self):
         return f"({self.base} | {self.func})"

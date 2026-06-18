@@ -100,17 +100,24 @@ class Initialization(ABC):
 
         Parameters
         ----------
-        size : int or tuple
+        size : int or tuple of int
             Shape of the output array.
-        **kwargs :
-            Additional keyword arguments (e.g., rng, distances, neuron_indices).
-            rng : numpy.random.Generator, optional
-                Random number generator (default: np.random).
+        **kwargs
+            Additional keyword arguments (e.g., ``rng``, ``distances``,
+            ``neuron_indices``).
+
+            rng : optional
+                Random number generator. Concrete initializers choose their own
+                default backend when ``rng`` is not supplied; most use
+                ``brainstate.random``, while a few (e.g. distance profiles) use
+                ``numpy``. Pass an explicit generator for reproducible results.
 
         Returns
         -------
-        values : array_like
-            Generated parameter values.
+        values : array_like or brainunit.Quantity
+            Generated parameter values. The return type is a plain array when the
+            initializer is unitless and a :class:`brainunit.Quantity` when it
+            carries a unit.
         """
         pass
 
@@ -181,6 +188,9 @@ Initializer = Union[Initialization, float, int, np.ndarray, jax.Array, u.Quantit
 def _to_size(x) -> Optional[Tuple[int]]:
     if isinstance(x, (tuple, list)):
         return tuple(x)
+    # ``bool`` is a subclass of ``int``; a boolean is never a valid size.
+    if isinstance(x, bool):
+        raise ValueError(f'Cannot make a size for {x}')
     if isinstance(x, (int, np.integer)):
         return (x,)
     if x is None:
@@ -190,14 +200,25 @@ def _to_size(x) -> Optional[Tuple[int]]:
 
 def _are_broadcastable_shapes(shape1, shape2):
     """
-    Check if two shapes are broadcastable.
+    Check if two shapes are broadcastable against each other.
 
-    Parameters:
-    - shape1: Tuple[int], the shape of the first array.
-    - shape2: Tuple[int], the shape of the second array.
+    This is a NumPy-style broadcast-compatibility test, not an equality test:
+    trailing dimensions are compared pairwise and are compatible when they are
+    equal or one of them is 1. Leading dimensions present in only one shape are
+    ignored. ``param`` uses this to accept parameters that can be broadcast up
+    to the requested ``size`` (e.g. a scalar-like ``(1,)`` against ``(10,)``).
 
-    Returns:
-    - bool: True if shapes are broadcastable, False otherwise.
+    Parameters
+    ----------
+    shape1 : tuple of int
+        The shape of the first array.
+    shape2 : tuple of int
+        The shape of the second array.
+
+    Returns
+    -------
+    bool
+        True if the shapes are broadcast-compatible, False otherwise.
     """
     # Reverse the shapes to compare from the last dimension
     shape1_reversed = shape1[::-1]
@@ -230,7 +251,7 @@ def _expand_params_to_match_sizes(params, sizes):
 
     # Add new axes to params if it has fewer dimensions than sizes
     for _ in range(dim_diff):
-        params = u.math.expand_dims(params, axis=0)  # Add new axis at the last dimension
+        params = u.math.expand_dims(params, axis=0)  # prepend a new leading axis
     return params
 
 
@@ -252,28 +273,34 @@ def param(
         The initialization of the parameter.
 
         - If it is None, the created parameter will be None.
-        - If it is a callable function :math:`f`, the ``f(size)`` will be returned.
-        - If it is an instance of :py:class:`init.Initializer``, the ``f(size)`` will be returned.
-        - If it is a tensor, then this function check whether ``tensor.shape`` is equal to the given ``size``.
-    sizes: int, sequence of int
+        - If it is a callable function :math:`f`, then ``f(size)`` will be returned.
+        - If it is an instance of :class:`Initialization`, then ``init(size)`` will be returned.
+        - If it is a tensor, then this function checks whether ``tensor.shape`` is
+          broadcast-compatible with the given ``size``.
+    sizes : int or sequence of int
         The shape of the parameter.
-    batch_size: int
-        The batch size.
-    allow_none: bool
-        Whether allow the parameter is None.
-    allow_scalar: bool
-        Whether allow the parameter is a scalar value.
+    batch_size : int, optional
+        If given, a leading batch axis of this length is prepended (arrays are
+        broadcast across it; an array whose leading dimension already equals
+        ``batch_size`` is passed through unchanged).
+    allow_none : bool, default True
+        Whether to allow the parameter to be None.
+    allow_scalar : bool, default True
+        Whether to allow the parameter to be a scalar value.
     **param_kwargs
-        Additional keyword arguments passed to the initialization.
+        Additional keyword arguments passed to the initialization callable.
 
     Returns
     -------
-    param: ArrayType, float, int, bool, None
-      The initialized parameter.
+    param : array, brainunit.Quantity, float, int, brainstate.State, brainstate.nn.Param, or None
+        The initialized parameter. Scalars (when ``allow_scalar``) and ``None``
+        (when ``allow_none``) are returned as-is; ``State``/``Param`` inputs are
+        returned with their value updated; everything else is returned as an
+        array or :class:`brainunit.Quantity`.
 
     See Also
     --------
-    noise, state
+    Initialization
     """
     # Check if the parameter is None
     if init is None:
@@ -350,7 +377,7 @@ def param(
             )
             if isinstance(init, State):
                 init.restore_value(param_value)
-            param_value = init
+                param_value = init
         else:
             if param_value.shape[0] != batch_size:
                 raise ValueError(
@@ -493,13 +520,20 @@ class PipeInit(Initialization):
         self.func = func
 
     def __call__(self, size, **kwargs):
-        values = self.base(size, **kwargs)
         if isinstance(self.func, Initialization):
-            return self.func(size, **kwargs)
-        elif callable(self.func):
-            return self.func(values)
-        else:
-            raise TypeError(f"Right operand of pipe must be callable or Initialization. Got {type(self.func)}")
+            raise TypeError(
+                "Right operand of the pipe operator must be a callable transform "
+                "that maps generated values to new values, not an Initialization. "
+                f"Got {type(self.func)}. An Initialization consumes a size argument, "
+                "not piped values, so chaining it would silently discard the left "
+                "operand. Wrap the transform in a function instead."
+            )
+        if not callable(self.func):
+            raise TypeError(
+                f"Right operand of pipe must be callable. Got {type(self.func)}"
+            )
+        values = self.base(size, **kwargs)
+        return self.func(values)
 
     def __repr__(self):
         return f"({self.base} | {self.func})"
@@ -550,7 +584,13 @@ class Compose(Initialization):
         result = self.inits[0](size, **kwargs) if isinstance(self.inits[0], Initialization) else self.inits[0]
         for init in self.inits[1:]:
             if isinstance(init, Initialization):
-                result = init(size if isinstance(result, (int, float)) else len(result), **kwargs)
+                raise TypeError(
+                    "Only the first element of Compose may be an Initialization. "
+                    "Subsequent elements must be callable transforms that map the "
+                    f"generated values to new values. Got {type(init)} at a later "
+                    "position. An Initialization consumes a size argument, not piped "
+                    "values, so it cannot be applied to the running result."
+                )
             elif callable(init):
                 result = init(result)
             else:

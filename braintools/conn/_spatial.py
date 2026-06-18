@@ -35,6 +35,24 @@ __all__ = [
 ]
 
 
+def _same_population(pre_positions, post_positions, pre_num, post_num) -> bool:
+    """Heuristically decide whether pre and post are the same population.
+
+    Treated as the same population (so that ``pre_idx == post_idx`` is an autapse)
+    when the same position array object is passed for both, or when the populations
+    have equal size and identical positions.
+    """
+    if pre_positions is post_positions and pre_positions is not None:
+        return True
+    if pre_num != post_num:
+        return False
+    if pre_positions is None or post_positions is None:
+        return False
+    pre_val = u.get_mantissa(pre_positions)
+    post_val = u.get_mantissa(post_positions)
+    return np.array_equal(pre_val, post_val)
+
+
 class DistanceDependent(PointConnectivity):
     """Distance-dependent connectivity for spatially arranged point neurons.
 
@@ -95,9 +113,14 @@ class DistanceDependent(PointConnectivity):
     - Requires neuron positions to be provided via ``pre_positions`` and ``post_positions``
       arguments when calling the connector, or a pre-computed ``distances`` array
     - Position arrays should have shape ``(n_neurons, n_dimensions)`` with units
+    - Distances are computed with the Euclidean metric over **all** position dimensions
+      (e.g. a 3D position array uses x, y and z), not just the first two
     - The actual number of connections is stochastic and depends on the distance profile
       and random sampling
     - Empty connection results are returned if no connections are established
+    - When ``pre`` and ``post`` are the same population, self-connections (autapses) are
+      excluded by default; pass ``allow_self_connections=True`` to keep them
+    - Connection probabilities are expected in ``[0, 1]`` and are clipped to this range
 
     See Also
     --------
@@ -148,7 +171,7 @@ class DistanceDependent(PointConnectivity):
         >>>
         >>> conn = DistanceDependent(
         ...     distance_profile=ExponentialProfile(
-        ...         scale=150 * u.um,
+        ...         decay_constant=150 * u.um,
         ...         max_distance=500 * u.um
         ...     ),
         ...     weight=Constant(2.0 * u.nS)
@@ -174,12 +197,20 @@ class DistanceDependent(PointConnectivity):
         distance_profile: Union[ArrayLike, DistanceProfile],
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
+        # If the profile exposes a positive scale parameter, validate it so that a
+        # non-positive sigma/decay_constant surfaces a clear error instead of NaN/empty.
+        for attr in ('sigma', 'decay_constant'):
+            val = getattr(distance_profile, attr, None)
+            if val is not None and u.get_mantissa(val) <= 0:
+                raise ValueError(f"distance_profile.{attr} must be > 0, got {val}.")
         self.distance_profile = distance_profile
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate distance-dependent connections."""
@@ -208,16 +239,35 @@ class DistanceDependent(PointConnectivity):
                              'for example: pre_positions=positions, post_positions=positions, '
                              'or provide distances directly.')
         else:
+            if len(pre_positions) != pre_num:
+                raise ValueError(
+                    f"Number of pre_positions ({len(pre_positions)}) must equal "
+                    f"pre_size ({pre_num})."
+                )
+            if len(post_positions) != post_num:
+                raise ValueError(
+                    f"Number of post_positions ({len(post_positions)}) must equal "
+                    f"post_size ({post_num})."
+                )
             pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
             post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
             distances = u.maybe_decimal(cdist(pre_pos_val, post_pos_val) * pos_unit)
 
         # Calculate connection probabilities using distance profile
         probs = self.distance_profile.probability(distances)
+        # Probabilities are expected in [0, 1]; clip to guard against profiles or
+        # custom arrays that exceed this range (e.g. distance 0 -> prob slightly >1).
+        probs = np.clip(probs, 0.0, 1.0)
 
         # Vectorized connection generation
         random_vals = self.rng.random((pre_num, post_num))
         connection_mask = (probs > 0) & (random_vals < probs)
+
+        # Drop autapses (self-connections) when pre and post are the same population.
+        if not self.allow_self_connections and _same_population(
+            pre_positions, post_positions, pre_num, post_num
+        ):
+            np.fill_diagonal(connection_mask, False)
 
         pre_indices, post_indices = np.where(connection_mask)
         connection_distances = distances[connection_mask]
@@ -408,14 +458,17 @@ class Gaussian(DistanceDependent):
 
     .. code-block:: python
 
-        >>> from braintools.init import DistanceModulated as DDWeight, Normal
+        >>> from braintools.init import DistanceModulated, Normal, GaussianProfile
         >>>
         >>> broad_conn = Gaussian(
         ...     distance_profile=GaussianProfile(
         ...         sigma=200 * u.um,  # Broader spread
         ...         max_distance=600 * u.um
         ...     ),
-        ...     weight=DDWeight(lambda d: (3.0 * u.nS) * np.exp(-d/(100*u.um)))
+        ...     weight=DistanceModulated(
+        ...         base_dist=Normal(mean=3.0*u.nS, std=0.5*u.nS),
+        ...         distance_profile=GaussianProfile(sigma=100*u.um),
+        ...     )
         ... )
 
     Modeling cortical column connectivity:
@@ -490,7 +543,7 @@ class Exponential(DistanceDependent):
         An exponential distance profile that defines the spatial connection probability decay.
         Must be an instance of ``braintools.init.ExponentialProfile`` with:
 
-        - ``scale``: Characteristic decay length (λ) - larger values create longer-range connections
+        - ``decay_constant``: Characteristic decay length (λ) - larger values create longer-range connections
         - ``max_distance``: Maximum distance for connections (optional)
         - ``normalize``: Whether to normalize to unit maximum (optional)
     weight : Initializer, optional
@@ -527,11 +580,11 @@ class Exponential(DistanceDependent):
 
     Notes
     -----
-    - The ``scale`` parameter (λ) determines how quickly connection probability decays:
+    - The ``decay_constant`` parameter (λ) determines how quickly connection probability decays:
 
       - At distance λ, probability is reduced to ~37% (1/e) of the maximum
-      - Smaller scale values create more localized connectivity
-      - Larger scale values allow longer-range connections
+      - Smaller decay_constant values create more localized connectivity
+      - Larger decay_constant values allow longer-range connections
 
     - Exponential decay is generally slower than Gaussian decay at intermediate distances
       but faster at very short distances, making it suitable for modeling projections
@@ -562,10 +615,10 @@ class Exponential(DistanceDependent):
         >>> # Create random 2D positions
         >>> positions = np.random.uniform(0, 1000, (300, 2)) * u.um
         >>>
-        >>> # Exponential connectivity with scale=150um
+        >>> # Exponential connectivity with decay_constant=150um
         >>> conn = Exponential(
         ...     distance_profile=ExponentialProfile(
-        ...         scale=150 * u.um,
+        ...         decay_constant=150 * u.um,
         ...         max_distance=500 * u.um
         ...     ),
         ...     weight=Constant(1.5 * u.nS),
@@ -586,7 +639,7 @@ class Exponential(DistanceDependent):
         >>> # Rapid decay for highly local connections
         >>> local_conn = Exponential(
         ...     distance_profile=ExponentialProfile(
-        ...         scale=75 * u.um,  # Short decay length
+        ...         decay_constant=75 * u.um,  # Short decay length
         ...         max_distance=225 * u.um
         ...     ),
         ...     weight=Constant(2.5 * u.nS)
@@ -601,7 +654,7 @@ class Exponential(DistanceDependent):
         >>> # Longer-range connectivity with stochastic weights
         >>> long_range_conn = Exponential(
         ...     distance_profile=ExponentialProfile(
-        ...         scale=300 * u.um,  # Long decay length
+        ...         decay_constant=300 * u.um,  # Long decay length
         ...         max_distance=900 * u.um
         ...     ),
         ...     weight=Normal(mean=1.0*u.nS, std=0.2*u.nS),
@@ -612,16 +665,19 @@ class Exponential(DistanceDependent):
 
     .. code-block:: python
 
-        >>> from braintools.init import DistanceModulated as DDDelay, LogNormal
+        >>> from braintools.init import DistanceModulated, Constant, Normal, GaussianProfile
         >>>
-        >>> # Model conduction delays proportional to distance
+        >>> # Modulate delays by distance using a Gaussian profile
         >>> conn_with_delays = Exponential(
         ...     distance_profile=ExponentialProfile(
-        ...         scale=200 * u.um,
+        ...         decay_constant=200 * u.um,
         ...         max_distance=600 * u.um
         ...     ),
         ...     weight=Constant(1.0 * u.nS),
-        ...     delay=DDDelay(lambda d: (0.5 * u.ms) + d / (300 * u.um/u.ms))
+        ...     delay=DistanceModulated(
+        ...         base_dist=Normal(mean=1.0*u.ms, std=0.2*u.ms),
+        ...         distance_profile=GaussianProfile(sigma=200*u.um),
+        ...     )
         ... )
 
     Modeling hippocampal connectivity:
@@ -633,10 +689,10 @@ class Exponential(DistanceDependent):
         >>>
         >>> hippo_conn = Exponential(
         ...     distance_profile=ExponentialProfile(
-        ...         scale=250 * u.um,  # Moderate spatial extent
+        ...         decay_constant=250 * u.um,  # Moderate spatial extent
         ...         max_distance=1000 * u.um
         ...     ),
-        ...     weight=LogNormal(mean=1.5*u.nS, sigma=0.4),
+        ...     weight=LogNormal(mean=1.5*u.nS, std=0.4*u.nS),
         ...     delay=Normal(mean=2.0*u.ms, std=0.3*u.ms)
         ... )
         >>>
@@ -829,22 +885,32 @@ class Ring(PointConnectivity):
         if pre_size != post_size:
             raise ValueError("Ring networks require pre_size == post_size")
 
-        pre_indices = []
-        post_indices = []
+        if not (1 <= self.neighbors <= (n - 1) // 2):
+            raise ValueError(
+                f"neighbors must satisfy 1 <= neighbors <= (n-1)//2 = {(n - 1) // 2} "
+                f"for a ring of {n} neurons, got {self.neighbors}."
+            )
 
-        # Connect each neuron to its neighbors
+        # Use a set to avoid duplicate (pre, post) edges (which can otherwise arise
+        # when (i + offset) % n == (i - offset) % n) and skip self-loops.
+        edges = set()
         for i in range(n):
             for offset in range(1, self.neighbors + 1):
                 # Forward connections
                 target = (i + offset) % n
-                pre_indices.append(i)
-                post_indices.append(target)
+                if target != i:
+                    edges.add((i, target))
 
                 # Backward connections if bidirectional
-                if self.bidirectional and offset > 0:
+                if self.bidirectional:
                     target = (i - offset) % n
-                    pre_indices.append(i)
-                    post_indices.append(target)
+                    if target != i:
+                        edges.add((i, target))
+
+        if edges:
+            pre_indices, post_indices = (list(t) for t in zip(*sorted(edges)))
+        else:
+            pre_indices, post_indices = [], []
 
         n_connections = len(pre_indices)
 
@@ -1076,18 +1142,14 @@ class Grid2d(PointConnectivity):
         """Generate grid connectivity."""
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        if pre_size != post_size:
-            raise ValueError("Grid2d networks require pre_size == post_size")
-
         if not isinstance(pre_size, (tuple, list)):
+            raise ValueError("Grid2d networks require pre_size and post_size to be a (rows, cols) tuple")
+        if pre_size != post_size:
             raise ValueError("Grid2d networks require pre_size == post_size")
         if len(pre_size) != 2:
             raise ValueError("Grid2d networks require pre_size and post_size to be 2D shapes")
 
         rows, cols = pre_size
-
-        pre_indices = []
-        post_indices = []
 
         # Define neighbor offsets
         if self.connectivity == 'von_neumann':
@@ -1097,7 +1159,10 @@ class Grid2d(PointConnectivity):
         else:
             raise ValueError(f"Unknown connectivity type: {self.connectivity}")
 
-        # Create connections
+        # Use a set to avoid duplicate (source, target) edges, which periodic wrapping
+        # produces on small grids (e.g. dim <= 2 maps several offsets to the same cell),
+        # and skip self-targets.
+        edges = set()
         for i in range(rows):
             for j in range(cols):
                 source_idx = i * cols + j
@@ -1114,8 +1179,13 @@ class Grid2d(PointConnectivity):
                             continue
 
                     target_idx = ni * cols + nj
-                    pre_indices.append(source_idx)
-                    post_indices.append(target_idx)
+                    if target_idx != source_idx:
+                        edges.add((source_idx, target_idx))
+
+        if edges:
+            pre_indices, post_indices = (list(t) for t in zip(*sorted(edges)))
+        else:
+            pre_indices, post_indices = [], []
 
         n_connections = len(pre_indices)
 
@@ -1236,6 +1306,8 @@ class RadialPatches(PointConnectivity):
     - Position arrays should have shape ``(n_neurons, n_dimensions)`` with consistent units
     - Patch centers are selected randomly without replacement for each presynaptic neuron
     - Duplicate connections (from overlapping patches) are automatically removed
+    - When ``pre`` and ``post`` are the same population, self-connections (autapses) are
+      excluded by default; pass ``allow_self_connections=True`` to keep them
     - The actual number of connections is stochastic and depends on:
 
       - Spatial distribution of neurons
@@ -1388,14 +1460,20 @@ class RadialPatches(PointConnectivity):
         prob: float = 1.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
+        if u.get_mantissa(patch_radius) <= 0:
+            raise ValueError(f"patch_radius must be > 0, got {patch_radius}.")
+        if not (0.0 <= prob <= 1.0):
+            raise ValueError(f"prob must be in [0, 1], got {prob}.")
         self.patch_radius = patch_radius
         self.n_patches = n_patches
         self.prob = prob
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate radial patch connections."""
@@ -1446,6 +1524,17 @@ class RadialPatches(PointConnectivity):
                     selected = candidates[random_vals < self.prob]
                     pre_indices.extend([i] * len(selected))
                     post_indices.extend(selected)
+
+        # Drop autapses (self-connections) when pre and post are the same population.
+        drop_self = not self.allow_self_connections and _same_population(
+            pre_positions, post_positions, pre_num, post_num
+        )
+        if drop_self:
+            filtered = [(p, q) for p, q in zip(pre_indices, post_indices) if p != q]
+            if filtered:
+                pre_indices, post_indices = (list(t) for t in zip(*filtered))
+            else:
+                pre_indices, post_indices = [], []
 
         if len(pre_indices) == 0:
             return ConnectionResult(

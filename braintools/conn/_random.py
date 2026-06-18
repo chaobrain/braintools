@@ -61,7 +61,8 @@ class Random(PointConnectivity):
         Weight initialization. Can be:
 
         - Initialization class (e.g., Normal, LogNormal, Constant)
-        - Scalar value (float/int, will use nS units)
+        - Scalar value (float/int, stays dimensionless; pass a ``brainunit``
+          Quantity such as ``2.5 * u.nS`` for physical units)
         - Quantity scalar or array
         - Array-like values
 
@@ -70,7 +71,8 @@ class Random(PointConnectivity):
         Delay initialization. Can be:
 
         - Initialization class (e.g., ConstantDelay, UniformDelay)
-        - Scalar value (float/int, will use ms units)
+        - Scalar value (float/int, stays dimensionless; pass a ``brainunit``
+          Quantity such as ``1.0 * u.ms`` for physical units)
         - Quantity scalar or array
         - Array-like values
 
@@ -101,7 +103,7 @@ class Random(PointConnectivity):
         >>> topology_only = Random(prob=0.1, seed=42)
         >>> result = topology_only(pre_size=1000, post_size=1000)
         >>>
-        >>> # Using scalar values (automatic units)
+        >>> # Using bare scalar values (remain dimensionless)
         >>> simple_conn = Random(prob=0.1, weight=2.5, delay=1.0, seed=42)
         >>> result = simple_conn(pre_size=1000, post_size=1000)
 
@@ -143,6 +145,8 @@ class Random(PointConnectivity):
         **kwargs
     ):
         super().__init__(**kwargs)
+        if not (0 <= prob <= 1):
+            raise ValueError(f"prob must be between 0 and 1, got {prob}")
         self.prob = prob
         self.allow_self_connections = allow_self_connections
         self.weight_init = weight
@@ -167,16 +171,12 @@ class Random(PointConnectivity):
         else:
             post_num = post_size
 
-        # Generate all potential connections
-        pre_indices = []
-        post_indices = []
-        for i in range(pre_num):
-            for j in range(post_num):
-                if not self.allow_self_connections and i == j:
-                    continue
-                if self.rng.random() < self.prob:
-                    pre_indices.append(i)
-                    post_indices.append(j)
+        # Vectorized connection generation
+        mask = self.rng.random((pre_num, post_num)) < self.prob
+        # Only drop self-connections when pre and post are the same population
+        if not self.allow_self_connections and pre_num == post_num:
+            np.fill_diagonal(mask, False)
+        pre_indices, post_indices = np.where(mask)
 
         n_connections = len(pre_indices)
         if n_connections == 0:
@@ -504,18 +504,25 @@ class ClusteredRandom(PointConnectivity):
         **kwargs
     ):
         super().__init__(**kwargs)
+        if not (0 <= prob <= 1):
+            raise ValueError(f"prob must be between 0 and 1, got {prob}")
+        if cluster_factor < 0:
+            raise ValueError(f"cluster_factor must be non-negative, got {cluster_factor}")
         self.prob = prob
         self.cluster_radius = cluster_radius
         self.cluster_factor = cluster_factor
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate clustered random connectivity."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for clustered random connectivity")

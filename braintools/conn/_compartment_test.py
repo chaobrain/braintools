@@ -501,17 +501,16 @@ class TestMorphologyAwarePatterns(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_morphology_distance_no_positions(self):
-        # Should fall back to CompartmentSpecific behavior
+        # CMP-2: distance-dependent connectivity is undefined without positions.
+        # Previously it silently fell back to a hardcoded prob=0.1; now it raises.
         conn = MorphologyDistance(
             sigma=50 * u.um,
             decay_function='gaussian',
             seed=42
         )
 
-        result = conn(pre_size=10, post_size=10)
-
-        self.assertEqual(result.model_type, 'multi_compartment')
-        self.assertGreater(result.n_connections, 0)
+        with self.assertRaises(ValueError):
+            conn(pre_size=10, post_size=10)
 
     def test_morphology_distance_with_positions(self):
         pre_positions = np.random.RandomState(42).uniform(0, 100, (10, 2)) * u.um
@@ -538,9 +537,13 @@ class TestMorphologyAwarePatterns(unittest.TestCase):
         post_positions = np.array([[0, 0], [20, 20]]) * u.um
 
         for decay_func in ['gaussian', 'exponential', 'linear']:
+            # allow_self_connections so the zero-distance diagonal (i==j) is kept;
+            # otherwise the sparse off-diagonal pairs can yield an empty result with
+            # no metadata for the 'linear' decay on this toy data.
             conn = MorphologyDistance(
                 sigma=10 * u.um,
                 decay_function=decay_func,
+                allow_self_connections=True,
                 seed=42
             )
 
@@ -789,7 +792,10 @@ class TestAxonalPatterns(unittest.TestCase):
 
         self.assertEqual(result.model_type, 'multi_compartment')
         self.assertTrue(np.all(result.pre_compartments == AXON))
-        self.assertTrue(np.all(result.post_compartments == BASAL_DENDRITE))
+        # CMP-3: AxonalProjection now targets both basal and apical dendrites
+        # (previously hardcoded to BASAL_DENDRITE only).
+        valid_post = np.isin(result.post_compartments, [BASAL_DENDRITE, APICAL_DENDRITE])
+        self.assertTrue(np.all(valid_post))
         self.assertEqual(result.metadata['pattern'], 'axonal_projection')
         self.assertEqual(result.metadata['projection_type'], 'local')
 
@@ -818,10 +824,13 @@ class TestAxonalPatterns(unittest.TestCase):
         pre_positions = np.array([[0, 0], [10, 10]]) * u.um
         post_positions = np.array([[0, 0], [50, 50]]) * u.um
 
+        # allow_self_connections so the zero-distance diagonal (i==j) is kept;
+        # on this far-apart toy data the off-diagonal clustered prob is ~0.
         conn = AxonalProjection(
             projection_type='local',
             arborization_pattern='clustered',
             connection_prob=0.5,
+            allow_self_connections=True,
             seed=42
         )
 
@@ -855,17 +864,16 @@ class TestAxonalPatterns(unittest.TestCase):
         self.assertGreater(result.n_connections, 10)  # Should be more than just one per pre neuron
 
     def test_axonal_arborization_no_positions(self):
-        # Should fall back to CompartmentSpecific behavior
+        # CMP-2: spatial arborization is undefined without positions.
+        # Previously it silently fell back to a dense pattern; now it raises.
         conn = AxonalArborization(
             arborization_radius=50 * u.um,
             density=0.2,
             seed=42
         )
 
-        result = conn(pre_size=10, post_size=10)
-
-        self.assertEqual(result.model_type, 'multi_compartment')
-        self.assertGreater(result.n_connections, 0)
+        with self.assertRaises(ValueError):
+            conn(pre_size=10, post_size=10)
 
     def test_axonal_arborization_with_positions(self):
         # Close positions should have high connection probability
@@ -1195,21 +1203,18 @@ class TestEdgeCases(unittest.TestCase):
         self.rng = np.random.default_rng(42)
 
     def test_empty_connections_various_patterns(self):
-        # Test various patterns with zero probability
+        # Test various patterns with zero probability. Seeds are passed at
+        # construction (reassigning ``pattern.seed`` afterwards has no effect
+        # on the already-created ``self.rng``).
         patterns = [
-            CompartmentSpecific(compartment_mapping={AXON: SOMA}, connection_prob=0.0),
-            SomaToDendrite(prob_per_dendrite=0.0),
-            AxonToSoma(connection_prob=0.0),
-            # DendriticTree(
-            #     tree_structure={'basal': {'n_branches': 3}},
-            #     branch_targeting={'proximal': 0.0}
-            # ),
-            AxonalBranching(branches_per_axon=0),  # Zero branches
+            CompartmentSpecific(compartment_mapping={AXON: SOMA}, connection_prob=0.0, seed=42),
+            SomaToDendrite(prob_per_dendrite=0.0, seed=42),
+            AxonToSoma(connection_prob=0.0, seed=42),
+            DendriticTree(branch_targeting={'proximal': 0.0, 'distal': 0.0}, seed=42),
+            AxonalBranching(branches_per_axon=0, seed=42),  # Zero branches
         ]
 
         for pattern in patterns:
-            print(pattern)
-            pattern.seed = 42
             result = pattern(pre_size=10, post_size=10)
             self.assertEqual(result.n_connections, 0)
             self.assertEqual(len(result.pre_indices), 0)
@@ -1230,9 +1235,12 @@ class TestEdgeCases(unittest.TestCase):
         self.assertLess(result.n_connections, 10000)  # Much less than 500*500
 
     def test_single_neuron_networks(self):
+        # allow_self_connections=True so the single 0->0 connection is kept;
+        # by default same-population self-connections (autapses) are dropped.
         conn = CompartmentSpecific(
             compartment_mapping={AXON: SOMA},
             connection_prob=1.0,  # Ensure connection
+            allow_self_connections=True,
             seed=42
         )
 
@@ -1320,6 +1328,141 @@ class TestEdgeCases(unittest.TestCase):
                 self.assertEqual(result.delays.unit, u.ms)
                 self.assertTrue(np.all(result.weights.mantissa == 1.5))
                 self.assertTrue(np.all((result.delays >= 0.5 * u.ms) & (result.delays < 2.5 * u.ms)))
+
+
+class TestConnFixesRegression(unittest.TestCase):
+    """Regression tests for the conn._compartment bug fixes."""
+
+    @staticmethod
+    def _quads(result):
+        return set(zip(
+            result.pre_indices.tolist(),
+            result.post_indices.tolist(),
+            result.pre_compartments.tolist(),
+            result.post_compartments.tolist(),
+        ))
+
+    def test_dendritic_integration_no_duplicate_quads(self):
+        # CMP-1: clusters sampled across many clusters used to repeat the same
+        # (pre, post, pre_comp, post_comp) quad, inflating weights after conversion.
+        conn = DendriticIntegration(cluster_size=5, n_clusters=20, seed=42)
+        result = conn(pre_size=6, post_size=4)
+        quads = self._quads(result)
+        self.assertEqual(len(quads), result.n_connections)
+
+    def test_synaptic_clustering_no_duplicate_quads(self):
+        # CMP-1: SynapticClustering delegates to DendriticIntegration.
+        conn = SynapticClustering(cluster_size=5, n_clusters_per_neuron=20, seed=42)
+        result = conn(pre_size=6, post_size=4)
+        quads = self._quads(result)
+        self.assertEqual(len(quads), result.n_connections)
+
+    def test_morphology_distance_requires_positions(self):
+        # CMP-2: must raise rather than silently use a hardcoded prob.
+        conn = MorphologyDistance(sigma=50 * u.um, seed=42)
+        with self.assertRaises(ValueError):
+            conn(pre_size=10, post_size=10)
+
+    def test_axonal_arborization_requires_positions(self):
+        # CMP-2: must raise rather than silently produce a dense pattern.
+        conn = AxonalArborization(arborization_radius=50 * u.um, density=0.2, seed=42)
+        with self.assertRaises(ValueError):
+            conn(pre_size=10, post_size=10)
+
+    def test_axonal_projection_targets_basal_and_apical(self):
+        # CMP-3: previously hardcoded to BASAL_DENDRITE only.
+        conn = AxonalProjection(projection_type='local', connection_prob=0.3, seed=42)
+        result = conn(pre_size=40, post_size=40)
+        post = set(result.post_compartments.tolist())
+        self.assertIn(BASAL_DENDRITE, post)
+        self.assertIn(APICAL_DENDRITE, post)
+        self.assertTrue(post.issubset({BASAL_DENDRITE, APICAL_DENDRITE}))
+
+    def test_1d_positions_accepted(self):
+        # CMP-7: cdist used to crash on 1-D (N,) position arrays.
+        pre_positions = np.array([0.0, 10.0, 20.0]) * u.um
+        post_positions = np.array([0.0, 10.0, 20.0]) * u.um
+
+        morph = MorphologyDistance(sigma=15 * u.um, decay_function='gaussian', seed=42)
+        result = morph(
+            pre_size=3, post_size=3,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+        self.assertEqual(result.model_type, 'multi_compartment')
+
+        arbor = AxonalArborization(arborization_radius=15 * u.um, density=0.9, seed=42)
+        result = arbor(
+            pre_size=3, post_size=3,
+            pre_positions=pre_positions, post_positions=post_positions
+        )
+        self.assertEqual(result.model_type, 'multi_compartment')
+
+    def test_out_of_range_probability_raises(self):
+        # CMP-9 / VALIDATION
+        with self.assertRaises(ValueError):
+            CompartmentSpecific(compartment_mapping={AXON: SOMA}, connection_prob=1.5)
+        with self.assertRaises(ValueError):
+            AxonalProjection(connection_prob=-0.1)
+        with self.assertRaises(ValueError):
+            AxonalArborization(density=2.0)
+        with self.assertRaises(ValueError):
+            BranchSpecific(connection_prob=1.1)
+        with self.assertRaises(ValueError):
+            DendriticTree(branch_targeting={'proximal': 1.2})
+
+    def test_negative_count_raises(self):
+        # CMP-9 / VALIDATION
+        with self.assertRaises(ValueError):
+            DendriticIntegration(cluster_size=-1)
+        with self.assertRaises(ValueError):
+            DendriticIntegration(n_clusters=-2)
+        with self.assertRaises(ValueError):
+            AxonalBranching(branches_per_axon=-1)
+        with self.assertRaises(ValueError):
+            SynapticClustering(cluster_size=-3)
+
+    def test_no_self_connections_by_default(self):
+        # CMP-6: same-neuron self-loops must be dropped by default.
+        conn = CompartmentSpecific(
+            compartment_mapping={SOMA: SOMA}, connection_prob=1.0, seed=42
+        )
+        result = conn(pre_size=10, post_size=10)
+        self.assertTrue(np.all(result.pre_indices != result.post_indices))
+
+    def test_all_to_all_compartments_no_autapses(self):
+        # CMP-6: AllToAllCompartments emitted SOMA->SOMA self-loops on neuron i.
+        conn = AllToAllCompartments(seed=42)
+        result = conn(pre_size=5, post_size=5)
+        self.assertTrue(np.all(result.pre_indices != result.post_indices))
+
+    def test_self_connections_allowed_when_requested(self):
+        conn = CompartmentSpecific(
+            compartment_mapping={SOMA: SOMA},
+            connection_prob=1.0,
+            allow_self_connections=True,
+            seed=42,
+        )
+        result = conn(pre_size=10, post_size=10)
+        self.assertTrue(np.any(result.pre_indices == result.post_indices))
+
+    def test_dict_prob_missing_pair_warns(self):
+        # CMP-12: a mapped pair with no probability entry should warn.
+        conn = CompartmentSpecific(
+            compartment_mapping={AXON: [BASAL_DENDRITE, APICAL_DENDRITE]},
+            connection_prob={(AXON, BASAL_DENDRITE): 0.2},  # APICAL missing
+            seed=42,
+        )
+        with self.assertWarns(UserWarning):
+            conn(pre_size=10, post_size=10)
+
+    def test_custom_compartment_non_tuple_return_raises(self):
+        # CMP-11: fragile return parsing should give a clear error.
+        def bad_func(pre_size, post_size, **kwargs):
+            return 42  # not a tuple/list
+
+        conn = CustomCompartment(connection_func=bad_func)
+        with self.assertRaises(ValueError):
+            conn(pre_size=5, post_size=5)
 
 
 if __name__ == '__main__':

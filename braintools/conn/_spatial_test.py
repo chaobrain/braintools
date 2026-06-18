@@ -26,7 +26,7 @@ from braintools.conn import (
     DistanceDependent,
     Exponential,
 )
-from braintools.init import Constant
+from braintools.init import Constant, GaussianProfile, ExponentialProfile
 
 
 class TestDistanceDependent(unittest.TestCase):
@@ -168,25 +168,31 @@ class TestDistanceDependent(unittest.TestCase):
         self.assertEqual(result.shape, (12, 12))
 
     def test_distance_dependent_3d_positions(self):
-        # Test with 3D positions (should use first 2 dimensions)
-        positions = np.random.RandomState(42).uniform(0, 50, (10, 3)) * u.um
+        # Distances use ALL position dimensions (Euclidean over x, y, z), not just
+        # the first two. Capture the distances the profile receives and check that a
+        # known 3D pair matches sqrt(3^2 + 4^2 + 12^2) = 13.
+        positions = np.array([[0, 0, 0], [3, 4, 12]]) * u.um
 
-        class SimpleProfile:
+        captured = {}
+
+        class CaptureProfile:
             def probability(self, distances):
+                captured['distances'] = u.get_mantissa(distances)
                 return np.full(distances.shape, 0.15)
 
         conn = DistanceDependent(
-            distance_profile=SimpleProfile(),
+            distance_profile=CaptureProfile(),
             seed=42
         )
 
         result = conn(
-            pre_size=10, post_size=10,
+            pre_size=2, post_size=2,
             pre_positions=positions,
             post_positions=positions
         )
 
-        # Should handle 3D positions (using first 2 dimensions)
+        # All three dimensions contribute: 0-1 distance must be 13, not 5.
+        self.assertAlmostEqual(captured['distances'][0, 1], 13.0)
         self.assertGreaterEqual(result.n_connections, 0)
 
 
@@ -321,3 +327,108 @@ class TestSpatialPatterns(unittest.TestCase):
         )
 
         self.assertGreaterEqual(result.n_connections, 0)
+
+
+class TestSpatialRegressions(unittest.TestCase):
+    """Regression tests for autapse, duplicate-edge and validation fixes."""
+
+    def test_gaussian_recurrent_no_autapses(self):
+        # Same positions object -> recurrent net. Distance 0 gives prob ~1, which
+        # previously produced self-connections. They must be excluded by default.
+        positions = np.random.RandomState(0).uniform(0, 200, (40, 2)) * u.um
+        conn = Gaussian(
+            distance_profile=GaussianProfile(sigma=100 * u.um),
+            seed=0,
+        )
+        result = conn(pre_size=40, post_size=40,
+                      pre_positions=positions, post_positions=positions)
+        self.assertEqual(np.sum(result.pre_indices == result.post_indices), 0)
+
+    def test_exponential_recurrent_no_autapses(self):
+        positions = np.random.RandomState(1).uniform(0, 200, (40, 2)) * u.um
+        conn = Exponential(
+            distance_profile=ExponentialProfile(decay_constant=100 * u.um),
+            seed=1,
+        )
+        result = conn(pre_size=40, post_size=40,
+                      pre_positions=positions, post_positions=positions)
+        self.assertEqual(np.sum(result.pre_indices == result.post_indices), 0)
+
+    def test_allow_self_connections_keeps_autapses(self):
+        positions = np.random.RandomState(2).uniform(0, 200, (40, 2)) * u.um
+        conn = Gaussian(
+            distance_profile=GaussianProfile(sigma=100 * u.um),
+            allow_self_connections=True,
+            seed=2,
+        )
+        result = conn(pre_size=40, post_size=40,
+                      pre_positions=positions, post_positions=positions)
+        # Distance 0 -> prob 1, so every diagonal entry should be present.
+        self.assertEqual(np.sum(result.pre_indices == result.post_indices), 40)
+
+    def test_radial_patches_recurrent_no_autapses(self):
+        positions = np.random.RandomState(3).uniform(0, 100, (30, 2)) * u.um
+        conn = RadialPatches(
+            patch_radius=40 * u.um,
+            n_patches=3,
+            prob=1.0,
+            seed=3,
+        )
+        result = conn(pre_size=30, post_size=30,
+                      pre_positions=positions, post_positions=positions)
+        self.assertEqual(np.sum(result.pre_indices == result.post_indices), 0)
+
+    def test_distance_dependent_position_count_mismatch(self):
+        positions = np.random.RandomState(4).uniform(0, 50, (5, 2)) * u.um
+        conn = DistanceDependent(
+            distance_profile=GaussianProfile(sigma=20 * u.um),
+            seed=4,
+        )
+        with self.assertRaises(ValueError):
+            conn(pre_size=10, post_size=10,
+                 pre_positions=positions, post_positions=positions)
+
+    def test_gaussian_invalid_sigma_raises(self):
+        with self.assertRaises(ValueError):
+            Gaussian(distance_profile=GaussianProfile(sigma=0 * u.um))
+        with self.assertRaises(ValueError):
+            Gaussian(distance_profile=GaussianProfile(sigma=-5 * u.um))
+
+    def test_exponential_invalid_decay_raises(self):
+        with self.assertRaises(ValueError):
+            Exponential(distance_profile=ExponentialProfile(decay_constant=0 * u.um))
+        with self.assertRaises(ValueError):
+            Exponential(distance_profile=ExponentialProfile(decay_constant=-5 * u.um))
+
+    def test_radial_patches_invalid_params_raise(self):
+        with self.assertRaises(ValueError):
+            RadialPatches(patch_radius=0 * u.um)
+        with self.assertRaises(ValueError):
+            RadialPatches(patch_radius=10 * u.um, prob=1.5)
+
+    def test_ring_no_duplicate_edges_or_self_loops(self):
+        # Large neighbors used to wrap and produce duplicate / self edges.
+        conn = Ring(neighbors=4, bidirectional=True, seed=5)
+        result = conn(pre_size=9, post_size=9)
+        edges = list(zip(result.pre_indices.tolist(), result.post_indices.tolist()))
+        self.assertEqual(len(edges), len(set(edges)))  # no duplicates
+        self.assertEqual(np.sum(result.pre_indices == result.post_indices), 0)  # no self-loops
+
+    def test_ring_invalid_neighbors_raises(self):
+        conn = Ring(neighbors=5, seed=6)  # 5 > (9-1)//2 == 4
+        with self.assertRaises(ValueError):
+            conn(pre_size=9, post_size=9)
+
+    def test_grid2d_periodic_small_no_duplicates(self):
+        # 2x2 periodic Moore grid maps multiple offsets onto the same cells.
+        conn = Grid2d(connectivity='moore', periodic=True, seed=7)
+        result = conn(pre_size=(2, 2), post_size=(2, 2))
+        edges = list(zip(result.pre_indices.tolist(), result.post_indices.tolist()))
+        self.assertEqual(len(edges), len(set(edges)))  # no duplicates
+        self.assertEqual(np.sum(result.pre_indices == result.post_indices), 0)  # no self-loops
+
+    def test_grid2d_non_tuple_size_message(self):
+        conn = Grid2d(seed=8)
+        with self.assertRaises(ValueError) as ctx:
+            conn(pre_size=16, post_size=16)
+        self.assertIn('tuple', str(ctx.exception))

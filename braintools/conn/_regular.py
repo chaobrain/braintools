@@ -14,7 +14,7 @@
 # ==============================================================================
 
 
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import brainunit as u
 import numpy as np
@@ -36,16 +36,19 @@ class AllToAll(PointConnectivity):
     include_self_connections : bool
         Whether neurons connect to themselves.
     weight : Initialization, optional
-        Weight initialization for all connections.
-        If None, no weights are generated.
+        Weight initialization for all connections. Bare scalars stay
+        dimensionless; pass a ``brainunit`` Quantity (e.g. ``0.5 * u.nS``)
+        for physical units. If None, no weights are generated.
     delay : Initialization, optional
-        Delay initialization for all connections.
-        If None, no delays are generated.
+        Delay initialization for all connections. Bare scalars stay
+        dimensionless; pass a ``brainunit`` Quantity (e.g. ``1.0 * u.ms``)
+        for physical units. If None, no delays are generated.
 
     Examples
     --------
     .. code-block:: python
 
+        >>> import brainunit as u
         >>> from braintools.init import Constant
         >>> all_to_all = AllToAll(
         ...     weight=Constant(0.5 * u.nS),
@@ -67,11 +70,15 @@ class AllToAll(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate all-to-all connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-
         if isinstance(pre_size, tuple):
             pre_num = int(np.prod(pre_size))
         else:
@@ -103,8 +110,8 @@ class AllToAll(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -113,8 +120,8 @@ class AllToAll(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -124,8 +131,8 @@ class AllToAll(PointConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             model_type='point',
             metadata={
                 'pattern': 'all_to_all',
@@ -142,11 +149,13 @@ class OneToOne(PointConnectivity):
     Parameters
     ----------
     weight : Initialization, optional
-        Weight initialization for each connection.
-        If None, no weights are generated.
+        Weight initialization for each connection. Bare scalars stay
+        dimensionless; pass a ``brainunit`` Quantity (e.g. ``1.5 * u.nS``)
+        for physical units. If None, no weights are generated.
     delay : Initialization, optional
-        Delay initialization for each connection.
-        If None, no delays are generated.
+        Delay initialization for each connection. Bare scalars stay
+        dimensionless; pass a ``brainunit`` Quantity (e.g. ``1.0 * u.ms``)
+        for physical units. If None, no delays are generated.
     circular : bool
         If True and sizes differ, use circular indexing.
 
@@ -154,6 +163,7 @@ class OneToOne(PointConnectivity):
     --------
     .. code-block:: python
 
+        >>> import brainunit as u
         >>> one_to_one = OneToOne(weight=1.5 * u.nS)
         >>> result = one_to_one(pre_size=100, post_size=100)
     """
@@ -171,11 +181,15 @@ class OneToOne(PointConnectivity):
         self.delay_init = delay
         self.circular = circular
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate one-to-one connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-
         if isinstance(pre_size, tuple):
             pre_num = int(np.prod(pre_size))
         else:
@@ -185,6 +199,20 @@ class OneToOne(PointConnectivity):
             post_num = int(np.prod(post_size))
         else:
             post_num = post_size
+
+        # Empty population: no connections possible (avoids division by zero
+        # in circular indexing).
+        if pre_num == 0 or post_num == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+                model_type='point',
+                metadata={'pattern': 'one_to_one', 'circular': self.circular}
+            )
 
         if self.circular:
             n_connections = max(pre_num, post_num)
@@ -203,8 +231,8 @@ class OneToOne(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -213,8 +241,8 @@ class OneToOne(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -224,8 +252,8 @@ class OneToOne(PointConnectivity):
             post_size=post_size,
             weights=weights,
             delays=delays,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             model_type='point',
             metadata={'pattern': 'one_to_one', 'circular': self.circular}
         )

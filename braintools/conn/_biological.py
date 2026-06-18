@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import brainunit as u
 import numpy as np
@@ -133,6 +133,12 @@ class ExcitatoryInhibitory(PointConnectivity):
         **kwargs
     ):
         super().__init__(**kwargs)
+        if not (0 <= exc_ratio <= 1):
+            raise ValueError(f"exc_ratio must be between 0 and 1, got {exc_ratio}")
+        if not (0 <= exc_prob <= 1):
+            raise ValueError(f"exc_prob must be between 0 and 1, got {exc_prob}")
+        if not (0 <= inh_prob <= 1):
+            raise ValueError(f"inh_prob must be between 0 and 1, got {inh_prob}")
         self.exc_ratio = exc_ratio
         self.exc_prob = exc_prob
         self.inh_prob = inh_prob
@@ -141,11 +147,15 @@ class ExcitatoryInhibitory(PointConnectivity):
         self.exc_delay = exc_delay
         self.inh_delay = inh_delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate excitatory-inhibitory network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-
         if isinstance(pre_size, tuple):
             pre_num = int(np.prod(pre_size))
         else:
@@ -184,8 +194,8 @@ class ExcitatoryInhibitory(PointConnectivity):
                 pre_size=pre_size,
                 post_size=post_size,
                 model_type='point',
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
             )
 
         n_exc_conn = len(exc_pre)
@@ -204,8 +214,8 @@ class ExcitatoryInhibitory(PointConnectivity):
                 param_type='weight',
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None)
+                pre_positions=pre_positions,
+                post_positions=post_positions
             )
             exc_weights, weight_unit = u.split_mantissa_unit(exc_weights)
 
@@ -216,9 +226,17 @@ class ExcitatoryInhibitory(PointConnectivity):
                 param_type='weight',
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None)
+                pre_positions=pre_positions,
+                post_positions=post_positions
             )
+            exc_weight_dim = u.DIMENSIONLESS if weight_unit is None else u.get_dim(weight_unit)
+            if exc_weight_dim != u.get_dim(inh_weights):
+                raise ValueError(
+                    "exc_weight and inh_weight must have the same dimensionality "
+                    "(both dimensionless or both with compatible units), but got "
+                    f"exc_weight unit {weight_unit} and "
+                    f"inh_weight unit {u.get_unit(inh_weights)}."
+                )
             if weight_unit is None:
                 inh_weights, weight_unit = u.split_mantissa_unit(inh_weights)
             else:
@@ -247,8 +265,8 @@ class ExcitatoryInhibitory(PointConnectivity):
                 param_type='delay',
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None)
+                pre_positions=pre_positions,
+                post_positions=post_positions
             )
             exc_delays, delay_unit = u.split_mantissa_unit(exc_delays)
 
@@ -259,9 +277,17 @@ class ExcitatoryInhibitory(PointConnectivity):
                 param_type='delay',
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None)
+                pre_positions=pre_positions,
+                post_positions=post_positions
             )
+            exc_delay_dim = u.DIMENSIONLESS if delay_unit is None else u.get_dim(delay_unit)
+            if exc_delay_dim != u.get_dim(inh_delays):
+                raise ValueError(
+                    "exc_delay and inh_delay must have the same dimensionality "
+                    "(both dimensionless or both with compatible units), but got "
+                    f"exc_delay unit {delay_unit} and "
+                    f"inh_delay unit {u.get_unit(inh_delays)}."
+                )
             if delay_unit is None:
                 inh_delays, delay_unit = u.split_mantissa_unit(inh_delays)
             else:
@@ -285,8 +311,8 @@ class ExcitatoryInhibitory(PointConnectivity):
             pre_size=pre_size,
             post_size=post_size,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'excitatory_inhibitory',
                 'exc_ratio': self.exc_ratio,
