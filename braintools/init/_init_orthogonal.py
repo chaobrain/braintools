@@ -128,6 +128,16 @@ class DeltaOrthogonal(Initialization):
     Reference: Xiao et al., "Dynamical Isometry and a Mean Field Theory of CNNs:
     How to Train 10,000-Layer Vanilla Convolutional Neural Networks", ICML 2018.
 
+    Notes
+    -----
+    The kernel uses the **channels-first** convention ``(out_channels,
+    in_channels, *spatial)``. The channel matrix placed at the spatial centre is
+    (semi-)orthogonal for any channel counts: when ``out_channels >=
+    in_channels`` it has orthonormal columns (``W.T @ W == I``, the
+    norm-preserving *expanding* case), and when ``out_channels < in_channels`` it
+    has orthonormal rows (``W @ W.T == I``). Both yield unit singular values, so
+    the convolution is an isometry on its column/row space.
+
     Parameters
     ----------
     scale : float, optional

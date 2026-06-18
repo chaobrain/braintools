@@ -28,6 +28,18 @@ from braintools.init import (
 )
 
 
+def _f64(weights):
+    """Materialize weights as float64 for accurate orthogonality checks.
+
+    Matrices are generated in JAX's default float32 (x64 disabled), so the
+    matrix entries carry ~1e-7 error. Forming ``W @ W.T`` in float32 then
+    *accumulates* rounding to ~1e-4, which spuriously fails a 1e-6 tolerance even
+    though the matrix is genuinely orthogonal. Computing the product in float64
+    keeps the verification error at the true ~3e-7 level.
+    """
+    return np.asarray(weights, dtype=np.float64)
+
+
 class TestOrthogonal(unittest.TestCase):
     """Test Orthogonal initialization."""
 
@@ -40,7 +52,8 @@ class TestOrthogonal(unittest.TestCase):
         self.assertEqual(weights.shape, (100, 100))
 
         # Check orthogonality: W @ W.T should be identity
-        product = weights @ weights.T
+        w = _f64(weights)
+        product = w @ w.T
         identity = np.eye(100)
         np.testing.assert_allclose(product, identity, atol=1e-6)
 
@@ -50,7 +63,8 @@ class TestOrthogonal(unittest.TestCase):
         self.assertEqual(weights.shape, (100, 50))
 
         # Check semi-orthogonality: W.T @ W should be identity
-        product = weights.T @ weights
+        w = _f64(weights)
+        product = w.T @ w
         identity = np.eye(50)
         np.testing.assert_allclose(product, identity, atol=1e-6)
 
@@ -60,7 +74,8 @@ class TestOrthogonal(unittest.TestCase):
         self.assertEqual(weights.shape, (50, 100))
 
         # Check semi-orthogonality: W @ W.T should be identity
-        product = weights @ weights.T
+        w = _f64(weights)
+        product = w @ w.T
         identity = np.eye(50)
         np.testing.assert_allclose(product, identity, atol=1e-6)
 
@@ -71,7 +86,8 @@ class TestOrthogonal(unittest.TestCase):
 
         # Check that norm scaling is correct
         # For orthogonal matrix with scale, W @ W.T = scale^2 * I
-        product = weights @ weights.T
+        w = _f64(weights)
+        product = w @ w.T
         identity = np.eye(100) * (gain ** 2)
         np.testing.assert_allclose(product, identity, atol=1e-5)
 
@@ -82,7 +98,7 @@ class TestOrthogonal(unittest.TestCase):
         self.assertEqual(weights.shape, (10, 20, 30))
 
         # Reshape to 2D for orthogonality check
-        weights_2d = weights.reshape(-1, 30)
+        weights_2d = _f64(weights).reshape(-1, 30)
         product = weights_2d.T @ weights_2d
         identity = np.eye(30)
         np.testing.assert_allclose(product, identity, atol=1e-6)
@@ -116,7 +132,7 @@ class TestDeltaOrthogonal(unittest.TestCase):
         weights = init((64, 32, 3, 3), rng=self.rng)
 
         # Extract center values (at index [1, 1] for 3x3 kernel)
-        center = weights[:, :, 1, 1]
+        center = _f64(weights[:, :, 1, 1])
 
         # Check orthogonality
         if center.shape[0] >= center.shape[1]:
@@ -146,7 +162,7 @@ class TestDeltaOrthogonal(unittest.TestCase):
         self.assertEqual(weights.shape, (64, 32, 5))
 
         # Center should be at index 2
-        center = weights[:, :, 2]
+        center = _f64(weights[:, :, 2])
         if center.shape[0] >= center.shape[1]:
             product = center.T @ center
             identity = np.eye(32)
@@ -160,7 +176,7 @@ class TestDeltaOrthogonal(unittest.TestCase):
         init = DeltaOrthogonal(scale=gain)
         weights = init((64, 32, 3, 3), rng=self.rng)
 
-        center = weights[:, :, 1, 1]
+        center = _f64(weights[:, :, 1, 1])
         # Check scale scaling
         if center.shape[0] >= center.shape[1]:
             product = center.T @ center

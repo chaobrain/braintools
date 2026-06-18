@@ -18,7 +18,9 @@ Tests for basic weight initialization distributions.
 """
 
 import unittest
+import warnings
 
+import brainstate
 import brainunit as u
 import numpy as np
 
@@ -323,6 +325,159 @@ class TestWeibull(unittest.TestCase):
         init = Weibull(1.5, 0.5 * u.siemens)
         repr_str = repr(init)
         self.assertIn('Weibull', repr_str)
+
+
+class TestParameterValidation(unittest.TestCase):
+    """Validation of distribution parameters at construction time."""
+
+    def test_normal_negative_std_raises(self):
+        """Normal must reject a negative standard deviation (bug H9)."""
+        with self.assertRaises(ValueError):
+            Normal(0.5 * u.siemens, -0.1 * u.siemens)
+
+    def test_normal_zero_std_allowed(self):
+        """A zero std is a degenerate but valid distribution."""
+        init = Normal(0.5 * u.siemens, 0.0 * u.siemens)
+        weights = init(10, rng=np.random.default_rng(0))
+        self.assertTrue(np.allclose(weights.mantissa, 0.5))
+
+    def test_lognormal_negative_std_raises(self):
+        """LogNormal must reject a negative standard deviation (bug H9)."""
+        with self.assertRaises(ValueError):
+            LogNormal(0.5 * u.siemens, -0.2 * u.siemens)
+
+    def test_lognormal_nonpositive_mean_raises(self):
+        """LogNormal mean must be strictly positive (bug M1)."""
+        with self.assertRaises(ValueError):
+            LogNormal(0.0 * u.siemens, 0.2 * u.siemens)
+        with self.assertRaises(ValueError):
+            LogNormal(-1.0 * u.siemens, 0.2 * u.siemens)
+
+    def test_uniform_low_ge_high_raises(self):
+        """Uniform requires low < high."""
+        with self.assertRaises(ValueError):
+            Uniform(1.0 * u.siemens, 0.5 * u.siemens)
+
+    def test_beta_low_ge_high_raises(self):
+        """Beta requires low < high."""
+        with self.assertRaises(ValueError):
+            Beta(2.0, 5.0, low=1.0 * u.siemens, high=1.0 * u.siemens)
+
+    def test_beta_nonpositive_alpha_raises(self):
+        """Beta alpha and beta must be positive."""
+        with self.assertRaises(ValueError):
+            Beta(-2.0, 5.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
+        with self.assertRaises(ValueError):
+            Beta(2.0, 0.0, low=0.0 * u.siemens, high=1.0 * u.siemens)
+
+    def test_truncated_normal_low_ge_high_raises(self):
+        """TruncatedNormal requires low < high when both are given."""
+        with self.assertRaises(ValueError):
+            TruncatedNormal(0.5 * u.siemens, 0.2 * u.siemens,
+                            low=1.0 * u.siemens, high=0.0 * u.siemens)
+
+    def test_truncated_normal_negative_std_raises(self):
+        """TruncatedNormal must reject a negative std."""
+        with self.assertRaises(ValueError):
+            TruncatedNormal(0.5 * u.siemens, -0.2 * u.siemens)
+
+    def test_gamma_nonpositive_shape_raises(self):
+        """Gamma shape must be positive."""
+        with self.assertRaises(ValueError):
+            Gamma(shape=-1.0, scale=0.5 * u.siemens)
+
+    def test_gamma_dimensionful_shape_raises(self):
+        """Gamma shape must be dimensionless."""
+        with self.assertRaises(ValueError):
+            Gamma(shape=2.0 * u.siemens, scale=0.5 * u.siemens)
+
+    def test_weibull_nonpositive_shape_raises(self):
+        """Weibull shape must be positive."""
+        with self.assertRaises(ValueError):
+            Weibull(shape=0.0, scale=0.5 * u.siemens)
+
+    def test_constant_none_value_raises(self):
+        """Constant must reject a None value (bug L8)."""
+        with self.assertRaises((ValueError, TypeError)):
+            Constant(None)
+
+
+class TestDeprecatedUnit(unittest.TestCase):
+    """Behaviour of the deprecated ``unit=`` argument (bug M2)."""
+
+    def test_deprecated_unit_with_bare_value_warns_and_applies(self):
+        """A bare value plus deprecated unit still works, with a warning."""
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', DeprecationWarning)
+            with self.assertRaises(DeprecationWarning):
+                Constant(0.5, unit=u.nS)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            init = Constant(0.5, unit=u.nS)
+            weights = init(10)
+        self.assertEqual(weights.unit, u.nS)
+        self.assertTrue(np.allclose(weights.to(u.nS).mantissa, 0.5))
+
+    def test_deprecated_unit_with_united_value_raises(self):
+        """Combining a deprecated unit with an already-united value raises."""
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            with self.assertRaises(ValueError):
+                Constant(0.5 * u.mS, unit=u.nS)
+
+    def test_weibull_accepts_unit_kwarg(self):
+        """Weibull supports the deprecated ``unit=`` like its siblings (bug L6)."""
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            init = Weibull(shape=1.5, scale=0.5, unit=u.nS)
+            weights = init(100, rng=np.random.default_rng(0))
+        self.assertEqual(weights.unit, u.nS)
+
+
+class TestTruncatedNormalBackend(unittest.TestCase):
+    """TruncatedNormal must be backend-agnostic (bug H10)."""
+
+    def test_default_rng_works(self):
+        """Default rng (brainstate.random) must work without scipy crash."""
+        init = TruncatedNormal(mean=0.5 * u.siemens, std=0.2 * u.siemens,
+                               low=0.0 * u.siemens, high=1.0 * u.siemens)
+        weights = init(1000)
+        self.assertEqual(weights.shape, (1000,))
+        self.assertTrue(np.all(weights >= 0.0 * u.siemens))
+        self.assertTrue(np.all(weights <= 1.0 * u.siemens))
+
+    def test_brainstate_rng_explicit(self):
+        """An explicit brainstate.random backend must not crash (bug H10)."""
+        init = TruncatedNormal(mean=0.5 * u.siemens, std=0.2 * u.siemens,
+                               low=0.0 * u.siemens, high=1.0 * u.siemens)
+        weights = init(1000, rng=brainstate.random)
+        self.assertTrue(np.all(weights >= 0.0 * u.siemens))
+        self.assertTrue(np.all(weights <= 1.0 * u.siemens))
+
+    def test_numpy_rng_explicit(self):
+        """A numpy Generator backend must still work."""
+        rng = np.random.default_rng(0)
+        init = TruncatedNormal(mean=0.5 * u.siemens, std=0.2 * u.siemens,
+                               low=0.0 * u.siemens, high=1.0 * u.siemens)
+        weights = init(1000, rng=rng)
+        self.assertTrue(np.all(weights >= 0.0 * u.siemens))
+        self.assertTrue(np.all(weights <= 1.0 * u.siemens))
+
+    def test_one_sided_bounds(self):
+        """Only a lower bound is honoured; upper tail is unbounded."""
+        rng = np.random.default_rng(0)
+        init = TruncatedNormal(mean=0.0 * u.siemens, std=1.0 * u.siemens,
+                               low=0.0 * u.siemens)
+        weights = init(10000, rng=rng)
+        self.assertTrue(np.all(weights >= 0.0 * u.siemens))
+
+    def test_statistics(self):
+        """Truncated-normal mean is correct via inverse-CDF sampling."""
+        rng = np.random.default_rng(0)
+        init = TruncatedNormal(mean=0.5 * u.siemens, std=0.1 * u.siemens,
+                               low=0.0 * u.siemens, high=1.0 * u.siemens)
+        weights = init(100000, rng=rng)
+        self.assertAlmostEqual(float(np.mean(weights.mantissa)), 0.5, delta=0.02)
 
 
 class TestEdgeCases(unittest.TestCase):
