@@ -98,10 +98,17 @@ def correlation_matrix(
         fig, ax = plt.subplots(figsize=figsize)
 
     data = as_numpy(data)
+    if data.ndim == 1:
+        data = data.reshape(-1, 1)
 
     # Calculate correlation matrix
-    if method == 'pearson':
-        corr_matrix = np.corrcoef(data.T)
+    if data.shape[1] == 1:
+        # A single feature has the trivial 1x1 correlation matrix; the methods
+        # below would return a 0-d scalar that breaks ``imshow``.
+        corr_matrix = np.array([[1.0]])
+    elif method == 'pearson':
+        # ``np.atleast_2d`` keeps a 2-D result even for degenerate inputs.
+        corr_matrix = np.atleast_2d(np.corrcoef(data.T))
     elif method == 'spearman':
         # ``spearmanr`` returns a scalar (not a 2x2 matrix) when ``data`` has
         # exactly two columns, which then breaks ``imshow``. Build the matrix
@@ -110,7 +117,7 @@ def correlation_matrix(
             rho = stats.spearmanr(data[:, 0], data[:, 1])[0]
             corr_matrix = np.array([[1.0, rho], [rho, 1.0]])
         else:
-            corr_matrix = np.asarray(stats.spearmanr(data)[0])
+            corr_matrix = np.atleast_2d(stats.spearmanr(data)[0])
     elif method == 'kendall':
         # ``kendalltau`` only compares two 1-D samples, so build the
         # feature-by-feature matrix pairwise.
@@ -672,11 +679,16 @@ def regression_plot(
 
         ax.plot(x_fit, y_fit, color='red', linewidth=2, label='Fit')
 
-        # Calculate R-squared
+        # Calculate R-squared. Guard against a constant ``y`` (ss_tot == 0),
+        # which would otherwise divide by zero and yield NaN: a perfect fit
+        # (ss_res == 0) is R² = 1.0, anything else is undefined -> 0.0.
         y_pred = np.polyval(coeffs, x)
         ss_res = np.sum((y - y_pred) ** 2)
         ss_tot = np.sum((y - np.mean(y)) ** 2)
-        r_squared = 1 - (ss_res / ss_tot)
+        if ss_tot == 0:
+            r_squared = 1.0 if np.isclose(ss_res, 0.0) else 0.0
+        else:
+            r_squared = 1 - (ss_res / ss_tot)
 
         # Add R-squared to plot
         ax.text(0.05, 0.95, f'R² = {r_squared:.3f}', transform=ax.transAxes,
@@ -828,13 +840,23 @@ def confusion_matrix(
         for j, pred_class in enumerate(classes):
             cm[i, j] = np.sum((y_true == true_class) & (y_pred == pred_class))
 
-    # Normalize if requested
+    # Normalize if requested. Guard against empty rows/columns (a class that
+    # never appears in y_true / y_pred) so the division yields 0 instead of NaN.
+    def _safe_divide(numerator, denominator):
+        denominator = np.asarray(denominator, dtype=float)
+        return np.divide(
+            numerator, denominator,
+            out=np.zeros_like(cm, dtype=float),
+            where=denominator != 0,
+        )
+
     if normalize == 'true':
-        cm = cm / cm.sum(axis=1, keepdims=True)
+        cm = _safe_divide(cm, cm.sum(axis=1, keepdims=True))
     elif normalize == 'pred':
-        cm = cm / cm.sum(axis=0, keepdims=True)
+        cm = _safe_divide(cm, cm.sum(axis=0, keepdims=True))
     elif normalize == 'all':
-        cm = cm / cm.sum()
+        total = cm.sum()
+        cm = cm / total if total != 0 else cm
 
     # Plot matrix
     im = ax.imshow(cm, cmap=cmap, **kwargs)
@@ -926,11 +948,17 @@ def roc_curve(
         tpr.append(tp / (tp + fn) if (tp + fn) > 0 else 0)
         fpr.append(fp / (fp + tn) if (fp + tn) > 0 else 0)
 
-    tpr = np.array(tpr)
-    fpr = np.array(fpr)
+    # Anchor the curve at (0, 0) and (1, 1) so the AUC is not underestimated
+    # when several samples tie at the most/least confident score. Sorting by
+    # FPR keeps the trapezoidal integration monotonic.
+    fpr = np.concatenate([[0.0], np.array(fpr), [1.0]])
+    tpr = np.concatenate([[0.0], np.array(tpr), [1.0]])
+    order = np.argsort(fpr, kind='stable')
+    fpr = fpr[order]
+    tpr = tpr[order]
 
-    # Calculate AUC
-    auc = _trapezoid(tpr, fpr)
+    # Calculate AUC (clamped to [0, 1] to absorb floating-point error).
+    auc = float(np.clip(_trapezoid(tpr, fpr), 0.0, 1.0))
 
     # Plot ROC curve
     ax.plot(fpr, tpr, color=color, linewidth=2, label=f'AUC = {auc:.3f}', **kwargs)

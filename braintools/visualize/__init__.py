@@ -63,8 +63,8 @@ analysis, 3D visualization, and interactive dashboards.
     # Define network architecture
     layer_sizes = [784, 256, 128, 10]
 
-    # Visualize network structure
-    fig, ax = neural_network_3d(
+    # Visualize network structure (returns the 3D Axes)
+    ax = neural_network_3d(
         layer_sizes=layer_sizes,
         layer_spacing=2.0,
         node_size=100,

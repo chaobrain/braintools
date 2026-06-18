@@ -135,10 +135,13 @@ def line_plot(
     if ax is None:
         ax = plt.gca()
 
-    val_matrix = val_matrix.reshape((val_matrix.shape[0], -1))
-    # change data
+    # Convert to arrays *before* reshaping. ``np.asarray`` stacks Python lists
+    # into an ndarray and triggers ``__array__`` for JAX / brainunit inputs;
+    # reshaping the raw input first used to crash with
+    # ``AttributeError: 'list' object has no attribute 'reshape'``.
     val_matrix = np.asarray(val_matrix)
     ts = np.asarray(ts)
+    val_matrix = val_matrix.reshape((val_matrix.shape[0], -1))
 
     # Validate dimensions
     if len(ts) != val_matrix.shape[0]:
@@ -379,10 +382,33 @@ def animate_2D(
     """
     dt = _resolve_dt(dt)
     values = np.asarray(values)
-    num_step, num_neuron = values.shape
     height, width = net_size
 
-    values = np.asarray(values).reshape((num_step, height, width))
+    # Accept either a flat ``(num_step, num_neuron)`` matrix or an already-shaped
+    # ``(num_step, height, width)`` array, validating the neuron count against
+    # ``net_size`` so a mismatch raises a clear error instead of an opaque
+    # reshape/unpack failure.
+    if values.ndim == 2:
+        num_step, num_neuron = values.shape
+        if num_neuron != height * width:
+            raise ValueError(
+                f"net_size {net_size} expects {height * width} neurons per step, "
+                f"but values has {num_neuron}."
+            )
+        values = values.reshape((num_step, height, width))
+    elif values.ndim == 3:
+        num_step = values.shape[0]
+        if values.shape[1:] != (height, width):
+            raise ValueError(
+                f"values has per-frame shape {values.shape[1:]}, which does not "
+                f"match net_size {net_size}."
+            )
+    else:
+        raise ValueError(
+            "values must be 2D (num_step, num_neuron) or 3D (num_step, height, "
+            f"width), got {values.ndim}D."
+        )
+
     val_min = values.min() if val_min is None else val_min
     val_max = values.max() if val_max is None else val_max
 
@@ -501,49 +527,45 @@ def animate_1D(
     gs = GridSpec(1, 1, figure=fig)
     fig.add_subplot(gs[0, 0])
 
-    # check dynamical variables
+    # check dynamical variables -- normalize every entry to a *fresh*
+    # {'xs', 'ys', 'legend'} dict so the caller's input dictionaries are never
+    # mutated in place (previously the function added 'xs'/'legend' keys and
+    # overwrote 'ys' on the user's objects).
     final_dynamic_vars = []
     lengths = []
     has_legend = False
+
+    def _normalize_dynamic(var):
+        nonlocal has_legend
+        if isinstance(var, dict):
+            assert 'ys' in var, 'Must provide "ys" item.'
+            ys = np.asarray(var['ys'])
+            legend = var.get('legend', None)
+            if 'legend' in var:
+                has_legend = True
+            xs = np.asarray(var['xs']) if 'xs' in var else None
+        elif isinstance(var, (np.ndarray, brainstate.State)):
+            ys = np.asarray(var)
+            legend = None
+            xs = None
+        else:
+            raise ValueError(f'Unknown data type: {type(var)}')
+        assert np.ndim(ys) == 2, "Dynamic variable must be 2D data."
+        if xs is None:
+            xs = np.arange(ys.shape[1])
+        return {'xs': xs, 'ys': ys, 'legend': legend}
+
     if isinstance(dynamical_vars, (tuple, list)):
         for var in dynamical_vars:
-            if isinstance(var, dict):
-                assert 'ys' in var, 'Must provide "ys" item.'
-                if 'legend' not in var:
-                    var['legend'] = None
-                else:
-                    has_legend = True
-                var['ys'] = np.asarray(var['ys'])
-                if 'xs' not in var:
-                    var['xs'] = np.arange(var['ys'].shape[1])
-            elif isinstance(var, (np.ndarray, brainstate.State)):
-                var = np.asarray(var)
-                var = {'ys': var,
-                       'xs': np.arange(var.shape[1]),
-                       'legend': None}
-            else:
-                raise ValueError(f'Unknown data type: {type(var)}')
-            assert np.ndim(var['ys']) == 2, "Dynamic variable must be 2D data."
-            lengths.append(var['ys'].shape[0])
-            final_dynamic_vars.append(var)
-    elif isinstance(dynamical_vars, dict):
-        assert 'ys' in dynamical_vars, 'Must provide "ys" item.'
-        if 'legend' not in dynamical_vars:
-            dynamical_vars['legend'] = None
-        else:
-            has_legend = True
-        dynamical_vars['ys'] = np.asarray(dynamical_vars['ys'])
-        if 'xs' not in dynamical_vars:
-            dynamical_vars['xs'] = np.arange(dynamical_vars['ys'].shape[1])
-        lengths.append(dynamical_vars['ys'].shape[0])
-        final_dynamic_vars.append(dynamical_vars)
+            norm = _normalize_dynamic(var)
+            lengths.append(norm['ys'].shape[0])
+            final_dynamic_vars.append(norm)
+    elif isinstance(dynamical_vars, (dict, np.ndarray, brainstate.State)):
+        norm = _normalize_dynamic(dynamical_vars)
+        lengths.append(norm['ys'].shape[0])
+        final_dynamic_vars.append(norm)
     else:
-        assert np.ndim(dynamical_vars) == 2, "Dynamic variable must be 2D data."
-        dynamical_vars = np.asarray(dynamical_vars)
-        lengths.append(dynamical_vars.shape[0])
-        final_dynamic_vars.append({'ys': dynamical_vars,
-                                   'xs': np.arange(dynamical_vars.shape[1]),
-                                   'legend': None})
+        raise ValueError(f'Unknown data type: {type(dynamical_vars)}')
     lengths = np.array(lengths)
     assert np.all(lengths == lengths[0]), 'Dynamic variables must have equal length.'
 
