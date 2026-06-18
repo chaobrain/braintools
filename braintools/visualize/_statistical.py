@@ -103,7 +103,14 @@ def correlation_matrix(
     if method == 'pearson':
         corr_matrix = np.corrcoef(data.T)
     elif method == 'spearman':
-        corr_matrix = stats.spearmanr(data)[0]
+        # ``spearmanr`` returns a scalar (not a 2x2 matrix) when ``data`` has
+        # exactly two columns, which then breaks ``imshow``. Build the matrix
+        # explicitly for that case.
+        if data.shape[1] == 2:
+            rho = stats.spearmanr(data[:, 0], data[:, 1])[0]
+            corr_matrix = np.array([[1.0, rho], [rho, 1.0]])
+        else:
+            corr_matrix = np.asarray(stats.spearmanr(data)[0])
     elif method == 'kendall':
         # ``kendalltau`` only compares two 1-D samples, so build the
         # feature-by-feature matrix pairwise.
@@ -221,7 +228,7 @@ def distribution_plot(
     if labels is None:
         labels = [f'Dataset {i + 1}' for i in range(len(data))]
 
-    for i, (d, label, color) in enumerate(zip(data, labels, colors)):
+    for d, label, color in zip(data, labels, colors):
         if plot_type in ['hist', 'both']:
             ax.hist(d, bins=bins, density=density, alpha=alpha, color=color,
                     label=label, **kwargs)
@@ -538,12 +545,8 @@ def scatter_matrix(
     n_features = data.shape[1]
 
     if ax is not None:
-        # Simplified version for single axis - show 2x2 subset of most important features
-        # Select first 2 features for simplicity
-        n_subset = min(2, n_features)
-
-        # Create 2x2 subplot within the given axis
-        # We'll create a simple scatter plot of first two features
+        # Simplified single-axis version: scatter the first two features (or a
+        # histogram when only one feature is available).
         if n_features >= 2:
             ax.scatter(data[:, 0], data[:, 1], alpha=alpha, color=color, **kwargs)
             ax.set_xlabel(labels[0] if labels else 'Feature 0')

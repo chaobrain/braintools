@@ -91,22 +91,22 @@ analysis, 3D visualization, and interactive dashboards.
     neuron_ids = np.random.randint(0, 100, 1000)
     spike_raster(spike_times, neuron_ids, show_stats=True)
 
-    # Population activity over time
-    activity = np.random.rand(100, 1000)  # 100 neurons, 1000 time steps
+    # Population activity over time (data is (time, neurons))
+    activity = np.random.rand(1000, 100)  # 1000 time steps, 100 neurons
     time = np.arange(1000) * 0.1
-    population_activity(activity, time, smoothing_window=10)
+    population_activity(activity, time, window_size=10)
 
     # Connectivity matrix heatmap
     connectivity = np.random.rand(50, 50)
-    connectivity_matrix(connectivity, colormap='viridis')
+    connectivity_matrix(connectivity, cmap='viridis')
 
     # Neural trajectory in state space
     trajectory = np.random.randn(1000, 3)  # 3D trajectory
-    neural_trajectory(trajectory, color_by_time=True)
+    neural_trajectory(trajectory, time_color=True)
 
-    # Spike histogram
-    spike_counts = np.random.poisson(10, 100)
-    spike_histogram(spike_counts, bin_width=1.0)
+    # Spike histogram (PSTH) from spike times
+    psth_times = np.random.rand(500) * 1000
+    spike_histogram(psth_times, bin_size=10.0)
 
     # Inter-spike interval distribution
     isi_values = np.random.exponential(20, 1000)
@@ -116,12 +116,11 @@ analysis, 3D visualization, and interactive dashboards.
     rate_map = np.random.rand(20, 20) * 50
     firing_rate_map(rate_map, interpolation='bilinear')
 
-    # Phase portrait (2D dynamics)
-    v = np.linspace(-70, 30, 100)
-    w = np.linspace(-20, 20, 100)
-    dv = lambda V, W: -V + W
-    dw = lambda V, W: -W + 0.1 * V
-    phase_portrait(v, w, dv, dw, nullclines=True)
+    # Phase portrait of a 2D state trajectory (x and y evolve over time)
+    t = np.linspace(0, 20, 500)
+    v = np.exp(-0.1 * t) * np.cos(t)
+    w = np.exp(-0.1 * t) * np.sin(t)
+    phase_portrait(v, w, trajectory=True)
 
     # Network topology visualization
     adjacency = np.random.rand(30, 30) > 0.8
@@ -153,10 +152,10 @@ analysis, 3D visualization, and interactive dashboards.
 
     # Distribution plot with histogram and KDE
     samples = np.random.normal(0, 1, 1000)
-    distribution_plot(samples, kde=True, rug=True)
+    distribution_plot(samples, plot_type='both')
 
     # Q-Q plot for normality test
-    qq_plot(samples, distribution='normal')
+    qq_plot(samples, distribution='norm')
 
     # Box plot for multiple groups
     groups = [np.random.normal(i, 1, 100) for i in range(5)]
@@ -171,7 +170,7 @@ analysis, 3D visualization, and interactive dashboards.
     # Regression plot with confidence interval
     x = np.linspace(0, 10, 100)
     y = 2 * x + 1 + np.random.randn(100)
-    regression_plot(x, y, order=1, confidence=0.95)
+    regression_plot(x, y, fit_line=True, confidence_interval=True)
 
     # Residual plot for regression diagnostics
     predictions = 2 * x + 1
@@ -185,7 +184,7 @@ analysis, 3D visualization, and interactive dashboards.
     # ROC curve for binary classification
     y_true_binary = np.random.randint(0, 2, 100)
     y_scores = np.random.rand(100)
-    roc_curve(y_true_binary, y_scores, label='Model')
+    roc_curve(y_true_binary, y_scores)
 
     # Precision-Recall curve
     precision_recall_curve(y_true_binary, y_scores)
@@ -218,33 +217,33 @@ analysis, 3D visualization, and interactive dashboards.
     faces = np.random.randint(0, 1000, (500, 3))
     brain_surface_3d(vertices, faces, alpha=0.7)
 
-    # 3D connectivity between brain regions
-    positions = np.random.randn(20, 3)
-    connections = np.random.rand(20, 20) > 0.8
-    connectivity_3d(positions, connections, node_size=100)
+    # 3D connectivity between two sets of nodes (source -> target)
+    source_positions = np.random.randn(10, 3)
+    target_positions = np.random.randn(10, 3)
+    connections = np.random.rand(10, 10) > 0.8
+    connectivity_3d(source_positions, target_positions, connections)
 
     # 3D trajectory in state space
     trajectory = np.random.randn(1000, 3)
-    trajectory_3d(trajectory, color_by_time=True, tube_radius=0.05)
+    trajectory_3d(trajectory, time_colors=True)
 
     # Volume rendering (3D activity maps)
     volume = np.random.rand(50, 50, 50)
-    volume_rendering(volume, threshold=0.5, opacity=0.3)
+    volume_rendering(volume, threshold=0.5, alpha=0.3)
 
-    # Electrode array positions
+    # Electrode array positions with per-electrode signal magnitude
     electrode_positions = np.random.randn(64, 3)
-    electrode_array_3d(electrode_positions, electrode_size=50)
+    signals = np.random.randn(64)
+    electrode_array_3d(electrode_positions, signals=signals)
 
-    # Dendritic tree structure
+    # Dendritic tree as a list of (start_point, end_point) segments
     tree_coords = np.random.randn(100, 3)
-    tree_connections = np.array([[i, i+1] for i in range(99)])
-    dendrite_tree_3d(tree_coords, tree_connections, radius=0.02)
+    segments = [(tree_coords[i], tree_coords[i + 1]) for i in range(99)]
+    dendrite_tree_3d(segments)
 
-    # 3D phase space portrait
-    x = np.linspace(-2, 2, 20)
-    y = np.linspace(-2, 2, 20)
-    z = np.linspace(-2, 2, 20)
-    phase_space_3d(x, y, z, vector_field=True)
+    # 3D phase-space trajectory
+    t = np.linspace(0, 20, 1000)
+    phase_space_3d(np.sin(t), np.cos(t), t / 20, time_colors=True)
 
 **Interactive Visualizations:**
 
@@ -281,30 +280,31 @@ analysis, 3D visualization, and interactive dashboards.
     # Interactive 3D scatter plot
     points = np.random.randn(500, 3)
     colors = np.random.rand(500)
-    interactive_3d_scatter(points, colors=colors)
+    interactive_3d_scatter(points[:, 0], points[:, 1], points[:, 2], color=colors)
 
     # Interactive network graph
     adjacency = np.random.rand(30, 30) > 0.8
-    interactive_network(adjacency, layout='force')
+    interactive_network(adjacency)
 
     # Interactive histogram with sliders
     samples = np.random.normal(0, 1, 10000)
     interactive_histogram(samples, bins=50)
 
-    # Interactive 3D surface
+    # Interactive 3D surface (z is the height grid; x, y are the coordinates)
     x = np.linspace(-5, 5, 50)
     y = np.linspace(-5, 5, 50)
     X, Y = np.meshgrid(x, y)
     Z = np.sin(np.sqrt(X**2 + Y**2))
-    interactive_surface(X, Y, Z)
+    interactive_surface(Z, x=x, y=y)
 
     # Interactive correlation matrix
     data = np.random.randn(100, 10)
     interactive_correlation_matrix(data)
 
-    # Complete neural activity dashboard
-    spike_data = np.random.rand(100, 1000)  # 100 neurons, 1000 timesteps
-    dashboard_neural_activity(spike_data)
+    # Complete neural activity dashboard (flat spike times + neuron ids)
+    spike_times = np.random.rand(2000) * 1000
+    neuron_ids = np.random.randint(0, 100, 2000)
+    dashboard_neural_activity(spike_times, neuron_ids)
 
 **Styling and Colormaps:**
 
@@ -328,14 +328,14 @@ analysis, 3D visualization, and interactive dashboards.
 
     # Publication-ready style (high DPI, professional fonts)
     publication_style(
-        font_family='serif',
-        font_size=10,
-        figure_dpi=300
+        fontsize=10,
+        figsize=(6, 4),
+        dpi=300
     )
 
     # Dark mode for presentations
     dark_style(
-        background='#1e1e1e',
+        background_color='#1e1e1e',
         text_color='white'
     )
 
@@ -360,8 +360,8 @@ analysis, 3D visualization, and interactive dashboards.
     # Get color palette for categorical data
     colors = get_color_palette('neural', n_colors=5)
 
-    # Set default colors for all plots
-    set_default_colors(primary='#45B7D1', secondary='#FF6B6B')
+    # Override default neural element colors (takes a single mapping)
+    set_default_colors({'excitatory': '#45B7D1', 'inhibitory': '#FF6B6B'})
 
 **Animation:**
 
@@ -383,13 +383,14 @@ analysis, 3D visualization, and interactive dashboards.
     # Display in Jupyter
     HTML(anim.to_html5_video())
 
-    # 2D animation with custom update function
-    data_2d = np.random.rand(100, 50, 50)
-    animate_2D(data_2d, interval=40, vmin=0, vmax=1)
+    # 2D animation: values are (num_steps, num_neurons), reshaped to net_size
+    data_2d = np.random.rand(100, 2500)  # 100 steps, 2500 neurons
+    animate_2D(data_2d, net_size=(50, 50), frame_delay=40,
+               val_min=0, val_max=1, show=False)
 
     # 1D animation (line plot evolving over time)
     data_1d = np.random.randn(100, 200)
-    animate_1D(data_1d, interval=30, xlim=(0, 200), ylim=(-3, 3))
+    animate_1D(data_1d, frame_delay=30, xlim=(0, 200), ylim=(-3, 3), show=False)
 
 **Figure Utilities:**
 
@@ -438,14 +439,12 @@ analysis, 3D visualization, and interactive dashboards.
         colors=['r', 'g', 'b']
     )
 
-    # Raster plot
-    spike_times = [
-        np.random.rand(10) * 100,  # Neuron 0
-        np.random.rand(15) * 100,  # Neuron 1
-        np.random.rand(8) * 100,   # Neuron 2
-    ]
+    # Raster plot from a (time, neuron) spike matrix
+    ts = np.arange(1000) * 0.1                      # 1000 time points
+    sp_matrix = np.random.rand(1000, 50) < 0.01     # sparse spikes, 50 neurons
     raster_plot(
-        spike_times,
+        ts,
+        sp_matrix,
         xlim=(0, 100),
         xlabel='Time (ms)',
         ylabel='Neuron'
@@ -494,7 +493,8 @@ analysis, 3D visualization, and interactive dashboards.
         # Convert spikes to rate
         time_bins = np.arange(0, n_timesteps * dt, 1.0)
         rates, _ = np.histogram(spike_times, bins=time_bins)
-        population_activity(rates[np.newaxis, :], time_bins[:-1], ax=ax2)
+        # ``rates`` is already a 1D population rate per time bin
+        population_activity(rates, time_bins[:-1], ax=ax2)
         ax2.set_title('Population Rate')
 
         # ISI distribution

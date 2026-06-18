@@ -129,7 +129,6 @@ omit = [
     # Optional/visual/hardware backends that cannot run in the standard CI
     # environment (their extra dependencies are not installed there):
     "*/visualize/_interactive.py",  # requires plotly
-    "*/visualize/_three_d.py",      # requires pyvista
     "*/trainer/_distributed.py",    # requires a multi-device/multi-host setup
 ]
 

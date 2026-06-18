@@ -207,7 +207,14 @@ def brain_surface_3d(
         values = as_numpy(values)
         # Average values for each face
         face_values = np.mean(values[faces], axis=1)
-        facecolors = plt.cm.get_cmap(cmap)(face_values / np.max(face_values))
+        # Normalize to [0, 1] for the colormap, guarding against an all-zero
+        # (degenerate) range that would produce NaN colors.
+        max_val = np.max(face_values)
+        scaled = face_values / max_val if max_val != 0 else np.zeros_like(face_values)
+        # ``plt.cm.get_cmap`` was deprecated in matplotlib 3.7 and is removed in
+        # 3.11; use the colormap registry instead.
+        cmap_obj = plt.get_cmap(cmap) if isinstance(cmap, str) else cmap
+        facecolors = cmap_obj(scaled)
     else:
         facecolors = None
 

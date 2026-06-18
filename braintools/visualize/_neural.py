@@ -434,7 +434,8 @@ def neural_trajectory(
         x, y, z = data[:, dims[0]], data[:, dims[1]], data[:, dims[2]]
         if time_color:
             time_points = np.arange(len(data))
-            ax.scatter(x, y, z, c=time_points, cmap=cmap, alpha=alpha, **kwargs)
+            scatter = ax.scatter(x, y, z, c=time_points, cmap=cmap, alpha=alpha, **kwargs)
+            plt.colorbar(scatter, ax=ax, label='Time', pad=0.1)
         else:
             ax.plot(x, y, z, alpha=alpha, linewidth=linewidth, **kwargs)
 
@@ -712,20 +713,26 @@ def firing_rate_map(
         if grid_size is None:
             grid_size = (50, 50)
 
-        # Create grid
-        x_edges = np.linspace(positions[:, 0].min(), positions[:, 0].max(), grid_size[0] + 1)
-        y_edges = np.linspace(positions[:, 1].min(), positions[:, 1].max(), grid_size[1] + 1)
+        # grid_size is (nx, ny): number of bins along x and y. The rate map is
+        # stored as (ny, nx) -- rows index y, columns index x -- so that
+        # ``rate_map[yi, xi]`` and ``imshow(origin='lower')`` stay consistent
+        # for non-square grids (a transposed allocation used to raise
+        # IndexError for rectangular grids).
+        nx, ny = grid_size
+        x_edges = np.linspace(positions[:, 0].min(), positions[:, 0].max(), nx + 1)
+        y_edges = np.linspace(positions[:, 1].min(), positions[:, 1].max(), ny + 1)
 
         # Bin the data
-        rate_map = np.zeros(grid_size)
-        count_map = np.zeros(grid_size)
+        rate_map = np.zeros((ny, nx))
+        count_map = np.zeros((ny, nx))
 
         for i, (x, y) in enumerate(positions):
-            xi = np.digitize(x, x_edges) - 1
-            yi = np.digitize(y, y_edges) - 1
-            if 0 <= xi < grid_size[0] and 0 <= yi < grid_size[1]:
-                rate_map[yi, xi] += rates[i]
-                count_map[yi, xi] += 1
+            # clip so points on the upper edge land in the last bin instead of
+            # falling out of range
+            xi = int(np.clip(np.digitize(x, x_edges) - 1, 0, nx - 1))
+            yi = int(np.clip(np.digitize(y, y_edges) - 1, 0, ny - 1))
+            rate_map[yi, xi] += rates[i]
+            count_map[yi, xi] += 1
 
         # Average rates in each bin
         mask = count_map > 0
@@ -1060,7 +1067,7 @@ def tuning_curve(
             y_fit = gaussian(x_fit, *popt)
             ax.plot(x_fit, y_fit, '--', color='red', alpha=0.8, label='Gaussian fit')
             ax.legend()
-        except:
+        except Exception:
             warnings.warn("Could not fit Gaussian curve")
 
     elif fit_curve == 'polynomial' and len(bin_centers) > 2:
@@ -1070,7 +1077,7 @@ def tuning_curve(
             y_fit = np.polyval(coeffs, x_fit)
             ax.plot(x_fit, y_fit, '--', color='red', alpha=0.8, label='Polynomial fit')
             ax.legend()
-        except:
+        except Exception:
             warnings.warn("Could not fit polynomial curve")
 
     # Labels
