@@ -42,52 +42,48 @@ def animator(
     cmap="plasma"
 ):
     """Generate an animation by looping through the first dimension of a
-    sample of spiking data.
-    Time must be the first dimension of ``data``.
+    sample of image-like data. Time must be the first dimension of ``data``.
 
     Example::
 
+        import numpy as np
         import matplotlib.pyplot as plt
+        from IPython.display import HTML
+        from braintools.visualize import animator
 
-        #  Index into a single sample from a minibatch
-        spike_data_sample = bm.random.rand(100, 28, 28)
-        print(spike_data_sample.shape)
-        >>> (100, 28, 28)
+        #  A single sample across 100 time steps of 28x28 frames
+        spike_data_sample = np.random.rand(100, 28, 28)
 
-        #  Plot
         fig, ax = plt.subplots()
-        anim = splt.animator(spike_data_sample, fig, ax)
+        anim = animator(spike_data_sample, fig, ax)
         HTML(anim.to_html5_video())
 
         #  Save as a gif
-        anim.save("spike_mnist.gif")
+        anim.save("spike_mnist.gif", writer="pillow")
 
-    :param data: Data tensor for a single sample across time steps of
-        shape [num_steps x input_size]
-    :type data: torch.Tensor
+    Parameters
+    ----------
+    data : array-like
+        Data array of shape ``(num_steps, height, width)``. Accepts NumPy,
+        JAX, or ``brainunit`` arrays (converted internally).
+    fig : matplotlib.figure.Figure
+        Top level container for all plot elements.
+    ax : matplotlib.axes.Axes
+        Axes that set the coordinate system, e.g.
+        ``fig, ax = plt.subplots(facecolor='w', figsize=(12, 7))``.
+    num_steps : int, optional
+        Number of time steps to plot. When falsy (the default ``False`` or
+        ``0``), every entry along the first dimension of ``data`` is used.
+    interval : int, optional
+        Delay between frames in milliseconds, defaults to ``40``.
+    cmap : str, optional
+        Color map, defaults to ``"plasma"``.
 
-    :param fig: Top level container for all plot elements
-    :type fig: matplotlib.figure.Figure
-
-    :param ax: Contains additional figure elements and sets the coordinate
-        system. E.g.:
-            fig, ax = plt.subplots(facecolor='w', figsize=(12, 7))
-    :type ax: matplotlib.axes._subplots.AxesSubplot
-
-    :param num_steps: Number of time steps to plot. If not specified,
-        the number of entries in the first dimension
-            of ``data`` will automatically be used, defaults to ``False``
-    :type num_steps: int, optional
-
-    :param interval: Delay between frames in milliseconds, defaults to ``40``
-    :type interval: int, optional
-
-    :param cmap: color map, defaults to ``plasma``
-    :type cmap: string, optional
-
-    :return: animation to be displayed using ``matplotlib.pyplot.show()``
-    :rtype: FuncAnimation
-
+    Returns
+    -------
+    anim : matplotlib.animation.ArtistAnimation
+        Animation to be displayed (e.g. via ``anim.to_html5_video()``) or saved
+        with ``anim.save(...)``.
     """
 
     data = as_numpy(data)

@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import warnings
 from typing import Dict, List, Tuple, Optional
 
 import matplotlib.pyplot as plt
@@ -272,17 +273,63 @@ def brain_colormaps():
     create_neural_colormap('brain_activation', brain_colors)
 
 
+class _StyleContext:
+    """Return value of :func:`apply_style`.
+
+    The style is applied *immediately* (so a plain ``apply_style(...)`` call
+    keeps working as before). When the return value is used as a context
+    manager, the rcParams captured before the style was applied are restored on
+    exit, enabling temporary styling::
+
+        with apply_style('publication'):
+            plt.plot([1, 2, 3])
+        # rcParams are restored here
+    """
+    __module__ = 'braintools.visualize'
+
+    def __init__(self, prior_params):
+        self._prior = prior_params
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Restore the rcParams snapshot taken before the style was applied.
+        # Suppress deprecation warnings that some legacy rcParams keys emit when
+        # written back.
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            rcParams.update(self._prior)
+        return False
+
+
 @set_module_as('braintools.visualize')
 def apply_style(style_name: str, **kwargs):
     """Apply predefined style by name.
-    
+
     Parameters
     ----------
     style_name : str
         Name of style: 'neural', 'publication', 'dark', 'colorblind'.
     **kwargs
-        Additional style parameters.
+        Additional style parameters forwarded to the underlying style function.
+
+    Returns
+    -------
+    ctx : _StyleContext
+        A context manager. The style is applied immediately; using the return
+        value in a ``with`` block restores the previous rcParams on exit.
+
+    Raises
+    ------
+    ValueError
+        If ``style_name`` is not recognized.
     """
+    # Validate first so an unknown style raises before any state is captured.
+    if style_name not in ('neural', 'publication', 'dark', 'colorblind'):
+        raise ValueError(f"Unknown style: {style_name}")
+
+    prior = dict(rcParams)
     if style_name == 'neural':
         neural_style(**kwargs)
     elif style_name == 'publication':
@@ -291,8 +338,7 @@ def apply_style(style_name: str, **kwargs):
         dark_style(**kwargs)
     elif style_name == 'colorblind':
         colorblind_friendly_style()
-    else:
-        raise ValueError(f"Unknown style: {style_name}")
+    return _StyleContext(prior)
 
 
 @set_module_as('braintools.visualize')

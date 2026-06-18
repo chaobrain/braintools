@@ -35,6 +35,22 @@ __all__ = [
 ]
 
 
+def _resolve_dt(dt):
+    """Resolve the time step for animations.
+
+    Honors an explicit ``dt`` first, then an active ``brainstate.environ`` ``dt``
+    context, and finally falls back to ``1.0`` (time axis expressed in steps) so a
+    plain plotting call does not crash with ``KeyError: 'dt'`` outside a simulation
+    context.
+    """
+    if dt is not None:
+        return dt
+    try:
+        return brainstate.environ.get_dt()
+    except KeyError:
+        return 1.0
+
+
 @set_module_as('braintools.visualize')
 def line_plot(
     ts,
@@ -117,7 +133,7 @@ def line_plot(
 
     # get ax
     if ax is None:
-        ax = plt
+        ax = plt.gca()
 
     val_matrix = val_matrix.reshape((val_matrix.shape[0], -1))
     # change data
@@ -159,25 +175,25 @@ def line_plot(
     if legend:
         ax.legend()
 
-    # xlim
+    # xlim (apply to the target axes, not the pyplot "current" axes)
     if xlim is not None:
-        plt.xlim(xlim[0], xlim[1])
+        ax.set_xlim(xlim[0], xlim[1])
 
     # ylim
     if ylim is not None:
-        plt.ylim(ylim[0], ylim[1])
+        ax.set_ylim(ylim[0], ylim[1])
 
     # xlabel
     if xlabel:
-        plt.xlabel(xlabel)
+        ax.set_xlabel(xlabel)
 
     # ylabel
     if ylabel:
-        plt.ylabel(ylabel)
+        ax.set_ylabel(ylabel)
 
     # title
     if title:
-        plt.title(title)
+        ax.set_title(title)
 
     # show
     if show:
@@ -269,28 +285,28 @@ def raster_plot(
 
     # plot raster
     if ax is None:
-        ax = plt
+        ax = plt.gca()
 
     scatter_kwargs = kwargs.copy()
     scatter_kwargs['alpha'] = alpha
     ax.scatter(time, index, marker=marker, c=color, s=markersize, **scatter_kwargs)
 
-    # xlable
+    # xlabel (apply to the target axes, not the pyplot "current" axes)
     if xlabel:
-        plt.xlabel(xlabel)
+        ax.set_xlabel(xlabel)
 
     # ylabel
     if ylabel:
-        plt.ylabel(ylabel)
+        ax.set_ylabel(ylabel)
 
     if xlim:
-        plt.xlim(xlim[0], xlim[1])
+        ax.set_xlim(xlim[0], xlim[1])
 
     if ylim:
-        plt.ylim(ylim[0], ylim[1])
+        ax.set_ylim(ylim[0], ylim[1])
 
     if title:
-        plt.title(title)
+        ax.set_title(title)
 
     if show:
         plt.show()
@@ -326,7 +342,9 @@ def animate_2D(
     net_size : tuple
         The size of the neuron group.
     dt : float
-        The time duration of each step.
+        The time duration of each step. If ``None``, the active
+        ``brainstate.environ`` ``dt`` is used when set, otherwise it defaults
+        to ``1.0`` (time axis expressed in steps).
     val_min : float, int
         The minimum of the potential.
     val_max : float, int
@@ -359,7 +377,8 @@ def animate_2D(
     anim : animation.FuncAnimation
         The created animation function.
     """
-    dt = brainstate.environ.get_dt() if dt is None else dt
+    dt = _resolve_dt(dt)
+    values = np.asarray(values)
     num_step, num_neuron = values.shape
     height, width = net_size
 
@@ -433,11 +452,12 @@ def animate_1D(
     dynamical_vars : dict, np.ndarray, list of np.ndarray, list of dict
         The dynamical variables which will be animated.
     static_vars : dict, np.ndarray, list of np.ndarray, list of dict
-        The static variables.
-    xticks : list, np.ndarray
-        The xticks.
+        The static variables. Array entries (or dicts carrying a ``'ys'`` /
+        ``'data'`` 1D array) are drawn unchanged on every frame.
     dt : float
-        The numerical integration step.
+        The numerical integration step. If ``None``, the active
+        ``brainstate.environ`` ``dt`` is used when set, otherwise it defaults
+        to ``1.0`` (time axis expressed in steps).
     xlim : tuple
         The xlim.
     ylim : tuple
@@ -474,7 +494,7 @@ def animate_1D(
     """
 
     # check dt
-    dt = brainstate.environ.get_dt() if dt is None else dt
+    dt = _resolve_dt(dt)
 
     # check figure
     fig = plt.figure(figsize=(figsize or (6, 6)), constrained_layout=True)
@@ -527,36 +547,38 @@ def animate_1D(
     lengths = np.array(lengths)
     assert np.all(lengths == lengths[0]), 'Dynamic variables must have equal length.'
 
-    # check static variables
+    # check static variables -- normalize every entry to {'xs', 'ys', 'legend'}
+    # so the auto-ylim loop and the frame() closure can index them uniformly
+    # (previously ndarray / 'data'-dict entries stored a 'data' key and crashed
+    # with KeyError: 'ys').
+    def _normalize_static(var):
+        nonlocal has_legend
+        if isinstance(var, dict):
+            if 'ys' in var:
+                ys = np.asarray(var['ys'])
+            elif 'data' in var:
+                ys = np.asarray(var['data'])
+            else:
+                raise ValueError('Static variable dict must provide a "ys" (or "data") item.')
+            legend = var.get('legend', None)
+            if 'legend' in var:
+                has_legend = True
+            xs = np.asarray(var['xs']) if 'xs' in var else np.arange(ys.shape[0])
+        elif isinstance(var, np.ndarray):
+            ys = var
+            legend = None
+            xs = np.arange(ys.shape[0])
+        else:
+            raise ValueError(f'Unknown static data type: {type(var)}')
+        assert np.ndim(ys) == 1, "Static variable must be 1D data."
+        return {'xs': xs, 'ys': ys, 'legend': legend}
+
     final_static_vars = []
     if isinstance(static_vars, (tuple, list)):
         for var in static_vars:
-            if isinstance(var, dict):
-                assert 'data' in var, 'Must provide "ys" item.'
-                if 'legend' not in var:
-                    var['legend'] = None
-                else:
-                    has_legend = True
-            elif isinstance(var, np.ndarray):
-                var = {'data': var, 'legend': None}
-            else:
-                raise ValueError(f'Unknown data type: {type(var)}')
-            assert np.ndim(var['data']) == 1, "Static variable must be 1D data."
-            final_static_vars.append(var)
-    elif isinstance(static_vars, np.ndarray):
-        final_static_vars.append({'data': static_vars,
-                                  'xs': np.arange(static_vars.shape[0]),
-                                  'legend': None})
-    elif isinstance(static_vars, dict):
-        assert 'ys' in static_vars, 'Must provide "ys" item.'
-        if 'legend' not in static_vars:
-            static_vars['legend'] = None
-        else:
-            has_legend = True
-        if 'xs' not in static_vars:
-            static_vars['xs'] = np.arange(static_vars['ys'].shape[0])
-        final_static_vars.append(static_vars)
-
+            final_static_vars.append(_normalize_static(var))
+    elif isinstance(static_vars, (np.ndarray, dict)):
+        final_static_vars.append(_normalize_static(static_vars))
     else:
         raise ValueError(f'Unknown static data type: {type(static_vars)}')
 
@@ -622,7 +644,35 @@ def animate_1D(
 
 @set_module_as('braintools.visualize')
 def remove_axis(ax, *pos):
+    """Hide axis spines, or blank the whole panel when no spine is named.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes to modify.
+    *pos : str
+        Spine names to hide, any of ``'left'``, ``'right'``, ``'top'``,
+        ``'bottom'``. When called with **no** spine names, all four spines and
+        the tick marks are removed, turning the panel into a blank decorative
+        cell (this matches the documented ``remove_axis(ax)`` usage).
+
+    Raises
+    ------
+    ValueError
+        If a position is not one of the four valid spine names.
+    """
+    if len(pos) == 0:
+        # No spine specified: blank the whole panel (documented behaviour for
+        # decorative sub-panels).
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return
     for p in pos:
         if p not in ['left', 'right', 'top', 'bottom']:
-            raise ValueError
+            raise ValueError(
+                f"Invalid spine position {p!r}; expected one of "
+                f"'left', 'right', 'top', 'bottom'."
+            )
         ax.spines[p].set_visible(False)

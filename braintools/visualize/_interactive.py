@@ -682,7 +682,13 @@ def interactive_correlation_matrix(
         corr_matrix = np.corrcoef(data.T)
     elif method == 'spearman':
         from scipy.stats import spearmanr
-        corr_matrix = spearmanr(data)[0]
+        # spearmanr returns a scalar for exactly two columns; build the 2x2
+        # matrix explicitly so the heatmap always receives a 2-D array.
+        if data.shape[1] == 2:
+            rho = spearmanr(data[:, 0], data[:, 1])[0]
+            corr_matrix = np.array([[1.0, rho], [rho, 1.0]])
+        else:
+            corr_matrix = np.asarray(spearmanr(data)[0])
     else:
         raise ValueError(f"Unknown correlation method: {method}")
 
