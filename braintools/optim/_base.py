@@ -28,33 +28,51 @@ __all__ = [
 
 
 class Optimizer(Node):
-    """
-    Base Optimizer Class.
+    """Base class for all optimizers.
+
+    Subclasses must implement :meth:`register_trainable_weights` and :meth:`update`
+    to register the parameters to optimize and to apply a single optimization step,
+    respectively.
     """
     __module__ = 'braintools.optim'
 
     def register_trainable_weights(self, param_states: Dict[Hashable, State]):
-        """
-        Register the trainable weights.
+        """Register the trainable weights with the optimizer.
 
-        Parameters:
-        -----------
-        param_states: Dict[Hashable, State]
-            The trainable weights.
+        Parameters
+        ----------
+        param_states : dict of {hashable : brainstate.State}
+            The trainable weights to optimize, as a pytree whose leaves are
+            ``brainstate.State`` objects.
+
+        Raises
+        ------
+        NotImplementedError
+            Always, in the base class. Subclasses must override this method.
         """
         raise NotImplementedError
 
     def update(self, grads: Dict[Hashable, PyTree]):
-        """
-        Update the trainable weights according to weight gradients.
+        """Update the trainable weights from their gradients.
 
-        Parameters:
-        -----------
-        grads: Dict[Hashable, PyTree]
-            The weight gradients.
+        Parameters
+        ----------
+        grads : dict of {hashable : PyTree}
+            The gradients of the loss with respect to each registered weight, with
+            the same structure as the registered parameters.
+
+        Raises
+        ------
+        NotImplementedError
+            Always, in the base class. Subclasses must override this method.
         """
         raise NotImplementedError
 
 
 class OptimState(brainstate.LongTermState):
-    pass
+    """A :class:`brainstate.LongTermState` holding optimizer state.
+
+    Used for quantities that persist across optimization steps but are not trainable
+    parameters, such as ``optax`` optimizer state, step counters and learning rates.
+    """
+    __module__ = 'braintools.optim'

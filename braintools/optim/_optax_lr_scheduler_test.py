@@ -1141,8 +1141,8 @@ class TestWarmupScheduler:
             warmup_start_lr=0.0
         )
 
-        # Initial learning rate is base_lr (scheduler hasn't stepped yet)
-        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+        # At epoch 0 the warmup LR is the start LR, 0.0 (S-3: epoch-0 value, not base_lr)
+        assert np.isclose(scheduler.current_lrs.value[0], 0.0)
 
         # After 5 steps (epoch 5), alpha = 5/10 = 0.5, lr = 0.0 + 1.0 * 0.5 = 0.5
         for _ in range(5):
@@ -1169,8 +1169,8 @@ class TestWarmupScheduler:
             warmup_start_lr=0.1
         )
 
-        # Initial should be base_lr (scheduler hasn't stepped yet)
-        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+        # At epoch 0 the warmup LR is the start LR, 0.1 (S-3: epoch-0 value, not base_lr)
+        assert np.isclose(scheduler.current_lrs.value[0], 0.1)
 
         # After step 1: alpha = 1/10 = 0.1, lr = 0.1 + 0.9 * 0.1 = 0.19
         scheduler.step()
@@ -1236,10 +1236,10 @@ class TestWarmupScheduler:
             warmup_start_lr=0.0
         )
 
-        # Check initial lrs (base_lrs before stepping)
+        # At epoch 0 both groups are at the warmup start LR, 0.0 (S-3 fix)
         assert len(scheduler.current_lrs.value) == 2
-        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
-        assert np.isclose(scheduler.current_lrs.value[1], 0.1)
+        assert np.isclose(scheduler.current_lrs.value[0], 0.0)
+        assert np.isclose(scheduler.current_lrs.value[1], 0.0)
 
         # After 10 steps, should be at base_lr
         for _ in range(10):
@@ -1279,8 +1279,8 @@ class TestWarmupScheduler:
             warmup_start_lr=0.5
         )
 
-        # Initial (base_lr before stepping)
-        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+        # At epoch 0 the warmup LR is the start LR, 0.5 (S-3 fix)
+        assert np.isclose(scheduler.current_lrs.value[0], 0.5)
 
         # After 1 step, alpha = 1/1 = 1.0, so we're at base_lr
         scheduler.step()
@@ -1966,8 +1966,8 @@ class TestLinearLR:
             total_iters=10
         )
 
-        # Initial LR should be base_lr (before stepping)
-        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+        # At epoch 0 LinearLR is at start_factor * base_lr = 0.1 (S-3 fix)
+        assert np.isclose(scheduler.current_lrs.value[0], 0.1)
 
         # After 5 steps, should be halfway: 0.1 + 0.5 * 0.9 = 0.55
         for _ in range(5):
@@ -2155,8 +2155,8 @@ class TestConstantLR:
             total_iters=10
         )
 
-        # Initial LR should be base_lr (before stepping)
-        assert np.isclose(scheduler.current_lrs.value[0], 1.0)
+        # At epoch 0 ConstantLR applies factor * base_lr = 0.5 (S-3 fix)
+        assert np.isclose(scheduler.current_lrs.value[0], 0.5)
 
         # During first total_iters epochs, should be factor * base_lr = 0.5
         for i in range(10):
@@ -2352,8 +2352,8 @@ class TestChainedScheduler:
         )
         scheduler = braintools.optim.ChainedScheduler([warmup, decay])
 
-        # Initial - warmup starts at base_lr
-        assert np.isclose(scheduler.get_lr()[0], 1.0)
+        # At epoch 0 the chained LR is warmup(0.1) * decay(1.0) = 0.1 (S-3/S-5 fix)
+        assert np.isclose(scheduler.get_lr()[0], 0.1)
 
         # After 5 steps, warmup complete, decay hasn't started
         for _ in range(5):
@@ -2384,8 +2384,8 @@ class TestChainedScheduler:
         model = brainstate.nn.Linear(10, 5)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        # Check initial LR
-        assert np.isclose(optimizer.current_lr, 0.1)
+        # At epoch 0 the chained LR is base(0.1) * warmup factor(0.5) * decay(1.0) = 0.05
+        assert np.isclose(optimizer.current_lr, 0.05)
 
         # Step through warmup and decay
         for _ in range(10):

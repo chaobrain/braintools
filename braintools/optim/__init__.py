@@ -35,11 +35,12 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
 
 .. code-block:: python
 
+    import jax.numpy as jnp
     import brainstate as bst
     from braintools.optim import Adam
 
     # Define a simple model
-    class SimpleModel(bst.Module):
+    class SimpleModel(bst.nn.Module):
         def __init__(self):
             super().__init__()
             self.w = bst.ParamState(jnp.zeros((10, 5)))
@@ -55,11 +56,15 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
     # Register trainable parameters
     optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-    # Training step
-    @bst.transform.grad(model.states(bst.ParamState), return_value=True)
+    # Loss returning (grads, value); pass the trainable states via grad_states=
+    @bst.transform.grad(grad_states=model.states(bst.ParamState), return_value=True)
     def loss_fn(data, target):
         pred = model(data)
         return jnp.mean((pred - target) ** 2)
+
+    # Example data
+    data = jnp.ones((32, 10))
+    target = jnp.ones((32, 5))
 
     # Update step
     grads, loss = loss_fn(data, target)
@@ -69,10 +74,11 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
 
 .. code-block:: python
 
+    import brainstate as bst
     from braintools.optim import Adam, CosineAnnealingLR
 
-    # Create optimizer with cosine annealing schedule
-    scheduler = CosineAnnealingLR(T_max=1000, eta_min=1e-6)
+    # Create optimizer with a cosine annealing schedule
+    scheduler = CosineAnnealingLR(base_lr=0.001, T_max=1000, eta_min=1e-6)
     optimizer = Adam(lr=scheduler, weight_decay=1e-4)
 
     optimizer.register_trainable_weights(model.states(bst.ParamState))
@@ -81,22 +87,26 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
     for epoch in range(100):
         grads, loss = loss_fn(data, target)
         optimizer.update(grads)
-        # Scheduler step is handled automatically
+        # Advance the schedule explicitly each epoch
+        scheduler.step()
 
 **Gradient-Based Optimizers:**
 
 .. code-block:: python
 
     from braintools.optim import (
-        SGD, Momentum, Adam, AdamW, RMSprop,
+        SGD, Momentum, MomentumNesterov, Adam, AdamW, RMSprop,
         Adagrad, Adadelta, Nadam, RAdam
     )
 
     # Stochastic Gradient Descent
     sgd = SGD(lr=0.01, weight_decay=1e-4)
 
-    # Momentum
-    momentum = Momentum(lr=0.01, momentum=0.9, nesterov=True)
+    # Momentum (note: `Momentum` has no `nesterov` flag)
+    momentum = Momentum(lr=0.01, momentum=0.9)
+
+    # Nesterov momentum: use MomentumNesterov or SGD(nesterov=True)
+    nesterov = MomentumNesterov(lr=0.01, momentum=0.9)
 
     # Adam (most popular)
     adam = Adam(lr=0.001, betas=(0.9, 0.999), eps=1e-8)
@@ -123,6 +133,7 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
 
 .. code-block:: python
 
+    import optax
     from braintools.optim import (
         Lamb, Lars, Lion, AdaBelief,
         Adafactor, Yogi, Lookahead
@@ -141,16 +152,16 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
     adabelief = AdaBelief(lr=0.001, betas=(0.9, 0.999), eps=1e-16)
 
     # Adafactor (memory-efficient adaptive learning rates)
-    adafactor = Adafactor(lr=0.001, min_dim_size_to_factor=128)
+    adafactor = Adafactor(lr=0.001, decay_rate=0.8)
 
     # Yogi (adaptive learning rate with controlled increases)
     yogi = Yogi(lr=0.01, betas=(0.9, 0.999))
 
-    # Lookahead (wrapper for other optimizers)
+    # Lookahead wraps an optax GradientTransformation (not a braintools optimizer)
     lookahead = Lookahead(
-        base_optimizer=Adam(lr=0.001),
+        base_optimizer=optax.adam(0.001),
         sync_period=5,
-        slow_step_size=0.5
+        alpha=0.5,
     )
 
 **Learning Rate Schedulers:**
@@ -165,25 +176,25 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
     )
 
     # Step decay
-    step_lr = StepLR(initial_lr=0.1, step_size=30, gamma=0.1)
+    step_lr = StepLR(base_lr=0.1, step_size=30, gamma=0.1)
 
     # Multi-step decay
-    multistep_lr = MultiStepLR(initial_lr=0.1, milestones=[30, 60, 90], gamma=0.1)
+    multistep_lr = MultiStepLR(base_lr=0.1, milestones=[30, 60, 90], gamma=0.1)
 
     # Exponential decay
-    exp_lr = ExponentialLR(initial_lr=0.1, gamma=0.95)
+    exp_lr = ExponentialLR(base_lr=0.1, gamma=0.95)
 
     # Cosine annealing
-    cosine_lr = CosineAnnealingLR(initial_lr=0.1, T_max=100, eta_min=1e-6)
+    cosine_lr = CosineAnnealingLR(base_lr=0.1, T_max=100, eta_min=1e-6)
 
     # Polynomial decay
-    poly_lr = PolynomialLR(initial_lr=0.1, total_steps=1000, power=2.0)
+    poly_lr = PolynomialLR(base_lr=0.1, total_iters=1000, power=2.0)
 
-    # Warmup then constant
+    # Warmup then base LR (warmup over `warmup_epochs`, starting at `warmup_start_lr`)
     warmup_lr = WarmupScheduler(
-        warmup_steps=1000,
-        peak_lr=0.001,
-        init_lr=1e-6
+        base_lr=0.001,
+        warmup_epochs=1000,
+        warmup_start_lr=1e-6,
     )
 
     # One-cycle policy
@@ -202,12 +213,12 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
         mode='triangular'
     )
 
-    # Warmup + cosine schedule
+    # Warmup + cosine schedule (warmup over `warmup_steps`, decay to `eta_min`)
     warmup_cosine = WarmupCosineSchedule(
+        base_lr=0.001,
         warmup_steps=1000,
         total_steps=10000,
-        peak_lr=0.001,
-        end_lr=1e-6
+        eta_min=1e-6
     )
 
 **SciPy Optimization:**
@@ -216,23 +227,28 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
 
     from braintools.optim import ScipyOptimizer
 
-    # Use SciPy's BFGS for gradient-based optimization
+    # `loss_fun` and `bounds` are required; the loss signature follows `bounds`
+    # (positional for sequence bounds, keyword for dict bounds).
+    def loss(x, y):
+        return (x - 1.0) ** 2 + (y + 2.0) ** 2
+
+    bounds = [(-5.0, 5.0), (-3.0, 3.0)]
+
+    # Gradient-based optimization (gradients via JAX autodiff)
     scipy_opt = ScipyOptimizer(
-        method='BFGS',
-        options={'maxiter': 1000, 'gtol': 1e-6}
-    )
-
-    # Use Nelder-Mead for gradient-free optimization
-    nelder_mead = ScipyOptimizer(
-        method='Nelder-Mead',
-        options={'maxiter': 5000, 'xatol': 1e-8}
-    )
-
-    # Constrained optimization with bounds
-    constrained = ScipyOptimizer(
+        loss_fun=loss,
+        bounds=bounds,
         method='L-BFGS-B',
-        bounds=[(0, 1), (-10, 10)],
-        options={'maxiter': 1000}
+        options={'maxiter': 1000},
+    )
+    result = scipy_opt.minimize(n_iter=1)
+
+    # Gradient-free optimization (no Jacobian is built/passed)
+    nelder_mead = ScipyOptimizer(
+        loss_fun=loss,
+        bounds=bounds,
+        method='Nelder-Mead',
+        options={'maxiter': 5000, 'xatol': 1e-8},
     )
 
 **Nevergrad Optimization:**
@@ -241,25 +257,27 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
 
     from braintools.optim import NevergradOptimizer
 
+    # Batched objective: each argument has shape (n_sample,); returns one loss
+    # per candidate. The algorithm name is passed via `method=`.
+    def batched_loss(x, y):
+        return x ** 2 + y ** 2
+
+    bounds = [(-5.0, 5.0), (-3.0, 3.0)]
+
     # Differential evolution
     ng_de = NevergradOptimizer(
-        optimizer='TwoPointsDE',
-        budget=1000,
-        num_workers=4
+        batched_loss, bounds, n_sample=16, method='TwoPointsDE', budget=1000,
     )
+    best = ng_de.minimize(n_iter=10, verbose=False)
 
     # CMA-ES (Covariance Matrix Adaptation)
     ng_cma = NevergradOptimizer(
-        optimizer='CMA',
-        budget=2000,
-        num_workers=1
+        batched_loss, bounds, n_sample=16, method='CMA', budget=2000,
     )
 
     # Particle swarm optimization
     ng_pso = NevergradOptimizer(
-        optimizer='PSO',
-        budget=1000,
-        num_workers=8
+        batched_loss, bounds, n_sample=32, method='PSO', budget=1000,
     )
 
 **Gradient Clipping:**
@@ -291,34 +309,35 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
 .. code-block:: python
 
     from braintools.optim import (
-        ChainedScheduler, SequentialLR,
+        ChainedScheduler, SequentialLR, ConstantLR, ExponentialLR,
+        WarmupScheduler, CosineAnnealingLR,
         ReduceLROnPlateau, PiecewiseConstantSchedule
     )
 
-    # Chain multiple schedulers
+    # Chain multiple schedulers (all advanced together on each step)
     scheduler = ChainedScheduler([
-        WarmupScheduler(warmup_steps=1000, peak_lr=0.001),
-        CosineAnnealingLR(initial_lr=0.001, T_max=9000)
+        WarmupScheduler(base_lr=0.001, warmup_epochs=1000),
+        CosineAnnealingLR(base_lr=0.001, T_max=9000)
     ])
 
     # Sequential schedulers (switch at milestones)
     sequential = SequentialLR(
         schedulers=[
-            ConstantLR(0.001),
-            ExponentialLR(initial_lr=0.001, gamma=0.95)
+            ConstantLR(base_lr=0.001),
+            ExponentialLR(base_lr=0.001, gamma=0.95)
         ],
         milestones=[5000]
     )
 
-    # Reduce on plateau (requires manual metric tracking)
+    # Reduce on plateau (requires manual metric tracking via scheduler.step(metric))
     reduce_plateau = ReduceLROnPlateau(
-        initial_lr=0.01,
+        base_lr=0.01,
         factor=0.5,
         patience=10,
         mode='min'
     )
 
-    # Piecewise constant
+    # Piecewise constant (values are absolute learning rates, not multipliers)
     piecewise = PiecewiseConstantSchedule(
         boundaries=[1000, 5000, 8000],
         values=[0.1, 0.01, 0.001, 0.0001]

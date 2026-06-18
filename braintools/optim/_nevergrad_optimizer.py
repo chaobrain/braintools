@@ -14,6 +14,7 @@
 # ==============================================================================
 
 
+import warnings
 from typing import Callable, Optional, Union, Sequence, Dict, List
 
 import brainunit as u
@@ -54,7 +55,10 @@ def concat_parameters(*parameters):
     Notes
     -----
     This utility prepares a batched set of parameters to pass to a batched
-    loss function. Broadcasting and dtype follow JAX semantics.
+    loss function by stacking corresponding leaves along a new leading axis. It
+    does **not** broadcast: every candidate must share an identical PyTree
+    structure and matching per-leaf shapes, otherwise stacking raises. The
+    result dtype follows ``jax.numpy.asarray`` promotion semantics.
     """
     final_parameters = jax.tree.map(lambda *ps: jax.numpy.asarray(ps), *parameters)
     return final_parameters
@@ -108,10 +112,16 @@ class NevergradOptimizer(Optimizer):
         Maximum number of evaluations given to Nevergrad. ``None`` lets the
         optimizer run without an explicit budget limit.
     num_workers : int, default: 1
-        Degree of parallelism hinted to Nevergrad.
+        Worker count forwarded to Nevergrad's internal model. This does **not**
+        parallelize the Python evaluation loop: candidates are evaluated
+        serially in batches of ``n_sample`` (vectorized speedups come from JAX
+        over the ``n_sample`` axis, not from this argument).
     method_params : dict, optional
         Extra keyword arguments forwarded to the Nevergrad optimizer
         constructor.
+    seed : int, optional
+        Seed applied to Nevergrad's random state in :meth:`initialize`. When
+        provided, the ask/tell sampling is reproducible across runs.
 
     Attributes
     ----------
@@ -119,6 +129,20 @@ class NevergradOptimizer(Optimizer):
         History of all parameter sets evaluated (one entry per candidate).
     errors : numpy.ndarray
         Aggregated losses corresponding to ``candidates``.
+
+    Notes
+    -----
+    - Total objective evaluations are approximately ``n_iter * n_sample``. The
+      ``budget`` argument only configures Nevergrad's internal model and does
+      **not** cap this loop; a warning is emitted if ``n_iter * n_sample``
+      exceeds ``budget``.
+    - This is a black-box optimizer: it implements :meth:`minimize` only and does
+      **not** honor the State-based :meth:`register_trainable_weights` /
+      :meth:`update` contract of the :class:`~braintools.optim.Optimizer` base
+      (those raise :class:`NotImplementedError`).
+    - If every candidate in an iteration evaluates to ``NaN``, the optimizer
+      falls back to Nevergrad's recommendation (with a warning) instead of
+      crashing on an all-``NaN`` ``argmin``.
 
     Examples
     --------
@@ -160,6 +184,7 @@ class NevergradOptimizer(Optimizer):
         budget: Optional[int] = None,
         num_workers: int = 1,
         method_params: Optional[Dict] = None,
+        seed: Optional[int] = None,
     ):
         if ng is None:
             raise ImportError("Nevergrad is not installed. Please install it using 'pip install nevergrad'.")
@@ -239,6 +264,7 @@ class NevergradOptimizer(Optimizer):
         self.num_workers = num_workers
         self.use_nevergrad_recommendation = use_nevergrad_recommendation
         self.method_params = method_params if method_params is not None else dict()
+        self.seed = seed
 
     def initialize(self):
         # initialize optimizer
@@ -269,6 +295,10 @@ class NevergradOptimizer(Optimizer):
                     break
             except Exception:
                 pass
+
+        # Seed Nevergrad's random state for reproducible ask/tell sampling (N-3).
+        if self.seed is not None:
+            self.optimizer.parametrization.random_state.seed(self.seed)
 
         # initialize the candidates and errors
         self.candidates = []
@@ -316,7 +346,16 @@ class NevergradOptimizer(Optimizer):
 
         # return the best parameter
         if choice_best:
-            if self.use_nevergrad_recommendation:
+            all_nan = bool(np.all(np.isnan(self.errors)))
+            if self.use_nevergrad_recommendation or all_nan:
+                if all_nan and not self.use_nevergrad_recommendation:
+                    # np.nanargmin raises "All-NaN slice encountered"; fall back to
+                    # Nevergrad's own recommendation instead of crashing (N-1).
+                    warnings.warn(
+                        "All candidate losses are NaN; falling back to Nevergrad's "
+                        "recommendation instead of the lowest-loss candidate.",
+                        RuntimeWarning,
+                    )
                 res = self.optimizer.provide_recommendation()
                 # use value which matches the parametrization structure
                 return self._add_unit(res.value)
@@ -325,9 +364,48 @@ class NevergradOptimizer(Optimizer):
                 return self._add_unit(self.candidates[best])
 
     def minimize(self, n_iter: int = 1, verbose: bool = True):
+        """Run the ask/tell optimization loop.
+
+        Each iteration draws ``n_sample`` candidates from Nevergrad, evaluates them
+        in a single batched call to ``batched_loss_fun``, reports the losses back,
+        and records the best parameters seen so far.
+
+        Parameters
+        ----------
+        n_iter : int, default: 1
+            Number of ask/tell rounds. Each round evaluates ``n_sample``
+            candidates, so the total number of objective evaluations is
+            approximately ``n_iter * n_sample``.
+        verbose : bool, default: True
+            If True, print the best error and parameters after each iteration.
+
+        Returns
+        -------
+        PyTree
+            The best parameters found, matching the structure of ``bounds`` (a
+            ``tuple`` for sequence bounds, a ``dict`` for dict bounds), with units
+            re-attached where the corresponding bound carried a unit. When
+            ``use_nevergrad_recommendation`` is True the recommendation is
+            returned instead of the lowest-loss candidate.
+
+        Raises
+        ------
+        AssertionError
+            If ``n_iter`` is not a positive integer.
+        """
         # check the number of iterations
         assert isinstance(n_iter, int), "'n_iter' must be an integer."
         assert n_iter > 0, "'n_iter' must be a positive integer."
+
+        # The optimization runs for exactly ``n_iter * n_sample`` evaluations; the
+        # nevergrad ``budget`` does not cap this loop, so warn on a mismatch (N-5).
+        if self.budget is not None and n_iter * self.n_sample > self.budget:
+            warnings.warn(
+                f"Requested {n_iter * self.n_sample} evaluations (n_iter * n_sample) "
+                f"exceed the configured Nevergrad budget={self.budget}; the budget "
+                f"does not cap the optimization loop.",
+                RuntimeWarning,
+            )
 
         # initialize the optimizer
         self.initialize()
@@ -338,5 +416,7 @@ class NevergradOptimizer(Optimizer):
             r = self._one_trial(choice_best=True)
             best_result = r
             if verbose:
-                print(f'Iteration {i}, best error: {np.nanmin(self.errors):.5f}, best parameters: {r}')
+                # np.nanmin warns + returns NaN on an all-NaN slice; guard it (N-1).
+                best_err = float('nan') if np.all(np.isnan(self.errors)) else np.nanmin(self.errors)
+                print(f'Iteration {i}, best error: {best_err:.5f}, best parameters: {r}')
         return best_result

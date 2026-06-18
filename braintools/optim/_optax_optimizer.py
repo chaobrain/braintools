@@ -14,8 +14,9 @@
 # ==============================================================================
 
 import warnings
-from typing import Dict, Optional, Union, Callable, Any, List, Tuple
+from typing import Dict, Optional, Union, Callable, Any, List, Tuple, NamedTuple
 
+import jax.numpy as jnp
 import jax.tree
 import optax
 from brainstate import State, maybe_state
@@ -282,8 +283,25 @@ class OptaxOptimizer(Optimizer):
 
     @current_lr.setter
     def current_lr(self, value: float):
-        """Set learning rate (will be used by schedulers)."""
+        """Set the current learning rate.
+
+        Updates both the reported value and the attached learning-rate schedule, so a
+        manual change actually takes effect in the learning rate applied during
+        ``step`` (which is read from the schedule via ``optax.scale_by_schedule``, not
+        from this reported attribute). The scalar is broadcast across all parameter
+        groups of the schedule.
+        """
         self._current_lr.value = value
+        sched = getattr(self, '_lr_scheduler', None)
+        if sched is not None and hasattr(sched, 'current_lrs'):
+            # Update only the primary (group-0) entry that the main schedule reads, so
+            # per-group learning rates set by a multi-group schedule are preserved.
+            cur = list(sched.current_lrs.value)
+            if cur:
+                cur[0] = float(value)
+            else:
+                cur = [float(value)]
+            sched.current_lrs.value = cur
 
     def _get_leaf_value(self, v):
         if not isinstance(v, State):
@@ -291,6 +309,31 @@ class OptaxOptimizer(Optimizer):
                 f"All params values must be brainstate.State, got {type(v)}"
             )
         return v.value
+
+    @staticmethod
+    def _write_back(state_tree, value_tree):
+        """Write each ``State`` leaf's value from the matching subtree of ``value_tree``.
+
+        ``state_tree`` is a (possibly nested) pytree whose leaves are ``State`` objects;
+        ``value_tree`` mirrors its outer structure but holds each state's updated value
+        (itself possibly a pytree) in place of the ``State``. Navigating by path keeps
+        the two aligned even when a ``State``'s value is a nested pytree (e.g. a
+        ``brainstate.ParamState`` holding ``{'weight': ..., 'bias': ...}``), which a
+        naive leaf-zip would mis-align.
+        """
+        leaves = jax.tree.flatten_with_path(
+            state_tree, is_leaf=lambda x: isinstance(x, State)
+        )[0]
+        for path, st in leaves:
+            sub = value_tree
+            for key in path:
+                if hasattr(key, 'key'):
+                    sub = sub[key.key]
+                elif hasattr(key, 'idx'):
+                    sub = sub[key.idx]
+                else:
+                    sub = sub[key]
+            st.value = sub
 
     def add_param_group(self, params: PyTree[State], **kwargs):
         """
@@ -303,14 +346,30 @@ class OptaxOptimizer(Optimizer):
         # Validate that params is a dict of State objects
         jax.tree.map(self._get_leaf_value, params, is_leaf=lambda x: isinstance(x, State))
 
-        # Create UniqueStateManager for this group
-        manager = UniqueStateManager()
-        manager.merge_with(params)
-        param_values = manager.to_pytree_value()
-        group_lr_state = OptimState(kwargs.get('lr', self.base_lr))
+        if self.opt_state is None:
+            raise ValueError(
+                "register_trainable_weights must be called before add_param_group."
+            )
 
+        # Merge the new parameters into the shared registry so that ``step`` sees and
+        # writes them back. Using the registry's global keys (matched by object
+        # identity) guarantees the group keys line up with the gradient keys, avoiding
+        # the previous behavior where added parameters were tracked in a private manager
+        # and silently never updated.
+        passed_ids = set()
+        jax.tree.map(
+            lambda x: passed_ids.add(id(x)), params, is_leaf=lambda x: isinstance(x, State)
+        )
+        self.param_states.merge_with(params)
+        # Use the flat path-string map so the identity filter works for arbitrarily
+        # nested parameter pytrees (``to_pytree`` would expose sub-dicts, not States).
+        full = self.param_states.to_dict()
+        group_param_dict = {k: v for k, v in full.items() if id(v) in passed_ids}
+        param_values = {k: v.value for k, v in group_param_dict.items()}
+
+        group_lr_state = OptimState(kwargs.get('lr', self.base_lr))
         group = {
-            'params': manager.to_pytree(),
+            'params': group_param_dict,
             'lr': group_lr_state,
             'weight_decay': kwargs.get('weight_decay', self.weight_decay),
         }
@@ -320,15 +379,17 @@ class OptaxOptimizer(Optimizer):
         # Initialize optimizer state for this param group if needed
         group_weight_decay = group['weight_decay']
 
-        # Create group-specific transformation
+        # Create group-specific transformation. Note: parameter groups use Adam-style
+        # adaptive scaling regardless of the parent optimizer; only ``lr`` and
+        # ``weight_decay`` are per-group.
         transforms = []
         if self.grad_clip_norm is not None:
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(optax.scale_by_adam())  # Use default Adam scaling
         if group_weight_decay > 0:
             transforms.append(optax.add_decayed_weights(group_weight_decay))
+        transforms.append(optax.scale_by_adam())  # Use default Adam scaling
 
         # Use a schedule function that reads from the group's LR State
         def group_lr_schedule(count):
@@ -372,19 +433,20 @@ class OptaxOptimizer(Optimizer):
 
         return self
 
-    def update(self, grads: Dict[str, Any]):
+    def update(self, grads: Dict[str, Any], **extra_args):
         """Update the model states with gradients (backward compatibility)."""
-        return self.step(grads)
+        return self.step(grads, **extra_args)
 
-    def step(self, grads: Optional[Dict[str, Any]]):
+    def step(self, grads: Optional[Dict[str, Any]], **extra_args):
         """
         Perform a single optimization step.
 
         Args:
-            grads: Gradients for parameters. If None, closure must be provided.
-
-        Returns:
-            Optional loss value if closure is provided.
+            grads: Dictionary mapping parameter keys to their gradients.
+            **extra_args: Extra keyword arguments forwarded to the underlying
+                ``optax`` transformation's ``update`` (e.g. ``value``, ``value_fn``
+                and ``grad`` required by LBFGS line searches). Ignored by
+                transformations that do not accept extra arguments.
         """
         if self.opt_state is None:
             raise ValueError("register_trainable_weights must be called before step.")
@@ -401,7 +463,8 @@ class OptaxOptimizer(Optimizer):
             if self.param_groups:
                 default_group = self.param_groups[0]
                 default_params = default_group['params']
-                assert isinstance(default_params, dict)
+                if not isinstance(default_params, dict):
+                    raise TypeError(f"Parameter group 'params' must be a dict, got {type(default_params)}")
 
                 # Extract gradients and values for default group
                 default_grads = {k: grads[k] for k in default_params.keys() if k in grads}
@@ -418,7 +481,8 @@ class OptaxOptimizer(Optimizer):
             for group_idx in range(1, len(self.param_groups)):
                 group = self.param_groups[group_idx]
                 group_params = group['params']
-                assert isinstance(group_params, dict)
+                if not isinstance(group_params, dict):
+                    raise TypeError(f"Parameter group 'params' must be a dict, got {type(group_params)}")
 
                 # Extract gradients and values for this group (fix: create dict not set)
                 group_grads = {k: grads[k] for k in group_params.keys() if k in grads}
@@ -490,10 +554,8 @@ class OptaxOptimizer(Optimizer):
             # Apply all accumulated updates to parameters
             new_params = optax.apply_updates(param_values, all_updates)
 
-            # Update parameters in the State objects
-            for k in params.keys():
-                if k in new_params:
-                    params[k].value = new_params[k]
+            # Update parameters in the State objects (path-based; nesting-safe).
+            self._write_back(params, new_params)
         else:
             # Original implementation for backward compatibility
             param_states = self.param_states.to_pytree()
@@ -501,14 +563,20 @@ class OptaxOptimizer(Optimizer):
             # Fix: create dict not set
             filtered_grads = {k: grads[k] for k in param_values.keys() if k in grads}
 
-            # Apply gradient transformations
-            updates, new_opt_state = self.tx.update(filtered_grads, self.opt_state.value, param_values)
+            # Apply gradient transformations. Extra args (e.g. LBFGS line-search
+            # arguments) are forwarded only when provided, so plain transformations
+            # that do not accept them keep working.
+            if extra_args:
+                updates, new_opt_state = self.tx.update(
+                    filtered_grads, self.opt_state.value, param_values, **extra_args
+                )
+            else:
+                updates, new_opt_state = self.tx.update(filtered_grads, self.opt_state.value, param_values)
             new_params = optax.apply_updates(param_values, updates)
 
-            # Update parameters in the State objects
-            for k in param_values.keys():
-                if k in new_params:
-                    param_states[k].value = new_params[k]
+            # Update parameters in the State objects. Navigate by path so nested
+            # parameter pytrees and States whose value is itself a pytree both work.
+            self._write_back(param_states, new_params)
 
             # Update optimizer state
             self.opt_state.value = new_opt_state
@@ -558,11 +626,22 @@ class OptaxOptimizer(Optimizer):
         self.current_lr = msgpack_from_state_dict(self.current_lr, state_dict['lr'])
         self._base_lr = state_dict['base_lr']
 
-        # Load param_groups and restore lr_state for groups that have it
-        self.param_groups = msgpack_from_state_dict(
-            self.param_groups,
-            state_dict['param_groups']
-        )
+        # Restore per-group mutable hyperparameters only. The live ``params`` State
+        # objects and the (non-serializable) ``tx`` are rebuilt by
+        # ``add_param_group``/``register_trainable_weights`` and are intentionally not
+        # restored from the checkpoint, so msgpack-restoring the whole ``param_groups``
+        # structure (which would mismatch on the dropped ``tx`` key) is avoided.
+        saved_groups = state_dict.get('param_groups', {})
+        for i, group in enumerate(self.param_groups):
+            saved = saved_groups.get(str(i))
+            if saved is None:
+                continue
+            if 'lr' in saved and isinstance(group.get('lr'), State):
+                group['lr'].value = saved['lr']
+            elif 'lr' in saved:
+                group['lr'] = saved['lr']
+            if 'weight_decay' in saved:
+                group['weight_decay'] = saved['weight_decay']
 
         if 'opt_state' in state_dict:
             if self.opt_state is None:
@@ -570,9 +649,13 @@ class OptaxOptimizer(Optimizer):
             else:
                 self.opt_state.value = state_dict['opt_state']
 
-        # Load param group optimizer states
+        # Load param group optimizer states. ``state_dict`` stores these as a
+        # ``{str(i): value}`` mapping, so iterate by index to bind the value (not the
+        # string key, which the previous ``enumerate`` over the dict did).
         if 'param_groups_opt_states' in state_dict:
-            for i, s in enumerate(state_dict['param_groups_opt_states']):
+            saved_states = state_dict['param_groups_opt_states']
+            for i in range(len(saved_states)):
+                s = saved_states[str(i)]
                 if i < len(self.param_groups_opt_states):
                     self.param_groups_opt_states[i].value = s
                 else:
@@ -721,14 +804,16 @@ class SGD(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
+        # Coupled L2 weight decay (PyTorch ``SGD``): folded into the gradient before
+        # the momentum buffer is accumulated.
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
         if self.momentum > 0:
             if self.nesterov:
                 transforms.append(optax.trace(decay=self.momentum, nesterov=True))
             else:
                 transforms.append(optax.trace(decay=self.momentum, nesterov=False))
-
-        if self.weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(self.weight_decay))
 
         # Always use the scheduler (now always present due to ConstantLR unification)
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
@@ -845,11 +930,12 @@ class Momentum(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
-        # Add momentum transformation (always use momentum for this optimizer)
-        transforms.append(optax.trace(decay=self.momentum, nesterov=False))
-
+        # Coupled L2 weight decay: folded into the gradient before the momentum buffer.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Add momentum transformation (always use momentum for this optimizer)
+        transforms.append(optax.trace(decay=self.momentum, nesterov=False))
 
         # Always use the scheduler (now always present due to ConstantLR unification)
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
@@ -984,11 +1070,12 @@ class MomentumNesterov(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
-        # Add Nesterov momentum transformation
-        transforms.append(optax.trace(decay=self.momentum, nesterov=True))
-
+        # Coupled L2 weight decay: folded into the gradient before the momentum buffer.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Add Nesterov momentum transformation
+        transforms.append(optax.trace(decay=self.momentum, nesterov=True))
 
         # Always use the scheduler (now always present due to ConstantLR unification)
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
@@ -1153,13 +1240,16 @@ class Adam(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
+        # Coupled L2 weight decay (PyTorch ``Adam``): added to the gradient *before*
+        # the adaptive moments. This is what distinguishes ``Adam`` from ``AdamW``,
+        # which applies decoupled weight decay after the moments.
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
         if self.amsgrad:
             transforms.append(optax.scale_by_amsgrad(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
         else:
             transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
-
-        if self.weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(self.weight_decay))
 
         # Always use the scheduler (now always present due to ConstantLR unification)
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
@@ -1393,10 +1483,20 @@ class Adagrad(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
-        transforms.append(optax.scale_by_rms(initial_scale=self.initial_accumulator_value, eps=self.eps))
-
+        # Coupled L2 weight decay: add to the gradient BEFORE the adaptive scaling.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        # Adagrad accumulates the sum of squared gradients (root-sum-of-squares),
+        # not an exponential moving average (that is RMSprop).
+        transforms.append(
+            optax.scale_by_rss(initial_accumulator_value=self.initial_accumulator_value, eps=self.eps)
+        )
+
+        # PyTorch-style learning-rate decay: clr_t = lr / (1 + t * lr_decay).
+        if self.lr_decay != 0:
+            lr_decay = self.lr_decay
+            transforms.append(optax.scale_by_schedule(lambda count: 1.0 / (1.0 + count * lr_decay)))
 
         # Always use the scheduler (now always present due to ConstantLR unification)
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
@@ -1518,10 +1618,11 @@ class Adadelta(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
-        transforms.append(optax.scale_by_adadelta(rho=self.rho, eps=self.eps))
-
+        # Coupled L2 weight decay: applied to the gradient before the adaptive scaling.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        transforms.append(optax.scale_by_adadelta(rho=self.rho, eps=self.eps))
 
         # Always use the scheduler (now always present due to ConstantLR unification)
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
@@ -1661,13 +1762,15 @@ class RMSprop(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
+        # Coupled L2 weight decay (PyTorch ``RMSprop``): added to the gradient before
+        # the squared-gradient moving average.
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
+
         transforms.append(optax.scale_by_rms(decay=self.alpha, eps=self.eps))
 
         if self.momentum > 0:
             transforms.append(optax.trace(decay=self.momentum))
-
-        if self.weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(self.weight_decay))
 
         # Always use the scheduler (now always present due to ConstantLR unification)
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
@@ -1768,9 +1871,10 @@ class Adamax(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(optax.scale_by_adamax(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        # Coupled L2 weight decay: applied to the gradient before the adaptive scaling.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_adamax(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -1932,9 +2036,10 @@ class Nadam(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
         # Nadam is Adam with Nesterov momentum - use adam with nesterov-style updates
-        transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps, nesterov=True))
+        # Coupled L2 weight decay: applied to the gradient before the adaptive moments.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps, nesterov=True))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -2113,9 +2218,10 @@ class RAdam(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(optax.scale_by_radam(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        # Coupled L2 weight decay: applied to the gradient before the adaptive moments.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_radam(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -2325,10 +2431,14 @@ class Lamb(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(optax.scale_by_trust_ratio())
+        # LAMB order (cf. ``optax.lamb``): Adam moments, then decoupled weight decay,
+        # then the layer-wise trust ratio computed on the *final* update direction,
+        # and finally the learning rate. The trust ratio must come last (before LR),
+        # not first on the raw gradient.
         transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_trust_ratio())
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -2563,12 +2673,81 @@ class Lars(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(optax.scale_by_trust_ratio(trust_coefficient=self.trust_coefficient, eps=self.eps))
-        transforms.append(optax.trace(decay=self.momentum))
+        # LARS order (cf. ``optax.lars``): weight decay is applied to the gradient
+        # *before* the trust-ratio computation, then momentum, then the learning rate.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_trust_ratio(trust_coefficient=self.trust_coefficient, eps=self.eps))
+        transforms.append(optax.trace(decay=self.momentum))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
+
+
+class _LookaheadState(NamedTuple):
+    """State for the plain-pytree Lookahead wrapper."""
+    count: Any
+    slow: Any
+    fast_state: Any
+
+
+def _lookahead_transform(
+    fast_tx: optax.GradientTransformation,
+    sync_period: int,
+    slow_step_size: float,
+) -> optax.GradientTransformation:
+    """Lookahead optimizer wrapper operating on plain parameter pytrees.
+
+    Unlike :func:`optax.lookahead`, which requires parameters to be wrapped in
+    :class:`optax.LookaheadParams`, this wrapper maintains the slow weights inside
+    its own state and returns updates directly on the parameter pytree, so it
+    composes with the standard optimizer ``step`` over ``brainstate.State`` objects.
+
+    Parameters
+    ----------
+    fast_tx : optax.GradientTransformation
+        The fast (inner) optimizer applied every step.
+    sync_period : int
+        Number of fast steps between slow-weight synchronizations.
+    slow_step_size : float
+        Interpolation factor ``alpha`` for the slow-weight update.
+
+    Returns
+    -------
+    optax.GradientTransformation
+        A transformation implementing Lookahead over plain pytrees.
+    """
+    if sync_period < 1:
+        raise ValueError(f"sync_period must be >= 1, got {sync_period}")
+
+    def init_fn(params):
+        return _LookaheadState(
+            count=jnp.zeros([], jnp.int32),
+            slow=params,
+            fast_state=fast_tx.init(params),
+        )
+
+    def update_fn(updates, state, params=None):
+        if params is None:
+            raise ValueError("Lookahead requires `params` to be passed to `update`.")
+        fast_updates, new_fast_state = fast_tx.update(updates, state.fast_state, params)
+        new_fast_params = optax.apply_updates(params, fast_updates)
+        count = state.count + 1
+        sync = (count % sync_period) == 0
+        synced_slow = jax.tree.map(
+            lambda s, f: s + slow_step_size * (f - s), state.slow, new_fast_params
+        )
+        # On a sync step the parameters jump to the interpolated slow weights;
+        # otherwise they follow the fast weights.
+        new_params = jax.tree.map(
+            lambda sl, fa: jnp.where(sync, sl, fa), synced_slow, new_fast_params
+        )
+        new_slow = jax.tree.map(
+            lambda old, syn: jnp.where(sync, syn, old), state.slow, synced_slow
+        )
+        out_updates = jax.tree.map(lambda np_, p_: np_ - p_, new_params, params)
+        return out_updates, _LookaheadState(count=count, slow=new_slow, fast_state=new_fast_state)
+
+    return optax.GradientTransformation(init_fn, update_fn)
 
 
 class Lookahead(OptaxOptimizer):
@@ -2796,13 +2975,13 @@ class Lookahead(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(self.base_optimizer)
-        transforms.append(
-            optax.lookahead(self.base_optimizer, slow_step_size=self.alpha, sync_period=self.sync_period)
-        )
+        # The base (fast) optimizer carries its own learning rate, so the Lookahead
+        # learning-rate schedule is not applied on top of it. Weight decay, when
+        # requested, is folded into the fast optimizer's gradient.
+        fast = self.base_optimizer
         if self.weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(self.weight_decay))
-        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+            fast = optax.chain(optax.add_decayed_weights(self.weight_decay), fast)
+        transforms.append(_lookahead_transform(fast, self.sync_period, self.alpha))
         return optax.chain(*transforms)
 
 
@@ -3010,9 +3189,10 @@ class Yogi(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(optax.scale_by_yogi(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        # Coupled L2 weight decay: applied to the gradient before the adaptive moments.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_yogi(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -3104,18 +3284,29 @@ class LBFGS(OptaxOptimizer):
 
     **Important Usage Note:**
 
-    L-BFGS with line search requires additional function evaluations. For best
-    performance, use with ``optax.value_and_grad_from_state`` to reuse computations:
+    Without a line search (``linesearch=None``), update L-BFGS like any other
+    optimizer by passing only the gradients:
 
     .. code-block:: python
 
-        >>> import optax
-        >>> value_and_grad = optax.value_and_grad_from_state(objective)
-        >>> value, grad = value_and_grad(params, state=opt_state)
-        >>> updates, opt_state = optimizer.tx.update(
-        ...     grad, opt_state, params,
-        ...     value=value, grad=grad, value_fn=objective
+        >>> grads = brainstate.transform.grad(
+        ...     loss_fn, model.states(brainstate.ParamState)
+        ... )()
+        >>> optimizer.update(grads)
+
+    With a line search (``linesearch='zoom'`` or ``'backtracking'``), the line
+    search needs the current objective value and a callable to re-evaluate it, so
+    pass ``value`` and ``value_fn`` to :meth:`update`:
+
+    .. code-block:: python
+
+        >>> @brainstate.transform.grad(
+        ...     grad_states=model.states(brainstate.ParamState), return_value=True
         ... )
+        ... def loss_fn():
+        ...     return objective(model)
+        >>> grads, value = loss_fn()
+        >>> optimizer.update(grads, value=value, value_fn=loss_fn)
 
     References
     ----------
@@ -3332,8 +3523,8 @@ class LBFGS(OptaxOptimizer):
         )
 
     def default_tx(self):
-        # This method shouldn't be called since we provide tx in __init__
-        # But we'll implement it for completeness
+        # Builds the LBFGS transformation (called by the base ``__init__`` since this
+        # optimizer does not pass an explicit ``tx``).
         transforms = []
         if self.grad_clip_norm is not None:
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
@@ -3543,7 +3734,7 @@ class Rprop(OptaxOptimizer):
         >>> # Setup for batch learning
         >>> model = brainstate.nn.Sequential(
         ...     brainstate.nn.Linear(100, 50),
-        ...     brainstate.nn.TanhT(),
+        ...     brainstate.nn.Tanh(),
         ...     brainstate.nn.Linear(50, 10)
         ... )
         >>>
@@ -3620,8 +3811,12 @@ class Rprop(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
+        # ``optax.rprop`` already applies the learning rate as the initial per-parameter
+        # step size and negates the update. Applying ``scale_by_schedule`` on top of
+        # ``scale_by_rprop`` (as before) multiplied the learning rate twice. Rprop owns
+        # its step size, so LR schedulers are intentionally not applied here.
         transforms.append(
-            optax.scale_by_rprop(
+            optax.rprop(
                 learning_rate=self.base_lr,
                 eta_minus=self.etas[0],
                 eta_plus=self.etas[1],
@@ -3629,7 +3824,6 @@ class Rprop(OptaxOptimizer):
                 max_step_size=self.step_sizes[1]
             )
         )
-        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
 
@@ -3653,9 +3847,11 @@ class Adafactor(OptaxOptimizer):
     clip_threshold : float, default=1.0
         Threshold for gradient clipping by root mean square. Helps prevent
         gradient explosions.
-    decay_rate : float, default=-0.8
-        Controls the decay of the second moment estimate. Negative values result
-        in polynomial decay: decay = 1 - (step + 1)^decay_rate.
+    decay_rate : float, default=0.8
+        Controls the decay of the second moment estimate via the polynomial schedule
+        ``decay = 1 - (step + 1)^(-decay_rate)`` (matching ``optax.adafactor``). The
+        coefficient starts at 0 and approaches 1 as training proceeds; larger values
+        decay the second moment faster. Must be positive.
     beta1 : float, optional, default=None
         Momentum parameter for first moment. If None, no momentum is used.
     weight_decay : float, default=0.0
@@ -3832,7 +4028,7 @@ class Adafactor(OptaxOptimizer):
         lr: Optional[Union[float, LRScheduler]] = None,
         eps: Tuple[float, float] = (1e-30, 1e-3),
         clip_threshold: float = 1.0,
-        decay_rate: float = -0.8,
+        decay_rate: float = 0.8,
         beta1: Optional[float] = None,
         weight_decay: float = 0.0,
         factored: bool = True,
@@ -3846,7 +4042,7 @@ class Adafactor(OptaxOptimizer):
         self.factored = factored
         super().__init__(
             tx=None,
-            lr=lr or 1e-3,
+            lr=1e-3 if lr is None else lr,
             weight_decay=weight_decay,
             grad_clip_norm=grad_clip_norm,
             grad_clip_value=grad_clip_value
@@ -4088,9 +4284,10 @@ class AdaBelief(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(optax.scale_by_belief(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
+        # Coupled L2 weight decay: applied to the gradient before the adaptive moments.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+        transforms.append(optax.scale_by_belief(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -4558,11 +4755,12 @@ class SM3(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
+        # Coupled L2 weight decay: applied to the gradient before the adaptive scaling.
+        if self.weight_decay > 0:
+            transforms.append(optax.add_decayed_weights(self.weight_decay))
         transforms.append(optax.scale_by_sm3(eps=self.eps))
         if self.momentum > 0:
             transforms.append(optax.trace(decay=self.momentum))
-        if self.weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(self.weight_decay))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -4803,9 +5001,13 @@ class Novograd(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        transforms.append(optax.scale_by_novograd(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
-        if self.weight_decay > 0:
-            transforms.append(optax.add_decayed_weights(self.weight_decay))
+        # Novograd folds weight decay into the per-layer normalized moment update,
+        # so it is passed to ``scale_by_novograd`` rather than added separately.
+        transforms.append(
+            optax.scale_by_novograd(
+                b1=self.betas[0], b2=self.betas[1], eps=self.eps, weight_decay=self.weight_decay
+            )
+        )
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -5014,6 +5216,12 @@ class Fromage(OptaxOptimizer):
         grad_clip_norm: Optional[float] = None,
         grad_clip_value: Optional[float] = None,
     ):
+        if momentum:
+            warnings.warn(
+                "Fromage does not use a momentum term; the `momentum` argument is "
+                "ignored and kept only for backward compatibility.",
+                UserWarning,
+            )
         self.momentum = momentum
         super().__init__(tx=None, lr=lr, grad_clip_norm=grad_clip_norm, grad_clip_value=grad_clip_value)
 
@@ -5023,8 +5231,8 @@ class Fromage(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        # Fromage doesn't have a standard optax implementation, using basic approach
-        if self.momentum > 0:
-            transforms.append(optax.trace(decay=self.momentum))
-        transforms.append(optax.scale_by_schedule(self._lr_scheduler))
+        # Fromage (Bernstein et al., 2020) normalizes each update by the ratio of the
+        # parameter norm to the update norm. ``optax.fromage`` applies the learning rate
+        # internally (and owns the step geometry), so no extra LR schedule is chained.
+        transforms.append(optax.fromage(learning_rate=self.base_lr))
         return optax.chain(*transforms)

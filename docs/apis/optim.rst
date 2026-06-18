@@ -23,6 +23,8 @@ Base Classes
 These classes provide the foundational architecture for all optimizers in the module.
 The ``Optimizer`` class defines the common interface, while ``OptaxOptimizer`` serves
 as the base for all gradient-based optimizers built on top of the Optax library.
+``OptimState`` is the ``brainstate`` state container used to hold persistent optimizer
+state (optax state, step counters and learning rates).
 
 .. autosummary::
    :toctree: generated/
@@ -31,6 +33,7 @@ as the base for all gradient-based optimizers built on top of the Optax library.
 
    Optimizer
    OptaxOptimizer
+   OptimState
 
 Gradient-Based Optimizers
 -------------------------

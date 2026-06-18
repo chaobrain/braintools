@@ -31,6 +31,11 @@ __all__ = [
     'ScipyOptimizer',
 ]
 
+# SciPy ``minimize`` methods that ignore gradient (Jacobian) information. Passing a
+# ``jac`` to these triggers a per-iteration ``RuntimeWarning`` and wastes a
+# ``jit(grad(...))`` trace, so the Jacobian is only built for the other methods.
+_GRADIENT_FREE_METHODS = frozenset({'nelder-mead', 'powell', 'cobyla', 'cobyqa'})
+
 
 class HashablePartial:
     __module__ = 'braintools.optim'
@@ -258,6 +263,9 @@ def scipy_minimize_with_jax(
 
     # Use tree flatten and unflatten to convert params x0 from PyTrees to flat arrays
     x0_flat, unravel = ravel_pytree(x0)
+    # SciPy's TNC/SLSQP Cython kernels require float64 buffers; JAX defaults to
+    # float32, so cast the vector SciPy operates on to float64 (X-1).
+    x0_flat = np.asarray(x0_flat, dtype=np.float64)
 
     # Wrap the objective function to consume flat _original_
     # numpy arrays and produce scalar outputs.
@@ -266,17 +274,25 @@ def scipy_minimize_with_jax(
         r = loss_fun(x, *fun_args)
         return float(r)
 
-    # Wrap the gradient in a similar manner
-    jac = brainstate.transform.jit(brainstate.transform.grad(loss_fun)) if jac is None else jac
+    # Gradient-free methods do not consume a Jacobian; building/passing one only
+    # triggers a per-iteration ``RuntimeWarning`` and wastes a trace (X-3).
+    method_name = method.lower() if isinstance(method, str) else None
+    if method_name in _GRADIENT_FREE_METHODS:
+        jac_wrapper = None
+    else:
+        # Wrap the gradient in a similar manner
+        jac_fun = brainstate.transform.jit(brainstate.transform.grad(loss_fun)) if jac is None else jac
 
-    def jac_wrapper(x_flat, *fun_args):
-        x = unravel(x_flat)
-        g_flat, _ = ravel_pytree(jac(x, *fun_args))
-        return np.array(g_flat)
+        def jac_wrapper(x_flat, *fun_args):
+            x = unravel(x_flat)
+            g_flat, _ = ravel_pytree(jac_fun(x, *fun_args))
+            return np.asarray(g_flat, dtype=np.float64)
 
-    # Wrap the callback to consume a pytree
-    def callback_wrapper(x_flat, *fun_args):
-        if callback is not None:
+    # Wrap the callback to consume a pytree (omit entirely when none is given).
+    if callback is None:
+        callback_wrapper = None
+    else:
+        def callback_wrapper(x_flat, *fun_args):
             x = unravel(x_flat)
             return callback(x, *fun_args)
 
@@ -337,7 +353,16 @@ class ScipyOptimizer(Optimizer):
     -----
     - This wrapper flattens parameters to a 1-D vector for SciPy and
       unflattens results back to the same structure found in ``bounds``.
-    - Gradients are computed via JAX auto-differentiation.
+    - Gradients are computed via JAX auto-differentiation, but only for
+      gradient-based methods. Gradient-free methods (``'Nelder-Mead'``,
+      ``'Powell'``, ``'COBYLA'``, ``'COBYQA'``) skip the Jacobian entirely.
+    - Everything SciPy operates on (the parameter vector, the Jacobian and the
+      bounds) is cast to ``float64`` so that the ``'TNC'`` and ``'SLSQP'``
+      kernels work despite JAX defaulting to ``float32``.
+    - This is a black-box optimizer: it implements :meth:`minimize` only and does
+      **not** honor the State-based :meth:`register_trainable_weights` /
+      :meth:`update` contract of the :class:`~braintools.optim.Optimizer` base
+      (those raise :class:`NotImplementedError`).
 
     Examples
     --------
@@ -428,11 +453,12 @@ class ScipyOptimizer(Optimizer):
         # Build flat SciPy bounds (list of (low, high) for each scalar variable)
         lows, _ = jax.tree.flatten(self._low_struct)
         highs, _ = jax.tree.flatten(self._high_struct)
+        # SciPy's SLSQP/TNC kernels require float64 bounds (X-1).
         self._flat_bounds: list[tuple[float, float]] = []
         for lo_leaf, hi_leaf in safe_zip(lows, highs):
-            lo_flat = np.ravel(np.asarray(lo_leaf))
-            hi_flat = np.ravel(np.asarray(hi_leaf))
-            self._flat_bounds.extend(list(zip(lo_flat, hi_flat)))
+            lo_flat = np.ravel(np.asarray(lo_leaf, dtype=np.float64))
+            hi_flat = np.ravel(np.asarray(hi_leaf, dtype=np.float64))
+            self._flat_bounds.extend([(float(lo), float(hi)) for lo, hi in zip(lo_flat, hi_flat)])
 
     def _sample_x0(self) -> Any:
         def sample(lo, hi):
@@ -458,6 +484,33 @@ class ScipyOptimizer(Optimizer):
         return jnp.asarray(r)
 
     def minimize(self, n_iter: int = 1):
+        """Run SciPy minimization with random restarts.
+
+        Each iteration draws a fresh starting point uniformly from the bounds and
+        runs ``scipy.optimize.minimize`` once; the result with the lowest objective
+        value across all restarts is returned.
+
+        Parameters
+        ----------
+        n_iter : int, default: 1
+            Number of random restarts. Each restart is an independent SciPy
+            minimization from a new random initial point; more restarts increase
+            the chance of escaping poor local minima.
+
+        Returns
+        -------
+        scipy.optimize.OptimizeResult
+            The best result across restarts, with ``res.x`` unflattened back into
+            the same structure as ``bounds`` (a ``tuple`` for sequence bounds, a
+            ``dict`` for dict bounds). If every restart yields a non-finite
+            objective (e.g. a diverging loss), the first such result is returned
+            with its non-finite ``res.fun`` rather than ``None``.
+
+        Raises
+        ------
+        AssertionError
+            If ``n_iter`` is not a positive integer.
+        """
         assert isinstance(n_iter, int) and n_iter > 0, "'n_iter' must be a positive integer."
 
         best_res = None
@@ -476,7 +529,9 @@ class ScipyOptimizer(Optimizer):
                 tol=self.tol,
                 options=self.options
             )
-            if results.fun < best_fun:
+            # ``inf < inf`` and ``nan < inf`` are both False, so a plain ``<``
+            # comparison would leave ``best_res = None`` for diverging losses (X-2).
+            if best_res is None or results.fun < best_fun:
                 best_fun = results.fun
                 best_res = results
         return best_res

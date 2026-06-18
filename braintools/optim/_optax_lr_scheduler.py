@@ -77,16 +77,41 @@ class LRScheduler:
 
         # Current learning rates
         self._current_lrs = OptimState(list(self.base_lrs))
+        # Initialize the current learning rates from the schedule at the starting
+        # epoch, so the very first optimizer step uses the *scheduled* value rather
+        # than the raw ``base_lr`` (see issue S-3). Guarded because a few subclasses
+        # finish setting up their attributes after calling ``super().__init__``.
+        self._refresh_current_lrs()
 
     @property
     def current_lrs(self):
         return self._current_lrs
 
+    @staticmethod
+    def _as_lr_list(values):
+        """Normalize a ``get_lr`` result to a Python list."""
+        if not isinstance(values, (list, tuple)):
+            values = [values]
+        return list(values)
+
+    def _refresh_current_lrs(self):
+        """Recompute ``current_lrs`` from ``get_lr()`` at the current epoch.
+
+        This keeps the *applied* learning rate (read by ``__call__`` through
+        ``optax.scale_by_schedule``) in sync with the closed-form schedule. It is
+        guarded so it is a no-op while a subclass is still being constructed.
+        """
+        try:
+            values = self.get_lr()
+        except (AttributeError, NotImplementedError, TypeError, IndexError, KeyError):
+            return
+        self._current_lrs.value = self._as_lr_list(values)
+
     def attach_optimizer(self, optimizer: 'OptaxOptimizer'):
         """Attach this scheduler to an optimizer."""
         from ._optax_optimizer import OptaxOptimizer
         if not isinstance(optimizer, OptaxOptimizer):
-            raise TypeError(f"optimizer must be an Optaxgot {type(optimizer)}")
+            raise TypeError(f"optimizer must be an OptaxOptimizer, got {type(optimizer)}")
 
         self.optimizer = optimizer
 
@@ -100,6 +125,10 @@ class LRScheduler:
             self.current_lrs.value.extend(
                 [last_lr] * (len(optimizer.param_groups) - len(self.current_lrs.value))
             )
+
+        # Now that the scheduler is fully constructed, make sure the applied LR
+        # reflects ``get_lr()`` at the starting epoch.
+        self._refresh_current_lrs()
 
     def get_lr(self):
         """Calculate learning rate."""
@@ -127,19 +156,33 @@ class LRScheduler:
             for param_group, lr in zip(self.optimizer.param_groups, applied_values):
                 param_group['lr'].value = lr
 
-            # Update the main optimizer lr
-            self.optimizer.current_lr = applied_values[0]
+            # Update the main optimizer lr. Write the underlying state directly rather
+            # than via the ``current_lr`` setter: the setter syncs back into this
+            # scheduler's ``current_lrs`` (needed for manual host-side LR changes) but
+            # would break JAX tracing here, where ``applied_values`` may be tracers.
+            self.optimizer._current_lr.value = applied_values[0]
 
     def step_epoch(self):
         """Step the scheduler by one epoch."""
         self.step()
 
-    def __call__(self, count):
-        """Make scheduler callable for use with optax.scale_by_schedule.
+    def get_last_lr(self) -> List[float]:
+        """Return the most recently computed learning rate(s).
 
-        This allows the scheduler to be passed directly to the optimizer.
+        Mirrors the PyTorch ``LRScheduler.get_last_lr`` API.
         """
-        return -self.current_lrs.value[0] if len(self.current_lrs.value) else -1e-3
+        return list(self._current_lrs.value)
+
+    def __call__(self, count):
+        """Make scheduler callable for use with ``optax.scale_by_schedule``.
+
+        Returns the *negated* current learning rate (optax multiplies updates by
+        this scale, and gradient descent subtracts). The learning rate is held
+        constant within an epoch and advanced by :meth:`step`, matching the
+        PyTorch epoch-based scheduling convention.
+        """
+        cur = self._current_lrs.value
+        return -cur[0] if len(cur) else -jnp.asarray(self.base_lrs[0])
 
     def state_dict(self):
         """Return scheduler state as dictionary."""
@@ -179,8 +222,7 @@ class StepLR(LRScheduler):
         Multiplicative factor of learning rate decay. Must be in range (0, 1].
         Default: 0.1.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1 (starts
-        from beginning).
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -219,17 +261,17 @@ class StepLR(LRScheduler):
         >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
         >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> # Training loop
+        >>> # Training loop (print the LR for the epoch, then advance the schedule)
         >>> for epoch in range(90):
         ...     # ... training code ...
-        ...     scheduler.step()
         ...     if epoch in [0, 29, 30, 59, 60, 89]:
         ...         print(f"Epoch {epoch}: lr = {optimizer.current_lr:.6f}")
+        ...     scheduler.step()
         Epoch 0: lr = 0.100000
         Epoch 29: lr = 0.100000
-        Epoch 30: lr = 0.010000  # First decay
+        Epoch 30: lr = 0.010000
         Epoch 59: lr = 0.010000
-        Epoch 60: lr = 0.001000  # Second decay
+        Epoch 60: lr = 0.001000
         Epoch 89: lr = 0.001000
 
     **Using with Adam optimizer:**
@@ -342,6 +384,8 @@ class StepLR(LRScheduler):
         gamma: float = 0.1,
         last_epoch: int = 0,
     ):
+        if step_size <= 0:
+            raise ValueError(f"step_size must be a positive integer, got {step_size}")
         self.step_size = step_size
         self.gamma = gamma
         super().__init__(base_lr, last_epoch)
@@ -370,8 +414,7 @@ class MultiStepLR(LRScheduler):
         Multiplicative factor of learning rate decay. Must be in range (0, 1].
         Default: 0.1.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1 (starts
-        from beginning).
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -566,8 +609,7 @@ class ExponentialLR(LRScheduler):
         Multiplicative factor of learning rate decay per epoch. Must be in range (0, 1).
         Typical values: 0.95-0.99 for slow decay, 0.9-0.95 for moderate decay.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1 (starts
-        from beginning).
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -617,13 +659,13 @@ class ExponentialLR(LRScheduler):
         >>>
         >>> for epoch in range(20):
         ...     # Training code
-        ...     scheduler.step()
         ...     if epoch % 5 == 0:
         ...         print(f"Epoch {epoch}: lr = {optimizer.current_lr:.6f}")
+        ...     scheduler.step()
         Epoch 0: lr = 0.100000
-        Epoch 5: lr = 0.077378  # lr * 0.95^5
-        Epoch 10: lr = 0.059874  # lr * 0.95^10
-        Epoch 15: lr = 0.046329  # lr * 0.95^15
+        Epoch 5: lr = 0.077378
+        Epoch 10: lr = 0.059874
+        Epoch 15: lr = 0.046329
 
     **Slow decay for fine-tuning:**
 
@@ -1043,8 +1085,7 @@ class CosineAnnealingLR(LRScheduler):
         Minimum learning rate. The learning rate will decay from base_lr to eta_min over
         T_max epochs. Default: 0.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1 (starts
-        from beginning).
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -1099,13 +1140,13 @@ class CosineAnnealingLR(LRScheduler):
         >>>
         >>> for epoch in range(100):
         ...     optimizer.step(grads)
-        ...     scheduler.step()
         ...     if epoch % 25 == 0:
         ...         print(f"Epoch {epoch}: lr = {optimizer.current_lr:.6f}")
+        ...     scheduler.step()
         Epoch 0: lr = 0.100000
-        Epoch 25: lr = 0.085355  # Slow decay early
-        Epoch 50: lr = 0.050000  # Fast decay middle
-        Epoch 75: lr = 0.014645  # Slow decay late
+        Epoch 25: lr = 0.085355
+        Epoch 50: lr = 0.050000
+        Epoch 75: lr = 0.014645
 
     **With non-zero minimum learning rate:**
 
@@ -1291,13 +1332,17 @@ class CosineAnnealingLR(LRScheduler):
         eta_min: float = 0,
         last_epoch: int = 0,
     ):
+        if T_max <= 0:
+            raise ValueError(f"T_max must be a positive integer, got {T_max}")
         self.T_max = T_max
         self.eta_min = eta_min
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
-        # JIT-compatible cosine annealing computation
-        epoch = self.last_epoch.value
+        # JIT-compatible cosine annealing computation. Clamp the epoch to T_max so
+        # the schedule holds at ``eta_min`` afterwards instead of oscillating back
+        # up (the documented behavior; see issue S-14).
+        epoch = jnp.minimum(self.last_epoch.value, self.T_max)
         factor = (1 + jnp.cos(jnp.pi * epoch / self.T_max)) / 2
         return [
             self.eta_min + (base_lr - self.eta_min) * factor
@@ -1329,8 +1374,7 @@ class PolynomialLR(LRScheduler):
         - power<1.0: Faster initial decay, slower later
         Default: 1.0.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1 (starts
-        from beginning).
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -1569,6 +1613,8 @@ class PolynomialLR(LRScheduler):
         power: float = 1.0,
         last_epoch: int = 0,
     ):
+        if total_iters <= 0:
+            raise ValueError(f"total_iters must be a positive integer, got {total_iters}")
         self.total_iters = total_iters
         self.power = power
         super().__init__(base_lr, last_epoch)
@@ -1597,8 +1643,7 @@ class WarmupScheduler(LRScheduler):
     warmup_start_lr : float, optional
         Initial learning rate at the start of warmup. Default: 0.0.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1 (starts
-        from beginning).
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -1859,12 +1904,17 @@ class WarmupScheduler(LRScheduler):
         warmup_start_lr: float = 0.0,
         last_epoch: int = 0,
     ):
+        if warmup_epochs < 0:
+            raise ValueError(f"warmup_epochs must be non-negative, got {warmup_epochs}")
         self.warmup_epochs = warmup_epochs
         self.warmup_start_lr = warmup_start_lr
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
-        # JIT-compatible warmup computation using jnp.where
+        # ``warmup_epochs == 0`` means "no warmup": jump straight to base_lr.
+        if self.warmup_epochs == 0:
+            return [base_lr for base_lr in self.base_lrs]
+        # JIT-compatible warmup computation using jnp.minimum
         alpha = jnp.minimum(self.last_epoch.value / self.warmup_epochs, 1.0)
         return [
             self.warmup_start_lr + (base_lr - self.warmup_start_lr) * alpha
@@ -2156,6 +2206,10 @@ class CyclicLR(LRScheduler):
         else:
             self.max_lrs = [max_lr]
 
+        if step_size_up <= 0:
+            raise ValueError(f"step_size_up must be a positive integer, got {step_size_up}")
+        if step_size_down is not None and step_size_down <= 0:
+            raise ValueError(f"step_size_down must be a positive integer, got {step_size_down}")
         self.step_size_up = step_size_up
         self.step_size_down = step_size_down or step_size_up
         self.mode = mode
@@ -2549,6 +2603,8 @@ class OneCycleLR(LRScheduler):
         else:
             self.max_lrs = [max_lr]
 
+        if not 0.0 < pct_start < 1.0:
+            raise ValueError(f"pct_start must be in the open interval (0, 1), got {pct_start}")
         self.pct_start = pct_start
         self.anneal_strategy = anneal_strategy
         self.div_factor = div_factor
@@ -2562,7 +2618,10 @@ class OneCycleLR(LRScheduler):
         super().__init__(base_lrs, last_epoch)
 
     def get_lr(self):
-        step_num = self.last_epoch.value + 1
+        # 0-indexed step, consistent with the other schedulers: at last_epoch=0 the
+        # warmup fraction is 0 so the LR equals the documented initial_lr
+        # (= max_lr / div_factor). See issue S-6.
+        step_num = self.last_epoch.value
         warmup_steps = self.pct_start * self.total_steps
 
         # JIT-compatible computation using jnp.where
@@ -2635,7 +2694,7 @@ class ReduceLROnPlateau(LRScheduler):
         Minimal decay applied to lr. If the difference between new and old lr is smaller
         than eps, the update is ignored. Default: 1e-8.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1.
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -3092,6 +3151,22 @@ class ReduceLROnPlateau(LRScheduler):
         # Return current learning rates
         return list(self._current_lrs.value)
 
+    def state_dict(self):
+        d = super().state_dict()
+        d['best'] = self.best.value
+        d['num_bad_epochs'] = self.num_bad_epochs.value
+        d['cooldown_counter'] = self.cooldown_counter.value
+        return d
+
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        super().load_state_dict(state_dict)
+        if 'best' in state_dict:
+            self.best.value = state_dict['best']
+        if 'num_bad_epochs' in state_dict:
+            self.num_bad_epochs.value = state_dict['num_bad_epochs']
+        if 'cooldown_counter' in state_dict:
+            self.cooldown_counter.value = state_dict['cooldown_counter']
+
 
 class LinearLR(LRScheduler):
     r"""Linear learning rate scheduler - Linearly scales learning rate between two factors.
@@ -3114,8 +3189,7 @@ class LinearLR(LRScheduler):
         Number of epochs over which to linearly transition from start_factor to
         end_factor. Default: 5.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1 (starts
-        from beginning).
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -3278,13 +3352,18 @@ class LinearLR(LRScheduler):
         total_iters: int = 5,
         last_epoch: int = 0,
     ):
+        if total_iters < 0:
+            raise ValueError(f"total_iters must be non-negative, got {total_iters}")
         self.start_factor = start_factor
         self.end_factor = end_factor
         self.total_iters = total_iters
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
-        # JIT-compatible conditional logic using jnp.where
+        # ``total_iters == 0`` means the ramp is instantaneous: use end_factor.
+        if self.total_iters == 0:
+            return [base_lr * self.end_factor for base_lr in self.base_lrs]
+        # JIT-compatible conditional logic using jnp.clip
         epoch = self.last_epoch.value
 
         # Compute the interpolation factor
@@ -3313,8 +3392,7 @@ class ConstantLR(LRScheduler):
         Number of epochs to apply the factor. After total_iters epochs, the learning
         rate returns to base_lr. Default: 5.
     last_epoch : int, optional
-        The index of the last epoch. Used for resuming training. Default: -1 (starts
-        from beginning).
+        The index of the last epoch. Used for resuming training. Default: 0.
 
     Notes
     -----
@@ -3528,8 +3606,12 @@ class ChainedScheduler(LRScheduler):
 
     - Each scheduler computes its own learning rate adjustment
     - All schedulers are stepped simultaneously
-    - The final learning rate is determined by the last scheduler in the chain
+    - The final learning rate is the **product** of every scheduler's factor
+      relative to its own ``base_lr`` (multiplicative combination, matching
+      PyTorch's ``ChainedScheduler``)
     - State management is handled individually for each scheduler
+    - The contained schedulers cannot be a :class:`ReduceLROnPlateau`, whose
+      ``step(metric)`` signature is incompatible with chained stepping
 
     **Key characteristics:**
 
@@ -3718,40 +3800,71 @@ class ChainedScheduler(LRScheduler):
     __module__ = 'braintools.optim'
 
     def __init__(self, schedulers: List[LRScheduler]):
+        for sch in schedulers:
+            if not isinstance(sch, LRScheduler):
+                raise TypeError(f'All elements must be LRScheduler, got {type(sch)}')
         self.schedulers = schedulers
         super().__init__()
-        self.optimizer = schedulers[0].optimizer if schedulers else None
-        for sch in schedulers:
-            assert isinstance(sch, LRScheduler), f'All elements must be LRScheduler, got {type(sch)}'
-
         # Get base_lrs from first scheduler for compatibility with attach_optimizer
-        if schedulers:
-            self.base_lrs = schedulers[0].base_lrs
-        else:
-            self.base_lrs = [1e-3]
+        self.base_lrs = list(schedulers[0].base_lrs) if schedulers else [1e-3]
+        self._current_lrs = OptimState(list(self.base_lrs))
+        # Sub-schedulers stay detached from the optimizer: ChainedScheduler combines
+        # their factors and writes the result itself (see issue S-5).
+        self.optimizer = None
+        self._refresh_current_lrs()
+        self._apply_to_optimizer()
 
     def attach_optimizer(self, optimizer):
-        """Attach optimizer to all schedulers."""
+        """Attach the optimizer (sub-schedulers remain detached)."""
         self.optimizer = optimizer
-        for scheduler in self.schedulers:
-            if isinstance(scheduler, LRScheduler):
-                scheduler.attach_optimizer(optimizer)
+        self._refresh_current_lrs()
+        self._apply_to_optimizer()
 
     def step(self, *args, **kwargs):
+        # Advance our own epoch counter (so external `while sched.last_epoch < N`
+        # loops terminate) and every sub-scheduler, then recombine (issue S-5).
+        self.last_epoch.value = self.last_epoch.value + 1
         for scheduler in self.schedulers:
             scheduler.step(*args, **kwargs)
+        self._refresh_current_lrs()
+        self._apply_to_optimizer()
 
     def get_lr(self):
-        return self.schedulers[-1].get_lr()
+        # Multiplicative combination relative to each sub-scheduler's base_lr,
+        # matching PyTorch's ChainedScheduler semantics.
+        n = len(self.base_lrs)
+        combined = list(self.base_lrs)
+        for sch in self.schedulers:
+            lrs = self._as_lr_list(sch.get_lr())
+            bls = list(sch.base_lrs)
+            for i in range(n):
+                base = bls[i] if i < len(bls) else bls[-1]
+                cur = lrs[i] if i < len(lrs) else lrs[-1]
+                factor = jnp.where(jnp.asarray(base) != 0, cur / base, 0.0)
+                combined[i] = combined[i] * factor
+        return combined
+
+    def _apply_to_optimizer(self):
+        if self.optimizer is not None:
+            lrs = list(self._current_lrs.value)
+            for pg, lr in zip(self.optimizer.param_groups, lrs):
+                pg['lr'].value = lr
+            if lrs:
+                self.optimizer.current_lr = lrs[0]
 
     def state_dict(self):
         return {
+            'last_epoch': self.last_epoch.value,
             'schedulers': [s.state_dict() for s in self.schedulers]
         }
 
     def load_state_dict(self, state_dict):
+        if 'last_epoch' in state_dict:
+            self.last_epoch.value = state_dict['last_epoch']
         for scheduler, s_dict in zip(self.schedulers, state_dict['schedulers']):
             scheduler.load_state_dict(s_dict)
+        self._refresh_current_lrs()
+        self._apply_to_optimizer()
 
 
 class SequentialLR(LRScheduler):
@@ -3796,6 +3909,8 @@ class SequentialLR(LRScheduler):
        matches your intended learning rate at the transition point.
     2. The ``last_epoch`` parameter of individual schedulers is managed internally.
     3. When saving/loading state, all schedulers' states are preserved.
+    4. The contained schedulers cannot be a :class:`ReduceLROnPlateau`, whose
+       ``step(metric)`` signature is incompatible with sequential stepping.
 
     Examples
     --------
@@ -3991,11 +4106,14 @@ class SequentialLR(LRScheduler):
 
         self.schedulers = schedulers
         self.milestones = jnp.array(milestones)
+        self._milestones_list = [int(m) for m in milestones]
         self.n_schedulers = len(schedulers)
 
         # Store current scheduler index as OptimState for JIT compatibility
         self._current_scheduler_idx = OptimState(0)
         self._update_scheduler_idx(last_epoch)
+        # Now that sub-schedulers are wired up, sync the applied LR (issue S-2/S-3).
+        self._refresh_current_lrs()
 
     def _update_scheduler_idx(self, epoch):
         """Update the current scheduler index in a JIT-compatible way."""
@@ -4019,26 +4137,40 @@ class SequentialLR(LRScheduler):
         # Update which scheduler to use
         self._update_scheduler_idx(epoch)
 
-        # Step all schedulers (only the active one will actually update)
-        # This is necessary for JIT compatibility since we can't index dynamically
+        # Step the active sub-scheduler with a *milestone-relative* epoch so each
+        # phase starts from its own epoch 0 at the transition (issue S-4). Offsets:
+        # scheduler 0 -> 0, scheduler i>0 -> milestones[i-1].
+        offsets = [0] + list(self._milestones_list)
+        branches = [
+            (lambda e, s=sch, o=int(off): s.step(e - o))
+            for sch, off in zip(self.schedulers, offsets)
+        ]
         brainstate.transform.switch(
             self._current_scheduler_idx.value,
-            [sch.step for sch in self.schedulers],
+            branches,
             epoch
         )
 
-    def get_lr(self):
-        """Get learning rate from the current scheduler."""
-        # For JIT compatibility, we compute all LRs and select the right one
-        all_lrs = []
-        for i, scheduler in enumerate(self.schedulers):
-            lr = scheduler.get_lr()
-            all_lrs.append(lr)
+        # Refresh our own applied LR and push it to the optimizer (issue S-2):
+        # the optimizer scales gradients by *this* scheduler's current_lrs.
+        self._refresh_current_lrs()
+        self._apply_to_optimizer()
 
-        # Select the current scheduler's LR
-        # In non-JIT mode, we can just index directly
-        current_idx = self._current_scheduler_idx.value
+    def get_lr(self):
+        """Get learning rate from the current (already milestone-offset) scheduler."""
+        # The active sub-scheduler has been stepped with the relative epoch, so its
+        # get_lr() already reflects the correct phase-local value.
+        all_lrs = [self._as_lr_list(scheduler.get_lr()) for scheduler in self.schedulers]
+        current_idx = int(self._current_scheduler_idx.value)
         return all_lrs[current_idx]
+
+    def _apply_to_optimizer(self):
+        if self.optimizer is not None:
+            lrs = list(self._current_lrs.value)
+            for pg, lr in zip(self.optimizer.param_groups, lrs):
+                pg['lr'].value = lr
+            if lrs:
+                self.optimizer.current_lr = lrs[0]
 
     def state_dict(self):
         return {
@@ -4342,6 +4474,10 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         eta_min: float = 0,
         last_epoch: int = 0,
     ):
+        if T_0 <= 0:
+            raise ValueError(f"T_0 must be a positive integer, got {T_0}")
+        if T_mult < 1:
+            raise ValueError(f"T_mult must be >= 1, got {T_mult}")
         self.T_0 = T_0
         self.T_mult = T_mult
         self.eta_min = eta_min
@@ -4366,10 +4502,26 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         self.T_i.value = jnp.where(should_restart, self.T_i.value * self.T_mult, self.T_i.value)
 
         values = self.get_lr()
+        # Update our own applied LR so the optimizer scales by the right value
+        # (issue S-2 — the optimizer reads *this* scheduler's current_lrs).
+        self._current_lrs.value = self._as_lr_list(values)
         if self.optimizer is not None:
             for param_group, lr in zip(self.optimizer.param_groups, values):
                 param_group['lr'].value = lr
             self.optimizer.current_lr = values[0]
+
+    def state_dict(self):
+        d = super().state_dict()
+        d['T_cur'] = self.T_cur.value
+        d['T_i'] = self.T_i.value
+        return d
+
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        super().load_state_dict(state_dict)
+        if 'T_cur' in state_dict:
+            self.T_cur.value = state_dict['T_cur']
+        if 'T_i' in state_dict:
+            self.T_i.value = state_dict['T_i']
 
 
 class WarmupCosineSchedule(LRScheduler):
@@ -4702,21 +4854,21 @@ class WarmupCosineSchedule(LRScheduler):
         epoch = self.last_epoch.value
         is_warmup = epoch < self.warmup_steps
 
-        # Warmup phase calculation
         alpha = jnp.clip(epoch / jnp.maximum(self.warmup_steps, 1), 0.0, 1.0)
-        warmup_lr = self.warmup_start_lr + (jnp.array(self.base_lrs[0]) - self.warmup_start_lr) * alpha
-
-        # Cosine annealing phase calculation
         progress = jnp.clip(
             (epoch - self.warmup_steps) / jnp.maximum(self.total_steps - self.warmup_steps, 1),
             0.0, 1.0
         )
-        cosine_lr = self.eta_min + (jnp.array(self.base_lrs[0]) - self.eta_min) * \
-                    (1 + jnp.cos(jnp.pi * progress)) / 2
+        cos_factor = (1 + jnp.cos(jnp.pi * progress)) / 2
 
-        # Select based on phase
-        lr_value = jnp.where(is_warmup, warmup_lr, cosine_lr)
-        return [lr_value for _ in self.base_lrs]
+        # Compute per parameter group so multi-group base_lrs are honored (S-9).
+        lrs = []
+        for base_lr in self.base_lrs:
+            base_lr = jnp.asarray(base_lr)
+            warmup_lr = self.warmup_start_lr + (base_lr - self.warmup_start_lr) * alpha
+            cosine_lr = self.eta_min + (base_lr - self.eta_min) * cos_factor
+            lrs.append(jnp.where(is_warmup, warmup_lr, cosine_lr))
+        return lrs
 
 
 class PiecewiseConstantSchedule(LRScheduler):
@@ -4737,18 +4889,18 @@ class PiecewiseConstantSchedule(LRScheduler):
     Parameters
     ----------
     base_lr : float or list of float, optional
-        Base learning rate(s) that will be scaled by the values parameter.
-        Can be a single float or list for multiple parameter groups. This serves
-        as a reference that gets multiplied by the values at each stage.
-        Default: 1e-3.
+        Reference learning rate(s). Only the *number* of entries is used (to set
+        the number of parameter groups); the magnitude is ignored because
+        ``values`` are absolute learning rates, not multipliers. Pass a list to
+        configure multiple parameter groups. Default: 1e-3.
     boundaries : list of int, optional
         Step indices where the learning rate changes. Must be sorted in ascending
         order. The schedule will have len(boundaries) + 1 distinct phases.
         Default: [1000, 2000].
     values : list of float, optional
-        Multiplicative factors for the base learning rate in each phase. Must have
-        exactly len(boundaries) + 1 elements. The i-th value applies from
-        boundary[i-1] to boundary[i]. Default: [1.0, 0.1, 0.01].
+        Absolute learning rate applied in each phase (not multipliers of
+        ``base_lr``). Must have exactly len(boundaries) + 1 elements. The i-th
+        value applies from boundary[i-1] to boundary[i]. Default: [1.0, 0.1, 0.01].
     last_epoch : int, optional
         The index of the last epoch. Used when resuming training. Default: 0.
 
@@ -4756,10 +4908,10 @@ class PiecewiseConstantSchedule(LRScheduler):
     -----
     **Mathematical Formulation:**
 
-    The learning rate at step t is defined as:
+    The learning rate at step t is the (absolute) phase value:
 
     .. math::
-        \eta_t = \eta_{base} \times v_i
+        \eta_t = v_i
 
     where :math:`v_i` is determined by:
 
@@ -4775,11 +4927,11 @@ class PiecewiseConstantSchedule(LRScheduler):
 
     Given boundaries [b1, b2, ..., bn] and values [v0, v1, ..., vn]:
 
-    - Steps [0, b1): learning_rate = base_lr × v0
-    - Steps [b1, b2): learning_rate = base_lr × v1
-    - Steps [b2, b3): learning_rate = base_lr × v2
+    - Steps [0, b1): learning_rate = v0
+    - Steps [b1, b2): learning_rate = v1
+    - Steps [b2, b3): learning_rate = v2
     - ...
-    - Steps [bn, ∞): learning_rate = base_lr × vn
+    - Steps [bn, ∞): learning_rate = vn
 
     **JIT Compatibility:**
 
