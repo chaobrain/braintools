@@ -158,8 +158,15 @@ def test_tamed_euler_bounds_superlinear_no_noise():
 
 
 def test_implicit_euler_linear_no_noise():
-    # Implicit Euler for stiff linear drift f(y)=a*y, a<<0, without noise
-    a = -50.0
+    # Implicit Euler for linear drift f(y)=a*y, without noise.
+    #
+    # ``sde_implicit_euler_step`` solves the implicit stage y1 = y0 + dt*a*y1 by
+    # fixed-point (Picard) iteration y1^{k+1} = y0 + dt*a*y1^{k}. This iteration is
+    # a contraction iff |dt*a| < 1, so it converges only for non-stiff coefficients.
+    # We therefore use a = -2 (|dt*a| = 0.2 < 1); a stiff a (e.g. -50) would make
+    # the iteration DIVERGE away from the exact solution, no matter how large
+    # max_iter is -- see the docstring note on ``sde_implicit_euler_step``.
+    a = -2.0
 
     def df(y, t):
         return a * y
@@ -174,7 +181,7 @@ def test_implicit_euler_linear_no_noise():
 
     # Exact implicit Euler formula: y1 = y0 / (1 - a*dt)
     y_exact = y0 / (1.0 - a * dt)
-    # assert np.allclose(y1, y_exact, rtol=1e-3, atol=1e-6)
+    assert np.allclose(y1, y_exact, rtol=1e-3, atol=1e-6)
 
 
 def test_sde_euler_pytree_structure():

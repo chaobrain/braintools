@@ -103,7 +103,7 @@ def dde_euler_step(
     
     >>> def f(t, y, y_delayed):
     ...     return -y + y_delayed  # Simple delayed feedback
-    >>> y_next = dde_euler_step(f, y, t, history_fn, delay=1.0)
+    >>> y_next = dde_euler_step(f, y, t, history_fn, delays=1.0)
     
     Multiple delays case:
     
