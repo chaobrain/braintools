@@ -55,7 +55,7 @@ class TestConvKernel(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import Conv2dKernel
+        from braintools.conn._kernel import Conv2dKernel
 
         # Create a simple 3x3 Gaussian-like kernel
         kernel = np.array([
@@ -264,7 +264,7 @@ class TestGaussianKernel(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import GaussianKernel
+        from braintools.conn._kernel import GaussianKernel
 
         # Random positions in 2D space
         positions = np.random.uniform(0, 200, (50, 2)) * u.um
@@ -446,7 +446,9 @@ class TestGaussianKernel(unittest.TestCase):
             post_positions=positions
         )
 
-        self.assertEqual(result.n_connections, 2)
+        # The only connections at distance 0 are the two self-connections, which
+        # are now dropped by the default no-autapse policy (same population) -> 0.
+        self.assertEqual(result.n_connections, 0)
 
 
 class TestGaborKernel(unittest.TestCase):
@@ -459,7 +461,7 @@ class TestGaborKernel(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import GaborKernel
+        from braintools.conn._kernel import GaborKernel
 
         # Grid positions for testing orientation selectivity
         x = np.linspace(-50, 50, 11)
@@ -658,7 +660,7 @@ class TestDoGKernel(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import DoGKernel
+        from braintools.conn._kernel import DoGKernel
 
         # Concentric positions for testing center-surround
         positions = np.random.uniform(-100, 100, (50, 2)) * u.um
@@ -877,7 +879,7 @@ class TestMexicanHat(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import MexicanHat
+        from braintools.conn._kernel import MexicanHat
 
         # Random positions for testing lateral inhibition
         positions = np.random.uniform(-80, 80, (40, 2)) * u.um
@@ -994,7 +996,7 @@ class TestSobelKernel(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import SobelKernel
+        from braintools.conn._kernel import SobelKernel
 
         # Grid positions for testing edge detection
         x = np.linspace(-30, 30, 7)
@@ -1125,7 +1127,7 @@ class TestLaplacianKernel(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import LaplacianKernel
+        from braintools.conn._kernel import LaplacianKernel
 
         # Grid positions for testing edge enhancement
         x = np.linspace(-20, 20, 5)
@@ -1235,7 +1237,7 @@ class TestCustomKernel(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import CustomKernel
+        from braintools.conn._kernel import CustomKernel
 
         def my_kernel_func(x, y):
             # Custom radial function with oscillations
@@ -1479,7 +1481,7 @@ class TestKernelEdgeCases(unittest.TestCase):
 
         import numpy as np
         import brainunit as u
-        from braintools.conn._conn_kernel import GaussianKernel
+        from braintools.conn._kernel import GaussianKernel
 
         # Test with very small networks
         positions = np.array([[0, 0]]) * u.um
@@ -1517,8 +1519,22 @@ class TestKernelEdgeCases(unittest.TestCase):
                 pre_positions=positions,
                 post_positions=positions
             )
-            # Single neuron should connect to itself
-            self.assertGreaterEqual(result.n_connections, 0)
+            # New default policy: no autapses for the same population, so the
+            # single neuron's only possible (self-)connection is dropped -> 0.
+            self.assertEqual(result.n_connections, 0)
+
+        # With allow_self_connections=True the self-connection is retained.
+        for kernel in [
+            GaussianKernel(sigma=10 * u.um, allow_self_connections=True, seed=42),
+            DoGKernel(sigma_center=5 * u.um, sigma_surround=15 * u.um,
+                      allow_self_connections=True, seed=42),
+        ]:
+            result = kernel(
+                pre_size=1, post_size=1,
+                pre_positions=positions,
+                post_positions=positions
+            )
+            self.assertEqual(result.n_connections, 1)
 
     def test_large_kernel_sizes(self):
         # Test with kernel size much larger than neuron spread
@@ -1558,22 +1574,37 @@ class TestKernelEdgeCases(unittest.TestCase):
         self.assertGreaterEqual(result.n_connections, 0)
 
     def test_3d_positions(self):
-        # Test with 3D positions (should use first 2 dimensions)
-        positions = np.random.RandomState(42).uniform(0, 50, (8, 3)) * u.um
+        # KER-2 policy: all kernels use only the first two position dims, so 3D
+        # (and N-D) positions work and give the same result as the 2D projection.
+        positions_3d = np.random.RandomState(42).uniform(0, 50, (8, 3)) * u.um
+        positions_2d = positions_3d[:, :2]
 
-        conn = GaussianKernel(
-            sigma=20 * u.um,
-            seed=42
-        )
+        def my_kernel(x, y):
+            return np.exp(-(x ** 2 + y ** 2) / 400)
 
-        result = conn(
-            pre_size=8, post_size=8,
-            pre_positions=positions,
-            post_positions=positions
-        )
+        kernels = [
+            lambda: GaussianKernel(sigma=20 * u.um, seed=42),
+            lambda: GaborKernel(sigma=20 * u.um, frequency=0.05, theta=0, seed=42),
+            lambda: DoGKernel(sigma_center=10 * u.um, sigma_surround=25 * u.um, seed=42),
+            lambda: Conv2dKernel(kernel=np.array([[0.5, 1.0, 0.5]]),
+                                 kernel_size=40 * u.um, seed=42),
+            lambda: CustomKernel(kernel_func=my_kernel, kernel_size=60 * u.um,
+                                 threshold=0.01, seed=42),
+        ]
 
-        # Should work with 3D positions
-        self.assertGreaterEqual(result.n_connections, 0)
+        for make in kernels:
+            result_3d = make()(
+                pre_size=8, post_size=8,
+                pre_positions=positions_3d, post_positions=positions_3d
+            )
+            result_2d = make()(
+                pre_size=8, post_size=8,
+                pre_positions=positions_2d, post_positions=positions_2d
+            )
+            # First two dims drive connectivity, so the third must not change it.
+            self.assertEqual(result_3d.n_connections, result_2d.n_connections)
+            np.testing.assert_array_equal(result_3d.pre_indices, result_2d.pre_indices)
+            np.testing.assert_array_equal(result_3d.post_indices, result_2d.post_indices)
 
     def test_mismatched_units(self):
         # Test with mismatched units between positions and kernel parameters
@@ -1677,6 +1708,159 @@ class TestKernelEdgeCases(unittest.TestCase):
                 post_positions=positions
             )
             self.assertGreaterEqual(result.n_connections, 0)
+
+
+class TestKernelRegressions(unittest.TestCase):
+    """Regression tests for fixed kernel-connectivity bugs (KER-1..KER-4)."""
+
+    def _grid_3x3(self, spacing):
+        # 3x3 grid of neurons spaced by ``spacing`` (units of um), centered.
+        xs = np.array([-spacing, 0.0, spacing])
+        X, Y = np.meshgrid(xs, xs, indexing='ij')
+        return np.column_stack([X.ravel(), Y.ravel()]) * u.um
+
+    def test_laplacian_retains_negative_center_weight(self):
+        # KER-1: signed kernels must keep their negative coefficients. The
+        # 4-connected Laplacian center coefficient is -4 and maps to the
+        # self-connection, so allow_self_connections=True is needed to surface it.
+        positions = self._grid_3x3(spacing=10.0)  # kernel_size/2 spacing
+
+        conn = LaplacianKernel(
+            kernel_type='4-connected',
+            kernel_size=20 * u.um,
+            allow_self_connections=True,
+            seed=42,
+        )
+        result = conn(
+            pre_size=9, post_size=9,
+            pre_positions=positions, post_positions=positions,
+        )
+        weights = result.weights.mantissa if hasattr(result.weights, 'mantissa') else np.asarray(result.weights)
+
+        # The center -4 coefficient must be present on the diagonal (self-conn).
+        self_mask = result.pre_indices == result.post_indices
+        self.assertTrue(np.any(self_mask))
+        self.assertTrue(np.any(np.isclose(weights[self_mask], -4.0)))
+        # And there must be at least one negative weight overall.
+        self.assertTrue(np.any(weights < 0))
+
+    def test_laplacian_includes_neighbor_plus_one(self):
+        # The 4-connected Laplacian off-center coefficient is +1; verify both
+        # signs coexist (was impossible when threshold dropped negatives).
+        positions = self._grid_3x3(spacing=10.0)
+        conn = LaplacianKernel(
+            kernel_type='4-connected',
+            kernel_size=20 * u.um,
+            allow_self_connections=True,
+            seed=42,
+        )
+        result = conn(
+            pre_size=9, post_size=9,
+            pre_positions=positions, post_positions=positions,
+        )
+        weights = result.weights.mantissa if hasattr(result.weights, 'mantissa') else np.asarray(result.weights)
+        self.assertTrue(np.any(weights > 0))
+        self.assertTrue(np.any(weights < 0))
+
+    def test_sobel_horizontal_retains_negative_weights(self):
+        # KER-1: horizontal Sobel has negative coefficients (-1, -2, -1 row);
+        # they must be retained (previously silently dropped by threshold=0.1).
+        positions = self._grid_3x3(spacing=10.0)
+        conn = SobelKernel(
+            direction='horizontal',
+            kernel_size=20 * u.um,
+            seed=42,
+        )
+        result = conn(
+            pre_size=9, post_size=9,
+            pre_positions=positions, post_positions=positions,
+        )
+        self.assertGreater(result.n_connections, 0)
+        weights = result.weights.mantissa if hasattr(result.weights, 'mantissa') else np.asarray(result.weights)
+        self.assertTrue(np.any(weights < 0), "horizontal Sobel must retain negative weights")
+        self.assertTrue(np.any(weights > 0))
+        # A net-zero (or near-zero) edge operator: the buggy version was net
+        # excitatory (all weights > 0).
+        self.assertTrue(np.any(np.isclose(np.abs(weights), 2.0)))
+
+    def test_non_square_kernel_axis_extents(self):
+        # KER-3: a non-square (wide) kernel must cover a wider x neighbourhood
+        # than y. A 1x3 kernel has extent_x == kernel_size and extent_y small,
+        # so a neuron offset only in y should NOT connect, but one offset in x
+        # at the same magnitude should.
+        kernel = np.array([[1.0, 1.0, 1.0]])  # 1 row, 3 cols
+        offset = 8.0
+        kernel_size = 18.0  # pitch = 6 -> extent_x = 18, extent_y = 6
+
+        post = np.array([[0.0, 0.0]]) * u.um
+        # pre A: offset along x (within extent_x/2 = 9); pre B: offset along y
+        # (outside extent_y/2 = 3).
+        pre = np.array([[offset, 0.0], [0.0, offset]]) * u.um
+
+        conn = Conv2dKernel(kernel=kernel, kernel_size=kernel_size * u.um,
+                            threshold=0.0, seed=42)
+        result = conn(
+            pre_size=2, post_size=1,
+            pre_positions=pre, post_positions=post,
+        )
+        # Only the x-offset neuron (index 0) should connect.
+        self.assertIn(0, result.pre_indices.tolist())
+        self.assertNotIn(1, result.pre_indices.tolist())
+
+    def test_no_autapse_by_default(self):
+        # KER-4: recurrent kernels must produce no autapses by default.
+        positions = np.random.RandomState(0).uniform(0, 50, (12, 2)) * u.um
+
+        recurrent_kernels = [
+            GaussianKernel(sigma=30 * u.um, seed=1),
+            GaborKernel(sigma=30 * u.um, frequency=0.02, theta=0, seed=1),
+            DoGKernel(sigma_center=10 * u.um, sigma_surround=25 * u.um, seed=1),
+            MexicanHat(sigma=20 * u.um, seed=1),
+            CustomKernel(kernel_func=lambda x, y: np.exp(-(x ** 2 + y ** 2) / 400),
+                         kernel_size=80 * u.um, threshold=0.01, seed=1),
+        ]
+        for kernel in recurrent_kernels:
+            result = kernel(
+                pre_size=12, post_size=12,
+                pre_positions=positions, post_positions=positions,
+            )
+            self.assertFalse(
+                np.any(result.pre_indices == result.post_indices),
+                f"{type(kernel).__name__} produced an autapse by default",
+            )
+
+    def test_autapse_allowed_when_requested(self):
+        # With allow_self_connections=True, self-connections are present.
+        positions = np.random.RandomState(0).uniform(0, 50, (12, 2)) * u.um
+        conn = GaussianKernel(sigma=30 * u.um, allow_self_connections=True, seed=1)
+        result = conn(
+            pre_size=12, post_size=12,
+            pre_positions=positions, post_positions=positions,
+        )
+        self.assertTrue(np.any(result.pre_indices == result.post_indices))
+
+    def test_distinct_populations_keep_coincident_connections(self):
+        # The no-autapse policy must only apply within the same population. With
+        # two distinct populations (different arrays), a coincident pre/post
+        # connection is legitimate and must be kept.
+        pre = np.array([[0.0, 0.0]]) * u.um
+        post = np.array([[0.0, 0.0]]) * u.um  # same coords, distinct object
+        conn = GaussianKernel(sigma=10 * u.um, seed=1)
+        result = conn(
+            pre_size=1, post_size=1,
+            pre_positions=pre, post_positions=post,
+        )
+        # Identical coordinates -> treated as same population -> dropped.
+        self.assertEqual(result.n_connections, 0)
+
+        # Truly different positions (distinct populations) -> connection kept.
+        post2 = np.array([[1.0, 0.0]]) * u.um
+        conn2 = GaussianKernel(sigma=10 * u.um, seed=1)
+        result2 = conn2(
+            pre_size=1, post_size=1,
+            pre_positions=pre, post_positions=post2,
+        )
+        self.assertEqual(result2.n_connections, 1)
 
 
 if __name__ == '__main__':

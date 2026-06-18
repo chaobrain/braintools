@@ -44,21 +44,48 @@ __all__ = [
 ]
 
 
+def _same_population(pre_positions, post_positions) -> bool:
+    """Whether pre and post refer to the same population.
+
+    Autapses (``pre_idx == post_idx``) are only meaningful to drop when the two
+    populations are identical. They are treated as the same population when the
+    position arrays are the same object or have identical coordinates.
+    """
+    if pre_positions is post_positions:
+        return True
+    pre_val = u.get_mantissa(pre_positions)
+    post_val = u.get_mantissa(post_positions)
+    pre_val = np.asarray(pre_val)
+    post_val = np.asarray(post_val)
+    return pre_val.shape == post_val.shape and np.array_equal(pre_val, post_val)
+
+
 class Conv2dKernel(PointConnectivity):
     """Convolutional kernel connectivity for spatially arranged point neurons.
 
     Applies a 2D convolution kernel to neuron positions, creating connections
-    where the kernel weight exceeds a threshold. This allows implementing
-    receptive field structures in spiking neural networks.
+    where the kernel weight magnitude exceeds a threshold. This allows
+    implementing receptive field structures in spiking neural networks.
+
+    Only the first two position dimensions (x, y) are used; any extra columns
+    (e.g. z) are ignored. ``kernel_size`` is the physical support of the kernel
+    along BOTH axes: the kernel rows are mapped onto the y extent and the kernel
+    columns onto the x extent, each bounded independently so non-square kernels
+    cover the correct neighbourhood.
 
     Parameters
     ----------
     kernel : np.ndarray
         2D convolution kernel array.
     kernel_size : float or Quantity
-        Physical size of the kernel in position units.
+        Physical size of the kernel support (along both axes) in position units.
     threshold : float
-        Connection threshold - only kernel values above this create connections.
+        Connection threshold - only kernel values whose magnitude exceeds this
+        create connections. Thresholding on magnitude keeps essential negative
+        coefficients (e.g. for edge-detection kernels). Default 0.0.
+    allow_self_connections : bool
+        Whether a neuron may connect to itself when pre and post are the same
+        population and coincide with the kernel centre (default: False).
     weight : Initialization, optional
         Weight initialization (kernel values are multiplied by this).
     delay : Initialization, optional
@@ -95,6 +122,7 @@ class Conv2dKernel(PointConnectivity):
         kernel: np.ndarray,
         kernel_size: ArrayLike,
         threshold: float = 0.0,
+        allow_self_connections: bool = False,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -105,6 +133,7 @@ class Conv2dKernel(PointConnectivity):
             raise ValueError("Kernel must be 2D array")
         self.kernel_size = kernel_size
         self.threshold = threshold
+        self.allow_self_connections = allow_self_connections
         self.weight_init = weight
         self.delay_init = delay
 
@@ -128,9 +157,11 @@ class Conv2dKernel(PointConnectivity):
         else:
             post_num = post_size
 
-        # Extract position values and units
+        # Extract position values and units (only the first two dims are used)
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
         post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
+        post_pos_val = np.asarray(post_pos_val)[:, :2]
 
         # Get kernel size in position units
         if isinstance(self.kernel_size, u.Quantity):
@@ -138,11 +169,21 @@ class Conv2dKernel(PointConnectivity):
         else:
             kernel_size_val = self.kernel_size
 
-        # Kernel grid coordinates (centered at 0)
+        # Per-axis physical extents derived from the kernel shape, using the
+        # pixel pitch implied by ``kernel_size`` (the larger axis spans
+        # ``kernel_size``). Rows map to the y extent, columns to the x extent,
+        # so non-square kernels cover the correct neighbourhood.
         kh, kw = self.kernel.shape
-        kernel_y = np.linspace(-kernel_size_val / 2, kernel_size_val / 2, kh)
-        kernel_x = np.linspace(-kernel_size_val / 2, kernel_size_val / 2, kw)
-        kernel_grid_y, kernel_grid_x = np.meshgrid(kernel_y, kernel_x, indexing='ij')
+        pitch = kernel_size_val / max(kh, kw)
+        extent_y = pitch * kh
+        extent_x = pitch * kw
+        kernel_y = np.linspace(-extent_y / 2, extent_y / 2, kh)
+        kernel_x = np.linspace(-extent_x / 2, extent_x / 2, kw)
+
+        same_population = (
+            not self.allow_self_connections
+            and _same_population(pre_positions, post_positions)
+        )
 
         pre_indices = []
         post_indices = []
@@ -155,22 +196,27 @@ class Conv2dKernel(PointConnectivity):
             # Calculate relative positions of pre neurons to this post neuron
             rel_positions = pre_pos_val - post_pos  # Shape: (pre_num, 2)
 
-            # Find pre neurons within kernel support
-            in_range_x = np.abs(rel_positions[:, 0]) <= kernel_size_val / 2
-            in_range_y = np.abs(rel_positions[:, 1]) <= kernel_size_val / 2
+            # Find pre neurons within kernel support (each axis bounded independently)
+            in_range_x = np.abs(rel_positions[:, 0]) <= extent_x / 2
+            in_range_y = np.abs(rel_positions[:, 1]) <= extent_y / 2
             in_range = in_range_x & in_range_y
             candidate_pre = np.where(in_range)[0]
 
             for pre_idx in candidate_pre:
-                rel_x, rel_y = rel_positions[pre_idx]
+                if same_population and pre_idx == post_idx:
+                    continue
+
+                rel_x = rel_positions[pre_idx, 0]
+                rel_y = rel_positions[pre_idx, 1]
 
                 # Find nearest kernel position
-                ki = np.argmin(np.abs(kernel_grid_y[:, 0] - rel_y))
-                kj = np.argmin(np.abs(kernel_grid_x[0, :] - rel_x))
+                ki = np.argmin(np.abs(kernel_y - rel_y))
+                kj = np.argmin(np.abs(kernel_x - rel_x))
 
                 kernel_val = self.kernel[ki, kj]
 
-                if kernel_val > self.threshold:
+                # Threshold on magnitude so signed kernels keep negative coeffs.
+                if np.abs(kernel_val) > self.threshold:
                     pre_indices.append(pre_idx)
                     post_indices.append(post_idx)
                     kernel_weights.append(kernel_val)
@@ -243,8 +289,11 @@ class Conv2dKernel(PointConnectivity):
 class GaussianKernel(PointConnectivity):
     """Gaussian kernel connectivity for center-surround receptive fields.
 
-    Creates connections weighted by a 2D Gaussian function of distance,
+    Creates connections weighted by a Gaussian function of distance,
     useful for implementing smooth spatial receptive fields.
+
+    Only the first two position dimensions (x, y) are used; any extra columns
+    (e.g. z) are ignored.
 
     Parameters
     ----------
@@ -253,7 +302,13 @@ class GaussianKernel(PointConnectivity):
     max_distance : float or Quantity, optional
         Maximum distance for connections (default: 3*sigma).
     normalize : bool
-        Whether to normalize the Gaussian (default: True).
+        Whether to normalize the Gaussian (default: True). Normalization uses
+        the 2-D constant ``1 / (2 * pi * sigma**2)`` (positions are treated as
+        2-D, see above).
+    allow_self_connections : bool
+        Whether a neuron may connect to itself when pre and post are the same
+        population (default: False). A coincident pre/post would otherwise
+        connect at the Gaussian peak.
     weight : Initialization, optional
         Weight initialization (Gaussian is multiplied by this).
     delay : Initialization, optional
@@ -281,6 +336,7 @@ class GaussianKernel(PointConnectivity):
         sigma: ArrayLike,
         max_distance: Optional[ArrayLike] = None,
         normalize: bool = True,
+        allow_self_connections: bool = False,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -289,6 +345,7 @@ class GaussianKernel(PointConnectivity):
         self.sigma = sigma
         self.max_distance = max_distance
         self.normalize = normalize
+        self.allow_self_connections = allow_self_connections
         self.weight_init = weight
         self.delay_init = delay
 
@@ -302,9 +359,11 @@ class GaussianKernel(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gaussian kernel connectivity")
 
-        # Calculate distances
+        # Calculate distances (only the first two position dims are used)
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
         post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
+        post_pos_val = np.asarray(post_pos_val)[:, :2]
         distances = cdist(pre_pos_val, post_pos_val)
 
         # Get sigma and max_distance in position units
@@ -325,13 +384,17 @@ class GaussianKernel(PointConnectivity):
         gaussian_weights = np.exp(-distances ** 2 / (2 * sigma_val ** 2))
 
         if self.normalize:
+            # 2-D normalization constant (positions are treated as 2-D).
             gaussian_weights /= (2 * np.pi * sigma_val ** 2)
 
         # Apply distance threshold
         connection_mask = distances <= max_dist_val
+        # Drop autapses when pre and post are the same population.
+        if not self.allow_self_connections and _same_population(pre_positions, post_positions):
+            np.fill_diagonal(connection_mask, False)
         gaussian_weights = gaussian_weights * connection_mask
 
-        # Get connections above threshold
+        # Get connections above threshold (prune cutoff: 1e-6)
         pre_indices, post_indices = np.where(gaussian_weights > 1e-6)
         gaussian_weights = gaussian_weights[pre_indices, post_indices]
 
@@ -407,18 +470,28 @@ class GaborKernel(PointConnectivity):
     Implements Gabor filters in spatial connectivity, useful for creating
     orientation-selective neurons similar to V1 simple cells.
 
+    Only the first two position dimensions (x, y) are used; any extra columns
+    (e.g. z) are ignored.
+
     Parameters
     ----------
     sigma : float or Quantity
         Standard deviation of Gaussian envelope.
     frequency : float
-        Frequency of sinusoidal component (cycles per unit distance).
+        Frequency of the sinusoidal component, expressed in cycles per
+        position-unit (i.e. ``1 / pos_unit``). This is NOT unit-converted: the
+        rotated coordinates are taken in the position unit, so the wavelength
+        changes if the position unit changes. Express ``frequency`` in the same
+        length unit as the positions.
     theta : float
         Orientation angle in radians.
     phase : float
         Phase offset in radians (default: 0).
     max_distance : float or Quantity, optional
         Maximum distance for connections (default: 3*sigma).
+    allow_self_connections : bool
+        Whether a neuron may connect to itself when pre and post are the same
+        population (default: False).
     weight : Initialization, optional
         Weight initialization (Gabor values are multiplied by this).
     delay : Initialization, optional
@@ -449,6 +522,7 @@ class GaborKernel(PointConnectivity):
         theta: float,
         phase: float = 0.0,
         max_distance: Optional[ArrayLike] = None,
+        allow_self_connections: bool = False,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -459,6 +533,7 @@ class GaborKernel(PointConnectivity):
         self.theta = theta
         self.phase = phase
         self.max_distance = max_distance
+        self.allow_self_connections = allow_self_connections
         self.weight_init = weight
         self.delay_init = delay
 
@@ -477,9 +552,11 @@ class GaborKernel(PointConnectivity):
         else:
             post_num = post_size
 
-        # Extract position values
+        # Extract position values (only the first two dims are used)
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
         post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
+        post_pos_val = np.asarray(post_pos_val)[:, :2]
 
         # Get sigma and max_distance in position units
         if isinstance(self.sigma, u.Quantity):
@@ -494,6 +571,11 @@ class GaborKernel(PointConnectivity):
                 max_dist_val = self.max_distance
         else:
             max_dist_val = 3 * sigma_val
+
+        same_population = (
+            not self.allow_self_connections
+            and _same_population(pre_positions, post_positions)
+        )
 
         pre_indices = []
         post_indices = []
@@ -515,7 +597,11 @@ class GaborKernel(PointConnectivity):
             candidate_pre = np.where(in_range)[0]
 
             for pre_idx in candidate_pre:
-                dx, dy = rel_pos[pre_idx]
+                if same_population and pre_idx == post_idx:
+                    continue
+
+                dx = rel_pos[pre_idx, 0]
+                dy = rel_pos[pre_idx, 1]
 
                 # Rotate coordinates
                 x_rot = dx * cos_theta + dy * sin_theta
@@ -526,6 +612,7 @@ class GaborKernel(PointConnectivity):
                 sinusoid = np.cos(2 * np.pi * self.frequency * x_rot + self.phase)
                 gabor_val = gaussian * sinusoid
 
+                # Prune cutoff: 1e-3 (magnitude).
                 if np.abs(gabor_val) > 1e-3:
                     pre_indices.append(pre_idx)
                     post_indices.append(post_idx)
@@ -615,6 +702,9 @@ class DoGKernel(PointConnectivity):
     Implements DoG filters commonly found in retinal ganglion cells and LGN neurons,
     with excitatory center and inhibitory surround (or vice versa).
 
+    Only the first two position dimensions (x, y) are used; any extra columns
+    (e.g. z) are ignored.
+
     Parameters
     ----------
     sigma_center : float or Quantity
@@ -627,6 +717,9 @@ class DoGKernel(PointConnectivity):
         Amplitude of surround Gaussian (default: 0.8).
     max_distance : float or Quantity, optional
         Maximum distance for connections (default: 3*sigma_surround).
+    allow_self_connections : bool
+        Whether a neuron may connect to itself when pre and post are the same
+        population (default: False).
     weight : Initialization, optional
         Weight initialization (DoG values are multiplied by this).
     delay : Initialization, optional
@@ -658,6 +751,7 @@ class DoGKernel(PointConnectivity):
         amplitude_center: float = 1.0,
         amplitude_surround: float = 0.8,
         max_distance: Optional[ArrayLike] = None,
+        allow_self_connections: bool = False,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -668,6 +762,7 @@ class DoGKernel(PointConnectivity):
         self.amplitude_center = amplitude_center
         self.amplitude_surround = amplitude_surround
         self.max_distance = max_distance
+        self.allow_self_connections = allow_self_connections
         self.weight_init = weight
         self.delay_init = delay
 
@@ -681,9 +776,11 @@ class DoGKernel(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for DoG kernel connectivity")
 
-        # Calculate distances
+        # Calculate distances (only the first two position dims are used)
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
         post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
+        post_pos_val = np.asarray(post_pos_val)[:, :2]
         distances = cdist(pre_pos_val, post_pos_val)
 
         # Get sigma values in position units
@@ -701,9 +798,12 @@ class DoGKernel(PointConnectivity):
 
         # Apply distance threshold
         connection_mask = distances <= max_dist_val
+        # Drop autapses when pre and post are the same population.
+        if not self.allow_self_connections and _same_population(pre_positions, post_positions):
+            np.fill_diagonal(connection_mask, False)
         dog_weights = dog_weights * connection_mask
 
-        # Get connections above threshold
+        # Get connections above threshold (prune cutoff: 1e-4 on magnitude)
         pre_indices, post_indices = np.where(np.abs(dog_weights) > 1e-4)
         dog_weights = dog_weights[pre_indices, post_indices]
 
@@ -844,12 +944,18 @@ class SobelKernel(PointConnectivity):
     Implements Sobel operators for detecting edges at specific orientations,
     useful for implementing orientation-selective connectivity patterns.
 
+    The Sobel kernel contains essential negative coefficients; connections are
+    selected on coefficient magnitude so those negative weights are retained.
+
     Parameters
     ----------
     direction : str
         Direction of edge detection ('horizontal', 'vertical', 'both').
     kernel_size : float or Quantity
         Physical size of the 3x3 kernel in position units.
+    allow_self_connections : bool
+        Whether a neuron may connect to itself when pre and post are the same
+        population (default: False).
     weight : Initialization, optional
         Weight initialization (Sobel values are multiplied by this).
     delay : Initialization, optional
@@ -876,6 +982,7 @@ class SobelKernel(PointConnectivity):
         self,
         direction: str = 'horizontal',
         kernel_size: ArrayLike = 1.0,
+        allow_self_connections: bool = False,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -883,6 +990,7 @@ class SobelKernel(PointConnectivity):
         super().__init__(**kwargs)
         self.direction = direction
         self.kernel_size = kernel_size
+        self.allow_self_connections = allow_self_connections
         self.weight_init = weight
         self.delay_init = delay
 
@@ -909,12 +1017,14 @@ class SobelKernel(PointConnectivity):
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate Sobel kernel connections."""
-        # Delegate to Conv2dKernel
+        # Delegate to Conv2dKernel. The Sobel kernel has essential negative
+        # coefficients, so threshold=0 (magnitude) retains all non-zero weights.
         if self.kernel is not None:
             conv = Conv2dKernel(
                 kernel=self.kernel,
                 kernel_size=self.kernel_size,
-                threshold=0.1,
+                threshold=0.0,
+                allow_self_connections=self.allow_self_connections,
                 weight=self.weight_init,
                 delay=self.delay_init,
                 seed=self.seed
@@ -928,7 +1038,8 @@ class SobelKernel(PointConnectivity):
             conv_h = Conv2dKernel(
                 kernel=self.kernel_h,
                 kernel_size=self.kernel_size,
-                threshold=0.1,
+                threshold=0.0,
+                allow_self_connections=self.allow_self_connections,
                 weight=self.weight_init,
                 delay=self.delay_init,
                 seed=self.seed
@@ -936,7 +1047,8 @@ class SobelKernel(PointConnectivity):
             conv_v = Conv2dKernel(
                 kernel=self.kernel_v,
                 kernel_size=self.kernel_size,
-                threshold=0.1,
+                threshold=0.0,
+                allow_self_connections=self.allow_self_connections,
                 weight=self.weight_init,
                 delay=self.delay_init,
                 seed=self.seed + 1 if self.seed is not None else None
@@ -956,12 +1068,21 @@ class LaplacianKernel(PointConnectivity):
     Implements Laplacian operators for detecting discontinuities and edges,
     useful for lateral inhibition and edge enhancement.
 
+    The Laplacian kernel has an essential negative centre coefficient (-4 or
+    -8); connections are selected on coefficient magnitude so that centre
+    weight is retained.
+
     Parameters
     ----------
     kernel_type : str
         Type of Laplacian ('4-connected', '8-connected').
     kernel_size : float or Quantity
         Physical size of the kernel in position units.
+    allow_self_connections : bool
+        Whether a neuron may connect to itself when pre and post are the same
+        population (default: False). The Laplacian centre coefficient maps onto
+        the self-connection, so enabling this retains the centre weight on the
+        diagonal.
     weight : Initialization, optional
         Weight initialization (Laplacian values are multiplied by this).
     delay : Initialization, optional
@@ -988,6 +1109,7 @@ class LaplacianKernel(PointConnectivity):
         self,
         kernel_type: str = '4-connected',
         kernel_size: ArrayLike = 1.0,
+        allow_self_connections: bool = False,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -995,6 +1117,7 @@ class LaplacianKernel(PointConnectivity):
         super().__init__(**kwargs)
         self.kernel_type = kernel_type
         self.kernel_size = kernel_size
+        self.allow_self_connections = allow_self_connections
         self.weight_init = weight
         self.delay_init = delay
 
@@ -1016,11 +1139,13 @@ class LaplacianKernel(PointConnectivity):
 
     def generate(self, **kwargs) -> ConnectionResult:
         """Generate Laplacian kernel connections."""
-        # Delegate to Conv2dKernel
+        # Delegate to Conv2dKernel. The Laplacian has an essential negative
+        # centre coefficient, so threshold=0 (magnitude) retains all weights.
         conv = Conv2dKernel(
             kernel=self.kernel,
             kernel_size=self.kernel_size,
-            threshold=0.1,
+            threshold=0.0,
+            allow_self_connections=self.allow_self_connections,
             weight=self.weight_init,
             delay=self.delay_init,
             seed=self.seed
@@ -1036,6 +1161,9 @@ class CustomKernel(PointConnectivity):
 
     Allows implementing arbitrary spatial kernel functions for connectivity.
 
+    Only the first two position dimensions (x, y) are used; any extra columns
+    (e.g. z) are ignored.
+
     Parameters
     ----------
     kernel_func : callable
@@ -1044,7 +1172,10 @@ class CustomKernel(PointConnectivity):
     kernel_size : float or Quantity
         Physical size of the kernel support in position units.
     threshold : float
-        Connection threshold (default: 0.0).
+        Connection threshold on kernel-value magnitude (default: 0.0).
+    allow_self_connections : bool
+        Whether a neuron may connect to itself when pre and post are the same
+        population (default: False).
     weight : Initialization, optional
         Weight initialization (kernel values are multiplied by this).
     delay : Initialization, optional
@@ -1078,6 +1209,7 @@ class CustomKernel(PointConnectivity):
         kernel_func: Callable,
         kernel_size: ArrayLike,
         threshold: float = 0.0,
+        allow_self_connections: bool = False,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -1086,6 +1218,7 @@ class CustomKernel(PointConnectivity):
         self.kernel_func = kernel_func
         self.kernel_size = kernel_size
         self.threshold = threshold
+        self.allow_self_connections = allow_self_connections
         self.weight_init = weight
         self.delay_init = delay
 
@@ -1109,15 +1242,22 @@ class CustomKernel(PointConnectivity):
         else:
             post_num = post_size
 
-        # Extract position values
+        # Extract position values (only the first two dims are used)
         pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
         post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
+        post_pos_val = np.asarray(post_pos_val)[:, :2]
 
         # Get kernel size in position units
         if isinstance(self.kernel_size, u.Quantity):
             kernel_size_val = u.Quantity(self.kernel_size).to(pos_unit).mantissa
         else:
             kernel_size_val = self.kernel_size
+
+        same_population = (
+            not self.allow_self_connections
+            and _same_population(pre_positions, post_positions)
+        )
 
         pre_indices = []
         post_indices = []
@@ -1133,6 +1273,9 @@ class CustomKernel(PointConnectivity):
 
             # Filter by kernel size
             in_range = distances <= kernel_size_val / 2
+            # Drop the autapse when pre and post are the same population.
+            if same_population:
+                in_range[post_idx] = False
             candidate_pre = np.where(in_range)[0]
 
             if len(candidate_pre) > 0:
@@ -1142,7 +1285,7 @@ class CustomKernel(PointConnectivity):
                 # Evaluate kernel function
                 kernel_vals = self.kernel_func(rel_x, rel_y)
 
-                # Apply threshold
+                # Apply threshold on magnitude
                 above_threshold = np.abs(kernel_vals) > self.threshold
                 valid_pre = candidate_pre[above_threshold]
                 valid_weights = kernel_vals[above_threshold]

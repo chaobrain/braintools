@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import numbers
 from typing import Optional, Dict, Sequence
 
 import brainunit as u
@@ -32,6 +33,42 @@ __all__ = [
 ]
 
 
+def _combine_block_params(blocks):
+    """Combine per-block weights/delays into a single per-edge array.
+
+    Each entry in ``blocks`` is a ``(n_edges, value)`` tuple where ``value`` is a
+    scalar (e.g. ``1.0 * u.nS``), a per-edge array, or ``None``. Returns ``None`` if
+    every block lacks the parameter; otherwise each value is broadcast to its block's
+    edge count (missing blocks filled with 0) and concatenated, unit-aware.
+    """
+    if not blocks or all(value is None for _, value in blocks):
+        return None
+
+    # Determine the unit from the first block that provides one so all blocks share it.
+    unit = None
+    for _, value in blocks:
+        if value is not None:
+            unit = u.get_unit(value)
+            break
+
+    mantissas = []
+    for n_edges, value in blocks:
+        if value is None:
+            mantissas.append(np.zeros(n_edges))
+            continue
+        mantissa = u.Quantity(value).to(unit).mantissa if unit is not None else u.get_mantissa(value)
+        mantissa = np.asarray(mantissa)
+        if mantissa.ndim == 0:
+            mantissa = np.full(n_edges, mantissa)
+        mantissas.append(mantissa)
+
+    combined = np.concatenate(mantissas)
+    if unit is None:
+        return combined
+    # ``maybe_decimal`` returns a plain array for a dimensionless unit.
+    return u.maybe_decimal(combined * unit)
+
+
 class SmallWorld(PointConnectivity):
     """Watts-Strogatz small-world network topology.
 
@@ -49,8 +86,8 @@ class SmallWorld(PointConnectivity):
     ----------
     k : int, default=6
         Number of nearest neighbors each node connects to in the initial ring lattice.
-        Must be an even number. Higher values create more local connections and increase
-        the clustering coefficient.
+        Must be a positive even number strictly less than the network size. Higher
+        values create more local connections and increase the clustering coefficient.
     p : float, default=0.3
         Rewiring probability for each edge. Valid range is [0, 1].
         - p=0: Regular ring lattice with high clustering, long path length
@@ -71,9 +108,9 @@ class SmallWorld(PointConnectivity):
     Notes
     -----
     - This connectivity pattern requires pre_size == post_size (recurrent connectivity)
-    - Self-connections are automatically avoided during rewiring
-    - The resulting network maintains exactly n*k connections where n is the network size
-    - The algorithm is vectorized for efficient generation of large networks
+    - Self-connections are avoided during rewiring; duplicate edges are also rejected
+    - The resulting network maintains exactly n*k directed edges (rewiring preserves the
+      edge count), where n is the network size. Edges are directed (a→b does not imply b→a).
 
     References
     ----------
@@ -132,8 +169,17 @@ class SmallWorld(PointConnectivity):
         else:
             n = pre_size
 
-        if pre_size != post_size:
+        if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Small-world networks require pre_size == post_size")
+
+        # Validate k: must be a positive even number strictly less than n so that the
+        # ring lattice has exactly n*k edges without self-loops or duplicates.
+        if self.k % 2 != 0:
+            raise ValueError(f"k must be even for small-world networks, got {self.k}")
+        if self.k <= 0:
+            raise ValueError(f"k must be positive, got {self.k}")
+        if self.k >= n:
+            raise ValueError(f"k ({self.k}) must be less than the network size ({n})")
 
         # Vectorized generation of regular ring lattice
         k_half = self.k // 2
@@ -143,21 +189,23 @@ class SmallWorld(PointConnectivity):
         offsets = np.tile(np.concatenate([np.arange(1, k_half + 1), -np.arange(1, k_half + 1)]), n)
         targets = (sources + offsets) % n
 
-        # Vectorized rewiring
+        # Track existing edges per source so rewiring never creates self-loops or
+        # duplicate edges (preserves the exact n*k edge count).
+        existing = [set() for _ in range(n)]
+        for s, t in zip(sources, targets):
+            existing[s].add(int(t))
+
+        # Vectorized rewiring decision; resolve target conflicts per edge.
         rewire_mask = self.rng.random(len(sources)) < self.p
-        n_rewire = np.sum(rewire_mask)
-
-        if n_rewire > 0:
-            # Generate random targets for rewiring
-            new_targets = self.rng.randint(0, n, size=n_rewire)
-
-            # Avoid self-connections in rewired edges
-            self_conn_mask = new_targets == sources[rewire_mask]
-            while np.any(self_conn_mask):
-                new_targets[self_conn_mask] = self.rng.randint(0, n, size=np.sum(self_conn_mask))
-                self_conn_mask = new_targets == sources[rewire_mask]
-
-            targets[rewire_mask] = new_targets
+        for idx in np.nonzero(rewire_mask)[0]:
+            s = int(sources[idx])
+            old_t = int(targets[idx])
+            existing[s].discard(old_t)
+            new_t = self.rng.randint(0, n)
+            while new_t == s or new_t in existing[s]:
+                new_t = self.rng.randint(0, n)
+            targets[idx] = new_t
+            existing[s].add(new_t)
 
         pre_indices = sources
         post_indices = targets
@@ -221,7 +269,7 @@ class ScaleFree(PointConnectivity):
     m : int, default=3
         Number of edges to attach from each new node to existing nodes. This parameter
         controls the minimum degree of nodes and affects the network density. Must be
-        at least 1 and at most equal to the initial complete graph size.
+        at least 1 and strictly less than the network size.
         Higher values create denser networks with more connections.
     weight : Initializer, optional
         Weight initialization for each connection. Can be a scalar value, array,
@@ -301,8 +349,15 @@ class ScaleFree(PointConnectivity):
         else:
             n = pre_size
 
-        if pre_size != post_size:
+        if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Scale-free networks require pre_size == post_size")
+
+        # Validate m: the initial complete graph spans max(m, 2) nodes, so m must be
+        # at least 1 and strictly less than n to keep indices in range.
+        if self.m < 1:
+            raise ValueError(f"m must be at least 1, got {self.m}")
+        if self.m >= n:
+            raise ValueError(f"m ({self.m}) must be less than the network size ({n})")
 
         # Start with a small complete graph
         m0 = max(self.m, 2)
@@ -465,7 +520,7 @@ class Regular(PointConnectivity):
         else:
             n = pre_size
 
-        if pre_size != post_size:
+        if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Regular networks require pre_size == post_size")
 
         # Each neuron connects to 'degree' random targets
@@ -537,9 +592,9 @@ class ModularRandom(PointConnectivity):
     Parameters
     ----------
     n_modules : int
-        Number of modules (communities) to divide the network into. Neurons are
-        distributed approximately evenly across modules, with any remainder assigned
-        to the last module.
+        Number of modules (communities) to divide the network into. Must not exceed
+        the network size. Neurons are distributed approximately evenly across modules
+        (the first ``remainder`` modules each receive one extra neuron).
     intra_prob : float, default=0.3
         Connection probability for neuron pairs within the same module. Valid range
         is [0, 1]. Higher values create denser intra-module connectivity and stronger
@@ -563,7 +618,8 @@ class ModularRandom(PointConnectivity):
     Notes
     -----
     - This connectivity pattern requires pre_size == post_size (recurrent connectivity)
-    - Neurons are assigned to modules in sequential order (first n/m neurons to module 0, etc.)
+    - Neurons are assigned to modules in sequential order using a balanced split
+      (every module gets at least one neuron; n_modules must not exceed the network size)
     - Self-connections are automatically excluded
     - The same weight and delay initialization is used for all connections
     - For module-specific connectivity patterns, use ModularGeneral instead
@@ -653,14 +709,20 @@ class ModularRandom(PointConnectivity):
         else:
             n = pre_size
 
-        if pre_size != post_size:
+        if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Modular networks require pre_size == post_size")
 
-        # Assign neurons to modules
-        module_size = n // self.n_modules
-        modules = np.repeat(np.arange(self.n_modules), module_size)
-        if len(modules) < n:
-            modules = np.concatenate([modules, np.full(n - len(modules), self.n_modules - 1)])
+        if self.n_modules > n:
+            raise ValueError(
+                f"n_modules ({self.n_modules}) must not exceed the network size ({n})"
+            )
+
+        # Assign neurons to modules using a balanced distribution so every module
+        # receives at least one neuron (the first ``remainder`` modules get one extra).
+        base_size = n // self.n_modules
+        remainder = n % self.n_modules
+        mod_sizes = [base_size + (1 if i < remainder else 0) for i in range(self.n_modules)]
+        modules = np.repeat(np.arange(self.n_modules), mod_sizes)
 
         # Generate connections with module-dependent probabilities
         pre_indices = []
@@ -859,7 +921,7 @@ class ModularGeneral(PointConnectivity):
         else:
             n = pre_size
 
-        if pre_size != post_size:
+        if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Modular networks require pre_size == post_size")
 
         # Determine module sizes and boundaries
@@ -869,12 +931,14 @@ class ModularGeneral(PointConnectivity):
 
             # Process first n_modules-1 sizes
             for ratio in self.module_ratios:
-                if isinstance(ratio, int):
+                # Integral values (incl. numpy ints, but not bool) are fixed sizes;
+                # everything else is treated as a proportion of the total size.
+                if isinstance(ratio, numbers.Integral) and not isinstance(ratio, bool):
                     # Fixed size
-                    size = ratio
+                    size = int(ratio)
                 else:
-                    # Proportional size
-                    size = int(ratio * n)
+                    # Proportional size (round to nearest neuron count)
+                    size = round(ratio * n)
 
                 if size < 0:
                     raise ValueError(f"Module size cannot be negative: {size}")
@@ -906,11 +970,24 @@ class ModularGeneral(PointConnectivity):
 
         all_pre_indices = []
         all_post_indices = []
-        all_weights = []
-        all_delays = []
+        # Per-block (n_edges, weights-or-None) / (n_edges, delays-or-None). Weights and
+        # delays from sub-connectivities may be scalars (e.g. ``1.0 * u.nS``), per-edge
+        # arrays, or None; we broadcast/combine them once all blocks are collected.
+        block_weights = []
+        block_delays = []
 
         pre_positions = kwargs.get('pre_positions', None)
         post_positions = kwargs.get('post_positions', None)
+        have_positions = pre_positions is not None and post_positions is not None
+
+        def _collect(result, pre_offset, post_offset):
+            n_edges = len(result.pre_indices)
+            if n_edges == 0:
+                return
+            all_pre_indices.append(result.pre_indices + pre_offset)
+            all_post_indices.append(result.post_indices + post_offset)
+            block_weights.append((n_edges, result.weights))
+            block_delays.append((n_edges, result.delays))
 
         # Generate intra-module connections using the provided connectivity
         for mod_id in range(self.n_modules):
@@ -924,35 +1001,26 @@ class ModularGeneral(PointConnectivity):
             # Get the connectivity instance for this module
             conn = self.intra_conn[mod_id]
 
-            # Set the RNG for the intra_conn to match this instance
-            conn.rng = self.rng
-
             # Generate connections within this module
-            if pre_positions is not None:
+            if have_positions:
                 mod_pre_pos = pre_positions[mod_start:mod_end]
                 mod_post_pos = post_positions[mod_start:mod_end]
             else:
                 mod_pre_pos = None
                 mod_post_pos = None
 
+            # ``recompute=True`` so each block draws independently even when the same
+            # connectivity instance (or equal-size modules) reuses the size-aware cache.
+            # We do not mutate ``conn.rng`` (it belongs to the user-supplied object).
             intra_result = conn(
                 pre_size=mod_n,
                 post_size=mod_n,
                 pre_positions=mod_pre_pos,
-                post_positions=mod_post_pos
+                post_positions=mod_post_pos,
+                recompute=True,
             )
 
-            # Map local indices to global indices
-            if len(intra_result.pre_indices) > 0:
-                global_pre = intra_result.pre_indices + mod_start
-                global_post = intra_result.post_indices + mod_start
-                all_pre_indices.append(global_pre)
-                all_post_indices.append(global_post)
-
-                if intra_result.weights is not None:
-                    all_weights.append(intra_result.weights)
-                if intra_result.delays is not None:
-                    all_delays.append(intra_result.delays)
+            _collect(intra_result, mod_start, mod_start)
 
         # Generate inter-module connections
         for pre_mod in range(self.n_modules):
@@ -984,31 +1052,25 @@ class ModularGeneral(PointConnectivity):
                     continue
 
                 # Generate connections between these two modules
-                if pre_positions is not None:
+                if have_positions:
                     pre_mod_pos = pre_positions[pre_start:pre_end]
                     post_mod_pos = post_positions[post_start:post_end]
                 else:
                     pre_mod_pos = None
                     post_mod_pos = None
 
+                # ``recompute=True`` so every module pair draws an independent block;
+                # a single shared ``inter_conn`` instance would otherwise return the
+                # same cached result for all equal-size pairs.
                 inter_result = conn(
                     pre_size=pre_n,
                     post_size=post_n,
                     pre_positions=pre_mod_pos,
-                    post_positions=post_mod_pos
+                    post_positions=post_mod_pos,
+                    recompute=True,
                 )
 
-                # Map local indices to global indices
-                if len(inter_result.pre_indices) > 0:
-                    global_pre = inter_result.pre_indices + pre_start
-                    global_post = inter_result.post_indices + post_start
-                    all_pre_indices.append(global_pre)
-                    all_post_indices.append(global_post)
-
-                    if inter_result.weights is not None:
-                        all_weights.append(inter_result.weights)
-                    if inter_result.delays is not None:
-                        all_delays.append(inter_result.delays)
+                _collect(inter_result, pre_start, post_start)
 
         # Combine all connections
         if len(all_pre_indices) == 0:
@@ -1024,8 +1086,11 @@ class ModularGeneral(PointConnectivity):
 
         final_pre = np.concatenate(all_pre_indices)
         final_post = np.concatenate(all_post_indices)
-        final_weights = np.concatenate(all_weights) if len(all_weights) > 0 else None
-        final_delays = np.concatenate(all_delays) if len(all_delays) > 0 else None
+        # Broadcast/concatenate per-block weights and delays. Policy: if no block
+        # supplies weights (resp. delays), the combined result is None; otherwise
+        # blocks that lack them are filled with 0 so the per-edge array stays aligned.
+        final_weights = _combine_block_params(block_weights)
+        final_delays = _combine_block_params(block_delays)
 
         return ConnectionResult(
             final_pre,
@@ -1229,7 +1294,7 @@ class HierarchicalRandom(PointConnectivity):
         else:
             n = pre_size
 
-        if pre_size != post_size:
+        if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Hierarchical networks require pre_size == post_size")
 
         # Determine level sizes and boundaries
@@ -1239,12 +1304,14 @@ class HierarchicalRandom(PointConnectivity):
 
             # Process first n_levels-1 sizes
             for ratio in self.level_ratios:
-                if isinstance(ratio, int):
+                # Integral values (incl. numpy ints, but not bool) are fixed sizes;
+                # everything else is treated as a proportion of the total size.
+                if isinstance(ratio, numbers.Integral) and not isinstance(ratio, bool):
                     # Fixed size
-                    size = ratio
+                    size = int(ratio)
                 else:
-                    # Proportional size
-                    size = int(ratio * n)
+                    # Proportional size (round to nearest neuron count)
+                    size = round(ratio * n)
 
                 if size < 0:
                     raise ValueError(f"Level size cannot be negative: {size}")
@@ -1526,7 +1593,7 @@ class CorePeripheryRandom(PointConnectivity):
         else:
             n = pre_size
 
-        if pre_size != post_size:
+        if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Core-periphery networks require pre_size == post_size")
 
         # Determine core size

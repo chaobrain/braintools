@@ -39,6 +39,7 @@ complete decoupling between model types to ensure clean, specialized implementat
 
     import brainunit as u
     from braintools.conn import Random, ExcitatoryInhibitory, AxonToDendrite
+    from braintools.init import LogNormal
 
     # Point neuron random connectivity
     random_conn = Random(prob=0.1)
@@ -57,8 +58,7 @@ complete decoupling between model types to ensure clean, specialized implementat
     # Multi-compartment axon-to-dendrite connectivity
     axon_dend = AxonToDendrite(
         connection_prob=0.1,
-        weight_distribution='lognormal',
-        weight_params={'mean': 2.0 * u.nS, 'sigma': 0.5}
+        weight=LogNormal(mean=2.0 * u.nS, std=0.5 * u.nS)
     )
     result = axon_dend(pre_size=100, post_size=100)
 
@@ -71,19 +71,17 @@ complete decoupling between model types to ensure clean, specialized implementat
     from braintools.conn import Random, DistanceDependent, ExcitatoryInhibitory
 
     # Realistic synaptic connectivity with proper units
-    from braintools.init import LogNormal, Normal
+    from braintools.init import LogNormal, Normal, GaussianProfile
     ampa_conn = Random(
         prob=0.05,
-        weight=LogNormal(mean=1.0 * u.nS, sigma=0.5),
+        weight=LogNormal(mean=1.0 * u.nS, std=0.5 * u.nS),
         delay=Normal(mean=1.5 * u.ms, std=0.3 * u.ms)
     )
 
     # Spatial connectivity
     positions = np.random.uniform(0, 1000, (500, 2)) * u.um
     spatial_conn = DistanceDependent(
-        sigma=100 * u.um,
-        decay='gaussian',
-        max_prob=0.3
+        GaussianProfile(sigma=100 * u.um, max_distance=300 * u.um)
     )
     result = spatial_conn(500, 500, positions, positions)
 

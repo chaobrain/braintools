@@ -132,7 +132,7 @@ class ConnectionResult:
             if not u.math.size(self.delays) in [n_connections, 1]:
                 raise ValueError(
                     f"delays must have same length as indices, "
-                    f"got {len(self.delays)} vs {n_connections}"
+                    f"got {u.math.size(self.delays)} vs {n_connections}"
                 )
 
     @property
@@ -151,14 +151,14 @@ class ConnectionResult:
     def shape(self) -> Tuple[int, int]:
         """Shape of the connectivity (pre_size, post_size)."""
         if self.pre_size is None:
-            pre_size = (max(self.pre_indices) + 1 if self.pre_indices.size > 0 else 0)
+            pre_size = (int(self.pre_indices.max()) + 1 if self.pre_indices.size > 0 else 0)
         elif isinstance(self.pre_size, int):
             pre_size = self.pre_size
         else:
             pre_size = int(np.prod(self.pre_size))
 
         if self.post_size is None:
-            post_size = (max(self.post_indices) + 1 if self.post_indices.size > 0 else 0)
+            post_size = (int(self.post_indices.max()) + 1 if self.post_indices.size > 0 else 0)
         elif isinstance(self.post_size, int):
             post_size = self.post_size
         else:
@@ -176,8 +176,15 @@ class ConnectionResult:
 
     def weight2csr(self):
         """Convert to sparse connectivity matrix in CSR format."""
-        indices, indptr = compute_csr_indices_indptr(self.pre_indices, self.post_indices, self.shape)
-        weights = 1.0 if self.weights is None else self.weights
+        indices, indptr, order = compute_csr_indices_indptr(self.pre_indices, self.post_indices, self.shape)
+        if self.weights is None:
+            weights = 1.0
+        else:
+            weights = self.weights
+            # The CSR ``indices`` are reordered to be row-sorted; per-edge data must
+            # follow the exact same permutation or weights land on the wrong columns.
+            if u.math.size(weights) == len(self.pre_indices) and len(self.pre_indices) > 0:
+                weights = weights[order]
         csr = brainevent.CSR((weights, indices, indptr), shape=self.shape)
         return csr
 
@@ -191,8 +198,14 @@ class ConnectionResult:
 
     def delay2csr(self):
         """Convert delays to sparse connectivity matrix in CSR format."""
-        indices, indptr = compute_csr_indices_indptr(self.pre_indices, self.post_indices, self.shape)
-        delays = 0.0 if self.delays is None else self.delays
+        indices, indptr, order = compute_csr_indices_indptr(self.pre_indices, self.post_indices, self.shape)
+        if self.delays is None:
+            delays = 0.0
+        else:
+            delays = self.delays
+            # See weight2csr: per-edge data must follow the row-sorted CSR order.
+            if u.math.size(delays) == len(self.pre_indices) and len(self.pre_indices) > 0:
+                delays = delays[order]
         csr = brainevent.CSR((delays, indices, indptr), shape=self.shape)
         return csr
 
@@ -235,8 +248,11 @@ class Connectivity(ABC):
         self.pre_size = pre_size
         self.post_size = post_size
         self.seed = seed
-        self.rng = np.random.RandomState(seed) if seed is not None else np.random
+        # Always use an isolated RandomState (even when seed is None) so generation
+        # does not depend on / perturb the global ``np.random`` state.
+        self.rng = np.random.RandomState(seed)
         self._cached_result = None
+        self._cache_key = None
 
     def __call__(
         self,
@@ -247,11 +263,23 @@ class Connectivity(ABC):
         recompute: bool = False,
         **kwargs
     ) -> ConnectionResult:
-        """Generate connectivity pattern."""
-        if self._cached_result is None or recompute:
-            effective_pre_size = pre_size if pre_size is not None else self.pre_size
-            effective_post_size = post_size if post_size is not None else self.post_size
+        """Generate connectivity pattern.
 
+        The result is cached and reused only when the connectivity is called again
+        with the same sizes and the same position arrays. Changing ``pre_size``,
+        ``post_size`` or the positions (or passing ``recompute=True``) regenerates
+        the pattern instead of returning a stale cached result.
+        """
+        effective_pre_size = pre_size if pre_size is not None else self.pre_size
+        effective_post_size = post_size if post_size is not None else self.post_size
+
+        cache_key = (
+            _normalize_size_key(effective_pre_size),
+            _normalize_size_key(effective_post_size),
+            id(pre_positions),
+            id(post_positions),
+        )
+        if self._cached_result is None or recompute or self._cache_key != cache_key:
             self._cached_result = self._generate(
                 pre_size=effective_pre_size,
                 post_size=effective_post_size,
@@ -259,6 +287,7 @@ class Connectivity(ABC):
                 post_positions=post_positions,
                 **kwargs
             )
+            self._cache_key = cache_key
         return self._cached_result
 
     def _generate(
@@ -374,8 +403,10 @@ class CompositeConnectivity(Connectivity):
         conn2: Connectivity,
         operator: str
     ):
-        assert conn1.pre_size == conn2.pre_size, f"Pre sizes must match, got {conn1.pre_size} vs {conn2.pre_size}"
-        assert conn1.post_size == conn2.post_size, f"Post sizes must match, got {conn1.post_size} vs {conn2.post_size}"
+        assert _size_count(conn1.pre_size) == _size_count(conn2.pre_size), \
+            f"Pre sizes must match, got {conn1.pre_size} vs {conn2.pre_size}"
+        assert _size_count(conn1.post_size) == _size_count(conn2.post_size), \
+            f"Post sizes must match, got {conn1.post_size} vs {conn2.post_size}"
         assert operator in ['union', 'intersection', 'difference'], f"Invalid operator, got {operator}"
         super().__init__(pre_size=conn1.pre_size, post_size=conn1.post_size)
         self.conn1 = conn1
@@ -402,10 +433,10 @@ class CompositeConnectivity(Connectivity):
         result2: ConnectionResult
     ) -> ConnectionResult:
         """Combine connections from both patterns using optimized array operations."""
-        assert result1.pre_size == result2.pre_size, (
+        assert _size_count(result1.pre_size) == _size_count(result2.pre_size), (
             f"Pre sizes must match for union, got {result1.pre_size} vs {result2.pre_size}"
         )
-        assert result1.post_size == result2.post_size, (
+        assert _size_count(result1.post_size) == _size_count(result2.post_size), (
             f"Post sizes must match for union, got {result1.post_size} vs {result2.post_size}"
         )
 
@@ -462,12 +493,14 @@ class CompositeConnectivity(Connectivity):
         # Create connection encoding for deduplication
         # For multi-compartment: encode (pre_idx, post_idx, pre_comp, post_comp)
         # For others: encode (pre_idx, post_idx)
-        if isinstance(result1.pre_size, tuple):
-            max_post = int(np.prod(result1.post_size))
-        elif isinstance(result1.post_size, tuple):
-            max_post = int(np.prod(result1.post_size))
-        else:
-            max_post = max(np.max(all_post) + 1, result1.post_size, result2.post_size)
+        post_count = _size_count(result1.post_size)
+        if post_count is None:
+            post_count = _size_count(result2.post_size)
+        max_post = max(
+            int(np.max(all_post)) + 1 if all_post.size > 0 else 0,
+            post_count if post_count is not None else 0,
+            1,
+        )
 
         if is_multicompartment:
             # Encode with compartment information
@@ -594,8 +627,8 @@ class CompositeConnectivity(Connectivity):
             'post_positions': result1.post_positions if result1.post_positions is not None else result2.post_positions,
             'model_type': result1.model_type,
             'metadata': merge_dict(
-                result1.metadata,
                 result2.metadata,
+                result1.metadata,  # result1 takes priority (consistent with weight/delay handling)
                 {
                     'operation': 'union',
                     'n_conn1': len(result1.pre_indices),
@@ -979,15 +1012,30 @@ class ScaledConnectivity(Connectivity):
         """Generate scaled connectivity."""
         result = self.base_connectivity(**kwargs)
 
-        # Scale weights
-        if result.weights is not None and self.weight_factor is not None:
-            result.weights = result.weights * self.weight_factor
+        # Compute scaled weights/delays without mutating the base connectivity's
+        # (possibly cached) result in place, which would corrupt it on reuse.
+        weights = result.weights
+        if weights is not None and self.weight_factor is not None:
+            weights = weights * self.weight_factor
 
-        # Scale delays
-        if result.delays is not None and self.delay_factor is not None:
-            result.delays = result.delays * self.delay_factor
+        delays = result.delays
+        if delays is not None and self.delay_factor is not None:
+            delays = delays * self.delay_factor
 
-        return result
+        return ConnectionResult(
+            result.pre_indices,
+            result.post_indices,
+            pre_size=result.pre_size,
+            post_size=result.post_size,
+            pre_positions=result.pre_positions,
+            post_positions=result.post_positions,
+            pre_compartments=result.pre_compartments,
+            post_compartments=result.post_compartments,
+            weights=weights,
+            delays=delays,
+            model_type=result.model_type,
+            metadata=dict(result.metadata),
+        )
 
 
 def compute_csr_indices_indptr(pre_indices, post_indices, shape):
@@ -1006,13 +1054,16 @@ def compute_csr_indices_indptr(pre_indices, post_indices, shape):
     Returns
     -------
     indices : np.ndarray
-        Column indices for CSR.
+        Column indices for CSR (row-sorted).
     indptr : np.ndarray
         Row pointer for CSR.
+    order : np.ndarray
+        Permutation applied to the input edges to produce ``indices``. Per-edge
+        data (weights/delays) must be indexed by ``order`` to stay aligned.
     """
     n_rows = shape[0]
-    # Sort by pre_indices for CSR format
-    order = np.argsort(pre_indices)
+    # Sort by pre_indices for CSR format (stable, so ties keep input column order).
+    order = np.argsort(pre_indices, kind='stable')
     sorted_pre = pre_indices[order]
     sorted_post = post_indices[order]
 
@@ -1024,7 +1075,23 @@ def compute_csr_indices_indptr(pre_indices, post_indices, shape):
     np.add.at(indptr, sorted_pre + 1, 1)
     np.cumsum(indptr, out=indptr)
 
-    return indices, indptr
+    return indices, indptr, order
+
+
+def _size_count(size):
+    """Return the scalar element count for a size given as int, tuple/list, or None."""
+    if size is None:
+        return None
+    if isinstance(size, (int, np.integer)):
+        return int(size)
+    return int(np.prod(size))
+
+
+def _normalize_size_key(size):
+    """Return a hashable, comparable key for a size (int, tuple/list/array, or None)."""
+    if size is None or isinstance(size, (int, np.integer)):
+        return size
+    return tuple(int(x) for x in np.atleast_1d(size))
 
 
 def merge_dict(*dicts):
