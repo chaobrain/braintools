@@ -18,6 +18,7 @@
 from typing import Union
 
 import brainstate
+import brainunit as u
 import jax
 import numpy as onp
 from jax import vmap, lax, numpy as jnp
@@ -53,7 +54,7 @@ def cross_correlation(
     .. math::
 
         \kappa_{ij}(\tau) = \frac{\sum_{l=1}^{K} X(l) Y(l)}
-        {\sqrt{\sum_{l=1}^{K} X(l) \sum_{l=1}^{K} Y(l)}}
+        {\sqrt{\left(\sum_{l=1}^{K} X(l)\right) \left(\sum_{l=1}^{K} Y(l)\right)}}
 
     where the time interval is divided into K bins of size :math:`\Delta t = \tau`,
     and :math:`X(l)`, :math:`Y(l)` are binary spike indicators (0 or 1) for each bin.
@@ -87,19 +88,25 @@ def cross_correlation(
     To JIT compile this function, make ``bin``, ``dt``, and ``method`` static.
     For example: ``partial(cross_correlation, bin=10, method='loop')``.
 
+    This is the coincidence-based coherence of Wang & Buzsáki (1996), not a
+    Pearson correlation coefficient.
+
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Generate random spike data
-    >>> spikes = jnp.array([[1, 0, 1], [0, 1, 0], [1, 1, 0]])
-    >>> sync_index = braintools.metric.cross_correlation(spikes, bin=1.0)
-    >>> print(f"Synchronization index: {sync_index:.3f}")
-    >>> 
-    >>> # For larger datasets, use vectorized method
-    >>> large_spikes = jnp.random.binomial(1, 0.1, (1000, 50))
-    >>> sync_fast = braintools.metric.cross_correlation(large_spikes, bin=10.0, method='vmap')
-    >>> print(f"Population synchronization: {sync_fast:.3f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> spikes = jnp.array([[1, 0, 1], [0, 1, 0], [1, 1, 0]])
+        >>> sync_index = braintools.metric.cross_correlation(spikes, bin=1.0, dt=1.0)
+        >>> float(sync_index) >= 0.0
+        True
+
+        >>> # For larger datasets, the vectorized method is faster.
+        >>> import brainstate
+        >>> large_spikes = (brainstate.random.rand(1000, 50) < 0.1).astype(float)
+        >>> sync_fast = braintools.metric.cross_correlation(
+        ...     large_spikes, bin=10.0, dt=1.0, method='vmap')
 
     References
     ----------
@@ -108,13 +115,19 @@ def cross_correlation(
            Neuroscience 16.20 (1996): 6402-6413.
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
-    bin_size = int(bin / dt)
+    bin_size = int(round(bin / dt))
+    if bin_size < 1:
+        raise ValueError(f'`bin` ({bin}) must be at least as large as `dt` ({dt}); '
+                         f'got a bin width of {bin_size} samples.')
     num_hist, num_neu = spikes.shape
+    if num_neu < 2:
+        # Coincidence is only defined for pairs; a single neuron has no pairs.
+        return jnp.asarray(0.0)
     num_bin = int(onp.ceil(num_hist / bin_size))
     if num_bin * bin_size != num_hist:
         spikes = jnp.append(spikes, jnp.zeros((num_bin * bin_size - num_hist, num_neu)), axis=0)
     states = spikes.T.reshape((num_neu, num_bin, bin_size))
-    states = jnp.asarray(jnp.sum(states, axis=2) > 0., dtype=jnp.float_)
+    states = jnp.asarray(jnp.sum(states, axis=2) > 0., dtype=float)
     indices = jnp.tril_indices(num_neu, k=-1)
 
     if method == 'loop':
@@ -125,7 +138,7 @@ def cross_correlation(
                             lambda _: jnp.sum(states[i] * states[j]) / sqrt_ij,
                             None)
 
-        res = brainstate.compile.for_loop(_f, *indices)
+        res = brainstate.transform.for_loop(_f, *indices)
 
     elif method == 'vmap':
         @vmap
@@ -144,7 +157,11 @@ def cross_correlation(
 
 
 def _f_signal(signal):
-    return jnp.mean(signal * signal) - jnp.mean(signal) ** 2
+    # ``jnp.var`` (mean-subtracted) is numerically stable; the algebraically
+    # equivalent ``mean(s**2) - mean(s)**2`` suffers float32 cancellation and can
+    # return a small *negative* value for constant signals, breaking the
+    # zero-variance guard in ``voltage_fluctuation``.
+    return jnp.var(signal)
 
 
 @set_module_as('braintools.metric')
@@ -195,26 +212,26 @@ def voltage_fluctuation(
 
     Returns
     -------
-    float
-        Synchronization index. Values > 1 indicate synchronized activity,
-        values ≈ 1 indicate asynchronous activity.
+    jax.Array
+        Scalar (0-d array) synchronization index. Values > 1 indicate synchronized
+        activity, values ≈ 1 indicate asynchronous activity. By convention a
+        constant (zero-variance) population returns ``1.0``.
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Generate correlated voltage traces
-    >>> t = jnp.linspace(0, 10, 1000)
-    >>> # Synchronous case: common oscillation + noise
-    >>> common_signal = jnp.sin(2 * jnp.pi * t)
-    >>> potentials_sync = common_signal[:, None] + 0.1 * jnp.random.normal((1000, 10))
-    >>> sync_idx = braintools.metric.voltage_fluctuation(potentials_sync)
-    >>> print(f"Synchronized case: {sync_idx:.3f}")
-    >>> 
-    >>> # Asynchronous case: independent noise
-    >>> potentials_async = jnp.random.normal((1000, 10))
-    >>> async_idx = braintools.metric.voltage_fluctuation(potentials_async)
-    >>> print(f"Asynchronous case: {async_idx:.3f}")
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> t = jnp.linspace(0, 10, 1000)
+        >>> # Synchronous case: shared oscillation + small independent noise.
+        >>> common = jnp.sin(2 * jnp.pi * t)[:, None]
+        >>> sync = common + 0.1 * brainstate.random.normal(size=(1000, 10))
+        >>> async_ = brainstate.random.normal(size=(1000, 10))
+        >>> bool(braintools.metric.voltage_fluctuation(sync)
+        ...      > braintools.metric.voltage_fluctuation(async_))
+        True
 
     References
     ----------
@@ -227,19 +244,22 @@ def voltage_fluctuation(
            Scholarpedia 2(1): 1347.
     """
 
+    potentials = jnp.asarray(u.get_magnitude(potentials))
     avg = jnp.mean(potentials, axis=1)
-    avg_var = jnp.mean(avg * avg) - jnp.mean(avg) ** 2
+    avg_var = jnp.var(avg)
 
     if method == 'loop':
-        _var = brainstate.compile.for_loop(_f_signal, jnp.moveaxis(potentials, 0, 1))
+        _var = brainstate.transform.for_loop(_f_signal, jnp.moveaxis(potentials, 0, 1))
     elif method == 'vmap':
         _var = vmap(_f_signal, in_axes=1)(potentials)
     else:
         raise ValueError(f'Do not support {method}. We only support "loop" or "vmap".')
 
     var_mean = jnp.mean(_var)
-    r = jnp.where(var_mean == 0., 1., avg_var / var_mean)
-    return r
+    # Double-``where`` guard: never evaluate ``avg_var / 0`` on the dead branch, which
+    # previously produced eager-vs-jit discrepancies and division-by-zero warnings.
+    safe_denom = jnp.where(var_mean == 0., 1., var_mean)
+    return jnp.where(var_mean == 0., 1., avg_var / safe_denom)
 
 
 @set_module_as('braintools.metric')
@@ -270,22 +290,24 @@ def matrix_correlation(x, y):
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Create two correlation matrices with similar structure
-    >>> x = jnp.array([[1.0, 0.8, 0.3], [0.8, 1.0, 0.5], [0.3, 0.5, 1.0]])
-    >>> y = jnp.array([[1.0, 0.7, 0.4], [0.7, 1.0, 0.6], [0.4, 0.6, 1.0]])
-    >>> corr = braintools.metric.matrix_correlation(x, y)
-    >>> print(f"Matrix correlation: {corr:.3f}")
-    >>> 
-    >>> # Compare connectivity matrices from different conditions
-    >>> baseline_fc = jnp.random.rand(5, 5)
-    >>> baseline_fc = (baseline_fc + baseline_fc.T) / 2  # Make symmetric
-    >>> jnp.fill_diagonal(baseline_fc, 1.0)  # Set diagonal to 1
-    >>> 
-    >>> treatment_fc = baseline_fc + 0.1 * jnp.random.rand(5, 5)
-    >>> similarity = braintools.metric.matrix_correlation(baseline_fc, treatment_fc)
-    >>> print(f"Condition similarity: {similarity:.3f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Two correlation matrices with similar structure.
+        >>> x = jnp.array([[1.0, 0.8, 0.3], [0.8, 1.0, 0.5], [0.3, 0.5, 1.0]])
+        >>> y = jnp.array([[1.0, 0.7, 0.4], [0.7, 1.0, 0.6], [0.4, 0.6, 1.0]])
+        >>> corr = braintools.metric.matrix_correlation(x, y)
+        >>> bool(corr > 0.9)
+        True
+
+        >>> # Compare connectivity matrices from different conditions.
+        >>> import brainstate
+        >>> base = brainstate.random.rand(5, 5)
+        >>> base = (base + base.T) / 2
+        >>> base = base.at[jnp.diag_indices(5)].set(1.0)
+        >>> treat = base + 0.1 * brainstate.random.rand(5, 5)
+        >>> similarity = braintools.metric.matrix_correlation(base, treat)
 
     Notes
     -----
@@ -306,16 +328,22 @@ def matrix_correlation(x, y):
     functional_connectivity : Compute connectivity matrix from time series
     weighted_correlation : Weighted correlation for individual vectors
     """
+    x = jnp.asarray(u.get_magnitude(x))
+    y = jnp.asarray(u.get_magnitude(y))
     if x.ndim != 2:
         raise ValueError(f'Only support 2d array, but we got a array '
                          f'with the shape of {x.shape}')
     if y.ndim != 2:
         raise ValueError(f'Only support 2d array, but we got a array '
                          f'with the shape of {y.shape}')
+    if x.shape != y.shape:
+        raise ValueError(f'`x` and `y` must have the same shape, '
+                         f'but got {x.shape} and {y.shape}.')
     x = x[jnp.triu_indices_from(x, k=1)]
     y = y[jnp.triu_indices_from(y, k=1)]
     cc = jnp.corrcoef(x, y)[0, 1]
-    return cc
+    # Constant inputs make corrcoef ill-defined (NaN); map to 0 (no linear relation).
+    return jnp.nan_to_num(cc)
 
 
 @set_module_as('braintools.metric')
@@ -342,16 +370,18 @@ def functional_connectivity(activities):
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools as braintools
-    >>> # Generate correlated time series
-    >>> t = jnp.linspace(0, 10, 100)
-    >>> sig1 = jnp.sin(t) + 0.1 * jnp.random.normal(size=100)
-    >>> sig2 = jnp.sin(t + 0.2) + 0.1 * jnp.random.normal(size=100)
-    >>> activities = jnp.column_stack([sig1, sig2])
-    >>> fc_matrix = braintools.metric.functional_connectivity(activities)
-    >>> print(f"Connectivity shape: {fc_matrix.shape}")
-    >>> print(f"Correlation: {fc_matrix[0, 1]:.3f}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> t = jnp.linspace(0, 10, 100)
+        >>> sig1 = jnp.sin(t) + 0.1 * brainstate.random.normal(size=100)
+        >>> sig2 = jnp.sin(t + 0.2) + 0.1 * brainstate.random.normal(size=100)
+        >>> activities = jnp.column_stack([sig1, sig2])
+        >>> fc_matrix = braintools.metric.functional_connectivity(activities)
+        >>> fc_matrix.shape
+        (2, 2)
 
     Notes
     -----
@@ -367,11 +397,16 @@ def functional_connectivity(activities):
     functional_connectivity_dynamics : Time-varying connectivity analysis
     matrix_correlation : Correlation between connectivity matrices
     """
+    activities = jnp.asarray(u.get_magnitude(activities))
     if activities.ndim != 2:
         raise ValueError('Only support 2d array with shape of "(num_time, num_sample)". '
                          f'But we got a array with the shape of {activities.shape}')
-    fc = jnp.corrcoef(activities.T)
-    return jnp.nan_to_num(fc)
+    n = activities.shape[1]
+    fc = jnp.nan_to_num(jnp.atleast_2d(jnp.corrcoef(activities.T)))
+    # A constant signal yields NaN correlations; ``nan_to_num`` zeros them, including
+    # the diagonal. Restore the documented unit diagonal.
+    fc = fc.at[jnp.diag_indices(n)].set(1.0)
+    return fc
 
 
 @set_module_as('braintools.metric')
@@ -425,11 +460,14 @@ def functional_connectivity_dynamics(
         raise ValueError('Only support 2d array with shape of "(num_time, num_sample)". '
                          f'But we got a array with the shape of {activities.shape}')
 
+    activities = jnp.asarray(u.get_magnitude(activities))
     t_len, n_sig = activities.shape
     if window_size <= 1:
         raise ValueError('window_size must be > 1.')
     if step_size <= 0:
         raise ValueError('step_size must be > 0.')
+    if n_sig < 2:
+        raise ValueError(f'Functional connectivity needs at least 2 signals, but got {n_sig}.')
 
     # Determine window start indices
     if t_len < window_size:
@@ -534,14 +572,9 @@ def weighted_correlation(
     >>> print(f"Reliability-weighted: {corr_reliable:.3f}")
     """
 
-    def _weighted_mean(x, w):
-        """Weighted Mean"""
-        return jnp.sum(x * w) / jnp.sum(w)
-
-    def _weighted_cov(x, y, w):
-        """Weighted Covariance"""
-        return jnp.sum(w * (x - _weighted_mean(x, w)) * (y - _weighted_mean(y, w))) / jnp.sum(w)
-
+    x = jnp.asarray(u.get_magnitude(x))
+    y = jnp.asarray(u.get_magnitude(y))
+    w = jnp.asarray(u.get_magnitude(w))
     if x.ndim != 1:
         raise ValueError(f'Only support 1d array, but we got a array '
                          f'with the shape of {x.shape}')
@@ -551,4 +584,21 @@ def weighted_correlation(
     if w.ndim != 1:
         raise ValueError(f'Only support 1d array, but we got a array '
                          f'with the shape of {w.shape}')
-    return _weighted_cov(x, y, w) / jnp.sqrt(_weighted_cov(x, x, w) * _weighted_cov(y, y, w))
+    if not (x.shape == y.shape == w.shape):
+        raise ValueError(f'`x`, `y` and `w` must have the same length, '
+                         f'but got {x.shape}, {y.shape} and {w.shape}.')
+
+    # Guard against all-zero weights (0/0) without evaluating the bad branch.
+    w_sum = jnp.sum(w)
+    safe_w_sum = jnp.where(w_sum == 0., 1., w_sum)
+
+    def _wmean(a):
+        return jnp.sum(a * w) / safe_w_sum
+
+    def _wcov(a, b):
+        return jnp.sum(w * (a - _wmean(a)) * (b - _wmean(b))) / safe_w_sum
+
+    denom = jnp.sqrt(_wcov(x, x) * _wcov(y, y))
+    safe_denom = jnp.where(denom == 0., 1., denom)
+    corr = jnp.where(denom == 0., 0., _wcov(x, y) / safe_denom)
+    return jnp.clip(corr, -1.0, 1.0)

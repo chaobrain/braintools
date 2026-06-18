@@ -139,10 +139,25 @@ Continuous-valued error metrics for fitting neural or behavioral signals.
    l1_loss
    l2_loss
    l2_norm
+   safe_norm
    huber_loss
    log_cosh
    cosine_similarity
    cosine_distance
+
+
+Pairwise Metrics
+----------------
+
+Pairwise distance and similarity matrices between sets of samples.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   pairwise_cosine_similarity
+   pairwise_cosine_distance
 
 
 Smoothing Losses

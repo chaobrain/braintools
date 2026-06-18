@@ -41,6 +41,7 @@ Usage with a batch of data and a mask to indicate valid items.
 0.497
 """
 
+import functools
 from typing import Callable, Optional
 
 import brainstate
@@ -53,6 +54,24 @@ from braintools._misc import set_module_as
 __all__ = [
     'ranking_softmax_loss',
 ]
+
+
+def _is_mean_reduce(reduce_fn) -> bool:
+    """Robustly detect a mean reduction.
+
+    The empty-mask NaN guard only applies to *mean* reductions. Detecting this
+    with a plain identity check (``reduce_fn is jnp.mean``) is fragile: it fails
+    for aliases, ``functools.partial`` wrappers, and the ``reduction='mean'``
+    string path. We therefore match on the callable's name (covering
+    ``jnp.mean`` and any ``functools.partial`` of it) instead.
+    """
+    fn = reduce_fn
+    # Unwrap functools.partial layers.
+    while isinstance(fn, functools.partial):
+        fn = fn.func
+    if fn is jnp.mean:
+        return True
+    return getattr(fn, "__name__", None) == "mean"
 
 
 def _safe_reduce(
@@ -124,7 +143,7 @@ def _safe_reduce(
     # Reduce values if there is a reduce_fn, otherwise keep the values as-is.
     output = reduce_fn(a, where=where) if reduce_fn is not None else a
 
-    if reduce_fn is jnp.mean:
+    if reduce_fn is not None and _is_mean_reduce(reduce_fn):
         # For mean reduction, we have to check whether the input contains any NaN
         # values, to ensure that masked mean reduction does not hide them (see
         # below).
@@ -148,6 +167,13 @@ def _safe_reduce(
     return output
 
 
+_REDUCTION_TO_FN = {
+    'mean': jnp.mean,
+    'sum': jnp.sum,
+    'none': None,
+}
+
+
 @set_module_as('braintools.metric')
 def ranking_softmax_loss(
     logits: brainstate.typing.ArrayLike,
@@ -155,7 +181,8 @@ def ranking_softmax_loss(
     *,
     where: Optional[brainstate.typing.ArrayLike] = None,
     weights: Optional[brainstate.typing.ArrayLike] = None,
-    reduce_fn: Optional[Callable[..., brainstate.typing.ArrayLike]] = jnp.mean
+    reduction: Optional[str] = None,
+    reduce_fn: Optional[Callable[..., brainstate.typing.ArrayLike]] = jnp.mean,
 ) -> brainstate.typing.ArrayLike:
     r"""Compute ranking softmax loss for learning-to-rank applications.
 
@@ -164,15 +191,20 @@ def ranking_softmax_loss(
     is particularly effective for information retrieval, recommendation systems,
     and other ranking tasks where the goal is to prioritize relevant items.
 
-    The loss is computed as the negative log-likelihood of the softmax distribution
-    over items, weighted by their relevance labels:
+    The loss is the negative sum of the per-item ``log_softmax`` over the
+    scores, each weighted by its **raw relevance label** (the Rax / softmax-loss
+    convention):
 
     .. math::
 
         \ell(s, y) = -\sum_{i=1}^{n} y_i \log \frac{\exp(s_i)}{\sum_{j=1}^{n} \exp(s_j)}
 
     where :math:`s_i` are the logit scores, :math:`y_i` are the relevance labels,
-    and :math:`n` is the number of items in the list.
+    and :math:`n` is the number of items in the list. Note that the labels
+    :math:`y_i` enter as plain multiplicative coefficients on
+    :math:`\log\mathrm{softmax}(s)_i`; they are **not** normalized into a
+    probability distribution (this is the softmax-loss convention, not ListNet,
+    which would first apply a softmax over the labels).
 
     Parameters
     ----------
@@ -183,7 +215,9 @@ def ranking_softmax_loss(
     labels : brainstate.typing.ArrayLike
         Ground truth relevance labels with shape ``(..., list_size)``.
         Typically non-negative values where higher values indicate greater
-        relevance. Labels are automatically normalized by the softmax operation.
+        relevance. These are used as **raw multiplicative weights** on the
+        per-item ``log_softmax`` of the logits; they are **not** normalized
+        into a probability distribution.
     where : brainstate.typing.ArrayLike, optional
         Boolean mask with shape ``(..., list_size)`` indicating valid items.
         Items where ``where`` is False are excluded from loss computation.
@@ -192,20 +226,31 @@ def ranking_softmax_loss(
         Per-item weights with shape ``(..., list_size)`` for emphasizing
         certain items in the loss calculation. Applied to labels before
         computing the softmax cross-entropy.
+    reduction : str, optional
+        How to reduce the per-list losses across the leading (batch) dimensions.
+        One of ``'none'``, ``'mean'`` or ``'sum'``. When provided, this takes
+        precedence over ``reduce_fn``. Lists in which every item is masked out
+        (empty ``where`` row) contribute 0 and, for ``'mean'``, are excluded
+        from the average. If ``None`` (default), the legacy ``reduce_fn``
+        argument is used instead.
     reduce_fn : callable, optional
-        Function to reduce loss values across batch dimensions. Common choices:
-        
-        - ``jax.numpy.mean`` (default): Average loss across batches
-        - ``jax.numpy.sum``: Sum loss across batches  
-        - ``None``: Return unreduced per-batch losses
+        Legacy reduction callable kept for backward compatibility. Used only
+        when ``reduction`` is ``None``. Common choices:
+
+        - ``jax.numpy.mean`` (default): Average loss across lists
+        - ``jax.numpy.sum``: Sum loss across lists
+        - ``None``: Return unreduced per-list losses
+
+        Prefer the ``reduction`` string for new code.
 
     Returns
     -------
     brainstate.typing.ArrayLike
-        Ranking softmax loss. Shape depends on ``reduce_fn``:
-        
-        - If ``reduce_fn`` is not None: scalar loss value
-        - If ``reduce_fn`` is None: array with shape ``(batch_dims,)``
+        Ranking softmax loss. Shape depends on the requested reduction:
+
+        - ``'mean'``/``'sum'`` (or a non-None ``reduce_fn``): scalar loss value
+        - ``'none'`` (or ``reduce_fn=None``): array with shape equal to all the
+          leading (batch) dimensions of ``logits``, i.e. ``logits.shape[:-1]``
 
     Notes
     -----
@@ -251,17 +296,28 @@ def ranking_softmax_loss(
     >>> loss = braintools.metric.ranking_softmax_loss(logits[0], labels[0], weights=weights)
     >>> print(f"Weighted loss: {loss:.4f}")
 
-    Unreduced losses for analysis:
+    Unreduced losses for analysis (legacy ``reduce_fn`` API):
 
     >>> batch_losses = braintools.metric.ranking_softmax_loss(
     ...     logits, labels, where=where, reduce_fn=None
     ... )
     >>> print(f"Individual losses: {batch_losses}")
 
+    Using the ``reduction`` string API (preferred):
+
+    >>> per_list = braintools.metric.ranking_softmax_loss(
+    ...     logits, labels, reduction='none'
+    ... )
+    >>> total = braintools.metric.ranking_softmax_loss(
+    ...     logits, labels, reduction='sum'
+    ... )
+    >>> print(jnp.allclose(jnp.sum(per_list), total))
+    True
+
     See Also
     --------
     jax.nn.log_softmax : Underlying log-softmax computation
-    jax.nn.softmax_cross_entropy : Related cross-entropy function
+    braintools.metric.softmax_cross_entropy : Related cross-entropy function
     braintools.metric.sigmoid_binary_cross_entropy : Alternative for binary relevance
 
     References
@@ -272,8 +328,27 @@ def ranking_softmax_loss(
            approach." Proceedings of the 24th international conference on Machine 
            learning. 2007.
     """
+    # Coerce inputs to arrays so Python lists/scalars are accepted (e.g.
+    # ``labels`` given as a plain list would otherwise lack ``.astype``).
+    logits = jnp.asarray(logits)
+    labels = jnp.asarray(labels)
+    if where is not None:
+        where = jnp.asarray(where)
+    if weights is not None:
+        weights = jnp.asarray(weights)
+
     assert u.math.is_float(logits), "logits must be a float type."
     labels = labels.astype(logits.dtype)
+
+    # Resolve the requested reduction. A ``reduction`` string takes precedence
+    # over the legacy ``reduce_fn`` callable.
+    if reduction is not None:
+        if reduction not in _REDUCTION_TO_FN:
+            raise ValueError(
+                'Only support reduction of "mean", "sum" and "none", '
+                'but got "%s".' % reduction
+            )
+        reduce_fn = _REDUCTION_TO_FN[reduction]
 
     # Applies mask so that masked elements do not count towards the loss.
     if where is not None:
@@ -282,13 +357,18 @@ def ranking_softmax_loss(
 
     # Apply weights to labels.
     if weights is not None:
-        labels *= weights
+        labels = labels * weights
 
     # Scales labels and logits to match the cross entropy loss.
     logits_log_softmax = jax.nn.log_softmax(logits, axis=-1)
 
-    # Computes per-element cross entropy.
+    # Computes per-element cross entropy. Masked logits were set to ``-inf``
+    # above so their ``log_softmax`` is ``-inf``; multiplying by a zero label
+    # yields ``0 * -inf = NaN``. Explicitly zero out masked positions BEFORE
+    # the sum rather than relying solely on the ``where=`` argument.
     softmax_cross_entropy = labels * logits_log_softmax
+    if where is not None:
+        softmax_cross_entropy = jnp.where(where, softmax_cross_entropy, 0.0)
 
     # Reduces softmax cross-entropy loss.
     loss = -jnp.sum(softmax_cross_entropy, axis=-1, where=where)

@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 import brainstate
 import brainunit as u
+import jax
 import jax.numpy as jnp
 
 from braintools._misc import set_module_as
@@ -97,25 +98,31 @@ def safe_norm(x: brainstate.typing.ArrayLike,
     --------
     Basic usage with vector norms:
 
-    >>> import jax.numpy as jnp
-    >>> x = jnp.array([0.0, 0.0, 0.0])  # Zero vector
-    >>> norm = safe_norm(x, min_norm=1e-8)
-    >>> print(norm)  # Returns 1e-8 instead of 0.0
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> from braintools.metric import safe_norm
+        >>> x = jnp.array([0.0, 0.0, 0.0])  # Zero vector
+        >>> safe_norm(x, min_norm=1e-8)  # Returns 1e-8 instead of 0.0
+        Array(1.e-08, dtype=float32)
 
     Compare with regular norm:
 
-    >>> regular_norm = jnp.linalg.norm(x)
-    >>> print(regular_norm)  # Returns 0.0
-    >>> safe_result = safe_norm(x, min_norm=0.1)
-    >>> print(safe_result)  # Returns 0.1
+    .. code-block:: python
+
+        >>> jnp.linalg.norm(x)  # Returns 0.0
+        Array(0., dtype=float32)
+        >>> safe_norm(x, min_norm=0.1)  # Returns 0.1
+        Array(0.1, dtype=float32)
 
     Matrix norms with axis specification:
 
-    >>> X = jnp.array([[1.0, 2.0], [3.0, 4.0]])
-    >>> # Frobenius norm of entire matrix
-    >>> fro_norm = safe_norm(X, min_norm=1.0, ord='fro')
-    >>> # L2 norm along rows
-    >>> row_norms = safe_norm(X, min_norm=0.1, axis=1)
+    .. code-block:: python
+
+        >>> X = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        >>> # L2 norm along rows
+        >>> safe_norm(X, min_norm=0.1, axis=1)
+        Array([2.2360680, 5.       ], dtype=float32)
 
     See Also
     --------
@@ -124,6 +131,9 @@ def safe_norm(x: brainstate.typing.ArrayLike,
     """
     norm = jnp.linalg.norm(x, ord=ord, axis=axis, keepdims=True)
     x = jnp.where(norm <= min_norm, jnp.ones_like(x), x)
+    # When ``keepdims`` is False we drop the reduced axes. ``axis=None`` reduces
+    # over all axes, so squeeze with ``axis=None`` removes every singleton
+    # dimension, matching ``jax.numpy.linalg.norm``'s ``keepdims=False`` output.
     norm = jnp.squeeze(norm, axis=axis) if not keepdims else norm
     masked_norm = jnp.linalg.norm(x, ord=ord, axis=axis, keepdims=keepdims)
     return jnp.where(norm <= min_norm, min_norm, masked_norm)
@@ -156,9 +166,11 @@ def squared_error(
     predictions : brainstate.typing.ArrayLike
         Predicted values with arbitrary shape. Must be floating-point type.
     targets : brainstate.typing.ArrayLike, optional
-        Ground truth target values with shape broadcastable to ``predictions``.
-        If not provided, targets are assumed to be zeros, making this equivalent
-        to computing the squared magnitude of predictions.
+        Ground truth target values. When provided, ``targets`` must have the
+        *exact* same shape as ``predictions`` (the implementation asserts shape
+        equality and does not broadcast). If not provided, targets are assumed
+        to be zeros, making this equivalent to computing the squared magnitude
+        of predictions.
     axis : int or tuple of ints, optional
         Axis or axes along which to reduce the error. If None, no reduction
         is performed and element-wise errors are returned.
@@ -191,36 +203,48 @@ def squared_error(
 
     Mean Squared Error (MSE) is computed as ``squared_error(pred, target, reduction='mean')``.
 
+    For ``brainunit.Quantity`` inputs the result carries **squared** units
+    (e.g. ``mV`` inputs produce a ``mV ** 2`` result), since the error is
+    squared element-wise.
+
     Examples
     --------
     Basic element-wise squared error:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> predictions = jnp.array([1.0, 2.0, 3.0])
-    >>> targets = jnp.array([1.1, 1.9, 3.2])
-    >>> errors = braintools.metric.squared_error(predictions, targets)
-    >>> print(errors)  # [0.01, 0.01, 0.04]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> predictions = jnp.array([1.0, 2.0, 3.0])
+        >>> targets = jnp.array([1.1, 1.9, 3.2])
+        >>> braintools.metric.squared_error(predictions, targets)
+        Array([0.01      , 0.01      , 0.04000002], dtype=float32)
 
     Mean Squared Error:
 
-    >>> mse = braintools.metric.squared_error(predictions, targets, reduction='mean')
-    >>> print(f"MSE: {mse:.4f}")
+    .. code-block:: python
+
+        >>> braintools.metric.squared_error(predictions, targets, reduction='mean')
+        Array(0.02000001, dtype=float32)
 
     Squared error with missing targets (assuming zero targets):
 
-    >>> pred_only = jnp.array([0.5, -0.3, 0.8])
-    >>> sq_magnitude = braintools.metric.squared_error(pred_only)
-    >>> print(sq_magnitude)  # [0.25, 0.09, 0.64]
+    .. code-block:: python
+
+        >>> pred_only = jnp.array([0.5, -0.3, 0.8])
+        >>> braintools.metric.squared_error(pred_only)
+        Array([0.25      , 0.09      , 0.64000005], dtype=float32)
 
     Batch processing with axis reduction:
 
-    >>> batch_pred = jnp.array([[1.0, 2.0], [3.0, 4.0]])
-    >>> batch_targets = jnp.array([[1.1, 1.9], [2.8, 4.2]])
-    >>> # MSE per sample
-    >>> per_sample_mse = braintools.metric.squared_error(batch_pred, batch_targets,
-    ...                                          axis=1, reduction='mean')
-    >>> print(per_sample_mse)
+    .. code-block:: python
+
+        >>> batch_pred = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        >>> batch_targets = jnp.array([[1.1, 1.9], [2.8, 4.2]])
+        >>> # MSE per sample
+        >>> braintools.metric.squared_error(batch_pred, batch_targets,
+        ...                                 axis=1, reduction='mean')
+        Array([0.01      , 0.03999997], dtype=float32)
 
     See Also
     --------
@@ -272,9 +296,11 @@ def absolute_error(
     predictions : brainstate.typing.ArrayLike
         Predicted values with arbitrary shape. Must be floating-point type.
     targets : brainstate.typing.ArrayLike, optional
-        Ground truth target values with shape broadcastable to ``predictions``.
-        If not provided, targets are assumed to be zeros, making this equivalent
-        to computing the absolute magnitude of predictions.
+        Ground truth target values. When provided, ``targets`` must have the
+        *exact* same shape as ``predictions`` (the implementation asserts shape
+        equality and does not broadcast). If not provided, targets are assumed
+        to be zeros, making this equivalent to computing the absolute magnitude
+        of predictions.
     axis : int or tuple of ints, optional
         Axis or axes along which to reduce the error. If None, no reduction
         is performed unless specified by ``reduction`` parameter.
@@ -310,34 +336,31 @@ def absolute_error(
     --------
     Basic element-wise absolute error:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> predictions = jnp.array([1.0, 2.0, 3.0])
-    >>> targets = jnp.array([1.1, 1.9, 3.2])
-    >>> errors = braintools.metric.absolute_error(predictions, targets, reduction='none')
-    >>> print(errors)  # [0.1, 0.1, 0.2]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> predictions = jnp.array([1.0, 2.0, 3.0])
+        >>> targets = jnp.array([1.1, 1.9, 3.2])
+        >>> braintools.metric.absolute_error(predictions, targets, reduction='none')
+        Array([0.10000002, 0.10000002, 0.20000005], dtype=float32)
 
     Mean Absolute Error (default):
 
-    >>> mae = braintools.metric.absolute_error(predictions, targets)
-    >>> print(f"MAE: {mae:.4f}")  # MAE: 0.1333
+    .. code-block:: python
 
-    Compare robustness to outliers with squared error:
-
-    >>> # Data with outlier
-    >>> pred_outlier = jnp.array([1.0, 2.0, 10.0])  # 10.0 is outlier
-    >>> target_clean = jnp.array([1.1, 1.9, 3.0])
-    >>> mae = braintools.metric.absolute_error(pred_outlier, target_clean)
-    >>> mse = braintools.metric.squared_error(pred_outlier, target_clean, reduction='mean')
-    >>> print(f"MAE: {mae:.3f}, MSE: {mse:.3f}")  # MAE less affected by outlier
+        >>> braintools.metric.absolute_error(predictions, targets)
+        Array(0.13333337, dtype=float32)
 
     Batch processing with axis reduction:
 
-    >>> batch_pred = jnp.array([[1.0, 2.0], [3.0, 4.0]])
-    >>> batch_targets = jnp.array([[1.1, 1.9], [2.8, 4.2]])
-    >>> # MAE per sample
-    >>> per_sample_mae = braintools.metric.absolute_error(batch_pred, batch_targets, axis=1)
-    >>> print(per_sample_mae)
+    .. code-block:: python
+
+        >>> batch_pred = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        >>> batch_targets = jnp.array([[1.1, 1.9], [2.8, 4.2]])
+        >>> # MAE per sample
+        >>> braintools.metric.absolute_error(batch_pred, batch_targets, axis=1)
+        Array([0.10000002, 0.19999993], dtype=float32)
 
     See Also
     --------
@@ -382,34 +405,42 @@ class L1Loss:
     :math:`x` and :math:`y` are tensors of arbitrary shapes with a total
     of :math:`n` elements each.
 
-    The sum operation still operates over all the elements, and divides by :math:`n`.
+    The mean operation divides by the total number of elements :math:`n`.
 
     The division by :math:`n` can be avoided if one sets ``reduction = 'sum'``.
 
     Supports real-valued and complex-valued inputs.
 
-    Args:
-        reduction (str, optional): Specifies the reduction to apply to the output:
-            ``'none'`` | ``'mean'`` | ``'sum'``. ``'none'``: no reduction will be applied,
-            ``'mean'``: the sum of the output will be divided by the number of
-            elements in the output, ``'sum'``: the output will be summed. Note: :attr:`size_average`
-            and :attr:`reduce` are in the process of being deprecated, and in the meantime,
-            specifying either of those two args will override :attr:`reduction`. Default: ``'mean'``
+    Parameters
+    ----------
+    reduction : str, optional
+        Specifies the reduction to apply to the output:
+        ``'none'`` | ``'mean'`` | ``'sum'``.
 
-    Shape:
-        - Input: :math:`(*)`, where :math:`*` means any number of dimensions.
-        - Target: :math:`(*)`, same shape as the input.
-        - Output: scalar. If :attr:`reduction` is ``'none'``, then
-          :math:`(*)`, same shape as the input.
+        - ``'none'``: no reduction will be applied,
+        - ``'mean'``: the sum of the output will be divided by the number of
+          elements in the output,
+        - ``'sum'``: the output will be summed.
 
-    Examples::
+        Default: ``'mean'``.
 
-        >>> import brainstate as brainstate
-        >>> loss = nn.L1Loss()
+    Notes
+    -----
+    - Input: :math:`(*)`, where :math:`*` means any number of dimensions.
+    - Target: :math:`(*)`, same shape as the input.
+    - Output: scalar. If :attr:`reduction` is ``'none'``, then a per-sample
+      mean absolute error of shape :math:`(N,)`.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> from braintools.metric import L1Loss
+        >>> loss = L1Loss()
         >>> input = brainstate.random.randn(3, 5)
         >>> target = brainstate.random.randn(3, 5)
-        >>> output = loss(input, target)
-        >>> output.backward()
+        >>> output = loss.update(input, target)
     """
 
     def __init__(self, reduction: str = 'mean') -> None:
@@ -424,18 +455,20 @@ class L1Loss:
 @set_module_as('braintools.metric')
 def l1_loss(logits: brainstate.typing.ArrayLike,
             targets: brainstate.typing.ArrayLike,
-            reduction: str = 'sum'):
-    r"""Creates a criterion that measures the mean absolute error (MAE) between each element in
-    the logits :math:`x` and targets :math:`y`. It is useful in regression problems.
+            reduction: str = 'mean'):
+    r"""Measure the mean absolute error (MAE) between each element in the logits
+    :math:`x` and the targets :math:`y`. It is useful in regression problems.
 
-    The unreduced (i.e. with :attr:`reduction` set to ``'none'``) loss can be described as:
+    The per-sample mean absolute error (i.e. with :attr:`reduction` set to
+    ``'none'``) can be described as:
 
     .. math::
         \ell(x, y) = L = \{l_1,\dots,l_N\}^\top, \quad
-        l_n = \left| x_n - y_n \right|,
+        l_n = \frac{1}{D} \sum_{d=1}^{D} \left| x_{n,d} - y_{n,d} \right|,
 
-    where :math:`N` is the batch size. If :attr:`reduction` is not ``'none'``
-    (default ``'mean'``), then:
+    where :math:`N` is the batch size and :math:`D` is the number of features
+    per sample (i.e. the product of all non-batch dimensions). If
+    :attr:`reduction` is not ``'none'`` (default ``'mean'``), then:
 
     .. math::
         \ell(x, y) =
@@ -447,58 +480,127 @@ def l1_loss(logits: brainstate.typing.ArrayLike,
     :math:`x` and :math:`y` are tensors of arbitrary shapes with a total
     of :math:`n` elements each.
 
-    The sum operation still operates over all the elements, and divides by :math:`n`.
-
-    The division by :math:`n` can be avoided if one sets ``reduction = 'sum'``.
-
     Supports real-valued and complex-valued inputs.
 
     Parameters
     ----------
     logits : brainstate.typing.ArrayLike
-      :math:`(N, *)` where :math:`*` means, any number of additional dimensions.
+        :math:`(N, *)` where :math:`*` means any number of additional dimensions.
     targets : brainstate.typing.ArrayLike
-      :math:`(N, *)`, same shape as the input.
-    reduction : str
-      Specifies the reduction to apply to the output: ``'none'`` | ``'mean'`` | ``'sum'``.
-      Default: ``'mean'``.
-      - ``'none'``: no reduction will be applied,
-      - ``'mean'``: the sum of the output will be divided by the number of elements in the output,
-      - ``'sum'``: the output will be summed. Note: :attr:`size_average`
+        :math:`(N, *)`, same shape as ``logits``.
+    reduction : str, optional
+        Specifies the reduction to apply to the per-sample losses:
+        ``'none'`` | ``'mean'`` | ``'sum'``. Default: ``'mean'``.
+
+        - ``'none'``: no reduction will be applied; returns the per-sample MAE
+          of shape :math:`(N,)`,
+        - ``'mean'``: the per-sample losses are averaged,
+        - ``'sum'``: the per-sample losses are summed.
 
     Returns
     -------
-    output : scalar.
-      If :attr:`reduction` is ``'none'``, then :math:`(N, *)`, same shape as the input.
+    output : brainstate.typing.ArrayLike
+        Scalar if :attr:`reduction` is ``'mean'`` or ``'sum'``. If
+        :attr:`reduction` is ``'none'``, an array of shape :math:`(N,)` holding
+        the per-sample mean absolute errors.
+
+    Notes
+    -----
+    This computes a true **mean** absolute error: the absolute differences are
+    averaged over the feature axis (all non-batch dimensions) for each sample,
+    rather than summed. The previous implementation returned a per-row L1
+    *sum* (``jnp.linalg.norm(diff, ord=1, axis=1)``); this corrected version
+    divides by the number of features so the result matches the documented MAE
+    semantics. With ``reduction='mean'`` over a single feature this equals
+    ``jnp.mean(jnp.abs(logits - targets))``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> logits = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        >>> targets = jnp.array([[1.5, 2.5], [2.0, 5.0]])
+        >>> braintools.metric.l1_loss(logits, targets)
+        Array(0.75, dtype=float32)
+        >>> braintools.metric.l1_loss(logits, targets, reduction='none')
+        Array([0.5, 1. ], dtype=float32)
     """
 
     diff = (logits - targets).reshape((logits.shape[0], -1))
-    norm = jnp.linalg.norm(diff, ord=1, axis=1, keepdims=False)
-    return _reduce(outputs=norm, reduction=reduction)
+    per_sample_mae = jnp.mean(jnp.abs(diff), axis=-1)
+    return _reduce(outputs=per_sample_mae, reduction=reduction)
 
 
 @set_module_as('braintools.metric')
 def l2_loss(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
+    axis: Optional[Union[int, tuple[int, ...]]] = None,
+    reduction: str = 'none',
 ) -> brainstate.typing.ArrayLike:
-    """Calculates the L2 loss for a set of predictions.
+    r"""Calculate the L2 loss for a set of predictions.
 
-    Note: the 0.5 term is standard in "Pattern Recognition and Machine Learning"
-    by Bishop, but not "The Elements of Statistical Learning" by Tibshirani.
+    The L2 loss is half the squared error:
 
-    References:
-      [Chris Bishop, 2006](https://bit.ly/3eeP0ga)
+    .. math::
 
-    Args:
-      predictions: a vector of arbitrary shape `[...]`.
-      targets: a vector with shape broadcastable to that of `predictions`;
-        if not provided then it is assumed to be a vector of zeros.
+        \text{L2 loss} = \frac{1}{2} (y - \hat{y})^2
 
-    Returns:
-      elementwise squared differences, with same shape as `predictions`.
+    Parameters
+    ----------
+    predictions : brainstate.typing.ArrayLike
+        A vector of arbitrary shape ``[...]``.
+    targets : brainstate.typing.ArrayLike, optional
+        A vector with the same shape as ``predictions`` (shape equality is
+        asserted; no broadcasting). If not provided then it is assumed to be a
+        vector of zeros.
+    axis : int or tuple of ints, optional
+        Axis or axes along which to reduce when ``reduction`` is ``'mean'`` or
+        ``'sum'``. If None, reduction (if any) is over all elements.
+    reduction : {'none', 'mean', 'sum'}, default='none'
+        Reduction operation to apply:
+
+        - ``'none'``: return element-wise losses with the same shape as
+          ``predictions`` (backward-compatible default),
+        - ``'mean'``: return the mean of the losses,
+        - ``'sum'``: return the sum of the losses.
+
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Element-wise squared differences scaled by ``0.5`` when
+        ``reduction='none'``; otherwise the reduced value.
+
+    Notes
+    -----
+    The ``0.5`` factor is standard in "Pattern Recognition and Machine Learning"
+    by Bishop, but not in "The Elements of Statistical Learning" by Tibshirani.
+
+    For ``brainunit.Quantity`` inputs the result carries **squared** units
+    (e.g. ``mV`` inputs produce a ``mV ** 2`` result), since the error is
+    squared element-wise.
+
+    References
+    ----------
+    .. [1] Bishop, Christopher M. "Pattern recognition and machine learning."
+           Springer, 2006. https://bit.ly/3eeP0ga
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> predictions = jnp.array([1.0, 2.0, 3.0])
+        >>> targets = jnp.array([1.5, 2.5, 2.0])
+        >>> braintools.metric.l2_loss(predictions, targets)
+        Array([0.125, 0.125, 0.5  ], dtype=float32)
+        >>> braintools.metric.l2_loss(predictions, targets, reduction='mean')
+        Array(0.25, dtype=float32)
     """
-    return 0.5 * squared_error(predictions, targets)
+    return _reduce(0.5 * squared_error(predictions, targets), reduction, axis=axis)
 
 
 @set_module_as('braintools.metric')
@@ -507,16 +609,34 @@ def l2_norm(
     targets: Optional[brainstate.typing.ArrayLike] = None,
     axis: Optional[Union[int, tuple[int, ...]]] = None,
 ) -> brainstate.typing.ArrayLike:
-    """Computes the L2 norm of the difference between predictions and targets.
+    r"""Compute the L2 norm of the difference between predictions and targets.
 
-    Args:
-      predictions: a vector of arbitrary shape `[...]`.
-      targets: a vector with shape broadcastable to that of `predictions`;
-        if not provided then it is assumed to be a vector of zeros.
-      axis: the dimensions to reduce. If `None`, the loss is reduced to a scalar.
+    Parameters
+    ----------
+    predictions : brainstate.typing.ArrayLike
+        A vector of arbitrary shape ``[...]``.
+    targets : brainstate.typing.ArrayLike, optional
+        A vector with the same shape as ``predictions`` (shape equality is
+        asserted; no broadcasting). If not provided then it is assumed to be a
+        vector of zeros.
+    axis : int or tuple of ints, optional
+        The dimensions to reduce. If None, the norm is computed over the whole
+        (flattened) array and reduced to a scalar.
 
-    Returns:
-      elementwise l2 norm of the differences, with same shape as `predictions`.
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        The L2 norm of the differences along ``axis``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> predictions = jnp.array([3.0, 4.0])
+        >>> braintools.metric.l2_norm(predictions)
+        Array(5., dtype=float32)
     """
     assert u.math.is_float(predictions), 'predictions must be float.'
     if targets is not None:
@@ -530,7 +650,9 @@ def l2_norm(
 def huber_loss(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
-    delta: float = 1.
+    delta: Union[float, brainstate.typing.ArrayLike] = 1.,
+    axis: Optional[Union[int, tuple[int, ...]]] = None,
+    reduction: str = 'none',
 ) -> brainstate.typing.ArrayLike:
     r"""Compute Huber loss combining L1 and L2 properties for robust regression.
 
@@ -557,27 +679,39 @@ def huber_loss(
     targets : brainstate.typing.ArrayLike, optional
         Ground truth target values with shape broadcastable to ``predictions``.
         If not provided, targets are assumed to be zeros.
-    delta : float, default=1.0
+    delta : float or brainstate.typing.ArrayLike, default=1.0
         Threshold parameter that controls the transition between quadratic and
         linear regions. Smaller values make the loss more L1-like (robust but
         less smooth), while larger values make it more L2-like (smooth but
-        less robust).
+        less robust). May be a ``brainunit.Quantity`` whose units match those
+        of the errors (see Notes).
+    axis : int or tuple of ints, optional
+        Axis or axes along which to reduce when ``reduction`` is ``'mean'`` or
+        ``'sum'``. If None, reduction (if any) is over all elements.
+    reduction : {'none', 'mean', 'sum'}, default='none'
+        Reduction operation to apply:
+
+        - ``'none'``: return element-wise losses with the same shape as
+          ``predictions`` (backward-compatible default),
+        - ``'mean'``: return the mean of the losses,
+        - ``'sum'``: return the sum of the losses.
 
     Returns
     -------
     brainstate.typing.ArrayLike
-        Element-wise Huber losses with the same shape as ``predictions``.
+        Element-wise Huber losses with the same shape as ``predictions`` when
+        ``reduction='none'``; otherwise the reduced value.
 
     Notes
     -----
     The Huber loss has several important properties:
-    
+
     - **Robustness**: Linear growth for large errors reduces outlier sensitivity
     - **Smoothness**: Quadratic near zero ensures smooth gradients for optimization
     - **Gradient clipping**: Equivalent to clipping L2 gradients to ``[-delta, delta]``
-    
+
     The choice of ``delta`` parameter affects the balance:
-    
+
     - Small ``delta``: More robust, approaches L1 loss
     - Large ``delta``: Less robust, approaches L2 loss
     - ``delta = 1.0``: Common default providing good balance
@@ -585,40 +719,32 @@ def huber_loss(
     This loss is particularly effective for regression with outliers and in
     reinforcement learning for value function approximation.
 
+    **Units:** comparisons are performed with ``brainunit.math`` so that a
+    ``brainunit.Quantity`` ``delta`` is handled correctly. When the errors carry
+    units, ``delta`` must carry the *same* units as the errors (a dimensionless
+    ``delta`` against unit-bearing errors raises a unit-mismatch error). For
+    ``Quantity`` inputs the loss carries **squared** units in the quadratic
+    region.
+
     Examples
     --------
     Basic Huber loss computation:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> predictions = jnp.array([1.0, 2.0, 5.0])
-    >>> targets = jnp.array([1.1, 1.9, 3.0])  # Last prediction is outlier
-    >>> loss = braintools.metric.huber_loss(predictions, targets)
-    >>> print(loss)
+    .. code-block:: python
 
-    Compare different delta values:
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> predictions = jnp.array([1.0, 2.0, 5.0])
+        >>> targets = jnp.array([1.1, 1.9, 3.0])  # Last prediction is outlier
+        >>> braintools.metric.huber_loss(predictions, targets)
+        Array([0.00499997, 0.00499998, 1.5       ], dtype=float32)
 
-    >>> # Small delta (more L1-like, robust)
-    >>> loss_small = braintools.metric.huber_loss(predictions, targets, delta=0.5)
-    >>> # Large delta (more L2-like, smooth)  
-    >>> loss_large = braintools.metric.huber_loss(predictions, targets, delta=2.0)
-    >>> print(f"Small delta: {loss_small}")
-    >>> print(f"Large delta: {loss_large}")
+    Reduce to a scalar mean:
 
-    Visualize the transition regions:
+    .. code-block:: python
 
-    >>> errors = jnp.linspace(-3, 3, 100)
-    >>> # Targets of zero to compute loss vs. error magnitude
-    >>> huber_vals = braintools.metric.huber_loss(errors, jnp.zeros_like(errors), delta=1.0)
-    >>> l1_vals = braintools.metric.absolute_error(errors, jnp.zeros_like(errors), reduction='none')
-    >>> l2_vals = braintools.metric.squared_error(errors, jnp.zeros_like(errors), reduction='none')
-
-    Gradient clipping interpretation:
-
-    >>> # For small errors, gradient is proportional to error (L2-like)
-    >>> small_error = jnp.array([0.5])
-    >>> # For large errors, gradient is constant (L1-like, clipped)
-    >>> large_error = jnp.array([2.0])
+        >>> braintools.metric.huber_loss(predictions, targets, reduction='mean')
+        Array(0.50333333, dtype=float32)
 
     See Also
     --------
@@ -638,45 +764,91 @@ def huber_loss(
     errors = (predictions - targets) if (targets is not None) else predictions
     # 0.5 * err^2                  if |err| <= d
     # 0.5 * d^2 + d * (|err| - d)  if |err| > d
-    abs_errors = jnp.abs(errors)
-    quadratic = jnp.minimum(abs_errors, delta)
+    # Use ``brainunit.math`` so Quantity errors / Quantity delta compare safely.
+    abs_errors = u.math.abs(errors)
+    quadratic = u.math.minimum(abs_errors, delta)
     # Same as max(abs_x - delta, 0) but avoids potentially doubling gradient.
     linear = abs_errors - quadratic
-    return 0.5 * quadratic ** 2 + delta * linear
+    loss = 0.5 * quadratic ** 2 + delta * linear
+    return _reduce(loss, reduction, axis=axis)
 
 
 @set_module_as('braintools.metric')
 def log_cosh(
     predictions: brainstate.typing.ArrayLike,
     targets: Optional[brainstate.typing.ArrayLike] = None,
+    axis: Optional[Union[int, tuple[int, ...]]] = None,
+    reduction: str = 'none',
 ) -> brainstate.typing.ArrayLike:
-    """Calculates the log-cosh loss for a set of predictions.
+    r"""Calculate the log-cosh loss for a set of predictions.
 
-    log(cosh(x)) is approximately `(x**2) / 2` for small x and `abs(x) - log(2)`
-    for large x.  It is a twice differentiable alternative to the Huber loss.
+    ``log(cosh(x))`` is approximately ``(x ** 2) / 2`` for small ``x`` and
+    ``abs(x) - log(2)`` for large ``x``. It is a twice differentiable
+    alternative to the Huber loss.
 
-    References:
-      [Chen et al, 2019](https://openreview.net/pdf?id=rkglvsC9Ym)
+    Parameters
+    ----------
+    predictions : brainstate.typing.ArrayLike
+        A vector of arbitrary shape ``[...]``.
+    targets : brainstate.typing.ArrayLike, optional
+        A vector with the same shape as ``predictions`` (no broadcasting). If
+        not provided then it is assumed to be a vector of zeros.
+    axis : int or tuple of ints, optional
+        Axis or axes along which to reduce when ``reduction`` is ``'mean'`` or
+        ``'sum'``. If None, reduction (if any) is over all elements.
+    reduction : {'none', 'mean', 'sum'}, default='none'
+        Reduction operation to apply:
 
-    Args:
-      predictions: a vector of arbitrary shape `[...]`.
-      targets: a vector with shape broadcastable to that of `predictions`;
-        if not provided then it is assumed to be a vector of zeros.
+        - ``'none'``: return element-wise losses with the same shape as
+          ``predictions`` (backward-compatible default),
+        - ``'mean'``: return the mean of the losses,
+        - ``'sum'``: return the sum of the losses.
 
-    Returns:
-      the log-cosh loss, with same shape as `predictions`.
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        The log-cosh loss with the same shape as ``predictions`` when
+        ``reduction='none'``; otherwise the reduced value.
+
+    Notes
+    -----
+    The loss is computed with the numerically stable, gradient-safe identity
+
+    .. math::
+
+        \log(\cosh(x)) = |x| + \operatorname{softplus}(-2 |x|) - \log 2,
+
+    which avoids overflow in ``cosh``/``exp`` and yields finite gradients even
+    for very large ``|x|`` (e.g. ``|x| = 500``).
+
+    References
+    ----------
+    .. [1] Chen et al., 2019. https://openreview.net/pdf?id=rkglvsC9Ym
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> predictions = jnp.array([0.0, 1.0, -1.0])
+        >>> braintools.metric.log_cosh(predictions)
+        Array([0.        , 0.43378806, 0.43378806], dtype=float32)
     """
     assert u.math.is_float(predictions), 'predictions must be float.'
     errors = (predictions - targets) if (targets is not None) else predictions
-    # log(cosh(x)) = log((exp(x) + exp(-x))/2) = log(exp(x) + exp(-x)) - log(2)
-    return jnp.logaddexp(errors, -errors) - jnp.log(2.0).astype(errors.dtype)
+    # Numerically stable, gradient-safe form of log(cosh(x)):
+    #   log(cosh(x)) = |x| + softplus(-2|x|) - log(2)
+    abs_errors = jnp.abs(errors)
+    loss = abs_errors + jax.nn.softplus(-2.0 * abs_errors) - jnp.log(2.0).astype(errors.dtype)
+    return _reduce(loss, reduction, axis=axis)
 
 
 @set_module_as('braintools.metric')
 def cosine_similarity(
     predictions: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike,
-    epsilon: float = 0.,
+    epsilon: float = 1e-8,
 ) -> brainstate.typing.ArrayLike:
     r"""Compute cosine similarity between predicted and target vectors.
 
@@ -703,10 +875,13 @@ def cosine_similarity(
     targets : brainstate.typing.ArrayLike
         Ground truth target vectors with shape ``(..., dim)`` matching the
         shape of ``predictions``. Must be floating-point type.
-    epsilon : float, default=0.0
-        Small value added to denominators to prevent division by zero when
-        computing norms. This provides numerical stability for zero or
-        near-zero vectors.
+    epsilon : float, default=1e-8
+        Minimum norm used as a floor in the denominator to prevent division by
+        zero when computing norms (via :func:`safe_norm`). This provides
+        numerical stability for zero or near-zero vectors and keeps both the
+        value and the gradient finite for zero-vector inputs. The default of
+        ``1e-8`` (rather than ``0``) ensures the zero-vector safety actually
+        takes effect.
 
     Returns
     -------
@@ -732,41 +907,40 @@ def cosine_similarity(
     - **Clustering**: Measuring vector similarity in high dimensions
 
     The function handles zero vectors gracefully using the ``epsilon`` parameter
-    to avoid division by zero errors.
+    to floor the denominator, which keeps both the value and the gradient finite
+    for zero-vector inputs.
 
     Examples
     --------
     Basic cosine similarity:
 
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Two 3D vectors
-    >>> pred = jnp.array([1.0, 2.0, 3.0])
-    >>> target = jnp.array([2.0, 4.0, 6.0])  # Same direction, different magnitude
-    >>> similarity = braintools.metric.cosine_similarity(pred, target)
-    >>> print(f"Similarity: {similarity:.4f}")  # Should be close to 1.0
+    .. code-block:: python
 
-    Batch computation:
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Two 3D vectors, same direction, different magnitude
+        >>> pred = jnp.array([1.0, 2.0, 3.0])
+        >>> target = jnp.array([2.0, 4.0, 6.0])
+        >>> braintools.metric.cosine_similarity(pred, target)
+        Array(1., dtype=float32)
 
-    >>> # Batch of vector pairs
-    >>> pred_batch = jnp.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
-    >>> target_batch = jnp.array([[0.0, 1.0], [1.0, 0.0], [1.0, -1.0]])
-    >>> similarities = braintools.metric.cosine_similarity(pred_batch, target_batch)
-    >>> print(similarities)  # [0.0, 0.0, 0.0] (all orthogonal pairs)
+    Batch computation (all orthogonal pairs):
 
-    Handling zero vectors:
+    .. code-block:: python
 
-    >>> zero_vec = jnp.array([0.0, 0.0, 0.0])
-    >>> normal_vec = jnp.array([1.0, 2.0, 3.0])
-    >>> # Without epsilon, might cause numerical issues
-    >>> sim_safe = braintools.metric.cosine_similarity(zero_vec, normal_vec, epsilon=1e-8)
+        >>> pred_batch = jnp.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+        >>> target_batch = jnp.array([[0.0, 1.0], [1.0, 0.0], [1.0, -1.0]])
+        >>> braintools.metric.cosine_similarity(pred_batch, target_batch)
+        Array([0., 0., 0.], dtype=float32)
 
-    Measuring text similarity (conceptual):
+    Handling zero vectors (finite result):
 
-    >>> # Document embeddings (simplified)
-    >>> doc1_embedding = jnp.array([0.8, 0.1, 0.3, 0.2])
-    >>> doc2_embedding = jnp.array([0.7, 0.2, 0.4, 0.1])  
-    >>> text_similarity = braintools.metric.cosine_similarity(doc1_embedding, doc2_embedding)
+    .. code-block:: python
+
+        >>> zero_vec = jnp.array([0.0, 0.0, 0.0])
+        >>> normal_vec = jnp.array([1.0, 2.0, 3.0])
+        >>> braintools.metric.cosine_similarity(zero_vec, normal_vec)
+        Array(0., dtype=float32)
 
     See Also
     --------
@@ -798,23 +972,44 @@ def cosine_similarity(
 def cosine_distance(
     predictions: brainstate.typing.ArrayLike,
     targets: brainstate.typing.ArrayLike,
-    epsilon: float = 0.,
+    epsilon: float = 1e-8,
 ) -> brainstate.typing.ArrayLike:
-    r"""Computes the cosine distance between targets and predictions.
+    r"""Compute the cosine distance between targets and predictions.
 
     The cosine **distance**, implemented here, measures the **dissimilarity**
-    of two vectors as the opposite of cosine **similarity**: `1 - cos(\theta)`.
+    of two vectors as the opposite of cosine **similarity**: :math:`1 - \cos(\theta)`.
 
-    References:
-      [Wikipedia, 2021](https://en.wikipedia.org/wiki/Cosine_similarity)
+    Parameters
+    ----------
+    predictions : brainstate.typing.ArrayLike
+        The predicted vectors, with shape ``[..., dim]``.
+    targets : brainstate.typing.ArrayLike
+        Ground truth target vectors, with shape ``[..., dim]``.
+    epsilon : float, default=1e-8
+        Minimum norm used as a floor in the denominator of the cosine
+        similarity. The default of ``1e-8`` (rather than ``0``) ensures
+        zero-vector safety actually takes effect.
 
-    Args:
-      predictions: The predicted vectors, with shape `[..., dim]`.
-      targets: Ground truth target vectors, with shape `[..., dim]`.
-      epsilon: minimum norm for terms in the denominator of the cosine similarity.
+    Returns
+    -------
+    brainstate.typing.ArrayLike
+        Cosine distances, with shape ``[...]``.
 
-    Returns:
-      cosine distances, with shape `[...]`.
+    References
+    ----------
+    .. [1] "Cosine similarity." Wikipedia, The Free Encyclopedia.
+           https://en.wikipedia.org/wiki/Cosine_similarity
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> pred = jnp.array([1.0, 0.0])
+        >>> target = jnp.array([0.0, 1.0])
+        >>> braintools.metric.cosine_distance(pred, target)
+        Array(1., dtype=float32)
     """
     assert u.math.is_float(predictions), 'predictions must be float.'
     assert u.math.is_float(targets), 'targets must be float.'
