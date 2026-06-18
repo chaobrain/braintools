@@ -178,6 +178,7 @@ class IterableDataset(Dataset):
         self.iterable = iterable
         self._length = length
         self._cache: List[Any] = []
+        self._iterator: Optional[Iterator] = None
 
     def __len__(self) -> int:
         if self._length is not None:
@@ -188,11 +189,17 @@ class IterableDataset(Dataset):
         return iter(self.iterable)
 
     def __getitem__(self, index: int) -> Any:
-        # Cache items for random access
+        if index < 0:
+            raise IndexError("negative indices are not supported by IterableDataset")
+        # Cache items for random access. A single persistent iterator is
+        # advanced as needed -- previously a fresh ``iter(self.iterable)`` was
+        # created on every call, which for any re-iterable input returned the
+        # first element forever.
+        if self._iterator is None:
+            self._iterator = iter(self.iterable)
         while len(self._cache) <= index:
             try:
-                item = next(iter(self.iterable))
-                self._cache.append(item)
+                self._cache.append(next(self._iterator))
             except StopIteration:
                 raise IndexError(f"Index {index} out of range")
         return self._cache[index]
@@ -580,10 +587,30 @@ class DataLoader:
         self._epoch = 0
 
     def __iter__(self) -> Iterator[Any]:
-        """Iterate over batches."""
-        # Reset random sampler if shuffling
-        if hasattr(self.batch_sampler.sampler, 'reset'):
-            self.batch_sampler.sampler.reset()
+        """Iterate over batches.
+
+        Each epoch produces a fresh shuffle that depends on the current epoch
+        counter, so successive passes reshuffle while remaining reproducible for
+        a given ``(seed, epoch)`` pair. The counter advances after the ordering
+        for this epoch is fixed (before the first batch is yielded) so that even
+        partially-consumed iterators still advance the epoch.
+        """
+        sampler = self.batch_sampler.sampler
+        epoch = self._epoch
+
+        # Vary the ordering per epoch. Epoch-aware samplers (e.g. the
+        # distributed sampler) take the epoch directly; plain random samplers
+        # are re-seeded with an epoch offset so the permutation differs each
+        # epoch yet stays reproducible from a fresh loader with the same seed.
+        if hasattr(sampler, 'set_epoch'):
+            sampler.set_epoch(epoch)
+        elif hasattr(sampler, 'reset'):
+            if self.seed is not None:
+                sampler.reset(seed=self.seed + epoch)
+            else:
+                sampler.reset()
+
+        self._epoch = epoch + 1
 
         for batch_indices in self.batch_sampler:
             # Get samples

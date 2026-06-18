@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import lax
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
 
@@ -396,7 +397,7 @@ class ShardedDataParallelStrategy(Strategy):
         self._data_axis = data_axis
 
         if mesh is None:
-            devices = jax.devices()
+            devices = np.asarray(jax.devices())
             self._mesh = Mesh(devices, (data_axis,))
         else:
             self._mesh = mesh
@@ -505,12 +506,16 @@ class FullyShardedDataParallelStrategy(Strategy):
         self._model_axis = model_axis
 
         if mesh is None:
-            devices = jax.devices()
+            # ``jax.devices()`` returns a plain list; reshaping for a 2D mesh
+            # requires a NumPy array. (T-15)
+            devices = np.asarray(jax.devices())
             if model_axis:
                 # 2D mesh for data + model parallelism
-                n_devices = len(devices)
+                n_devices = devices.size
                 # Try to create a balanced mesh
                 for dp in [n_devices, n_devices // 2, n_devices // 4]:
+                    if dp < 1:
+                        continue
                     mp = n_devices // dp
                     if dp * mp == n_devices:
                         break

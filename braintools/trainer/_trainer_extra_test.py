@@ -485,7 +485,7 @@ class TestCallbacksIntegration:
                 return {'val_loss': loss}
 
         early = braintools.trainer.EarlyStopping(
-            monitor='val_val_loss', patience=1, mode='min', strict=False
+            monitor='val_loss', patience=1, mode='min', strict=False
         )
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = Trainer(

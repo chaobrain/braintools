@@ -45,6 +45,22 @@ __all__ = [
 ]
 
 
+def _format_metrics(metrics: Dict[str, Any]) -> str:
+    """Render a metrics dict as ``k: v`` pairs, robust to non-float values.
+
+    Floats (including 0-d arrays coercible to float) use 4 decimals; anything
+    else falls back to ``str`` so a stray array/tracer never raises a
+    ``ValueError`` from the format spec.
+    """
+    parts = []
+    for key, value in metrics.items():
+        try:
+            parts.append(f"{key}: {float(value):.4f}")
+        except (TypeError, ValueError):
+            parts.append(f"{key}: {value}")
+    return ", ".join(parts)
+
+
 class Callback(ABC):
     """
     Base class for callbacks.
@@ -355,6 +371,66 @@ class CallbackList:
     def on_validation_batch_end(self, trainer, module, outputs, batch, batch_idx):
         self._call_hook('on_validation_batch_end', trainer, module, outputs, batch, batch_idx)
 
+    def on_train_start(self, trainer, module):
+        self._call_hook('on_train_start', trainer, module)
+
+    def on_train_end(self, trainer, module):
+        self._call_hook('on_train_end', trainer, module)
+
+    def on_validation_start(self, trainer, module):
+        self._call_hook('on_validation_start', trainer, module)
+
+    def on_validation_end(self, trainer, module):
+        self._call_hook('on_validation_end', trainer, module)
+
+    def on_test_start(self, trainer, module):
+        self._call_hook('on_test_start', trainer, module)
+
+    def on_test_end(self, trainer, module):
+        self._call_hook('on_test_end', trainer, module)
+
+    def on_test_epoch_start(self, trainer, module):
+        self._call_hook('on_test_epoch_start', trainer, module)
+
+    def on_test_epoch_end(self, trainer, module):
+        self._call_hook('on_test_epoch_end', trainer, module)
+
+    def on_test_batch_start(self, trainer, module, batch, batch_idx):
+        self._call_hook('on_test_batch_start', trainer, module, batch, batch_idx)
+
+    def on_test_batch_end(self, trainer, module, outputs, batch, batch_idx):
+        self._call_hook('on_test_batch_end', trainer, module, outputs, batch, batch_idx)
+
+    def on_predict_start(self, trainer, module):
+        self._call_hook('on_predict_start', trainer, module)
+
+    def on_predict_end(self, trainer, module):
+        self._call_hook('on_predict_end', trainer, module)
+
+    def on_predict_batch_start(self, trainer, module, batch, batch_idx):
+        self._call_hook('on_predict_batch_start', trainer, module, batch, batch_idx)
+
+    def on_predict_batch_end(self, trainer, module, outputs, batch, batch_idx):
+        self._call_hook('on_predict_batch_end', trainer, module, outputs, batch, batch_idx)
+
+    def on_before_optimizer_step(self, trainer, module, optimizer):
+        self._call_hook('on_before_optimizer_step', trainer, module, optimizer)
+
+    def on_after_optimizer_step(self, trainer, module, optimizer):
+        self._call_hook('on_after_optimizer_step', trainer, module, optimizer)
+
+    def on_before_backward(self, trainer, module, loss):
+        self._call_hook('on_before_backward', trainer, module, loss)
+
+    def on_after_backward(self, trainer, module):
+        self._call_hook('on_after_backward', trainer, module)
+
+    def on_save_checkpoint(self, trainer, module, checkpoint):
+        self._call_hook('on_save_checkpoint', trainer, module, checkpoint)
+
+    def on_load_checkpoint(self, trainer, module, checkpoint):
+        self._call_hook('on_load_checkpoint', trainer, module, checkpoint)
+
 
 class ModelCheckpoint(Callback):
     """
@@ -431,6 +507,7 @@ class ModelCheckpoint(Callback):
         self.best_model_path: Optional[str] = None
         self.best_k_models: Dict[str, float] = {}  # path -> score
         self._last_global_step_saved = -1
+        self._last_saved_epoch = -1
 
         # Create directory
         Path(self.dirpath).mkdir(parents=True, exist_ok=True)
@@ -449,12 +526,18 @@ class ModelCheckpoint(Callback):
     ) -> str:
         """Format the checkpoint filename."""
         format_dict = {'epoch': epoch, 'step': step}
-        format_dict.update(metrics)
+        # Coerce metric values to plain floats so numeric format specs such as
+        # ``{val_loss:.4f}`` work even when the value is a 0-d JAX/numpy array.
+        for key, value in metrics.items():
+            try:
+                format_dict[key] = float(value)
+            except (TypeError, ValueError):
+                format_dict[key] = value
 
         try:
             filename = self.filename.format(**format_dict)
-        except KeyError:
-            # Fall back to simple format if metrics not available
+        except (KeyError, ValueError, TypeError, IndexError):
+            # Fall back to a simple format if a field is missing or unformattable.
             filename = f'checkpoint-epoch={epoch:02d}-step={step}'
 
         return filename
@@ -516,39 +599,68 @@ class ModelCheckpoint(Callback):
             self._remove_checkpoint(worst_path)
             del self.best_k_models[worst_path]
 
-    def on_train_epoch_end(self, trainer: Any, module: Any):
-        """Check if we should save a checkpoint at epoch end."""
-        if not self.save_on_train_epoch_end:
-            return
+    @staticmethod
+    def _trainer_metrics(trainer: Any) -> Dict[str, Any]:
+        """Fetch the metrics dict the trainer exposes (callback > logged)."""
+        if hasattr(trainer, 'callback_metrics'):
+            return trainer.callback_metrics
+        if hasattr(trainer, 'logged_metrics'):
+            return trainer.logged_metrics
+        return {}
 
+    def _checkpoint_epoch(self, trainer: Any, module: Any):
+        """Perform the per-epoch (metric-based) checkpoint, deduped per epoch.
+
+        Used by both ``on_validation_epoch_end`` (preferred, so the monitored
+        validation metric is available) and ``on_train_epoch_end`` (when no
+        validation runs).
+        """
         epoch = module.current_epoch
+        if epoch == self._last_saved_epoch:
+            return
         if epoch % self.every_n_epochs != 0:
             return
 
-        # Get monitored metric
-        metrics = {}
-        if hasattr(trainer, 'callback_metrics'):
-            metrics = trainer.callback_metrics
-        elif hasattr(trainer, 'logged_metrics'):
-            metrics = trainer.logged_metrics
-
+        metrics = self._trainer_metrics(trainer)
         current_score = metrics.get(self.monitor)
 
-        # Build filepath
         filename = self._format_checkpoint_name(epoch, module.global_step, metrics)
         filepath = os.path.join(self.dirpath, f'{filename}.ckpt')
 
-        # Check if this is the best model
         if current_score is not None:
             if self.best_score is None or self._is_better(current_score, self.best_score):
                 self.best_score = current_score
                 self.best_model_path = filepath
-
             self._update_best_k(current_score, filepath)
             self._save_checkpoint(trainer, module, filepath)
+            self._last_saved_epoch = epoch
         elif self.save_top_k == -1 or self.save_top_k > 0:
             # No metric to monitor, just save
             self._save_checkpoint(trainer, module, filepath)
+            self._last_saved_epoch = epoch
+
+    def on_validation_epoch_end(self, trainer: Any, module: Any):
+        """Checkpoint at validation end, where the monitored metric exists.
+
+        This is the correct point to evaluate a validation metric such as
+        ``monitor='val_loss'`` — running validation populates it just before
+        this hook fires (unlike ``on_train_epoch_end``, which runs first).
+        """
+        self._checkpoint_epoch(trainer, module)
+
+    def on_train_epoch_end(self, trainer: Any, module: Any):
+        """Check if we should save a checkpoint at train-epoch end.
+
+        When validation runs this epoch we defer to ``on_validation_epoch_end``
+        so the monitored validation metric is available. When there is no
+        validation we save here (subject to ``save_on_train_epoch_end``).
+        """
+        if not self.save_on_train_epoch_end:
+            return
+        # Defer to validation end if validation will produce the metric.
+        if getattr(trainer, 'val_dataloaders', None) is not None:
+            return
+        self._checkpoint_epoch(trainer, module)
 
     def on_train_batch_end(
         self,
@@ -660,15 +772,18 @@ class EarlyStopping(Callback):
         self.stopped_epoch: int = 0
         self._should_stop: bool = False
 
-        # Adjust min_delta sign based on mode
-        if self.mode == 'min':
-            self.min_delta *= -1
-
     def _is_improvement(self, current: float, best: float) -> bool:
-        """Check if current is an improvement over best."""
+        """Check if ``current`` improves on ``best`` by at least ``min_delta``.
+
+        ``min_delta`` is always a non-negative magnitude. In ``'min'`` mode an
+        improvement requires ``current`` to be *lower* than ``best`` by at
+        least ``min_delta``; in ``'max'`` mode it must be *higher* by at least
+        ``min_delta``.
+        """
+        delta = abs(self.min_delta)
         if self.mode == 'min':
-            return current < best - self.min_delta
-        return current > best + self.min_delta
+            return current < best - delta
+        return current > best + delta
 
     def on_validation_epoch_end(self, trainer: Any, module: Any):
         """Check if training should stop."""
@@ -769,19 +884,35 @@ class LearningRateMonitor(Callback):
         self._lr_history: List[Dict[str, float]] = []
 
     def _get_learning_rates(self, trainer: Any) -> Dict[str, float]:
-        """Extract learning rates from optimizers."""
+        """Extract the current learning rate from each optimizer.
+
+        braintools optimizers expose the resolved scalar as ``current_lr``;
+        ``opt.lr`` is an ``LRScheduler`` object (not a number), so it is only
+        used as a fallback via its ``.value`` attribute or a zero-arg call.
+        """
         lrs = {}
-        if hasattr(trainer, 'optimizers'):
-            for i, opt in enumerate(trainer.optimizers):
-                if hasattr(opt, 'lr'):
-                    lr = opt.lr
-                    if hasattr(lr, 'value'):
-                        lr = lr.value
-                    elif callable(lr):
-                        lr = lr()
+        for i, opt in enumerate(getattr(trainer, 'optimizers', None) or []):
+            lr = None
+            if hasattr(opt, 'current_lr'):
+                lr = opt.current_lr
+            elif hasattr(opt, 'lr'):
+                lr_obj = opt.lr
+                if hasattr(lr_obj, 'value'):
+                    lr = lr_obj.value
+                elif callable(lr_obj):
+                    try:
+                        lr = lr_obj()
+                    except TypeError:
+                        lr = None
+                else:
+                    lr = lr_obj
+            elif hasattr(opt, 'learning_rate'):
+                lr = opt.learning_rate
+            if lr is not None:
+                try:
                     lrs[f'lr-opt{i}'] = float(lr)
-                elif hasattr(opt, 'learning_rate'):
-                    lrs[f'lr-opt{i}'] = float(opt.learning_rate)
+                except (TypeError, ValueError):
+                    pass
         return lrs
 
     def on_train_batch_start(
@@ -1187,8 +1318,7 @@ class PrintCallback(Callback):
     ):
         if batch_idx % self.print_freq == 0:
             metrics = module._get_prog_bar_metrics()
-            metrics_str = ", ".join(f"{k}: {v:.4f}" for k, v in metrics.items())
-            print(f"  Step {batch_idx}: {metrics_str}")
+            print(f"  Step {batch_idx}: {_format_metrics(metrics)}")
 
     def on_train_epoch_end(self, trainer: Any, module: Any):
         print(f"Epoch {module.current_epoch} completed.")
@@ -1197,5 +1327,4 @@ class PrintCallback(Callback):
         metrics = {}
         if hasattr(trainer, 'callback_metrics'):
             metrics = trainer.callback_metrics
-        metrics_str = ", ".join(f"{k}: {v:.4f}" for k, v in metrics.items())
-        print(f"  Validation: {metrics_str}")
+        print(f"  Validation: {_format_metrics(metrics)}")

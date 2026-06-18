@@ -373,3 +373,44 @@ T-19 (deterministic/benchmark), T-21 (multiple optimizers), T-22 (distributed st
 
 All fixes follow TDD: a failing test reproduces each behavioral bug first, then the fix makes it
 pass, with the full suite kept green.
+
+---
+
+## Resolution (2026-06-18)
+
+All 33 findings were addressed. Summary of what changed:
+
+- **Correctness fixes (T-1…T-15, T-20, T-23, T-24, T-25, T-27, T-28, T-30):** applied across
+  `_callbacks.py`, `_trainer.py`, `_dataloader.py`, `_loggers.py`, `_module.py`,
+  `_distributed.py`, `_checkpoint.py`, and `_progress.py`.
+  - `EarlyStopping.min_delta` now uses a positive magnitude with direction from `mode` (T-1).
+  - Validation/test metrics are prefixed via `_prefixed()`, eliminating `val_val_loss` (T-2).
+  - `ModelCheckpoint` checkpoints at validation-epoch end with per-epoch dedup (T-3).
+  - The training step does a **single** forward pass via
+    `grad(..., return_value=True, has_aux=True)`, returning concrete loss + logged metrics
+    (T-4, T-9); verified to trace once per shape.
+  - `min_epochs` now gates early stopping (T-5); checkpoint resume reads `global_step`
+    (fallback `step`) and accepts list / single / digit-keyed optimizer states (T-6, T-29).
+  - `DataLoader` reshuffles per epoch yet stays reproducible (T-7); `IterableDataset` uses a
+    single cached iterator (T-8); `CallbackList` dispatches the full hook set (T-12, T-13).
+  - `CSVLogger` honors `step=0` and rewrites the header when new columns appear (T-14);
+    FSDP/sharded meshes build from `np.asarray(jax.devices())` (T-15).
+- **Implemented:** gradient accumulation (T-17), numerically equal to a full-batch step.
+- **Implemented (real, name-based):** parameter freezing (T-16) — `freeze`/`unfreeze` record
+  parameter keys that the trainer excludes from gradients and optimizer updates.
+- **Made honest (validate + warn + document):** precision (T-18), deterministic/benchmark
+  (T-19), multiple optimizers (T-21), distributed strategies (T-22).
+- **Docs:** `print_summary` input_shape annotated (T-26); new `docs/apis/trainer.rst` added to
+  the toctree (T-31); docstrings corrected for the metric convention and partially-supported
+  parameters (T-32).
+- **Tests (T-33):** added `_trainer_audit_test.py` (end-to-end fit/validate/test/predict, all
+  behavioral fixes), `_distributed_test.py`, and `_loggers_backends_test.py` (mocked backends).
+
+**Verification:** `489 passed`. Per-file coverage (excluding `_distributed.py`, omitted by
+`pyproject.toml`): `_progress` 100%, `_checkpoint` 99%, `_dataloader` 99%, `_module` 98%,
+`_callbacks` 96%, `_loggers` 96% (was 73%), `_trainer` 93% (was 91%) — every file > 90%.
+
+> One limitation intentionally left out of scope: faithful round-tripping of the optax
+> optimizer-state pytree through msgpack serialization belongs to the `braintools.optim`
+> module, not the trainer. The trainer correctly restores epoch, `global_step`, and model
+> weights on resume.
