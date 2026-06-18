@@ -144,7 +144,7 @@ class TestVoltageFluctuation(unittest.TestCase):
         voltages = jnp.array(voltages).T
 
         sync_index = braintools.metric.voltage_fluctuation(voltages)
-        # Synchronized signals should have sync_index > 1
+        # Synchronized signals push the index toward its upper bound of 1.
         self.assertGreater(float(sync_index), 0.5)  # More relaxed threshold
 
     def test_voltage_fluctuation_asynchronous(self):
@@ -153,9 +153,9 @@ class TestVoltageFluctuation(unittest.TestCase):
         voltages = self.rng.normal(0, 1, size=(100, 10))
         sync_index = braintools.metric.voltage_fluctuation(voltages)
 
-        # Asynchronous signals should have sync_index around 1, but can vary
+        # Asynchronous signals have a small index (~1/N); it stays within [0, 1].
         self.assertGreater(float(sync_index), 0.0)
-        self.assertLess(float(sync_index), 10.0)  # Reasonable upper bound
+        self.assertLessEqual(float(sync_index), 1.0 + 1e-4)
 
     def test_voltage_fluctuation_constant(self):
         """Test voltage fluctuation for constant signals."""

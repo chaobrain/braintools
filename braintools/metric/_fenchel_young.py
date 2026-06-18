@@ -58,9 +58,11 @@ def make_fenchel_young_loss(
 
     where :math:`\theta` are the scores and :math:`y` is the target. ``max_fun``
     is exactly this conjugate :math:`\Omega^*` (NOT the regularizer
-    :math:`\Omega` itself). The loss is convex in :math:`\theta`, non-negative,
-    and minimized when the prediction matches the target. Its gradient w.r.t.
-    the scores is
+    :math:`\Omega` itself). When ``max_fun`` is a genuine convex conjugate and
+    the target :math:`y` lies in the marginal polytope :math:`\mathcal{C}`, the
+    loss is convex in :math:`\theta`, non-negative, and zero iff the prediction
+    matches the target. (These guarantees do not hold for an arbitrary
+    ``max_fun`` such as a plain ``max``.) Its gradient w.r.t. the scores is
 
     .. math::
 
@@ -144,7 +146,7 @@ def make_fenchel_young_loss(
     must return a SCALAR per core call (consistent with ``"(n)->()"``):
 
     >>> def custom_max(x):
-    ...     return logsumexp(x) + 0.1 * jnp.sum(x ** 2)  # L2-regularized soft-max
+    ...     return logsumexp(x) + 0.1 * jnp.sum(x ** 2)  # logsumexp plus a quadratic term
     >>> structured_loss = braintools.metric.make_fenchel_young_loss(max_fun=custom_max)
 
     See Also
@@ -168,9 +170,10 @@ def make_fenchel_young_loss(
         mf = lambda s: max_fun(s, *args, **kwargs)
         max_fun_last_dim = jnp.vectorize(mf, signature="(n)->()")
         max_value = max_fun_last_dim(scores)
-        # Use an explicit (non-conjugating) inner product over the last
-        # dimension. ``jnp.vdot`` conjugates its first argument, which would be
-        # wrong for complex inputs.
+        # Explicit (non-conjugating) inner product over the last dimension,
+        # matching the real-valued Fenchel-Young definition. ``jnp.vdot`` would
+        # both flatten and conjugate its first argument. Complex inputs are not
+        # specifically supported (the loss is only well-defined for real inputs).
         inner = jnp.sum(targets * scores, axis=-1)
         return max_value - inner
 

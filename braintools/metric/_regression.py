@@ -31,10 +31,12 @@ __all__ = [
     'l1_loss',
     'l2_loss',
     'l2_norm',
+    'safe_norm',
     'huber_loss',
     'log_cosh',
     'cosine_similarity',
     'cosine_distance',
+    'L1Loss',
 ]
 
 
@@ -122,7 +124,7 @@ def safe_norm(x: brainstate.typing.ArrayLike,
         >>> X = jnp.array([[1.0, 2.0], [3.0, 4.0]])
         >>> # L2 norm along rows
         >>> safe_norm(X, min_norm=0.1, axis=1)
-        Array([2.2360680, 5.       ], dtype=float32)
+        Array([2.236068, 5.      ], dtype=float32)
 
     See Also
     --------
@@ -172,8 +174,9 @@ def squared_error(
         to be zeros, making this equivalent to computing the squared magnitude
         of predictions.
     axis : int or tuple of ints, optional
-        Axis or axes along which to reduce the error. If None, no reduction
-        is performed and element-wise errors are returned.
+        Axis or axes along which to reduce when ``reduction`` is ``'mean'`` or
+        ``'sum'``. Has no effect when ``reduction='none'`` (the default), in
+        which case element-wise errors are always returned.
     reduction : {'none', 'mean', 'sum'}, default='none'
         Reduction operation to apply:
         
@@ -528,7 +531,10 @@ def l1_loss(logits: brainstate.typing.ArrayLike,
         Array([0.5, 1. ], dtype=float32)
     """
 
-    diff = (logits - targets).reshape((logits.shape[0], -1))
+    # ``atleast_1d`` lets a 0-d/scalar input be treated as a single-sample batch
+    # instead of raising ``IndexError`` on ``shape[0]``.
+    diff = jnp.atleast_1d(jnp.asarray(logits) - jnp.asarray(targets))
+    diff = diff.reshape((diff.shape[0], -1))
     per_sample_mae = jnp.mean(jnp.abs(diff), axis=-1)
     return _reduce(outputs=per_sample_mae, reduction=reduction)
 
@@ -737,7 +743,7 @@ def huber_loss(
         >>> predictions = jnp.array([1.0, 2.0, 5.0])
         >>> targets = jnp.array([1.1, 1.9, 3.0])  # Last prediction is outlier
         >>> braintools.metric.huber_loss(predictions, targets)
-        Array([0.00499997, 0.00499998, 1.5       ], dtype=float32)
+        Array([0.005, 0.005, 1.5  ], dtype=float32)
 
     Reduce to a scalar mean:
 
@@ -791,8 +797,9 @@ def log_cosh(
     predictions : brainstate.typing.ArrayLike
         A vector of arbitrary shape ``[...]``.
     targets : brainstate.typing.ArrayLike, optional
-        A vector with the same shape as ``predictions`` (no broadcasting). If
-        not provided then it is assumed to be a vector of zeros.
+        A vector with a shape broadcastable to ``predictions``. If not provided
+        then it is assumed to be a vector of zeros. Inputs must be dimensionless
+        (``log(cosh(x))`` is only defined for a dimensionless argument).
     axis : int or tuple of ints, optional
         Axis or axes along which to reduce when ``reduction`` is ``'mean'`` or
         ``'sum'``. If None, reduction (if any) is over all elements.
@@ -833,7 +840,7 @@ def log_cosh(
         >>> import braintools
         >>> predictions = jnp.array([0.0, 1.0, -1.0])
         >>> braintools.metric.log_cosh(predictions)
-        Array([0.        , 0.43378806, 0.43378806], dtype=float32)
+        Array([0.       , 0.4337808, 0.4337808], dtype=float32)
     """
     assert u.math.is_float(predictions), 'predictions must be float.'
     errors = (predictions - targets) if (targets is not None) else predictions
@@ -908,7 +915,9 @@ def cosine_similarity(
 
     The function handles zero vectors gracefully using the ``epsilon`` parameter
     to floor the denominator, which keeps both the value and the gradient finite
-    for zero-vector inputs.
+    for zero-vector inputs. Note that because each vector is normalized
+    independently, the gradient -- while finite -- can be large in magnitude for
+    near-zero inputs (it scales like ``1 / epsilon``).
 
     Examples
     --------
@@ -922,7 +931,7 @@ def cosine_similarity(
         >>> pred = jnp.array([1.0, 2.0, 3.0])
         >>> target = jnp.array([2.0, 4.0, 6.0])
         >>> braintools.metric.cosine_similarity(pred, target)
-        Array(1., dtype=float32)
+        Array(0.9999999, dtype=float32)
 
     Batch computation (all orthogonal pairs):
 

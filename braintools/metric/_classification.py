@@ -102,7 +102,7 @@ def sigmoid_binary_cross_entropy(
     >>> labels = jnp.array([1.0, 0.0, 1.0])
     >>> loss = braintools.metric.sigmoid_binary_cross_entropy(logits, labels)
     >>> print(loss)
-    [0.31326166 0.31326166 0.6931472 ]
+    [0.3132617 0.3132617 0.6931472]
 
     References
     ----------
@@ -110,7 +110,8 @@ def sigmoid_binary_cross_entropy(
            "Deep learning." MIT press, 2016.
            http://www.deeplearningbook.org/contents/prob.html
     """
-    labels = labels.astype(logits.dtype)
+    logits = jnp.asarray(logits)
+    labels = jnp.asarray(labels).astype(logits.dtype)
     log_p = jax.nn.log_sigmoid(logits)
     log_not_p = jax.nn.log_sigmoid(-logits)
     return -labels * log_p - (1. - labels) * log_not_p
@@ -192,7 +193,7 @@ def perceptron_loss(
     >>> targets = jnp.array([1, -1, 1])
     >>> loss = braintools.metric.perceptron_loss(predictions, targets)
     >>> print(loss)
-    [0.  0.  0. ]
+    [0. 0. 0.]
 
     References
     ----------
@@ -240,7 +241,7 @@ def softmax_cross_entropy(
     >>> labels = jnp.array([[1.0, 0.0, 0.0]])
     >>> loss = braintools.metric.softmax_cross_entropy(logits, labels)
     >>> print(loss)
-    [0.4170299]
+    [0.41702995]
 
     References
     ----------
@@ -288,7 +289,7 @@ def softmax_cross_entropy_with_integer_labels(
     >>> labels = jnp.array([0])  # Class 0
     >>> loss = braintools.metric.softmax_cross_entropy_with_integer_labels(logits, labels)
     >>> print(loss)
-    [0.4170299]
+    [0.41702995]
 
     Notes
     -----
@@ -363,7 +364,7 @@ def multiclass_hinge_loss(
     >>> labels = jnp.array([1, 2])  # Correct classes
     >>> loss = braintools.metric.multiclass_hinge_loss(scores, labels)
     >>> print(loss)
-    [0.  0. ]
+    [0.        0.5999999]
 
     References
     ----------
@@ -421,7 +422,7 @@ def multiclass_perceptron_loss(
     >>> labels = jnp.array([1, 2])  # Correct classes
     >>> loss = braintools.metric.multiclass_perceptron_loss(scores, labels)
     >>> print(loss)
-    [0.  0. ]
+    [0. 0.]
 
     References
     ----------
@@ -1017,6 +1018,13 @@ def sigmoid_focal_loss(
 
     The alpha parameter is typically set to the inverse class frequency for
     the positive class, e.g., alpha=0.25 when positive examples are 25% of data.
+
+    The modulating factor ``(1 - p_t) ** gamma`` has a non-finite gradient when a
+    *fractional* focusing parameter (``0 < gamma < 1``) meets a perfectly
+    classified, saturated example (``p_t -> 1``), because ``d/dx x**gamma`` is
+    unbounded at ``x = 0``. This matches the reference optax/fvcore behaviour; the
+    default ``gamma = 2.0`` (and any ``gamma >= 1``) is gradient-safe. Prefer
+    integer/``>= 1`` ``gamma`` values when differentiating through saturated logits.
 
     References
     ----------
