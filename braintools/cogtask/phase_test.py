@@ -333,3 +333,63 @@ def test_describe_lists_inputs_outputs_and_noise():
     s = p.describe()
     assert "Inputs" in s and "Outputs" in s and "Noise" in s
     assert "fixation" in s
+
+
+def test_parallel_executes_compound_child_eager():
+    # Regression: a compound child (Sequence) of a Parallel must execute its
+    # sub-phases. Previously Parallel.execute called encode_inputs directly,
+    # which is a no-op for compounds, so the whole branch was silently dropped.
+    m = ct.Feature(1, 'm')
+    n = ct.Feature(1, 'n')
+    fix = ct.Feature(1, 'fixation')
+    a = Stimulus(5 * u.ms, name='A', inputs={'m': 1.0}, outputs={'label': 0})
+    b = Stimulus(5 * u.ms, name='B', inputs={'m': 1.0}, outputs={'label': 0})
+    seq_ab = a >> b                      # compound child
+    c = Stimulus(10 * u.ms, name='C', inputs={'n': 1.0}, outputs={'label': 0})
+    par = seq_ab | c
+    task = ct.Task(
+        phases=par,
+        input_features=m + n + fix,
+        output_features=fix + ct.Feature(1, 'out'),
+        seed=0,
+    )
+    X, _, _ = task.sample_trial(0)
+    X = np.asarray(X)
+    assert X.shape[0] == 10
+    # A and B each ran for 5 ticks writing 1.0 into channel 'm' -> sum == 10.
+    np.testing.assert_allclose(X[:, 0].sum(), 10.0, atol=1e-6)
+    # C ran for all 10 ticks writing 1.0 into channel 'n'.
+    np.testing.assert_allclose(X[:, 1], 1.0, atol=1e-6)
+
+
+def test_parallel_eager_and_packed_agree_on_compound_child():
+    # The fixed (eager) and variable (packed) execution paths must produce the
+    # same input channels for a Parallel whose first child is a compound, when
+    # all durations are fully realised.
+    m = ct.Feature(1, 'm')
+    n = ct.Feature(1, 'n')
+    fix = ct.Feature(1, 'fixation')
+
+    def build(extra_phase):
+        a = Stimulus(5 * u.ms, name='A', inputs={'m': 1.0}, outputs={'label': 0})
+        b = Stimulus(5 * u.ms, name='B', inputs={'m': 1.0}, outputs={'label': 0})
+        c = Stimulus(10 * u.ms, name='C', inputs={'n': 1.0}, outputs={'label': 0})
+        phases = (a >> b) | c
+        if extra_phase is not None:
+            phases = phases >> extra_phase
+        return ct.Task(phases=phases, input_features=m + n + fix,
+                       output_features=fix + ct.Feature(1, 'out'), seed=0)
+
+    # Eager path.
+    X_eager, _, _ = build(None).sample_trial(0)
+    # Packed path: append a VariableDuration whose realised length is fixed via
+    # trial_init, forcing packed mode but the same total realised content.
+    vd = ct.VariableDuration(min_duration=2 * u.ms, max_duration=4 * u.ms,
+                             ctx_key='d', inputs={'n': 1.0}, outputs={'label': 0},
+                             name='vd')
+    packed_task = build(vd)
+    packed_task._trial_init_func = lambda ctx: ctx.update(d=4.0)
+    X_packed, _, info = packed_task.sample_trial(0)
+    # The Parallel block occupies the first 10 ticks in both; compare them.
+    np.testing.assert_allclose(np.asarray(X_eager)[:10, 0],
+                               np.asarray(X_packed)[:10, 0], atol=1e-6)

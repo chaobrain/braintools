@@ -62,6 +62,13 @@ def make_encoder(mode: str, key: str, *, feature_per_direction: int = 1, kappa=2
     """
     mode = mode.lower()
 
+    # ``scalar`` broadcasts a single value across every feature dimension, so it
+    # is agnostic to ``feature_per_direction`` — handle it up front rather than
+    # only in the K == 1 branch (otherwise scalar + K>1 fell through to the
+    # population branch and raised a misleading "Unknown mode=scalar").
+    if mode == "scalar":
+        return scalar(key)
+
     if feature_per_direction == 1:
         if mode == "von_mises":
             return von_mises(key, kappa=kappa, base_value=base_value, as_index=True, num_dirs=num_dirs)
@@ -69,8 +76,6 @@ def make_encoder(mode: str, key: str, *, feature_per_direction: int = 1, kappa=2
             return one_hot(key)
         elif mode == "circular":
             return circular(key, base_value=base_value, as_index=True, num_dirs=num_dirs)
-        elif mode == "scalar":
-            return scalar(key)
         else:
             raise ValueError(f"Unknown mode={mode}")
 

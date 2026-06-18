@@ -67,6 +67,20 @@ def test_make_encoder_population_dim_not_divisible_raises():
         enc(ctx, f)
 
 
+@pytest.mark.parametrize("k", [1, 3, 5])
+def test_make_encoder_scalar_is_feature_per_direction_agnostic(k):
+    # Regression: scalar was only handled in the K==1 branch, so
+    # feature_per_direction>1 raised "Unknown mode=scalar". scalar broadcasts a
+    # single value across all dims and must work for any K.
+    enc = make_encoder("scalar", "sample_value", feature_per_direction=k)
+    f = ct.Feature(6, 'stimulus')
+    ctx = ct.Context()
+    ctx['sample_value'] = 0.7
+    out = np.asarray(enc(ctx, f))
+    assert out.shape == (6,)
+    np.testing.assert_allclose(out, 0.7, atol=1e-6)
+
+
 def test_build_cues_returns_jax_arrays_with_right_shapes():
     non_resp, resp = build_cues(3)
     assert non_resp.shape == (3,)
