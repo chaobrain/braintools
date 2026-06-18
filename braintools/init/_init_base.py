@@ -87,9 +87,13 @@ class Initialization(ABC):
         >>>
         >>> delay_init = Uniform(1.0 * u.ms, 3.0 * u.ms).clip(0.5 * u.ms, 5.0 * u.ms)
         >>>
+        >>> # Each transform must be parenthesized: a bare ``lambda`` body would
+        >>> # greedily capture the rest of the expression. Bounds must share the
+        >>> # value's unit (``0.0 * u.nS``, not ``0``).
         >>> combined = (Normal(1.0 * u.nS, 0.2 * u.nS) |
-        ...             lambda x: x.clip(0, 2 * u.nS) |
-        ...             lambda x: x * 0.5)
+        ...             (lambda x: u.math.maximum(x, 0.0 * u.nS)) |
+        ...             (lambda x: x * 0.5))
+        >>> values = combined(1000, rng=np.random.default_rng(0))
     """
     __module__ = 'braintools.init'
 
@@ -365,15 +369,19 @@ def param(
         else:
             raise TypeError(f'Unknown parameter type: {type(init)}')
 
+    # Resolve the underlying value first: a ``State`` is a mutable container and
+    # ``u.math.shape(state)`` reports ``()`` (it does not see into the wrapped
+    # value), which would silently bypass the shape check below.
+    param_value = init.value if isinstance(init, State) else init
+
     # Check if the shape of the parameter matches the given size
-    if not _are_broadcastable_shapes(u.math.shape(init), sizes):
+    if not _are_broadcastable_shapes(u.math.shape(param_value), sizes):
         raise ValueError(
-            f'The shape of the parameter {u.math.shape(init)} '
+            f'The shape of the parameter {u.math.shape(param_value)} '
             f'does not match with the given size {sizes}'
         )
 
     # Expand the parameter to match the given batch size
-    param_value = init.value if isinstance(init, State) else init
     if batch_size is not None and not batch_applied_by_callable:
         if param_value.ndim <= len(sizes):
             # add a new axis to the params so that it matches the dimensionality of the given shape ``sizes``
@@ -383,15 +391,19 @@ def param(
                 batch_size,
                 axis=0
             )
-            if isinstance(init, State):
-                init.restore_value(param_value)
-                param_value = init
         else:
             if param_value.shape[0] != batch_size:
                 raise ValueError(
                     f'The batch size of the parameter {param_value.shape[0]} '
                     f'does not match with the given batch size {batch_size}'
                 )
+    # A ``State`` input is a mutable container: update its value and return the
+    # container itself, consistent with the ``Param`` path above and the
+    # documented contract. Doing this only in the batch-expansion branch (the
+    # previous behaviour) made the return type depend on the batch shape.
+    if isinstance(init, State):
+        init.restore_value(param_value)
+        return init
     return param_value
 
 

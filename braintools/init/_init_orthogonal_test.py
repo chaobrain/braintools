@@ -248,5 +248,31 @@ class TestIdentity(unittest.TestCase):
         self.assertIn('2.0', repr_str)
 
 
+class TestUnitDeprecationWarning(unittest.TestCase):
+    """The deprecated ``unit=`` arg must warn at the caller's stack frame (bug D4)."""
+
+    def test_orthogonal_unit_warns_at_caller(self):
+        import warnings
+        import brainunit as u
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            Orthogonal(unit=u.nS)
+        self.assertEqual(len(caught), 1)
+        self.assertTrue(issubclass(caught[0].category, DeprecationWarning))
+        # stacklevel=2 attributes the warning to this test module, not the
+        # library source file.
+        self.assertTrue(caught[0].filename.endswith('_init_orthogonal_test.py'))
+
+    def test_delta_orthogonal_unit_warns_at_caller(self):
+        import warnings
+        import brainunit as u
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            DeltaOrthogonal(unit=u.nS)
+        self.assertEqual(len(caught), 1)
+        self.assertTrue(issubclass(caught[0].category, DeprecationWarning))
+        self.assertTrue(caught[0].filename.endswith('_init_orthogonal_test.py'))
+
+
 if __name__ == '__main__':
     unittest.main()

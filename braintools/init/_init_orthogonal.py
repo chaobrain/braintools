@@ -77,7 +77,8 @@ class Orthogonal(Initialization):
         if unit is not None:
             warnings.warn(
                 'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please handle units separately from initialization.', DeprecationWarning
+                'Please handle units separately from initialization.',
+                DeprecationWarning, stacklevel=2,
             )
         else:
             unit = u.UNITLESS
@@ -162,7 +163,8 @@ class DeltaOrthogonal(Initialization):
         if unit is not None:
             warnings.warn(
                 'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please handle units separately from initialization.', DeprecationWarning
+                'Please handle units separately from initialization.',
+                DeprecationWarning, stacklevel=2,
             )
         else:
             unit = u.UNITLESS
@@ -208,6 +210,17 @@ class Identity(Initialization):
     ----------
     scale : float, optional
         Multiplicative factor to apply to the identity matrix (default: 1.0).
+
+    Notes
+    -----
+    The output depends on the rank of ``size``:
+
+    - **1-D** ``(n,)``: an identity matrix is undefined, so a vector of
+      ``scale * ones(n)`` is returned (useful as a bias-like / pass-through init).
+    - **2-D** ``(rows, cols)``: ``scale * eye(rows, cols)`` (identity, truncated
+      or zero-padded for rectangular shapes).
+    - **N-D**: ``scale`` times an identity placed in the trailing two dimensions,
+      broadcast over the leading dimensions.
 
     Examples
     --------
