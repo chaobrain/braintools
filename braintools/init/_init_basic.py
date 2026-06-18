@@ -482,21 +482,27 @@ class TruncatedNormal(Initialization):
         lo = None if self.low is None else u.Quantity(self.low).to(unit).mantissa
         hi = None if self.high is None else u.Quantity(self.high).to(unit).mantissa
 
-        if std == 0:
-            # Degenerate distribution: all mass at the (clamped) mean.
-            samples = jnp.full(size, mean, dtype=float)
-        else:
-            a = -jnp.inf if lo is None else (lo - mean) / std
-            b = jnp.inf if hi is None else (hi - mean) / std
-            # Inverse-CDF sampling: draw u ~ U(0, 1), map into the truncated CDF
-            # interval [F(a), F(b)], then invert through the normal quantile.
-            cdf_a = 0.0 if lo is None else ndtr(a)
-            cdf_b = 1.0 if hi is None else ndtr(b)
-            u_samples = rng.uniform(0.0, 1.0, size)
-            p = cdf_a + u_samples * (cdf_b - cdf_a)
-            # Keep the quantile finite (avoids +-inf at the open ends).
-            p = jnp.clip(p, 1e-7, 1.0 - 1e-7)
-            samples = mean + std * ndtri(p)
+        # Vectorized inverse-CDF sampling that also handles a degenerate (std == 0)
+        # distribution element-wise. A scalar ``if std == 0`` would raise
+        # ("truth value ambiguous") for array-valued ``std`` (a per-element
+        # parametrization that the sibling distributions accept), so instead use a
+        # "safe" denominator: where ``std == 0`` the term ``std * ndtri(p)`` is 0,
+        # leaving ``samples == mean`` (then clamped into ``[low, high]`` below).
+        mean_arr = jnp.asarray(mean, dtype=float)
+        std_arr = jnp.asarray(std, dtype=float)
+        safe_std = jnp.where(std_arr == 0, 1.0, std_arr)
+
+        a = -jnp.inf if lo is None else (lo - mean_arr) / safe_std
+        b = jnp.inf if hi is None else (hi - mean_arr) / safe_std
+        # Inverse-CDF sampling: draw u ~ U(0, 1), map into the truncated CDF
+        # interval [F(a), F(b)], then invert through the normal quantile.
+        cdf_a = 0.0 if lo is None else ndtr(a)
+        cdf_b = 1.0 if hi is None else ndtr(b)
+        u_samples = rng.uniform(0.0, 1.0, size)
+        p = cdf_a + u_samples * (cdf_b - cdf_a)
+        # Keep the quantile finite (avoids +-inf at the open ends).
+        p = jnp.clip(p, 1e-7, 1.0 - 1e-7)
+        samples = mean_arr + std_arr * ndtri(p)
 
         if lo is not None or hi is not None:
             samples = jnp.clip(

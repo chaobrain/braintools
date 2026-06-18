@@ -185,6 +185,11 @@ class KaimingUniform(VarianceScaling):
 
     Parameters
     ----------
+    scale : float, optional
+        Variance multiplier (``variance = scale / fan``). When ``None`` (the
+        default), it is derived from ``nonlinearity`` as the He variance
+        multiplier ``gain ** 2`` (``2.0`` for ReLU, ``2 / (1 + negative_slope ** 2)``
+        for leaky ReLU). Pass an explicit value to override.
     mode : {'fan_in', 'fan_out', 'fan_avg'}, optional
         Mode for computing scale factor (default: 'fan_in').
     nonlinearity : {'relu', 'leaky_relu'}, optional
@@ -246,6 +251,11 @@ class KaimingNormal(VarianceScaling):
 
     Parameters
     ----------
+    scale : float, optional
+        Variance multiplier (``variance = scale / fan``). When ``None`` (the
+        default), it is derived from ``nonlinearity`` as the He variance
+        multiplier ``gain ** 2`` (``2.0`` for ReLU, ``2 / (1 + negative_slope ** 2)``
+        for leaky ReLU). Pass an explicit value to override.
     mode : {'fan_in', 'fan_out', 'fan_avg'}, optional
         Mode for computing scale factor (default: 'fan_in').
     nonlinearity : {'relu', 'leaky_relu'}, optional

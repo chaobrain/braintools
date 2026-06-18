@@ -480,6 +480,64 @@ class TestTruncatedNormalBackend(unittest.TestCase):
         self.assertAlmostEqual(float(np.mean(weights.mantissa)), 0.5, delta=0.02)
 
 
+class TestTruncatedNormalArrayParams(unittest.TestCase):
+    """TruncatedNormal must accept array-valued ``mean``/``std`` (bug B1).
+
+    A scalar ``if std == 0`` previously raised "truth value of an array ...
+    is ambiguous" for per-element ``std``.
+    """
+
+    def test_array_std_does_not_crash(self):
+        rng = np.random.default_rng(0)
+        init = TruncatedNormal(
+            mean=np.array([0.0, 1.0]) * u.mV,
+            std=np.array([0.5, 0.2]) * u.mV,
+            low=-1.0 * u.mV, high=2.0 * u.mV,
+        )
+        weights = init(2, rng=rng)
+        self.assertEqual(weights.shape, (2,))
+        self.assertTrue(np.all(weights >= -1.0 * u.mV))
+        self.assertTrue(np.all(weights <= 2.0 * u.mV))
+
+    def test_array_std_with_zero_element_is_degenerate(self):
+        """A zero entry in ``std`` collapses that element to the (clamped) mean."""
+        rng = np.random.default_rng(0)
+        init = TruncatedNormal(
+            mean=np.array([0.5, 3.0]) * u.mV,
+            std=np.array([0.0, 0.2]) * u.mV,
+            low=0.0 * u.mV, high=1.0 * u.mV,
+        )
+        weights = init(2, rng=rng)
+        # std==0 with in-range mean -> exactly the mean.
+        self.assertAlmostEqual(float(weights.mantissa[0]), 0.5, places=6)
+        # std==0 path must not perturb the second (non-zero std) element's bounds.
+        self.assertTrue(0.0 <= float(weights.mantissa[1]) <= 1.0)
+
+    def test_scalar_std_zero_still_degenerate(self):
+        """Scalar std==0 keeps the original degenerate behaviour (all == mean)."""
+        rng = np.random.default_rng(0)
+        init = TruncatedNormal(0.5 * u.mV, 0.0 * u.mV, low=0.0 * u.mV, high=1.0 * u.mV)
+        weights = init(5, rng=rng)
+        self.assertTrue(np.allclose(weights.mantissa, 0.5))
+
+    def test_scalar_std_zero_mean_out_of_range_is_clamped(self):
+        rng = np.random.default_rng(0)
+        init = TruncatedNormal(5.0 * u.mV, 0.0 * u.mV, low=0.0 * u.mV, high=1.0 * u.mV)
+        weights = init(3, rng=rng)
+        self.assertTrue(np.allclose(weights.mantissa, 1.0))
+
+    def test_array_mean_and_std_statistics(self):
+        """Per-element parametrization keeps each element near its own mean."""
+        rng = np.random.default_rng(0)
+        means = np.array([0.2, 0.8]) * u.mV
+        init = TruncatedNormal(mean=means, std=np.array([0.05, 0.05]) * u.mV,
+                               low=0.0 * u.mV, high=1.0 * u.mV)
+        weights = init((100000, 2), rng=rng)
+        col_means = np.mean(weights.mantissa, axis=0)
+        self.assertAlmostEqual(float(col_means[0]), 0.2, delta=0.02)
+        self.assertAlmostEqual(float(col_means[1]), 0.8, delta=0.02)
+
+
 class TestEdgeCases(unittest.TestCase):
     def setUp(self):
         self.rng = np.random.default_rng(42)

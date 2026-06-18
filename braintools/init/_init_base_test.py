@@ -709,6 +709,50 @@ class TestParamSupport:
             param(p, 5, batch_size=3)
 
 
+class TestParamStateSupport:
+    """param() must return the State (value updated) consistently (bug B2).
+
+    Previously the no-batch and already-batched paths returned the bare
+    underlying value, while only the batch-expansion path returned the State.
+    """
+
+    def test_state_no_batch_returns_state(self):
+        from brainstate import State
+        s = State(np.ones(10) * u.nS)
+        result = param(s, 10)
+        assert isinstance(result, State)
+        assert result is s
+        assert u.math.shape(result.value) == (10,)
+
+    def test_state_batch_expand_returns_state(self):
+        from brainstate import State
+        s = State(np.ones(10) * u.nS)
+        result = param(s, 10, batch_size=4)
+        assert isinstance(result, State)
+        assert result is s
+        assert u.math.shape(result.value) == (4, 10)
+
+    def test_state_already_batched_returns_state(self):
+        from brainstate import State
+        s = State(np.ones((4, 10)) * u.nS)
+        result = param(s, 10, batch_size=4)
+        assert isinstance(result, State)
+        assert result is s
+        assert u.math.shape(result.value) == (4, 10)
+
+    def test_state_batch_mismatch_raises(self):
+        from brainstate import State
+        s = State(np.ones((3, 10)) * u.nS)
+        with pytest.raises(ValueError, match="batch size"):
+            param(s, 10, batch_size=4)
+
+    def test_state_shape_mismatch_raises(self):
+        from brainstate import State
+        s = State(np.ones(10) * u.nS)
+        with pytest.raises(ValueError, match="does not match"):
+            param(s, 5)
+
+
 class TestParamBatching:
     """Test param() batch_size expansion for plain arrays/quantities (bug C2)."""
 
