@@ -25,33 +25,37 @@ __all__ = [
 
 
 class UniqueStateManager:
-    """
-    A class to manage unique State objects in a PyTree structure.
+    """Manage unique :class:`brainstate.State` objects within a PyTree structure.
 
-    This class:
-    1. Flattens a PyTree with State leaves to (path, leaf) pairs
-    2. Removes duplicate State objects based on their id()
-    3. Supports recovering the unique states back to a PyTree structure
+    This class flattens a PyTree with ``State`` leaves to ``(path, leaf)`` pairs, removes
+    duplicate ``State`` objects based on their ``id()``, and supports recovering the unique
+    states back to a PyTree structure.
 
-    Example usage:
+    Parameters
+    ----------
+    pytree : PyTree[State], optional
+        If provided, :meth:`make_unique` is called on it during construction.
+
+    Examples
+    --------
+    .. code-block:: python
+
         >>> import jax.numpy as jnp
         >>> from brainstate import ParamState
         >>>
         >>> # Create a pytree with some duplicate State objects
         >>> state1 = ParamState(jnp.ones((2, 3)))
         >>> state2 = ParamState(jnp.zeros((3, 4)))
-        >>>
         >>> pytree = {
         ...     'layer1': {'weight': state1, 'bias': state2},
-        ...     'layer2': {'weight': state1, 'bias': ParamState(jnp.ones((4,)))}  # state1 is duplicate
+        ...     'layer2': {'weight': state1, 'bias': ParamState(jnp.ones((4,)))}  # duplicate
         ... }
         >>>
         >>> # Create manager and process the pytree
         >>> manager = UniqueStateManager()
         >>> unique_pytree = manager.make_unique(pytree)
-        >>>
-        >>> # The duplicate state1 in layer2.weight will be removed
-        >>> print(len(manager.flattened_states))  # Will be 3 instead of 4
+        >>> print(len(manager.flattened_states))  # 3, not 4 (duplicate removed)
+        3
         >>>
         >>> # Recover to pytree structure
         >>> recovered = manager.to_pytree()
@@ -59,7 +63,7 @@ class UniqueStateManager:
     __module__ = 'braintools.optim'
 
     def __init__(self, pytree: PyTree[State] = None):
-        """Initialize the UniqueStateManager."""
+        """Initialize the manager, optionally processing ``pytree``."""
         self.flattened_states: List[Tuple[Any, State]] = []
         self.seen_ids: Set[int] = set()
         self.pytree_structure = None
@@ -69,14 +73,17 @@ class UniqueStateManager:
             self.make_unique(pytree)
 
     def make_unique(self, pytree: PyTree[State]) -> PyTree[State]:
-        """
-        Process a PyTree with State leaves and remove duplicates.
+        """Process a PyTree with State leaves and remove duplicates.
 
-        Args:
-            pytree: A PyTree where leaves are State objects
+        Parameters
+        ----------
+        pytree : PyTree[State]
+            A PyTree whose leaves are :class:`brainstate.State` objects.
 
-        Returns:
-            A PyTree with only unique State objects (duplicates removed)
+        Returns
+        -------
+        PyTree[State]
+            A PyTree containing only unique ``State`` objects (duplicates removed).
         """
         # Flatten the pytree to get (leaf, path) pairs
         leaves, treedef = jax.tree.flatten_with_path(
@@ -157,11 +164,12 @@ class UniqueStateManager:
         return result
 
     def to_pytree(self) -> PyTree[State]:
-        """
-        Convert the stored unique states back to a PyTree structure.
+        """Convert the stored unique states back to a PyTree structure.
 
-        Returns:
-            PyTree with unique State objects
+        Returns
+        -------
+        PyTree[State]
+            PyTree with the unique ``State`` objects as leaves.
         """
         if not self.unique_states:
             return {}
@@ -169,11 +177,12 @@ class UniqueStateManager:
         return self._reconstruct_pytree(self.unique_paths, self.unique_states)
 
     def to_pytree_value(self) -> PyTree:
-        """
-        Convert the stored unique states to a PyTree with State.value as leaves.
+        """Convert the stored unique states to a PyTree with ``State.value`` as leaves.
 
-        Returns:
-            PyTree where leaves are the values (State.value) of the State objects
+        Returns
+        -------
+        PyTree
+            PyTree where leaves are the values (``State.value``) of the ``State`` objects.
         """
         if not self.unique_states:
             return {}
@@ -184,11 +193,13 @@ class UniqueStateManager:
         return self._reconstruct_pytree(self.unique_paths, state_values)
 
     def to_dict(self) -> Dict[str, State]:
-        """
-        Convert the stored unique states to a dictionary with path strings as keys.
+        """Convert the stored unique states to a dict keyed by path strings.
 
-        Returns:
-            Dictionary where keys are string representations of paths and values are State objects
+        Returns
+        -------
+        dict of {str : State}
+            Dictionary whose keys are string representations of paths and whose values
+            are the ``State`` objects.
         """
         result = {}
         for path, state in zip(self.unique_paths, self.unique_states):
@@ -198,11 +209,13 @@ class UniqueStateManager:
         return result
 
     def to_dict_value(self) -> Dict[str, Any]:
-        """
-        Convert the stored unique states to a dictionary with path strings as keys and State.value as values.
+        """Convert the stored unique states to a dict of path strings to ``State.value``.
 
-        Returns:
-            Dictionary where keys are string representations of paths and values are State.value
+        Returns
+        -------
+        dict of {str : Any}
+            Dictionary whose keys are string representations of paths and whose values
+            are the corresponding ``State.value``.
         """
         result = {}
         for path, state in zip(self.unique_paths, self.unique_states):
@@ -246,23 +259,27 @@ class UniqueStateManager:
         return result
 
     def get_flattened(self) -> List[Tuple[Any, State]]:
-        """
-        Get the flattened list of (path, state) pairs.
+        """Get the flattened list of ``(path, state)`` pairs.
 
-        Returns:
-            List of tuples containing (path, State) for unique states
+        Returns
+        -------
+        list of (Any, State)
+            List of ``(path, State)`` tuples for the unique states.
         """
         return self.flattened_states
 
     def get_state_by_path(self, target_path: Any) -> State:
-        """
-        Retrieve a State object by its path.
+        """Retrieve a ``State`` object by its path.
 
-        Args:
-            target_path: The path to the desired State
+        Parameters
+        ----------
+        target_path : Any
+            The path to the desired ``State``.
 
-        Returns:
-            The State object at the given path, or None if not found
+        Returns
+        -------
+        State or None
+            The ``State`` object at the given path, or ``None`` if not found.
         """
         for path, state in self.flattened_states:
             if path == target_path:
@@ -274,15 +291,19 @@ class UniqueStateManager:
         target_path: Any,
         new_state: State
     ) -> bool:
-        """
-        Update a State object at a specific path.
+        """Update a ``State`` object at a specific path.
 
-        Args:
-            target_path: The path to the State to update
-            new_state: The new State object
+        Parameters
+        ----------
+        target_path : Any
+            The path to the ``State`` to update.
+        new_state : State
+            The new ``State`` object.
 
-        Returns:
-            True if update was successful, False if path not found
+        Returns
+        -------
+        bool
+            ``True`` if the update succeeded, ``False`` if the path was not found.
         """
         for i, (path, state) in enumerate(self.flattened_states):
             if path == target_path:
@@ -301,14 +322,17 @@ class UniqueStateManager:
         return False
 
     def merge_with(self, other_pytree: PyTree[State]) -> 'UniqueStateManager':
-        """
-        Merge another PyTree with the current unique states, maintaining uniqueness.
+        """Merge another PyTree into the current unique states, maintaining uniqueness.
 
-        Args:
-            other_pytree: Another PyTree with State leaves to merge
+        Parameters
+        ----------
+        other_pytree : PyTree[State]
+            Another PyTree with ``State`` leaves to merge in.
 
-        Returns:
-            Merged PyTree with all unique State objects
+        Returns
+        -------
+        UniqueStateManager
+            ``self``, with the new unique states merged in.
         """
         # Flatten the other pytree
         other_leaves, _ = jax.tree.flatten_with_path(

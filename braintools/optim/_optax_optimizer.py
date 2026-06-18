@@ -211,6 +211,18 @@ class OptaxOptimizer(Optimizer):
         """
         super().__init__()
 
+        # Validate hyperparameters up front (PyTorch-style fail-fast) so bad values do
+        # not silently diverge/NaN deep inside the optimization loop. A scheduler ``lr``
+        # validates its own ``base_lr``, so only plain float learning rates are checked.
+        if not isinstance(lr, LRScheduler) and isinstance(lr, (int, float)) and lr < 0:
+            raise ValueError(f"Invalid learning rate: {lr} (must be >= 0).")
+        if weight_decay < 0:
+            raise ValueError(f"Invalid weight_decay: {weight_decay} (must be >= 0).")
+        if grad_clip_norm is not None and grad_clip_norm <= 0:
+            raise ValueError(f"Invalid grad_clip_norm: {grad_clip_norm} (must be > 0).")
+        if grad_clip_value is not None and grad_clip_value <= 0:
+            raise ValueError(f"Invalid grad_clip_value: {grad_clip_value} (must be > 0).")
+
         # param_states is already initialized in parent class as StateDictManager
         # which will hold our pytree of State objects
 
@@ -249,10 +261,12 @@ class OptaxOptimizer(Optimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
-        transforms.append(optax.scale_by_adam())
-
+        # Coupled L2 weight decay (consistent with the named ``Adam`` and with
+        # ``add_param_group``): add to the gradient *before* the adaptive scaling.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
+
+        transforms.append(optax.scale_by_adam())
 
         # Always use the scheduler (now always present due to ConstantLR unification)
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
@@ -341,7 +355,14 @@ class OptaxOptimizer(Optimizer):
 
         Args:
             params: A pytree (dict) of brainstate.State objects.
-            **kwargs: Additional hyperparameters for this group.
+            **kwargs: Additional hyperparameters for this group (e.g. ``lr``,
+                ``weight_decay``).
+
+        Notes:
+            Added parameter groups always use Adam-style adaptive scaling
+            (``optax.scale_by_adam``) regardless of the parent optimizer's algorithm;
+            only ``lr`` and ``weight_decay`` are honored per group. To optimize a group
+            with a different algorithm, construct a separate optimizer instead.
         """
         # Validate that params is a dict of State objects
         jax.tree.map(self._get_leaf_value, params, is_leaf=lambda x: isinstance(x, State))
@@ -1767,7 +1788,13 @@ class RMSprop(OptaxOptimizer):
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
 
-        transforms.append(optax.scale_by_rms(decay=self.alpha, eps=self.eps))
+        # Centered RMSprop normalizes by the variance estimate
+        # ``sqrt(E[g^2] - E[g]^2 + eps)`` (``optax.scale_by_stddev``); the uncentered
+        # variant normalizes by ``sqrt(E[g^2] + eps)`` (``optax.scale_by_rms``).
+        if self.centered:
+            transforms.append(optax.scale_by_stddev(decay=self.alpha, eps=self.eps))
+        else:
+            transforms.append(optax.scale_by_rms(decay=self.alpha, eps=self.eps))
 
         if self.momentum > 0:
             transforms.append(optax.trace(decay=self.momentum))
@@ -1877,6 +1904,66 @@ class Adamax(OptaxOptimizer):
         transforms.append(optax.scale_by_adamax(b1=self.betas[0], b2=self.betas[1], eps=self.eps))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
+
+
+class _ScaleByNadamState(NamedTuple):
+    """State for :func:`_scale_by_nadam` (scheduled-momentum NAdam)."""
+    count: jax.Array        # step counter (starts at 0)
+    mu_product: jax.Array   # running product of the scheduled momenta mu_t
+    mu: PyTree              # first moment estimate
+    nu: PyTree              # second moment estimate
+
+
+def _scale_by_nadam(
+    b1: float = 0.9,
+    b2: float = 0.999,
+    eps: float = 1e-8,
+    momentum_decay: float = 4e-3,
+) -> optax.GradientTransformation:
+    r"""Scale updates by the NAdam rule with scheduled momentum (PyTorch ``NAdam``).
+
+    Unlike ``optax.scale_by_adam(nesterov=True)`` (a fixed-:math:`\beta_1` Nesterov-Adam),
+    this transform implements the *scheduled* momentum of Dozat (2016) / PyTorch
+    ``torch.optim.NAdam`` so the ``momentum_decay`` (:math:`\psi`) hyperparameter actually
+    influences the update:
+
+    .. math::
+        \mu_t = \beta_1 \left(1 - \tfrac{1}{2}\,0.96^{\,t\,\psi}\right)
+
+    The returned updates are the (positive) NAdam direction
+    :math:`\hat{m}_t / (\sqrt{\hat{v}_t} + \epsilon)`; chain ``optax.scale_by_schedule``
+    (or ``optax.scale(-lr)``) afterwards to apply the learning rate.
+    """
+
+    def init_fn(params):
+        return _ScaleByNadamState(
+            count=jnp.zeros([], jnp.int32),
+            mu_product=jnp.ones([], jnp.float32),
+            mu=optax.tree.zeros_like(params),
+            nu=optax.tree.zeros_like(params),
+        )
+
+    def update_fn(updates, state, params=None):
+        del params
+        count = state.count + 1
+        t = count.astype(jnp.float32)
+        mu_t = b1 * (1.0 - 0.5 * (0.96 ** (t * momentum_decay)))
+        mu_next = b1 * (1.0 - 0.5 * (0.96 ** ((t + 1.0) * momentum_decay)))
+        mu = jax.tree.map(lambda m, g: b1 * m + (1.0 - b1) * g, state.mu, updates)
+        nu = jax.tree.map(lambda v, g: b2 * v + (1.0 - b2) * (g ** 2), state.nu, updates)
+        mu_product = state.mu_product * mu_t
+        bias_correction2 = 1.0 - b2 ** t
+
+        def compute(g, m, v):
+            denom = jnp.sqrt(v / bias_correction2) + eps
+            term_grad = (1.0 - mu_t) / (1.0 - mu_product) * g / denom
+            term_mom = mu_next / (1.0 - mu_product * mu_next) * m / denom
+            return term_grad + term_mom
+
+        new_updates = jax.tree.map(compute, updates, mu, nu)
+        return new_updates, _ScaleByNadamState(count=count, mu_product=mu_product, mu=mu, nu=nu)
+
+    return optax.GradientTransformation(init_fn, update_fn)
 
 
 class Nadam(OptaxOptimizer):
@@ -2035,11 +2122,18 @@ class Nadam(OptaxOptimizer):
             transforms.append(optax.clip_by_global_norm(self.grad_clip_norm))
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
-        # Nadam is Adam with Nesterov momentum - use adam with nesterov-style updates
+        # Nadam = Adam with Nesterov-accelerated, *scheduled* momentum (Dozat 2016).
+        # ``_scale_by_nadam`` honours ``momentum_decay`` (psi); plain
+        # ``optax.scale_by_adam(nesterov=True)`` would ignore it.
         # Coupled L2 weight decay: applied to the gradient before the adaptive moments.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
-        transforms.append(optax.scale_by_adam(b1=self.betas[0], b2=self.betas[1], eps=self.eps, nesterov=True))
+        transforms.append(
+            _scale_by_nadam(
+                b1=self.betas[0], b2=self.betas[1], eps=self.eps,
+                momentum_decay=self.momentum_decay,
+            )
+        )
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
@@ -3222,7 +3316,7 @@ class LBFGS(OptaxOptimizer):
         Number of past gradient-position pairs to store for Hessian approximation.
         Typical values: 3-20. Larger values give better approximations but use more
         memory. Trade-off between accuracy and computational cost.
-    scale_init_hess : bool, default=True
+    scale_init_precond : bool, default=True
         Whether to scale the initial Hessian approximation using gradient information.
         Improves convergence by adapting to problem scale. Recommended for most cases.
     grad_clip_norm : float, optional
@@ -3369,7 +3463,7 @@ class LBFGS(OptaxOptimizer):
         >>> optimizer = braintools.optim.LBFGS(
         ...     lr=1.0,
         ...     memory_size=10,
-        ...     scale_init_hess=False
+        ...     scale_init_precond=False
         ... )
         >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
@@ -3445,7 +3539,7 @@ class LBFGS(OptaxOptimizer):
         >>> optimizer = braintools.optim.LBFGS(
         ...     lr=1.0,
         ...     memory_size=20,  # Higher accuracy for scientific computing
-        ...     scale_init_hess=True
+        ...     scale_init_precond=True
         ... )
 
     **Hybrid optimization strategy:**
@@ -3531,9 +3625,13 @@ class LBFGS(OptaxOptimizer):
         if self.grad_clip_value is not None:
             transforms.append(optax.clip(self.grad_clip_value))
 
-        # Create LBFGS with proper parameters
+        # Read the live LR schedule each step rather than freezing the LR at
+        # construction time. ``optax.lbfgs`` scales by ``-learning_rate`` (flip_sign),
+        # and ``self._lr_scheduler(count)`` already returns the *negated* LR, so negate
+        # it back to the positive value optax expects. Passing the raw ``current_lr``
+        # float would ignore any ``LRScheduler`` handed to ``LBFGS(lr=...)``.
         lbfgs_tx = optax.lbfgs(
-            learning_rate=self.current_lr,
+            learning_rate=lambda count: -self._lr_scheduler(count),
             memory_size=self.memory_size,
             scale_init_precond=self.scale_init_precond,
             linesearch=self.linesearch,
@@ -4007,7 +4105,7 @@ class Adafactor(OptaxOptimizer):
         ...     lr=1e-3,
         ...     eps=(1e-30, 1e-3),
         ...     clip_threshold=1.0,
-        ...     decay_rate=-0.8,
+        ...     decay_rate=0.8,
         ...     beta1=0.9,
         ...     weight_decay=0.01,
         ...     factored=True
@@ -4758,9 +4856,11 @@ class SM3(OptaxOptimizer):
         # Coupled L2 weight decay: applied to the gradient before the adaptive scaling.
         if self.weight_decay > 0:
             transforms.append(optax.add_decayed_weights(self.weight_decay))
-        transforms.append(optax.scale_by_sm3(eps=self.eps))
-        if self.momentum > 0:
-            transforms.append(optax.trace(decay=self.momentum))
+        # ``optax.scale_by_sm3`` applies the first-moment momentum *internally* via its
+        # ``b1`` argument (mirroring ``optax.sm3(lr, momentum)``). Pass ``momentum`` as
+        # ``b1`` and do NOT chain a separate ``optax.trace`` — otherwise momentum would be
+        # applied twice and ``momentum=0`` would not actually disable it.
+        transforms.append(optax.scale_by_sm3(b1=self.momentum, b2=1.0, eps=self.eps))
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
         return optax.chain(*transforms)
 
