@@ -300,7 +300,7 @@ class Feature(_FeatureBase):
         """
         Create multiple copies of this feature with indexed names.
 
-        Example: Feature(1, 30.*u.Hz, 'choice') * 3
+        Example: Feature(1, 'choice') * 3
         Creates: choice_0, choice_1, choice_2
         """
         if not isinstance(count, int) or count < 1:

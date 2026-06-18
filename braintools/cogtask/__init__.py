@@ -35,7 +35,7 @@ Building custom tasks from phases:
 >>> from braintools.cogtask import (
 ...     Task, Context, concat,
 ...     Fixation, Stimulus, Delay, Response,
-...     Feature, circular, one_hot
+...     Feature, circular, one_hot, label
 ... )
 >>> import brainunit as u
 >>>
@@ -44,13 +44,14 @@ Building custom tasks from phases:
 >>> stim = Feature(8, 'stimulus')
 >>> choice = Feature(2, 'choice')
 >>>
->>> # Build task
+>>> # Build task. A string label spec must be wrapped in ``label(...)`` so it
+>>> # is read as a context key; a bare string is treated as a literal and fails.
 >>> task = Task(
 ...     phases=concat([
 ...         Fixation(100 * u.ms, inputs={'fixation': 1.0}),
 ...         Stimulus(500 * u.ms, inputs={'stimulus': circular('direction')}),
 ...         Delay(500 * u.ms, inputs={'fixation': 1.0}),
-...         Response(100 * u.ms, outputs={'label': 'ground_truth'})
+...         Response(100 * u.ms, outputs={'label': label('ground_truth')})
 ...     ]),
 ...     input_features=fix + stim,
 ...     output_features=fix + choice,
@@ -153,7 +154,7 @@ from .phase import (
     execute_phase_packed,
     phase_tree_is_variable,
 )
-from .task import Task
+from .task import Task, create_task
 # Pre-built tasks
 from .tasks import (
     # Decision Making
@@ -215,6 +216,7 @@ __all__ = [
     'Switch',
     'While',
     'Task',
+    'create_task',
     # Features
     'Feature',
     'FeatureSet',

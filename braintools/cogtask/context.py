@@ -36,19 +36,25 @@ class Context:
 
     Examples
     --------
-    >>> ctx = Context(seed=42)
-    >>> ctx['ground_truth'] = 1
-    >>> ctx['stimulus_direction'] = 0.5 * np.pi
-    >>> print(ctx['ground_truth'])
-    1
+    .. code-block:: python
 
-    >>> # In a phase:
-    >>> ctx.inputs[ctx.phase_start:ctx.phase_end, :] = stimulus_encoding
+        >>> import jax
+        >>> import jax.numpy as jnp
+        >>> ctx = Context(key=jax.random.PRNGKey(42))
+        >>> ctx['ground_truth'] = 1
+        >>> ctx['stimulus_direction'] = 0.5 * jnp.pi
+        >>> print(ctx['ground_truth'])
+        1
+
+        >>> # In a phase, write into the buffer with a functional update
+        >>> # (JAX arrays are immutable; ``.at[...].set(...)`` returns a copy):
+        >>> # ctx.inputs = ctx.inputs.at[ctx.phase_start:ctx.phase_end, :].set(stimulus_encoding)
 
     Parameters
     ----------
     key : jax.Array, optional
-        JAX PRNGKey for random number generation. If None, creates one with seed.
+        JAX PRNGKey for random number generation. If None, draws fresh
+        randomness from brainstate's default RNG.
 
     Note
     ----

@@ -387,3 +387,36 @@ def test_pulse_decision_making_runs_through_repeat():
         gt = int(info['trial_state']['ground_truth'])
         last = int(np.asarray(Y)[-1])
         assert last == gt + 1
+
+
+# ---------------------------------------------------------------------------
+# create_task factory: must be exported from the package and produce a
+# sampleable task. Also exercises the (previously broken) docstring pattern
+# of a string label spec wrapped in label(...).
+# ---------------------------------------------------------------------------
+
+def test_create_task_is_exported_from_package():
+    assert hasattr(ct, 'create_task')
+    assert 'create_task' in ct.__all__
+
+
+def test_create_task_builds_sampleable_task_with_string_label():
+    task = ct.create_task(
+        phases=(
+            ct.Fixation(10 * u.ms, inputs={'fixation': 1.0})
+            >> ct.Stimulus(20 * u.ms, inputs={'stimulus': ct.circular('direction')})
+            >> ct.Response(10 * u.ms, outputs={'label': ct.label('ground_truth')})
+        ),
+        input_features=ct.Feature(1, 'fixation') + ct.Feature(2, 'stimulus'),
+        output_features=ct.Feature(1, 'fixation') + ct.Feature(2, 'choice'),
+        trial_init=lambda ctx: ctx.update(
+            ground_truth=ctx.rng.choice(2),
+            direction=ctx.rng.uniform(0, 2 * 3.14159),
+        ),
+        seed=0,
+    )
+    X, Y, info = task.sample_trial(0)
+    assert X.shape[0] == Y.shape[0] == 40
+    gt = int(info['trial_state']['ground_truth'])
+    # Response phase is the last 10 ticks; label == ground_truth there.
+    assert (np.asarray(Y)[-10:] == gt).all()

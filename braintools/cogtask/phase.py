@@ -457,25 +457,33 @@ class Parallel(Phase):
         pass
 
     def execute(self, ctx: Context) -> None:
-        """Encode each child within its own [phase_start, phase_start+dur)."""
+        """Encode each child within its own ``[parent_start, parent_start+dur)``.
+
+        Every child — leaf *or* compound — is dispatched through
+        ``execute_phase`` so that nested ``Sequence``/``Repeat``/conditional
+        children execute correctly. Routing compound children through
+        ``encode_inputs``/``encode_outputs`` directly would be a no-op (those
+        classes drive their sub-phases via ``execute``), silently dropping the
+        branch. This mirrors ``execute_packed`` and keeps the two paths
+        consistent. All children start at ``parent_start``; only the first child
+        contributes to the output buffer by convention.
+        """
         parent_start = ctx.phase_start
         parent_end = ctx.phase_end
         parent_name = ctx.current_phase
 
         for i, child in enumerate(self.phases):
-            child_dur = child.get_duration(ctx)
-            ctx.phase_start = parent_start
-            ctx.phase_end = parent_start + child_dur
-            ctx.current_phase = child.name
-            child.on_enter(ctx)
-            child.encode_inputs(ctx)
-            # Only the first child contributes outputs by default.
+            ctx.current_step = parent_start
             if i == 0:
-                child.encode_outputs(ctx)
-            child.on_exit(ctx)
-            ctx.phase_history.append((child.name, ctx.phase_start, ctx.phase_end))
+                execute_phase(child, ctx)
+            else:
+                # Non-first children must not contribute to the output buffer.
+                # Stash, encode (inputs + any state), then restore outputs.
+                saved_out = ctx.outputs
+                execute_phase(child, ctx)
+                ctx.outputs = saved_out
 
-        # Restore parent scope.
+        # Restore parent scope and advance past the (longest) child.
         ctx.phase_start = parent_start
         ctx.phase_end = parent_end
         ctx.current_phase = parent_name
