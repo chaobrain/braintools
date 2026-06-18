@@ -590,8 +590,8 @@ class CompositeConnectivity(Connectivity):
             'delays': delays,
             'pre_size': result1.pre_size,
             'post_size': result1.post_size,
-            'pre_positions': result1.pre_positions or result2.pre_positions,
-            'post_positions': result1.post_positions or result2.post_positions,
+            'pre_positions': result1.pre_positions if result1.pre_positions is not None else result2.pre_positions,
+            'post_positions': result1.post_positions if result1.post_positions is not None else result2.post_positions,
             'model_type': result1.model_type,
             'metadata': merge_dict(
                 result1.metadata,
