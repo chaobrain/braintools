@@ -631,8 +631,13 @@ class ModelCheckpoint(Callback):
             if self.best_score is None or self._is_better(current_score, self.best_score):
                 self.best_score = current_score
                 self.best_model_path = filepath
-            self._update_best_k(current_score, filepath)
+            # Save first, then prune. ``_update_best_k`` may evict this very file
+            # when it is the worst of the tracked set, and the eviction's
+            # ``_remove_checkpoint`` can only delete it once it exists on disk.
+            # Doing it in the other order left orphaned files that violated
+            # ``save_top_k``. (T-B)
             self._save_checkpoint(trainer, module, filepath)
+            self._update_best_k(current_score, filepath)
             self._last_saved_epoch = epoch
         elif self.save_top_k == -1 or self.save_top_k > 0:
             # No metric to monitor, just save
@@ -864,7 +869,8 @@ class LearningRateMonitor(Callback):
     logging_interval : str, default='step'
         When to log the learning rate. One of 'step' or 'epoch'.
     log_momentum : bool, default=False
-        Whether to also log momentum values.
+        Reserved for logging optimizer momentum values. Not yet implemented;
+        the value is accepted but currently has no effect.
 
     Examples
     --------
@@ -953,24 +959,40 @@ class LearningRateMonitor(Callback):
 
 class GradientClipCallback(Callback):
     """
-    Clip gradients during training.
+    Placeholder callback for gradient clipping configuration.
 
-    Note: This is usually handled by the Trainer's gradient_clip_val parameter,
-    but this callback provides more control and logging.
+    .. warning::
+
+       This callback does **not** itself clip gradients or log gradient norms.
+       Gradient clipping is performed inside the Trainer's JIT-compiled apply
+       step (where a Python callback cannot intercept the traced gradients), so
+       a callback hook cannot see or modify them. To clip gradients, configure
+       the Trainer directly::
+
+           Trainer(gradient_clip_val=1.0, gradient_clip_algorithm='norm')
+
+       The parameters below are validated and stored for forward compatibility
+       but currently have no runtime effect.
 
     Parameters
     ----------
     clip_val : float, optional
-        Maximum gradient norm or value.
+        Maximum gradient norm or value. Stored only; not applied.
     clip_algorithm : str, default='norm'
         Clipping algorithm. One of 'norm' (global norm) or 'value' (element-wise).
+        Validated only; not applied.
     log_grad_norm : bool, default=False
-        Whether to log the gradient norm before clipping.
+        Reserved for gradient-norm logging, which is not yet implemented.
+
+    See Also
+    --------
+    Trainer : Set ``gradient_clip_val`` / ``gradient_clip_algorithm`` there to
+        actually clip gradients.
 
     Examples
     --------
-    >>> grad_clip = GradientClipCallback(clip_val=1.0, log_grad_norm=True)
-    >>> trainer = Trainer(callbacks=[grad_clip])
+    >>> # Real clipping is configured on the Trainer, not via this callback:
+    >>> trainer = Trainer(gradient_clip_val=1.0, gradient_clip_algorithm='norm')
     """
     __module__ = 'braintools.trainer'
 

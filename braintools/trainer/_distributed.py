@@ -360,12 +360,14 @@ class DataParallelStrategy(Strategy):
             raise ValueError(f"Unknown reduction operation: {op}")
 
     def broadcast(self, tensor: Any, src: int = 0) -> Any:
-        """Broadcast tensor from source device."""
-        return lax.ppermute(
-            tensor,
-            axis_name=self._axis_name,
-            perm=[(src, i) for i in range(self.num_devices)]
-        )
+        """Broadcast tensor from the source replica to all replicas.
+
+        Implemented via ``all_gather`` + index rather than ``ppermute``: a
+        broadcast is one-source-to-many-destinations, which ``ppermute`` cannot
+        express (it requires unique sources and destinations). (T-D)
+        """
+        gathered = lax.all_gather(tensor, self._axis_name)
+        return jax.tree.map(lambda g: g[src], gathered)
 
 
 class ShardedDataParallelStrategy(Strategy):
@@ -510,18 +512,20 @@ class FullyShardedDataParallelStrategy(Strategy):
             # requires a NumPy array. (T-15)
             devices = np.asarray(jax.devices())
             if model_axis:
-                # 2D mesh for data + model parallelism
-                n_devices = devices.size
-                # Try to create a balanced mesh
-                for dp in [n_devices, n_devices // 2, n_devices // 4]:
-                    if dp < 1:
-                        continue
-                    mp = n_devices // dp
-                    if dp * mp == n_devices:
+                # 2D mesh for data + model parallelism. Pick the most balanced
+                # split: the model axis is the largest divisor of the device
+                # count that is <= sqrt(n); the data axis takes the rest. This
+                # gives the model axis a real size (>1) on composite device
+                # counts instead of always collapsing it to 1. (T-G)
+                n_devices = int(devices.size)
+                mp = 1
+                for cand in range(int(n_devices ** 0.5), 0, -1):
+                    if n_devices % cand == 0:
+                        mp = cand
                         break
-                mesh_shape = (dp, mp)
+                dp = n_devices // mp
                 self._mesh = Mesh(
-                    devices.reshape(mesh_shape),
+                    devices.reshape((dp, mp)),
                     (data_axis, model_axis)
                 )
             else:
@@ -806,11 +810,13 @@ def broadcast(
     Any
         Broadcasted tensor.
     """
-    if num_devices is None:
-        num_devices = jax.device_count()
-
-    perm = [(src, i) for i in range(num_devices)]
-    return lax.ppermute(tensor, axis_name=axis_name, perm=perm)
+    # A broadcast sends one replica's value to every replica. ``lax.ppermute``
+    # cannot express this (it requires unique sources/destinations), so we
+    # ``all_gather`` along the mapped axis and select the source's slice on
+    # every replica. ``num_devices`` is accepted for API compatibility but is
+    # inferred from the gathered axis. (T-D)
+    gathered = lax.all_gather(tensor, axis_name)
+    return jax.tree.map(lambda g: g[src], gathered)
 
 
 def sync_batch_norm(
@@ -832,12 +838,16 @@ def sync_batch_norm(
     Tuple[Any, Any]
         Synchronized mean and variance.
     """
-    # Compute local statistics
-    mean = jnp.mean(x, axis=0)
-    var = jnp.var(x, axis=0)
+    # Compute the pooled statistics across devices. Averaging per-device
+    # variances is wrong -- it ignores the between-device differences in means
+    # -- so we synchronize the first and second moments and recombine as
+    # Var[x] = E[x^2] - E[x]^2. This assumes equal per-device batch sizes, which
+    # holds under ``pmap``. (T-H)
+    local_mean = jnp.mean(x, axis=0)
+    local_mean_sq = jnp.mean(x * x, axis=0)
 
-    # Synchronize across devices
-    mean = lax.pmean(mean, axis_name=axis_name)
-    var = lax.pmean(var, axis_name=axis_name)
+    mean = lax.pmean(local_mean, axis_name=axis_name)
+    mean_sq = lax.pmean(local_mean_sq, axis_name=axis_name)
+    var = mean_sq - mean ** 2
 
     return mean, var
