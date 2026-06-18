@@ -656,4 +656,12 @@ def lfp_phase_coherence(
     z = jnp.exp(1j * phases)                           # unit phasors
     # (i, j) = mean_t conj(z_i) z_j = mean_t exp(i(phi_j - phi_i)); |.| is the PLV.
     coherence = jnp.abs(jnp.conj(z).T @ z) / n_time
+    # PLV is the magnitude of a normalized sum of unit phasors, so it is
+    # mathematically bounded in [0, 1]. Clip to remove float32 roundoff that
+    # can push near-coherent pairs marginally above 1.0.
+    coherence = jnp.clip(coherence, 0.0, 1.0)
+    # A channel is perfectly phase-locked with itself, so the diagonal is
+    # exactly 1 by definition; set it explicitly to remove float32 drift that
+    # can leave it marginally below 1.0.
+    coherence = coherence.at[jnp.diag_indices(n_channels)].set(1.0)
     return coherence
