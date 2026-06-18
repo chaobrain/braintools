@@ -54,3 +54,42 @@ class SmoothLabelsTest(parameterized.TestCase):
         expected_output = (1.0 - very_small_alpha) * self.ts + very_small_alpha / self.ts.shape[-1]
         np.testing.assert_allclose(
             braintools.metric.smooth_labels(self.ts, very_small_alpha), expected_output, atol=1e-4)
+
+    def test_rows_sum_to_one_for_valid_distribution(self):
+        """B22: rows sum to 1 when the input rows are valid distributions."""
+        labels = jnp.eye(5)
+        for alpha in (0.0, 0.05, 0.1, 0.5, 1.0):
+            smoothed = braintools.metric.smooth_labels(labels, alpha=alpha)
+            np.testing.assert_allclose(jnp.sum(smoothed, axis=1), jnp.ones(5), atol=1e-5)
+            self.assertTrue(bool(jnp.all(smoothed >= 0)))
+
+    def test_rows_do_not_sum_to_one_for_invalid_input(self):
+        """B22: precondition - invalid input rows do not yield rows summing to 1."""
+        # rows sum to 2.0, not 1.0
+        labels = jnp.array([[1.0, 1.0, 0.0], [2.0, 0.0, 0.0]])
+        smoothed = braintools.metric.smooth_labels(labels, alpha=0.2)
+        row_sums = jnp.sum(smoothed, axis=1)
+        # (1-0.2)*2 + 0.2 = 1.8 != 1.0
+        np.testing.assert_allclose(row_sums, jnp.array([1.8, 1.8]), atol=1e-5)
+
+    def test_alpha_out_of_range_raises(self):
+        """B23: alpha must be validated to lie in [0, 1]."""
+        labels = jnp.eye(3)
+        with self.assertRaises(ValueError):
+            braintools.metric.smooth_labels(labels, alpha=-0.1)
+        with self.assertRaises(ValueError):
+            braintools.metric.smooth_labels(labels, alpha=1.5)
+
+    def test_alpha_boundary_values_ok(self):
+        """B23: alpha exactly at 0 and 1 must be accepted."""
+        labels = jnp.eye(3)
+        out0 = braintools.metric.smooth_labels(labels, alpha=0.0)
+        np.testing.assert_allclose(out0, labels, atol=1e-6)
+        out1 = braintools.metric.smooth_labels(labels, alpha=1.0)
+        np.testing.assert_allclose(out1, jnp.ones_like(labels) / 3.0, atol=1e-6)
+
+    def test_alpha_one_is_uniform(self):
+        """alpha=1.0 yields a uniform distribution over classes."""
+        labels = jnp.eye(4)
+        out = braintools.metric.smooth_labels(labels, alpha=1.0)
+        np.testing.assert_allclose(out, jnp.full((4, 4), 0.25), atol=1e-6)

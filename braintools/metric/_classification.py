@@ -49,11 +49,13 @@ __all__ = [
 
 
 def assert_is_float(array):
-    assert u.math.is_float(array), 'Array must be float.'
+    if not u.math.is_float(array):
+        raise TypeError('Array must be float.')
 
 
 def assert_is_int(array):
-    assert u.math.is_int(array), 'Array must be int.'
+    if not u.math.is_int(array):
+        raise TypeError('Array must be int.')
 
 
 @set_module_as('braintools.metric')
@@ -150,7 +152,7 @@ def hinge_loss(
     >>> targets = jnp.array([1, -1, 1])
     >>> loss = braintools.metric.hinge_loss(predictions, targets)
     >>> print(loss)
-    [0.  1.5 0. ]
+    [0.  0.5 0. ]
     """
     return jnp.maximum(0, 1 - predictor_outputs * targets)
 
@@ -288,6 +290,14 @@ def softmax_cross_entropy_with_integer_labels(
     >>> print(loss)
     [0.4170299]
 
+    Notes
+    -----
+    Labels are used to gather along the last axis via ``jnp.take_along_axis``.
+    Out-of-range integer ``labels`` (outside ``[0, num_classes)``) are **not**
+    validated: JAX silently clamps out-of-bounds gather indices to the nearest
+    valid index, so an invalid label yields a (silently) wrong loss rather than
+    an error. Ensure ``labels`` lie within ``[0, num_classes)``.
+
     References
     ----------
     .. [1] Goodfellow, Ian, Yoshua Bengio, and Aaron Courville.
@@ -300,7 +310,7 @@ def softmax_cross_entropy_with_integer_labels(
     # we avoid subtracting the normalizer from all values, just from the values
     # for the correct labels.
     logits_max = jnp.max(logits, axis=-1, keepdims=True)
-    logits -= jax.lax.stop_gradient(logits_max)
+    logits = logits - jax.lax.stop_gradient(logits_max)
     label_logits = jnp.take_along_axis(logits, labels[..., None], axis=-1)[..., 0]
     log_normalizers = jnp.log(jnp.sum(jnp.exp(logits), axis=-1))
     return log_normalizers - label_logits
@@ -558,7 +568,12 @@ def kl_divergence(
     """
     assert_is_float(log_predictions)
     assert_is_float(targets)
-    loss = targets * (jnp.where(targets == 0, 0, jnp.log(targets)) - log_predictions)
+    # Double-`where` trick to keep the gradient finite at ``targets == 0``:
+    # using a single ``where`` would still evaluate ``jnp.log(0) = -inf`` on the
+    # untaken branch, leaking a NaN gradient w.r.t. ``targets``.
+    safe_targets = jnp.where(targets == 0, 1.0, targets)
+    log_targets = jnp.where(targets == 0, 0.0, jnp.log(safe_targets))
+    loss = targets * (log_targets - log_predictions)
     return jnp.sum(loss, axis=-1)
 
 
@@ -612,7 +627,15 @@ def kl_divergence_with_log_targets(
     """
     assert_is_float(log_predictions)
     assert_is_float(log_targets)
-    loss = jnp.exp(log_targets) * (log_targets - log_predictions)
+    # When a target probability is zero, ``log_targets`` is ``-inf``. The term
+    # ``exp(-inf) * (-inf - log_predictions)`` evaluates to ``0 * -inf = NaN``
+    # both in value and gradient. Use the double-`where` trick to neutralise the
+    # ``-inf`` branch (the corresponding ``exp(log_targets)`` weight is zero, so
+    # the term contributes nothing).
+    targets_prob = jnp.exp(log_targets)
+    is_zero = jnp.isneginf(log_targets)
+    safe_log_targets = jnp.where(is_zero, 0.0, log_targets)
+    loss = jnp.where(is_zero, 0.0, targets_prob * (safe_log_targets - log_predictions))
     return jnp.sum(loss, axis=-1)
 
 
@@ -734,23 +757,35 @@ def ctc_loss_with_forward_probs(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Example with batch_size=1, time=4, classes=3, labels=2
-    >>> logits = jnp.random.normal(size=(1, 4, 3))
-    >>> logit_pad = jnp.zeros((1, 4))
-    >>> labels = jnp.array([[1, 2]])
-    >>> label_pad = jnp.zeros((1, 2))
-    >>> loss, alpha_blank, alpha_label = braintools.metric.ctc_loss_with_forward_probs(
-    ...     logits, logit_pad, labels, label_pad, blank_id=0
-    ... )
-    >>> print(f"CTC loss: {loss[0]:.4f}")
+    .. code-block:: python
+
+        >>> import jax
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Example with batch_size=1, time=4, classes=3, labels=2
+        >>> logits = jax.random.normal(jax.random.PRNGKey(0), (1, 4, 3))
+        >>> logit_pad = jnp.zeros((1, 4))
+        >>> labels = jnp.array([[1, 2]])
+        >>> label_pad = jnp.zeros((1, 2))
+        >>> loss, alpha_blank, alpha_label = braintools.metric.ctc_loss_with_forward_probs(
+        ...     logits, logit_pad, labels, label_pad, blank_id=0
+        ... )
+        >>> print(f"CTC loss: {loss[0]:.4f}")
+        CTC loss: 3.6826
 
     Notes
     -----
     This function requires that labels are right-padded and logit sequences
     are properly aligned. The forward probabilities can be used for additional
     analysis or for implementing more sophisticated training procedures.
+
+    The loss is computed in log-space with ``log_epsilon`` standing in for
+    ``log(0)``. An infeasible alignment (e.g. when ``max_time`` is too short to
+    emit every label, accounting for required blank separators between repeated
+    labels) therefore yields a large but **finite** loss on the order of
+    ``-log_epsilon`` rather than ``inf``. Labels equal to ``blank_id`` collide
+    with the blank symbol and lead to ill-defined alignments; keep the blank
+    class index disjoint from real label indices.
 
     References
     ----------
@@ -868,22 +903,31 @@ def ctc_loss(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Setup for speech recognition task
-    >>> batch_size, time_steps, vocab_size = 2, 10, 30
-    >>> logits = jnp.random.normal(size=(batch_size, time_steps, vocab_size))
-    >>> logit_pad = jnp.zeros((batch_size, time_steps))
-    >>> labels = jnp.array([[1, 2, 3], [4, 5, 0]])  # Different length sequences
-    >>> label_pad = jnp.array([[0, 0, 0], [0, 0, 1]])  # Last label is padded
-    >>> loss = braintools.metric.ctc_loss(logits, logit_pad, labels, label_pad)
-    >>> print(f"Average CTC loss: {jnp.mean(loss):.4f}")
+    .. code-block:: python
+
+        >>> import jax
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Setup for speech recognition task
+        >>> batch_size, time_steps, vocab_size = 2, 10, 30
+        >>> logits = jax.random.normal(jax.random.PRNGKey(0), (batch_size, time_steps, vocab_size))
+        >>> logit_pad = jnp.zeros((batch_size, time_steps))
+        >>> labels = jnp.array([[1, 2, 3], [4, 5, 0]])  # Different length sequences
+        >>> label_pad = jnp.array([[0, 0, 0], [0, 0, 1]])  # Last label is padded
+        >>> loss = braintools.metric.ctc_loss(logits, logit_pad, labels, label_pad)
+        >>> print(f"Average CTC loss: {jnp.mean(loss):.4f}")
+        Average CTC loss: 28.2277
 
     Notes
     -----
     This function internally calls ``ctc_loss_with_forward_probs`` and
     discards the forward probability arrays. For applications that need
     the forward probabilities, use ``ctc_loss_with_forward_probs`` directly.
+
+    As with ``ctc_loss_with_forward_probs``, infeasible alignments produce a
+    large but **finite** loss (≈ ``-log_epsilon``), not ``inf``, and labels equal
+    to ``blank_id`` collide with the blank symbol; keep ``blank_id`` disjoint
+    from real label indices.
 
     See Also
     --------
@@ -920,10 +964,10 @@ def sigmoid_focal_loss(
 
     .. math::
 
-        FL(p_t) = -\\alpha_t (1 - p_t)^\\gamma \\log(p_t)
+        FL(p_t) = -\alpha_t (1 - p_t)^\gamma \log(p_t)
 
     where :math:`p_t` is the predicted probability for the true class,
-    :math:`\\alpha_t` is a class-dependent weighting factor, and :math:`\\gamma`
+    :math:`\alpha_t` is a class-dependent weighting factor, and :math:`\gamma`
     is the focusing parameter.
 
     Parameters
@@ -949,16 +993,21 @@ def sigmoid_focal_loss(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Imbalanced binary classification
-    >>> logits = jnp.array([2.0, -1.0, 0.5, -2.0])
-    >>> labels = jnp.array([1.0, 0.0, 1.0, 0.0])
-    >>> # Standard focal loss
-    >>> loss = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=0.25, gamma=2.0)
-        >>> print(f"Focal loss: {loss}")
-    >>> # Compare with unweighted version
-    >>> loss_unweighted = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=None, gamma=2.0)
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Imbalanced binary classification
+        >>> logits = jnp.array([2.0, -1.0, 0.5, -2.0])
+        >>> labels = jnp.array([1.0, 0.0, 1.0, 0.0])
+        >>> # Standard focal loss
+        >>> loss = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=0.25, gamma=2.0)
+        >>> print(loss)
+        [0.00045089 0.01699354 0.01689337 0.00135267]
+        >>> # Compare with unweighted version
+        >>> loss_unweighted = braintools.metric.sigmoid_focal_loss(logits, labels, alpha=None, gamma=2.0)
+        >>> print(loss_unweighted)
+        [0.00180356 0.02265805 0.06757348 0.00180356]
 
     Notes
     -----
@@ -971,7 +1020,7 @@ def sigmoid_focal_loss(
 
     References
     ----------
-    .. [1] Lin, Tsung-Yi, et al. \"Focal loss for dense object detection.\"
+    .. [1] Lin, Tsung-Yi, et al. "Focal loss for dense object detection."
            Proceedings of ICCV 2017.
            https://arxiv.org/pdf/1708.02002.pdf
     """
@@ -983,14 +1032,19 @@ def sigmoid_focal_loss(
     ce_loss = sigmoid_binary_cross_entropy(logits, labels)
     p_t = p * labels + (1 - p) * (1 - labels)
     loss = ce_loss * ((1 - p_t) ** gamma)
-    weighted = lambda loss_arg: (alpha * labels + (1 - alpha) * (1 - labels)) * loss_arg
-    not_weighted = lambda loss_arg: loss_arg
-    loss = jax.lax.cond(alpha >= 0, weighted, not_weighted, loss)
+    # ``alpha`` is a static Python float, so a plain ``if`` is appropriate here
+    # (no need for ``jax.lax.cond``, which would trace both branches).
+    if alpha >= 0:
+        alpha_t = alpha * labels + (1 - alpha) * (1 - labels)
+        loss = alpha_t * loss
     return loss
 
 
 @set_module_as('braintools.metric')
-def nll_loss(input, target):
+def nll_loss(
+    log_probs: brainstate.typing.ArrayLike,
+    target: brainstate.typing.ArrayLike,
+) -> brainstate.typing.ArrayLike:
     r"""Compute negative log likelihood loss for classification.
 
     The negative log likelihood (NLL) loss is a standard loss function for
@@ -1007,45 +1061,50 @@ def nll_loss(input, target):
 
     Parameters
     ----------
-    input : brainstate.typing.ArrayLike
-        Log-probabilities of each class. Expected shapes:
-        
+    log_probs : brainstate.typing.ArrayLike
+        Log-probabilities of each class. The class dimension is the **last** axis
+        for the 1-D/2-D cases and **axis 1** for higher-dimensional inputs
+        (PyTorch convention). Expected shapes:
+
         - ``(num_classes,)`` for single sample
         - ``(batch_size, num_classes)`` for batch processing
         - ``(batch_size, num_classes, d1, d2, ..., dK)`` for higher-dimensional inputs
           (e.g., per-pixel classification for images)
-        
+
     target : brainstate.typing.ArrayLike
         Class indices in the range ``[0, num_classes-1]``. Expected shapes:
-        
+
         - ``()`` (scalar) for single sample
-        - ``(batch_size,)`` for batch processing  
+        - ``(batch_size,)`` for batch processing
         - ``(batch_size, d1, d2, ..., dK)`` for higher-dimensional targets
 
     Returns
     -------
     brainstate.typing.ArrayLike
         Negative log likelihood loss values:
-        
+
         - Scalar for single sample
         - ``(batch_size,)`` for batch processing
         - ``(batch_size, d1, d2, ..., dK)`` for higher-dimensional inputs
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> import braintools 
-    >>> # Single sample example
-    >>> log_probs = jnp.log(jnp.array([0.1, 0.7, 0.2]))
-    >>> target = 1  # Correct class is index 1
-    >>> loss = braintools.metric.nll_loss(log_probs, target)
-    >>> print(f"NLL loss: {loss:.4f}")
-    
-    >>> # Batch example
-    >>> log_probs_batch = jnp.log(jnp.array([[0.1, 0.7, 0.2], [0.3, 0.3, 0.4]]))
-    >>> targets_batch = jnp.array([1, 2])
-    >>> losses = braintools.metric.nll_loss(log_probs_batch, targets_batch)
-    >>> print(f"Batch losses: {losses}")
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> # Single sample example
+        >>> log_probs = jnp.log(jnp.array([0.1, 0.7, 0.2]))
+        >>> target = 1  # Correct class is index 1
+        >>> loss = braintools.metric.nll_loss(log_probs, target)
+        >>> print(f"NLL loss: {loss:.4f}")
+        NLL loss: 0.3567
+        >>> # Batch example
+        >>> log_probs_batch = jnp.log(jnp.array([[0.1, 0.7, 0.2], [0.3, 0.3, 0.4]]))
+        >>> targets_batch = jnp.array([1, 2])
+        >>> losses = braintools.metric.nll_loss(log_probs_batch, targets_batch)
+        >>> print(losses)
+        [0.35667497 0.9162907 ]
 
     Notes
     -----
@@ -1054,26 +1113,50 @@ def nll_loss(input, target):
     log-probabilities, or ``jnp.log`` to convert probabilities.
 
     For end-to-end training with logits, consider using ``softmax_cross_entropy``
-    which combines softmax and cross-entropy in a numerically stable way.
+    which combines softmax and cross-entropy in a numerically stable way. In
+    fact, ``nll_loss(jax.nn.log_softmax(logits), labels)`` is equal to
+    ``softmax_cross_entropy_with_integer_labels(logits, labels)``.
+
+    Out-of-range integer ``target`` values are gathered via
+    ``jnp.take_along_axis`` and are silently clamped by JAX (not validated), so
+    ensure targets lie within ``[0, num_classes)``.
 
     Raises
     ------
-    AssertionError
-        If input and target shapes are incompatible or if target contains
-        invalid class indices.
+    ValueError
+        If the dimensions of ``log_probs`` and ``target`` are incompatible.
 
     See Also
     --------
     softmax_cross_entropy : Cross entropy loss starting from logits
     softmax_cross_entropy_with_integer_labels : Efficient version for integer labels
     """
+    log_probs = jnp.asarray(log_probs)
     target = jnp.asarray(target)
-    if target.ndim == 1:
-        assert input.ndim == 2
-        loss = input[jnp.arange(len(target)), target]
-        return loss
-    elif target.ndim == 0:
-        assert input.ndim == 1
-        return input[target]
+    if target.ndim == 0:
+        # Single sample: log_probs has shape (num_classes,).
+        if log_probs.ndim != 1:
+            raise ValueError(
+                f'For a scalar target, log_probs must be 1-D (num_classes,), '
+                f'got log_probs.ndim={log_probs.ndim}.'
+            )
+        return -log_probs[target]
+    elif target.ndim == 1:
+        # Batched 1-D: log_probs has shape (batch_size, num_classes).
+        if log_probs.ndim != 2:
+            raise ValueError(
+                f'For a 1-D target, log_probs must be 2-D (batch_size, num_classes), '
+                f'got log_probs.ndim={log_probs.ndim}.'
+            )
+        return -log_probs[jnp.arange(target.shape[0]), target]
     else:
-        assert False, 'Invalid shape for target'
+        # Higher-dimensional: log_probs (N, C, d1, ..., dK), target (N, d1, ..., dK).
+        # Classes live on axis=1 (PyTorch convention). Gather along axis=1.
+        if log_probs.ndim != target.ndim + 1:
+            raise ValueError(
+                f'For an N-D target of shape {target.shape}, log_probs must have '
+                f'one extra (class) axis at position 1, i.e. ndim={target.ndim + 1}, '
+                f'got log_probs.ndim={log_probs.ndim}.'
+            )
+        gathered = jnp.take_along_axis(log_probs, target[:, None], axis=1)
+        return -jnp.squeeze(gathered, axis=1)

@@ -20,29 +20,68 @@ import math
 import unittest
 
 import brainstate
+import brainunit as u
 import jax.numpy as jnp
+import numpy as np
 
 import braintools
 
 brainstate.environ.set(dt=0.1)
 
 
+class TestRasterPlot(unittest.TestCase):
+    def test_indices_and_times(self):
+        spikes = np.array([
+            [0, 1, 0],
+            [1, 0, 0],
+            [0, 0, 1],
+            [0, 1, 1],
+            [0, 0, 0],
+        ])
+        times = np.array([0.0, 0.1, 0.2, 0.3, 0.4])
+        idx, st = braintools.metric.raster_plot(spikes, times)
+        # Spikes occur (sorted by time-step) at: (t0,n1),(t1,n0),(t2,n2),(t3,n1),(t3,n2)
+        np.testing.assert_array_equal(idx, np.array([1, 0, 2, 1, 2]))
+        np.testing.assert_allclose(np.asarray(st), np.array([0.0, 0.1, 0.2, 0.3, 0.3]))
+
+    def test_preserves_quantity_units(self):
+        spikes = np.zeros((5, 2))
+        spikes[2, 1] = 1
+        times = np.arange(5) * 0.1 * u.ms
+        _, st = braintools.metric.raster_plot(spikes, times)
+        self.assertIsInstance(st, u.Quantity)
+        self.assertTrue(u.math.allclose(st, jnp.array([0.2]) * u.ms))
+
+
 class TestFiringRate(unittest.TestCase):
-    def test_fr1(self):
+    def test_shape(self):
         spikes = jnp.ones((1000, 10))
-        print(braintools.metric.firing_rate(spikes, 1.))
+        rate = braintools.metric.firing_rate(spikes, 1.0)
+        self.assertEqual(rate.shape, (1000,))
 
-    def test_fr2(self):
-        brainstate.random.seed()
-        spikes = brainstate.random.random((1000, 10)) < 0.2
-        print(braintools.metric.firing_rate(spikes, 1.))
-        print(braintools.metric.firing_rate(spikes, 10.))
+    def test_units_are_hz_quantity_vs_float_parity(self):
+        # Quantity (ms) and float (seconds) inputs that describe the SAME physical
+        # window/step must give the same Hz output.
+        spikes = (np.random.RandomState(0).rand(500, 8) < 0.2).astype(float)
+        r_q = braintools.metric.firing_rate(spikes, 5 * u.ms, 0.1 * u.ms)
+        r_f = braintools.metric.firing_rate(spikes, 0.005, 0.0001)  # seconds
+        np.testing.assert_allclose(np.asarray(r_q), np.asarray(r_f), rtol=1e-4)
 
-    def test_fr3(self):
-        brainstate.random.seed()
-        spikes = brainstate.random.random((1000, 10)) < 0.02
-        print(braintools.metric.firing_rate(spikes, 1.))
-        print(braintools.metric.firing_rate(spikes, 5.))
+    def test_constant_rate_value(self):
+        # Every neuron spikes every step -> mean fraction 1.0 -> rate = 1/dt Hz.
+        spikes = jnp.ones((1000, 4))
+        dt = 0.001  # seconds
+        rate = braintools.metric.firing_rate(spikes, 0.01, dt)
+        # Away from the edges the boxcar average of a constant-1 signal is 1/dt = 1000 Hz.
+        np.testing.assert_allclose(float(rate[500]), 1.0 / dt, rtol=1e-5)
+
+    def test_wider_window_is_smoother(self):
+        brainstate.random.seed(0)
+        spikes = (brainstate.random.random((2000, 20)) < 0.1).astype(float)
+        narrow = braintools.metric.firing_rate(spikes, 2 * u.ms, 0.1 * u.ms)
+        wide = braintools.metric.firing_rate(spikes, 20 * u.ms, 0.1 * u.ms)
+        # Wider smoothing -> smaller temporal variance.
+        self.assertLess(float(jnp.std(wide)), float(jnp.std(narrow)))
 
 
 class TestVictorPurpuraDistance(unittest.TestCase):
@@ -176,6 +215,21 @@ class TestSpikeTrainSynchrony(unittest.TestCase):
         synchrony = braintools.metric.spike_train_synchrony(spikes, window_size=10.0, dt=1.0)
         self.assertEqual(float(synchrony), 0.0)
 
+    def test_bounded_with_asymmetric_counts(self):
+        """Regression for C9: many spikes in one train, one in the other.
+
+        The previous ``min(N_i, N_j)`` normalization with one-directional counting
+        could exceed 1; the symmetric ratio must stay in [0, 1].
+        """
+        spikes = jnp.zeros((100, 2))
+        spikes = spikes.at[jnp.array([10, 20, 30, 40, 50]), 0].set(1)
+        spikes = spikes.at[10, 1].set(1)  # single spike, coincident with one of train 0
+        synchrony = braintools.metric.spike_train_synchrony(spikes, window_size=4.0, dt=1.0)
+        self.assertGreaterEqual(float(synchrony), 0.0)
+        self.assertLessEqual(float(synchrony), 1.0)
+        # 1 coincidence in train0 + 1 in train1 over 5+1 spikes = 2/6.
+        self.assertAlmostEqual(float(synchrony), 2.0 / 6.0, places=6)
+
 
 class TestBurstSynchronyIndex(unittest.TestCase):
     def test_synchronized_bursts(self):
@@ -305,6 +359,36 @@ class TestSpikeTimeTilingCoefficient(unittest.TestCase):
         self.assertTrue(jnp.all(sttc >= -1.0))
         self.assertTrue(jnp.all(sttc <= 1.0))
 
+    def test_union_time_coverage_not_overcounted(self):
+        """Regression for C16: T must use the union of windows.
+
+        With densely packed spikes whose ±tau windows overlap heavily, summing
+        per-spike window lengths overcounts (T would far exceed 1 before the old
+        ``min(1, .)`` clamp). For two identical dense trains STTC must be exactly 1.
+        """
+        spikes = jnp.zeros((100, 2))
+        dense = jnp.arange(10, 30)  # 20 consecutive spikes -> windows overlap a lot
+        spikes = spikes.at[dense, 0].set(1)
+        spikes = spikes.at[dense, 1].set(1)
+        sttc = braintools.metric.spike_time_tiling_coefficient(spikes, dt=1.0, tau=5.0)
+        self.assertAlmostEqual(float(sttc[0, 1]), 1.0, places=6)
+
+    def test_anticorrelated_is_negative(self):
+        """Disjoint, non-overlapping trains should give a negative STTC."""
+        spikes = jnp.zeros((1000, 2))
+        spikes = spikes.at[jnp.arange(0, 500, 20), 0].set(1)
+        spikes = spikes.at[jnp.arange(500, 1000, 20), 1].set(1)
+        sttc = braintools.metric.spike_time_tiling_coefficient(spikes, dt=1.0, tau=2.0)
+        self.assertLess(float(sttc[0, 1]), 0.0)
+
+    def test_empty_train_pair_is_zero(self):
+        """A pair involving a silent neuron has STTC 0 (and diagonal stays 1)."""
+        spikes = jnp.zeros((100, 2))
+        spikes = spikes.at[jnp.array([10, 20, 30]), 0].set(1)  # neuron 1 stays silent
+        sttc = braintools.metric.spike_time_tiling_coefficient(spikes, dt=1.0, tau=2.0)
+        self.assertEqual(float(sttc[0, 1]), 0.0)
+        self.assertEqual(float(sttc[1, 1]), 1.0)
+
 
 class TestCorrelationIndex(unittest.TestCase):
     def test_perfect_correlation(self):
@@ -356,3 +440,17 @@ class TestCorrelationIndex(unittest.TestCase):
         # Both should be finite
         self.assertFalse(math.isnan(float(ci_small)))
         self.assertFalse(math.isnan(float(ci_large)))
+
+    def test_too_few_bins_returns_zero(self):
+        """A window covering (almost) the whole recording yields < 2 bins -> 0.0."""
+        spikes = (brainstate.random.random((100, 3)) < 0.1).astype(float)
+        ci = braintools.metric.correlation_index(spikes, window_size=100.0, dt=1.0)
+        self.assertEqual(float(ci), 0.0)
+
+    def test_constant_neuron_zero_variance(self):
+        """A constant (zero-variance) binned train contributes a 0 correlation."""
+        spikes = jnp.zeros((1000, 2))
+        spikes = spikes.at[:, 0].set(1.0)  # neuron 0 spikes every step -> constant bins
+        spikes = spikes.at[jnp.arange(0, 1000, 30), 1].set(1.0)
+        ci = braintools.metric.correlation_index(spikes, window_size=50.0, dt=1.0)
+        self.assertEqual(float(ci), 0.0)

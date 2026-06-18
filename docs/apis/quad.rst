@@ -78,3 +78,21 @@ processes.
     sde_srk4_step
 
 
+DDE Numerical Integrators
+-------------------------
+
+Steppers for delay differential equations, where the right-hand side depends on
+one or more delayed states ``y(t - τ)`` supplied by a user history function.
+
+.. autosummary::
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
+
+    dde_euler_step
+    dde_heun_step
+    dde_rk4_step
+    dde_euler_pc_step
+    dde_heun_pc_step
+
+
