@@ -1,6 +1,194 @@
 # Release Notes
 
 
+## Version 0.2.0 (2026-06-18)
+
+This is a codebase-wide correctness, test-coverage, and documentation
+release. Nearly every major module — `metric`, `trainer`, `optim`,
+`visualize`, `surrogate`, `quad`, `init`, `conn`, and `file` — received a
+dedicated static audit; the findings were resolved with fixes and locked in
+behind comprehensive new test suites that raise per-module coverage to
+roughly 92–100%. The audits uncovered and corrected genuine mathematical and
+numerical bugs that had previously gone unnoticed — inverted surrogate-gradient
+formulas, a sign error in `nll_loss`, coherence metrics that were identically
+one, He-initialization variance off by a factor of two, and unit-handling
+crashes in the ODE/SDE integrators under newer `saiunit`. Documentation was
+realigned across the board so that docstring examples, notebooks, and the API
+reference are runnable and accurate. Alongside the fixes, the release adds new
+public API in `file`, `trainer`, `optim`, `metric`, and `init`, and modernizes
+the CI and build configuration. The minor-version bump reflects the breadth of
+behavioral corrections rather than any intentional break in compatibility.
+
+### Highlights
+
+- **Library-wide audit pass**: every audited module ships corrected behavior
+  plus a dedicated regression/correctness test suite, lifting coverage to
+  ~92–100% and replacing previously self-referential tests with reference-value
+  checks.
+- **Real numerical-correctness fixes**: corrected surrogate-gradient formulas
+  (`GaussianGrad`, `Arctan`, `ERF`, `PiecewiseQuadratic`, …), an `nll_loss`
+  sign error, LFP coherence that was identically `1`, He/Kaiming initialization
+  variance that was off by 2×, and integrator unit handling under `saiunit`.
+- **New public API**: `braintools.file.save_matfile`, gradient accumulation and
+  name-based parameter freezing in `braintools.trainer`, a line-search API for
+  `LBFGS` in `braintools.optim`, and exported `safe_norm` / pairwise-cosine
+  helpers in `braintools.metric`.
+- **Modernized infrastructure**: Python 3.14 configuration, `codecov-action`
+  v5 → v7, enforced LF line endings, and removal of the broken `scienceplots`
+  integration that was failing CI.
+
+### Added
+
+#### `braintools.file`
+
+- **`save_matfile`**: save a dictionary to a MATLAB ``.mat`` file, the
+  counterpart to `load_matfile` (#104).
+
+#### `braintools.trainer`
+
+- **Gradient accumulation**: accumulate gradients across micro-batches,
+  numerically equal to a single full-batch step (#112).
+- **Name-based parameter freezing**: parameters selected by name are now
+  genuinely frozen by the trainer (#112).
+
+#### `braintools.optim`
+
+- **`LBFGS.update(grads, value=, value_fn=)`**: public line-search API
+  supporting zoom and backtracking line searches (#111).
+
+#### `braintools.metric`
+
+- **`safe_norm`** is now exported, along with the pairwise helpers
+  `pairwise_cosine_similarity` and `pairwise_cosine_distance` (built on a
+  gradient-safe norm). `huber_loss`, `log_cosh`, and `l2_loss` gain `axis` and
+  `reduction` arguments (#108).
+
+#### `braintools.init`
+
+- **`VarianceScaling`** and the `Initializer` alias are now part of the public
+  API, and `ExponentialProfile` gains a `decay_constant` argument (#106).
+
+### Changed
+
+- **`braintools.optim`** (#111):
+  - `ChainedScheduler` combines factors multiplicatively, matching PyTorch;
+    `PiecewiseConstantSchedule` is documented and treated as absolute LR values;
+    `ReduceLROnPlateau`'s incompatibility with `ChainedScheduler` / `SequentialLR`
+    is documented.
+  - Multi-group `step()` updates the default group through the main `tx` and
+    each added group through its own `tx`, while parameters outside any added
+    group still update.
+  - SciPy backend casts `x0` / `jac` / `bounds` to float64 for the TNC/SLSQP
+    Cython kernels and skips `jac` for gradient-free methods; the Nevergrad
+    backend gains reproducible seeding and an all-NaN recommendation fallback.
+- **`braintools.visualize`** (#110):
+  - `line_plot` / `raster_plot` draw onto the passed `Axes` rather than the
+    pyplot state machine, so labels, limits, and titles land on the right
+    subplot.
+  - `animate_1D` / `animate_2D` fall back to `dt=1.0` outside a brainstate `dt`
+    context instead of raising `KeyError`; `static_vars` accepts arrays, lists,
+    or labeled dicts.
+  - `apply_style` validates the style name and returns a context manager that
+    restores `rcParams` on exit; `brain_surface_3d` uses `plt.get_cmap`
+    (replacing the `plt.cm.get_cmap` removed in Matplotlib 3.11).
+- **`braintools.init`** (#106):
+  - `TruncatedNormal` uses a jit-traceable, backend-agnostic inverse-CDF
+    sampler (`ndtr` / `ndtri`) in place of `scipy.stats.truncnorm`, and
+    `VarianceScaling` compensates for the truncated standard deviation so the
+    achieved variance matches the target.
+  - Distance profiles use unit-aware math throughout; the per-call `unit`
+    argument on basic distributions is deprecated in favor of unit-bearing
+    quantities.
+- **`braintools.conn`** (#105):
+  - Per-edge weights and delays are aligned to CSR row order in `weight2csr` /
+    `delay2csr`; `__call__` result caching is keyed on `(pre_size, post_size,
+    position ids)` so changed sizes recompute, and `ScaledConnectivity` no
+    longer mutates the base connectivity's cached result.
+  - Spatial/kernel connectivities gain autapse control via
+    `allow_self_connections`, and `ExponentialProfile` adopts the
+    `decay_constant` API.
+- **`braintools.file`** (#104):
+  - The matfile reader replaces the deprecated `scipy.io.matlab.mio5_params`
+    with the public `mat_struct`, detects MATLAB v7.3 (HDF5) files and raises an
+    actionable `NotImplementedError`, and renames the inverted `header_info`
+    flag to `include_header` (deprecated alias retained).
+  - `msgpack_load` plumbs `max_size` through (None = unlimited, replacing the
+    hard 10 GB cap) and `msgpack_save` returns its filename and writes via a
+    unique temp file so concurrent saves no longer clobber each other.
+- **`braintools.trainer`** (#112): single forward pass per training step via
+  `grad(..., has_aux)`; `EarlyStopping` `min_delta` keyed off `mode` and gated
+  by `min_epochs`; validation/test metrics prefixed via `_prefixed()`
+  (eliminating `val_val_loss`); `seed` seeds both NumPy and brainstate; honest
+  validation and warnings for `precision`, `deterministic`/`benchmark`,
+  multiple optimizers, and distributed strategies.
+
+### Fixed
+
+- **`braintools.surrogate`** (#109) — formula corrections, caught after the
+  self-referential test suite was replaced with reference-value checks:
+  - `GaussianGrad` exponent corrected to `-x²/(2σ²)` (the σ dependence was
+    inverted); `Arctan.surrogate_fun` rebuilt around `arctan` (it had misused
+    `arctan2`, leaving the range outside `[0, 1]`); `ERF.surrogate_fun`
+    corrected to be increasing.
+  - `PiecewiseQuadratic.surrogate_grad` is now the continuous triangle
+    `a − a²|x|`; `PiecewiseLeakyRelu` central slope fixed to `1/(2w)`;
+    `QPseudoSpike.surrogate_fun` rewritten as a finite antiderivative;
+    `SquarewaveFourierSeries` off-by-one term count fixed.
+  - `S2NN` / `LogTailedRelu` guard dead `where`-branch denominators to avoid
+    NaN gradients.
+- **`braintools.metric`** (#108, #113):
+  - `nll_loss` sign error fixed (with N-D support added); KL divergence made
+    gradient-safe via the double-`where` pattern; `ctc_loss` uses `jax.random`
+    instead of a nonexistent `jnp.random`.
+  - LFP fixes: corrected Welch PSD normalization, magnitude-squared coherence
+    (which had been identically `1`), Tort PAC, and `current_source_density`
+    axis/conductivity/units. `lfp_phase_coherence` is vectorized and its PLV
+    output is bounded to `[0, 1]` with an exactly-`1` diagonal, removing float32
+    roundoff that pushed values marginally above one (#113).
+  - `firing_rate` width/dt scaling corrected; `spike_train_synchrony` made
+    symmetric; `cross_correlation`, `voltage_fluctuation`, and the loss
+    reductions gained shape / zero-variance / zero-weight guards. The misspelled
+    `_pariwise` module was renamed to `_pairwise`.
+- **`braintools.quad`** (#107) — all Butcher tableaux verified correct; bugs
+  were concentrated in unit handling and noise sampling:
+  - `ode_expeuler_step` / `sde_expeuler_step` divide the diagonal Jacobian by
+    the *state* unit so `dt·A` is dimensionless (previously crashed under
+    `saiunit >= 0.4`); `sde_expeuler_step` samples the Brownian increment from
+    the shape of `y`; `sde_euler_step` uses `u.math.sqrt(dt)` for unitful `dt`.
+  - `ode_dopri5_step` exploits the FSAL property to drop one redundant stage,
+    computing `k7` only when `return_error=True`.
+- **`braintools.init`** (#106): `KaimingUniform` / `KaimingNormal` use the
+  correct He variance (`scale=2.0` for ReLU, `2/(1+slope²)` for leaky ReLU; it
+  had been `sqrt(2)`, giving half the intended variance). `param()` restores the
+  `State` value into the returned parameter, and `_to_size` rejects boolean
+  sizes.
+- **`braintools.conn`** (#102): `CompositeConnectivity._union` uses explicit
+  `is not None` checks instead of array truthiness, fixing a
+  `ValueError: truth value of an array ... is ambiguous` that broke CI.
+- **`braintools.visualize`** (#110): `remove_axis()` with no spine names blanks
+  the panel; `firing_rate_map` handles non-square `grid_size` and edge points;
+  Spearman correlation builds a 2×2 matrix for exactly two features; ~26 broken
+  docstring examples were corrected.
+- **`braintools.file`** (#104): checkpoint restore validates array shape and
+  honors `mismatch` (wrong-shaped arrays were silently loaded), dispatches to
+  the most-specific registered subclass, and stops misfiring the
+  namedtuple-envelope heuristic on genuine namedtuples; `AsyncManager` surfaces
+  background-save failures instead of swallowing them.
+
+### Infrastructure
+
+- **Dependencies**: bumped `codecov/codecov-action` from v5 to v7 (#101).
+- **Python 3.14**: project and tool configuration updated for Python 3.14.
+- **Line endings**: enforced LF via `.gitattributes`, with binary rules for
+  image/data assets and `eol` rules for `.ps1` / `.sh`; three CRLF-committed
+  files were renormalized with no content change.
+- **`scienceplots` removal**: the unused `_style.py` scienceplots integration
+  was removed — it depended on an undeclared package and on internal Matplotlib
+  APIs removed in newer releases, which was breaking CI on Python 3.13 (#103).
+- **Audit reports**: each module audit committed its findings under
+  `docs/braintools-<module>-issues-found-20260618.md`.
+
+
 ## Version 0.1.10 (2026-06-09)
 
 This release adds two forward-mode second-order optimizers — `SOFO` and
