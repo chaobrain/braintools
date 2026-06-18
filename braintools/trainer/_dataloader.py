@@ -741,6 +741,13 @@ def create_distributed_batches(
     Any
         Batches with shape (num_devices, batch_size, ...).
 
+    Notes
+    -----
+    Only full blocks of ``num_devices * batch_size`` samples are yielded; any
+    trailing samples that cannot fill a complete block are dropped (this keeps
+    the leading device axis a fixed size for ``pmap``). Size the data or
+    ``batch_size`` accordingly if you cannot afford to drop the remainder.
+
     Examples
     --------
     >>> for batch in create_distributed_batches(X, batch_size=32):

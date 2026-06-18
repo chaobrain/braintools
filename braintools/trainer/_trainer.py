@@ -86,7 +86,9 @@ class Trainer:
     min_epochs : int, default=1
         Minimum number of training epochs.
     max_steps : int, default=-1
-        Maximum number of training steps. -1 means no limit.
+        Maximum number of training steps. -1 means no limit. A "step" is counted
+        per processed batch; when ``accumulate_grad_batches > 1`` this counts
+        micro-batches rather than optimizer updates.
     val_check_interval : int or float, default=1.0
         How often to run validation within a training epoch.
         Integer = every N batches, float = fraction of epoch.
@@ -617,9 +619,15 @@ class Trainer:
         optimizer = self.optimizers[0] if self.optimizers else None
         state.stage = 'train'
 
-        # Callbacks: epoch start
+        # Callbacks: epoch start. Reset first so the epoch-start hooks log onto a
+        # clean (concrete) slate -- the previous epoch left traced values behind
+        # -- then snapshot whatever they log (e.g. epoch-mode LearningRateMonitor)
+        # so it survives the first per-batch reset and reaches the loggers. (T-A)
+        model._reset_logged_metrics()
         self._callbacks.on_train_epoch_start(self, model)
         model.on_train_epoch_start()
+        epoch_start_logger = dict(model._logger_metrics)
+        epoch_start_prog = dict(model._prog_bar_metrics)
 
         # Reset epoch metrics
         self._epoch_metrics.clear()
@@ -648,6 +656,19 @@ class Trainer:
             # Callbacks: batch start
             self._callbacks.on_train_batch_start(self, model, batch, batch_idx)
             model.on_train_batch_start(batch, batch_idx)
+
+            # Snapshot metrics logged by callbacks/hooks *outside* the traced
+            # step (e.g. LearningRateMonitor). These are concrete values; the
+            # JIT step below resets and repopulates the model dicts with only
+            # ``training_step`` metrics, so without this snapshot they would be
+            # lost. On the first batch, fold in the once-per-epoch metrics. (T-A)
+            pre_logger_metrics = dict(model._logger_metrics)
+            pre_prog_bar_metrics = dict(model._prog_bar_metrics)
+            if batch_idx == 0:
+                for k, v in epoch_start_logger.items():
+                    pre_logger_metrics.setdefault(k, v)
+                for k, v in epoch_start_prog.items():
+                    pre_prog_bar_metrics.setdefault(k, v)
 
             # Single forward + backward pass; metrics come back concrete.
             grads, loss, aux = compute_grads_fn(batch, batch_idx)
@@ -679,6 +700,10 @@ class Trainer:
             logger_metrics = aux.get('logger', {}) if isinstance(aux, dict) else {}
             prog_bar_metrics = aux.get('prog_bar', {}) if isinstance(aux, dict) else {}
             outputs = {'loss': loss_val}
+            # Callback/hook metrics first; training_step metrics take precedence
+            # on any name collision. (T-A)
+            for key, value in pre_logger_metrics.items():
+                outputs[key] = _to_scalar(value)
             for key, value in logger_metrics.items():
                 outputs[key] = _to_scalar(value)
 
@@ -696,6 +721,7 @@ class Trainer:
             if pbar is not None:
                 pbar.update(1)
                 pbar_show = {'loss': loss_val}
+                pbar_show.update({k: _to_scalar(v) for k, v in pre_prog_bar_metrics.items()})
                 pbar_show.update({k: _to_scalar(v) for k, v in prog_bar_metrics.items()})
                 pbar.set_postfix(pbar_show)
 
@@ -899,9 +925,16 @@ class Trainer:
                 if i < len(self.optimizers):
                     self.optimizers[i].load_state_dict(single)
 
-        self.state.epoch = state.get('epoch', 0)
+        # Coerce missing/None counters to 0. ``CheckpointManager`` may store
+        # ``step=None`` (and hence no 'global_step'), which would otherwise make
+        # ``global_step`` None and crash the loop on ``global_step += 1``. (T-C)
+        epoch = state.get('epoch')
+        self.state.epoch = epoch if epoch is not None else 0
         # Prefer 'global_step'; fall back to the legacy 'step' key.
-        self.state.global_step = state.get('global_step', state.get('step', 0))
+        gstep = state.get('global_step')
+        if gstep is None:
+            gstep = state.get('step')
+        self.state.global_step = gstep if gstep is not None else 0
         if self.model is not None:
             self.model.current_epoch = self.state.epoch
             self.model.global_step = self.state.global_step
