@@ -837,14 +837,14 @@ class ExponentialDecayLR(LRScheduler):
     **Continuous mode (staircase=False):**
 
     .. math::
-        \text{rate\_factor} = \frac{\text{step} - \text{transition\_begin}}{\text{transition\_steps}}
+        \text{rate\_factor} = \frac{\text{step} - \text{transition\_begin}}{\text{decay\_steps}}
 
         \eta = \text{init\_value} \times \text{decay\_rate}^{\text{rate\_factor}}
 
     **Staircase mode (staircase=True):**
 
     .. math::
-        \text{rate\_factor} = \left\lfloor\frac{\text{step} - \text{transition\_begin}}{\text{transition\_steps}}\right\rfloor
+        \text{rate\_factor} = \left\lfloor\frac{\text{step} - \text{transition\_begin}}{\text{decay\_steps}}\right\rfloor
 
         \eta = \text{init\_value} \times \text{decay\_rate}^{\text{rate\_factor}}
 
@@ -2038,8 +2038,8 @@ class CyclicLR(LRScheduler):
         ... )
         >>>
         >>> # First cycle: LR oscillates between 0.0001 and 0.001
-        >>> # Second cycle: LR oscillates between 0.0001 and 0.0055
-        >>> # Third cycle: LR oscillates between 0.0001 and 0.00325
+        >>> # Second cycle: LR oscillates between 0.0001 and 0.00055 (amplitude halved)
+        >>> # Third cycle: LR oscillates between 0.0001 and 0.000325 (amplitude halved again)
         >>> # And so on...
 
     **Exponential range decay:**
@@ -2210,6 +2210,11 @@ class CyclicLR(LRScheduler):
             raise ValueError(f"step_size_up must be a positive integer, got {step_size_up}")
         if step_size_down is not None and step_size_down <= 0:
             raise ValueError(f"step_size_down must be a positive integer, got {step_size_down}")
+        if mode not in ('triangular', 'triangular2', 'exp_range'):
+            raise ValueError(
+                f"mode must be one of 'triangular', 'triangular2', 'exp_range', got {mode!r}.")
+        if scale_mode not in ('cycle', 'iterations'):
+            raise ValueError(f"scale_mode must be 'cycle' or 'iterations', got {scale_mode!r}.")
         self.step_size_up = step_size_up
         self.step_size_down = step_size_down or step_size_up
         self.mode = mode
@@ -2454,7 +2459,7 @@ class OneCycleLR(LRScheduler):
         ...         total_steps=num_iter,
         ...         div_factor=final_lr/init_lr,
         ...         final_div_factor=1.0,  # Don't decrease at end
-        ...         pct_start=1.0  # Only increase
+        ...         pct_start=0.99  # Almost entirely increasing (must be < 1.0)
         ...     )
         ...     optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
         ...
@@ -2605,6 +2610,8 @@ class OneCycleLR(LRScheduler):
 
         if not 0.0 < pct_start < 1.0:
             raise ValueError(f"pct_start must be in the open interval (0, 1), got {pct_start}")
+        if anneal_strategy not in ('cos', 'linear'):
+            raise ValueError(f"anneal_strategy must be 'cos' or 'linear', got {anneal_strategy!r}.")
         self.pct_start = pct_start
         self.anneal_strategy = anneal_strategy
         self.div_factor = div_factor
@@ -2981,6 +2988,10 @@ class ReduceLROnPlateau(LRScheduler):
         super().__init__(base_lr=base_lr, last_epoch=last_epoch)
         if factor >= 1.0:
             raise ValueError("Factor should be < 1.0")
+        if mode not in ('min', 'max'):
+            raise ValueError(f"mode must be 'min' or 'max', got {mode!r}.")
+        if threshold_mode not in ('rel', 'abs'):
+            raise ValueError(f"threshold_mode must be 'rel' or 'abs', got {threshold_mode!r}.")
 
         self.mode = mode
         self.factor = factor
@@ -4364,7 +4375,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         ...     current_lr = scheduler.get_lr()[0]
         ...
         ...     # Detect restart
-        ...     if scheduler.T_cur.value < old_T_cur.value:
+        ...     if scheduler.T_cur.value < old_T_cur:
         ...         print(f"Restart at epoch {epoch}! LR reset to {current_lr:.6f}")
         ...
         ...     if epoch % 10 == 0:
@@ -4432,8 +4443,8 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         >>> state = {
         ...     'epoch': 75,
         ...     'scheduler': scheduler.state_dict(),
-        ...     'T_cur': scheduler.T_cur,
-        ...     'T_i': scheduler.T_i
+        ...     'T_cur': scheduler.T_cur.value,
+        ...     'T_i': scheduler.T_i.value
         ... }
         >>>
         >>> # Later: restore and continue
@@ -4441,8 +4452,8 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         ...     base_lr=0.1, T_0=50, T_mult=2
         ... )
         >>> new_scheduler.load_state_dict(state['scheduler'])
-        >>> new_scheduler.T_cur = state['T_cur']
-        >>> new_scheduler.T_i = state['T_i']
+        >>> new_scheduler.T_cur.value = state['T_cur']
+        >>> new_scheduler.T_i.value = state['T_i']
 
     See Also
     --------
@@ -4492,14 +4503,28 @@ class CosineAnnealingWarmRestarts(LRScheduler):
 
     def step(self, epoch: Optional[int] = None):
         if epoch is None:
-            epoch = self.last_epoch.value + 1
-        self.last_epoch.value = epoch
-
-        # JIT-compatible: use jnp.where for conditional updates
-        self.T_cur.value = self.T_cur.value + 1
-        should_restart = self.T_cur.value >= self.T_i.value
-        self.T_cur.value = jnp.where(should_restart, 0, self.T_cur.value)
-        self.T_i.value = jnp.where(should_restart, self.T_i.value * self.T_mult, self.T_i.value)
+            # Incremental advance by one step within the current cycle.
+            self.last_epoch.value = self.last_epoch.value + 1
+            # JIT-compatible: use jnp.where for conditional updates
+            self.T_cur.value = self.T_cur.value + 1
+            should_restart = self.T_cur.value >= self.T_i.value
+            self.T_cur.value = jnp.where(should_restart, 0, self.T_cur.value)
+            self.T_i.value = jnp.where(should_restart, self.T_i.value * self.T_mult, self.T_i.value)
+        else:
+            # Jump to an absolute epoch: recompute the cycle position from the SGDR
+            # closed form so ``step(epoch)`` places the schedule exactly at ``epoch``
+            # (matching PyTorch's CosineAnnealingWarmRestarts), rather than blindly
+            # advancing one step. ``T_mult`` is a static Python int so the branch is safe.
+            self.last_epoch.value = epoch
+            if self.T_mult == 1:
+                self.T_cur.value = epoch % self.T_0
+                self.T_i.value = self.T_0
+            else:
+                n = jnp.floor(
+                    jnp.log((epoch / self.T_0) * (self.T_mult - 1) + 1) / jnp.log(self.T_mult)
+                )
+                self.T_cur.value = epoch - self.T_0 * (self.T_mult ** n - 1) / (self.T_mult - 1)
+                self.T_i.value = self.T_0 * self.T_mult ** n
 
         values = self.get_lr()
         # Update our own applied LR so the optimizer scales by the right value
@@ -4951,7 +4976,7 @@ class PiecewiseConstantSchedule(LRScheduler):
         >>> scheduler = braintools.optim.PiecewiseConstantSchedule(
         ...     base_lr=0.1,
         ...     boundaries=[30, 60, 80],  # Epochs to decrease LR
-        ...     values=[1.0, 0.1, 0.01, 0.001]  # LR multipliers
+        ...     values=[1.0, 0.1, 0.01, 0.001]  # absolute LRs (not multipliers of base_lr)
         ... )
         >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
         >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
@@ -4962,7 +4987,7 @@ class PiecewiseConstantSchedule(LRScheduler):
         ...     scheduler.step()
         ...     lr = scheduler.get_lr()[0]
         ...     print(f"Epoch {epoch}: LR = {lr:.6f}")
-        ...     # LR: 0.1 (epochs 0-29), 0.01 (30-59), 0.001 (60-79), 0.0001 (80-89)
+        ...     # LR: 1.0 (epochs 0-29), 0.1 (30-59), 0.01 (60-79), 0.001 (80-89)
 
     **Transfer learning with progressive unfreezing:**
 
