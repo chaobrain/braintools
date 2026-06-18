@@ -261,3 +261,24 @@ class TestOneToOne(unittest.TestCase):
         self.assertEqual(result.n_connections, 1)
         np.testing.assert_array_equal(result.pre_indices, [0])
         np.testing.assert_array_equal(result.post_indices, [0])
+
+    def test_one_to_one_empty_population_circular(self):
+        # REG-1: circular indexing used to divide by zero (% pre_num) when a
+        # size is 0, emitting bogus indices / warnings. Must return 0
+        # connections cleanly.
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            conn = OneToOne(circular=True, seed=42)
+            result = conn(pre_size=0, post_size=5)
+            self.assertEqual(result.n_connections, 0)
+            self.assertEqual(len(result.pre_indices), 0)
+            self.assertEqual(len(result.post_indices), 0)
+
+            result2 = conn(pre_size=5, post_size=0, recompute=True)
+            self.assertEqual(result2.n_connections, 0)
+
+    def test_one_to_one_empty_population_non_circular(self):
+        conn = OneToOne(circular=False, seed=42)
+        result = conn(pre_size=0, post_size=0)
+        self.assertEqual(result.n_connections, 0)

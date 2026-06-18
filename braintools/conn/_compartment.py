@@ -118,6 +118,34 @@ def _normalize_positions(positions, unit=None):
     return positions, unit
 
 
+def _validate_prob(prob, name='connection_prob'):
+    """Validate that a probability is numeric and in [0, 1]."""
+    if not isinstance(prob, (int, float, np.number)):
+        raise TypeError(f"{name} must be numeric, got {type(prob)}")
+    if prob < 0 or prob > 1:
+        raise ValueError(f"{name} must be in [0, 1], got {prob}")
+
+
+def _validate_non_negative_int(value, name):
+    """Validate that a value is a non-negative integer."""
+    if not isinstance(value, (int, np.integer)):
+        raise TypeError(f"{name} must be an integer, got {type(value)}")
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative, got {value}")
+
+
+def _as_2d_positions(positions):
+    """Reshape 1-D position arrays to (N, 1) so cdist works.
+
+    cdist requires 2-D inputs; a flat ``(N,)`` array of scalar coordinates is
+    reshaped to ``(N, 1)``.
+    """
+    positions = np.asarray(positions)
+    if positions.ndim == 1:
+        positions = positions.reshape(-1, 1)
+    return positions
+
+
 class CompartmentSpecific(MultiCompartmentConnectivity):
     """General compartment-specific connectivity pattern.
 
@@ -132,12 +160,16 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         Keys and values can be compartment indices (int) or names (str).
     connection_prob : float or dict
         Connection probability. Can be global or per-compartment-pair.
-    weight_distribution : str or callable
-        Weight distribution for connections.
-    weight_params : dict
-        Parameters for weight distribution.
+    weight : Initializer, optional
+        Weight initializer (e.g. ``braintools.init.Normal``).
+    delay : Initializer, optional
+        Delay initializer (e.g. ``braintools.init.Uniform``).
     morphology_info : dict, optional
         Information about neuron morphology structure.
+    allow_self_connections : bool, optional
+        Whether a neuron may connect to itself (autapse). When ``False`` and the
+        pre/post populations have the same size, connections with
+        ``pre_idx == post_idx`` are dropped regardless of compartment. Default ``False``.
 
     Examples
     --------
@@ -146,11 +178,11 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> from braintools.init import Normal
         >>> axon_soma = CompartmentSpecific(
         ...     compartment_mapping={AXON: SOMA},
         ...     connection_prob=0.1,
-        ...     weight_distribution='normal',
-        ...     weight_params={'mean': 2.0 * u.nS, 'std': 0.5 * u.nS}
+        ...     weight=Normal(mean=2.0 * u.nS, std=0.5 * u.nS)
         ... )
         >>> result = axon_soma(pre_size=100, post_size=100)
 
@@ -194,6 +226,7 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         morphology_info: Optional[Dict] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -203,6 +236,7 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         self.weight_init = weight
         self.delay_init = delay
         self.morphology_info = morphology_info or {}
+        self.allow_self_connections = allow_self_connections
 
     @staticmethod
     def _validate_compartment_index(idx: int, context: str = "compartment") -> None:
@@ -302,6 +336,13 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
             for target_comp in target_comps:
                 # Get connection probability for this compartment pair
                 if isinstance(self.connection_prob, dict):
+                    if (source_comp, target_comp) not in self.connection_prob:
+                        warnings.warn(
+                            f"No connection probability provided for mapped pair "
+                            f"({source_comp}, {target_comp}); this pair is dropped "
+                            f"(probability defaults to 0.0).",
+                            UserWarning,
+                        )
                     prob = self.connection_prob.get((source_comp, target_comp), 0.0)
                 else:
                     prob = self.connection_prob
@@ -339,6 +380,26 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         post_indices = np.concatenate(all_post_indices)
         pre_compartments = np.concatenate(all_pre_compartments)
         post_compartments = np.concatenate(all_post_compartments)
+
+        # Drop self-connections (autapses) when not allowed and populations match.
+        if not self.allow_self_connections and pre_num == post_num:
+            keep = pre_indices != post_indices
+            pre_indices = pre_indices[keep]
+            post_indices = post_indices[keep]
+            pre_compartments = pre_compartments[keep]
+            post_compartments = post_compartments[keep]
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                model_type='multi_compartment',
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+            )
+
         n_connections = len(pre_indices)
 
         # Generate weights and delays using init_call
@@ -442,10 +503,11 @@ class AxonToSoma(CompartmentSpecific):
     --------
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.init import LogNormal
         >>> axon_soma = AxonToSoma(
         ...     connection_prob=0.05,
-        ...     weight_distribution='lognormal',
-        ...     weight_params={'mean': 1.0, 'sigma': 0.3}
+        ...     weight=LogNormal(mean=1.0 * u.nS, std=0.3 * u.nS)
         ... )
     """
     __module__ = 'braintools.conn'
@@ -500,11 +562,11 @@ class AxonToDendrite(CompartmentSpecific):
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> from braintools.init import LogNormal
         >>> axon_dend = AxonToDendrite(
         ...     target_dendrites=[BASAL_DENDRITE, APICAL_DENDRITE],
         ...     connection_prob=0.1,
-        ...     weight_distribution='lognormal',
-        ...     weight_params={'mean': 2.0 * u.nS, 'sigma': 0.5}
+        ...     weight=LogNormal(mean=2.0 * u.nS, std=0.5 * u.nS)
         ... )
     """
     __module__ = 'braintools.conn'
@@ -527,10 +589,11 @@ class DendriteToDendrite(CompartmentSpecific):
     --------
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.init import Normal
         >>> dend_dend = DendriteToDendrite(
         ...     connection_prob=0.2,
-        ...     weight_distribution='normal',
-        ...     weight_params={'mean': 0.5, 'std': 0.1}
+        ...     weight=Normal(mean=0.5 * u.nS, std=0.1 * u.nS)
         ... )
     """
     __module__ = 'braintools.conn'
@@ -544,11 +607,12 @@ class DendriteToDendrite(CompartmentSpecific):
 
 
 class MorphologyDistance(MultiCompartmentConnectivity):
-    """Distance-dependent connectivity based on detailed morphology.
+    """Distance-dependent connectivity based on neuron positions.
 
-    This pattern uses the actual morphological structure of neurons
-    to determine connection probabilities and strengths based on
-    distances between specific compartments.
+    Connection probabilities decay with the Euclidean distance between
+    presynaptic and postsynaptic neuron positions (the soma positions passed
+    as ``pre_positions``/``post_positions``); the chosen target compartments
+    come from ``compartment_mapping``. Positions are required.
 
     Parameters
     ----------
@@ -558,12 +622,12 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         Distance decay function ('gaussian', 'exponential', 'linear').
     compartment_mapping : dict
         Mapping of which compartments can connect to which.
-    morphology_positions : dict, optional
-        Detailed positions of compartments for each neuron.
     weight : Initializer, optional
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+    allow_self_connections : bool, optional
+        Whether a neuron may connect to itself. Default ``False``.
 
     Examples
     --------
@@ -583,18 +647,18 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         sigma: Union[float, u.Quantity],
         decay_function: str = 'gaussian',
         compartment_mapping: Dict = None,
-        morphology_positions: Optional[Dict] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.sigma = sigma
         self.decay_function = decay_function
         self.compartment_mapping = compartment_mapping or {AXON: [BASAL_DENDRITE, APICAL_DENDRITE]}
-        self.morphology_positions = morphology_positions
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(
         self,
@@ -606,13 +670,10 @@ class MorphologyDistance(MultiCompartmentConnectivity):
     ) -> ConnectionResult:
         """Generate morphology-based distance-dependent connections."""
         if pre_positions is None or post_positions is None:
-            return CompartmentSpecific(
-                compartment_mapping=self.compartment_mapping,
-                connection_prob=0.1,
-                weight=self.weight_init,
-                delay=self.delay_init,
-                seed=self.seed
-            ).generate(pre_size, post_size, pre_positions, post_positions, **kwargs)
+            raise ValueError(
+                "MorphologyDistance requires both pre_positions and post_positions "
+                "(distance-dependent connectivity cannot be computed without them)."
+            )
 
         # Validate and normalize sizes FIRST
         if isinstance(pre_size, tuple):
@@ -651,8 +712,8 @@ class MorphologyDistance(MultiCompartmentConnectivity):
             post_num = min(len(post_pos_val), post_num)
 
         # Trim positions to actual sizes being used
-        pre_pos_val = pre_pos_val[:pre_num]
-        post_pos_val = post_pos_val[:post_num]
+        pre_pos_val = _as_2d_positions(pre_pos_val)[:pre_num]
+        post_pos_val = _as_2d_positions(post_pos_val)[:post_num]
 
         # Calculate distances
         distances = cdist(pre_pos_val, post_pos_val)
@@ -704,6 +765,26 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         post_indices = np.concatenate(all_post_indices)
         pre_compartments = np.concatenate(all_pre_compartments)
         post_compartments = np.concatenate(all_post_compartments)
+
+        # Drop self-connections (autapses) when not allowed and populations match.
+        if not self.allow_self_connections and pre_num == post_num:
+            keep = pre_indices != post_indices
+            pre_indices = pre_indices[keep]
+            post_indices = post_indices[keep]
+            pre_compartments = pre_compartments[keep]
+            post_compartments = post_compartments[keep]
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                model_type='multi_compartment',
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+            )
+
         n_connections = len(pre_indices)
 
         weights = param(self.weight_init, n_connections, rng=self.rng)
@@ -733,34 +814,35 @@ class MorphologyDistance(MultiCompartmentConnectivity):
 
 
 class DendriticTree(MultiCompartmentConnectivity):
-    """Dendritic tree connectivity patterns with branch-specific targeting.
+    """Dendritic tree connectivity with separate basal/apical probabilities.
 
-    This models realistic dendritic connectivity considering the branching
-    structure of dendritic trees and branch-specific connection rules.
+    Generates axon-to-dendrite connections using two independent connection
+    probabilities: ``branch_targeting['proximal']`` is applied to basal
+    dendrites and ``branch_targeting['distal']`` to apical dendrites. The
+    ``'proximal'``/``'distal'`` keys are treated purely as the basal/apical
+    probabilities respectively (no actual proximal/distal position model).
 
     Parameters
     ----------
-    tree_structure : dict
-        Description of dendritic tree structure.
     branch_targeting : dict
-        Rules for targeting specific branches (e.g., {'proximal': 0.8, 'distal': 0.2}).
-    distance_dependence : bool
-        Whether to include distance dependence within the tree.
+        Per-target connection probabilities. ``'proximal'`` -> basal dendrite
+        probability (default 0.5), ``'distal'`` -> apical dendrite probability
+        (default 0.3). Both must be in [0, 1].
+    tree_structure : dict, optional
+        Reserved descriptive metadata about the dendritic tree. It is stored on
+        the result metadata but does not affect connection generation.
     weight : Initializer, optional
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+    allow_self_connections : bool, optional
+        Whether a neuron may connect to itself. Default ``False``.
 
     Examples
     --------
     .. code-block:: python
 
-        >>> tree_structure = {
-        ...     'basal': {'n_branches': 5, 'branch_length': 200 * u.um},
-        ...     'apical': {'n_branches': 1, 'branch_length': 600 * u.um}
-        ... }
         >>> dend_tree = DendriticTree(
-        ...     tree_structure=tree_structure,
         ...     branch_targeting={'proximal': 0.8, 'distal': 0.2}
         ... )
     """
@@ -768,19 +850,21 @@ class DendriticTree(MultiCompartmentConnectivity):
 
     def __init__(
         self,
-        tree_structure: Dict,
         branch_targeting: Dict,
-        distance_dependence: bool = True,
+        tree_structure: Optional[Dict] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.tree_structure = tree_structure
         self.branch_targeting = branch_targeting
-        self.distance_dependence = distance_dependence
+        _validate_prob(branch_targeting.get('proximal', 0.5), "branch_targeting['proximal']")
+        _validate_prob(branch_targeting.get('distal', 0.3), "branch_targeting['distal']")
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(
         self,
@@ -845,6 +929,26 @@ class DendriticTree(MultiCompartmentConnectivity):
         post_indices = np.concatenate(all_post_indices)
         pre_compartments = np.concatenate(all_pre_compartments)
         post_compartments = np.concatenate(all_post_compartments)
+
+        # Drop self-connections (autapses) when not allowed and populations match.
+        if not self.allow_self_connections and pre_num == post_num:
+            keep = pre_indices != post_indices
+            pre_indices = pre_indices[keep]
+            post_indices = post_indices[keep]
+            pre_compartments = pre_compartments[keep]
+            post_compartments = post_compartments[keep]
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                model_type='multi_compartment',
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+            )
+
         n_connections = len(pre_indices)
 
         weights = param(self.weight_init, n_connections, rng=self.rng)
@@ -892,10 +996,15 @@ class AxonalProjection(MultiCompartmentConnectivity):
     spatial_scale : float
         Spatial scale for clustered arborization pattern (default 10000.0).
         Controls how distance affects clustering: smaller values = tighter clustering.
+    target_compartments : list of int, optional
+        Postsynaptic dendritic compartments to target. Each connection is randomly
+        assigned one of these. Default ``[BASAL_DENDRITE, APICAL_DENDRITE]``.
     weight : Initializer, optional
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+    allow_self_connections : bool, optional
+        Whether a neuron may connect to itself. Default ``False``.
 
     Examples
     --------
@@ -920,18 +1029,23 @@ class AxonalProjection(MultiCompartmentConnectivity):
         arborization_pattern: str = 'diffuse',
         connection_prob: float = 0.05,
         spatial_scale: float = 10000.0,
+        target_compartments: Optional[List[int]] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
+        _validate_prob(connection_prob)
         self.projection_type = projection_type
         self.topographic_map = topographic_map
         self.arborization_pattern = arborization_pattern
         self.connection_prob = connection_prob
         self.spatial_scale = spatial_scale
+        self.target_compartments = target_compartments or [BASAL_DENDRITE, APICAL_DENDRITE]
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(
         self,
@@ -971,7 +1085,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
 
             # Modify based on arborization pattern
             if self.arborization_pattern == 'clustered':
-                distances = cdist(pre_pos_vals, post_pos_vals)
+                distances = cdist(_as_2d_positions(pre_pos_vals), _as_2d_positions(post_pos_vals))
                 spatial_factor = np.exp(-distances ** 2 / self.spatial_scale)
                 probs = probs * spatial_factor
         else:
@@ -982,6 +1096,12 @@ class AxonalProjection(MultiCompartmentConnectivity):
         random_matrix = self.rng.random((pre_num, post_num))
         connection_mask = random_matrix < probs
         pre_indices, post_indices = np.where(connection_mask)
+
+        # Drop self-connections (autapses) when not allowed and populations match.
+        if not self.allow_self_connections and pre_num == post_num:
+            keep = pre_indices != post_indices
+            pre_indices = pre_indices[keep]
+            post_indices = post_indices[keep]
 
         if len(pre_indices) == 0:
             return ConnectionResult(
@@ -996,7 +1116,11 @@ class AxonalProjection(MultiCompartmentConnectivity):
 
         n_connections = len(pre_indices)
         pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
-        post_compartments = np.full(n_connections, BASAL_DENDRITE, dtype=np.int64)
+        # Randomly assign each connection to one of the target dendritic compartments.
+        post_compartments = self.rng.choice(
+            self.target_compartments,
+            size=n_connections
+        ).astype(np.int64)
 
         weights = param(self.weight_init, n_connections, rng=self.rng)
         delays = param(self.delay_init, n_connections, rng=self.rng)
@@ -1078,13 +1202,16 @@ class BranchSpecific(MultiCompartmentConnectivity):
         connection_prob: float = 0.3,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
+        _validate_prob(connection_prob)
         self.branch_indices = branch_indices or [0, 1, 2]
         self.connection_prob = connection_prob
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(
         self,
@@ -1114,6 +1241,7 @@ class BranchSpecific(MultiCompartmentConnectivity):
             connection_prob=self.connection_prob,
             weight=self.weight_init,
             delay=self.delay_init,
+            allow_self_connections=self.allow_self_connections,
             seed=self.seed
         ).generate(pre_size, post_size, pre_positions, post_positions, **kwargs)
 
@@ -1161,13 +1289,17 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         n_clusters: int = 10,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
+        _validate_non_negative_int(cluster_size, 'cluster_size')
+        _validate_non_negative_int(n_clusters, 'n_clusters')
         self.cluster_size = cluster_size
         self.n_clusters = n_clusters
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(
         self,
@@ -1222,6 +1354,38 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         post_indices = np.concatenate(all_post_indices)
         pre_compartments = np.concatenate(all_pre_compartments)
         post_compartments = np.concatenate(all_post_compartments)
+
+        # Deduplicate (pre, post, pre_comp, post_comp) quads. The same neuron can be
+        # sampled into multiple clusters of the same post neuron (replace=False only
+        # holds within a cluster), which would otherwise produce duplicate synapses
+        # that inflate weights after conversion.
+        quads = np.stack([pre_indices, post_indices, pre_compartments, post_compartments])
+        _, unique_cols = np.unique(quads, axis=1, return_index=True)
+        unique_cols = np.sort(unique_cols)
+        pre_indices = pre_indices[unique_cols]
+        post_indices = post_indices[unique_cols]
+        pre_compartments = pre_compartments[unique_cols]
+        post_compartments = post_compartments[unique_cols]
+
+        # Drop self-connections (autapses) when not allowed and populations match.
+        if not self.allow_self_connections and pre_num == post_num:
+            keep = pre_indices != post_indices
+            pre_indices = pre_indices[keep]
+            post_indices = post_indices[keep]
+            pre_compartments = pre_compartments[keep]
+            post_compartments = post_compartments[keep]
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                model_type='multi_compartment',
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+            )
+
         n_connections = len(pre_indices)
 
         weights = param(self.weight_init, n_connections, rng=self.rng)
@@ -1275,13 +1439,16 @@ class AxonalBranching(MultiCompartmentConnectivity):
         branch_spread: float = 100.0,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
+        _validate_non_negative_int(branches_per_axon, 'branches_per_axon')
         self.branches_per_axon = branches_per_axon
         self.branch_spread = branch_spread
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(
         self,
@@ -1328,6 +1495,24 @@ class AxonalBranching(MultiCompartmentConnectivity):
 
         pre_indices = np.concatenate(all_pre_indices)
         post_indices = np.concatenate(all_post_indices)
+
+        # Drop self-connections (autapses) when not allowed and populations match.
+        if not self.allow_self_connections and pre_num == post_num:
+            keep = pre_indices != post_indices
+            pre_indices = pre_indices[keep]
+            post_indices = post_indices[keep]
+
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                model_type='multi_compartment',
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+            )
+
         n_connections = len(pre_indices)
 
         pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
@@ -1372,11 +1557,13 @@ class AxonalArborization(MultiCompartmentConnectivity):
     arborization_radius : float or Quantity
         Radius of axonal arborization field.
     density : float
-        Synaptic density within arborization field.
+        Synaptic density within arborization field. Must be in [0, 1].
     weight : Initializer, optional
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+    allow_self_connections : bool, optional
+        Whether a neuron may connect to itself. Default ``False``.
     """
     __module__ = 'braintools.conn'
 
@@ -1386,13 +1573,16 @@ class AxonalArborization(MultiCompartmentConnectivity):
         density: float = 0.3,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
+        _validate_prob(density, 'density')
         self.arborization_radius = arborization_radius
         self.density = density
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(
         self,
@@ -1404,13 +1594,10 @@ class AxonalArborization(MultiCompartmentConnectivity):
     ) -> ConnectionResult:
         """Generate axonal arborization connections."""
         if pre_positions is None or post_positions is None:
-            return CompartmentSpecific(
-                compartment_mapping={AXON: [BASAL_DENDRITE, APICAL_DENDRITE]},
-                connection_prob=self.density,
-                weight=self.weight_init,
-                delay=self.delay_init,
-                seed=self.seed
-            ).generate(pre_size, post_size, pre_positions, post_positions, **kwargs)
+            raise ValueError(
+                "AxonalArborization requires both pre_positions and post_positions "
+                "(spatial arborization cannot be computed without them)."
+            )
 
         # Normalize positions using helper
         if isinstance(self.arborization_radius, u.Quantity):
@@ -1423,7 +1610,7 @@ class AxonalArborization(MultiCompartmentConnectivity):
             post_pos_val, _ = _normalize_positions(post_positions)
 
         # Calculate distances
-        distances = cdist(pre_pos_val, post_pos_val)
+        distances = cdist(_as_2d_positions(pre_pos_val), _as_2d_positions(post_pos_val))
 
         # Within arborization radius
         within_radius = distances <= radius_val
@@ -1433,6 +1620,12 @@ class AxonalArborization(MultiCompartmentConnectivity):
         connection_mask = within_radius & (random_matrix < self.density)
 
         pre_indices, post_indices = np.where(connection_mask)
+
+        # Drop self-connections (autapses) when not allowed and populations match.
+        if not self.allow_self_connections and len(pre_pos_val) == len(post_pos_val):
+            keep = pre_indices != post_indices
+            pre_indices = pre_indices[keep]
+            post_indices = post_indices[keep]
 
         if len(pre_indices) == 0:
             return ConnectionResult(
@@ -1557,6 +1750,11 @@ class SynapticPlacement(MultiCompartmentConnectivity):
             BASAL_DENDRITE: 0.6,
             APICAL_DENDRITE: 0.4
         }
+        for comp, pref in self.compartment_preferences.items():
+            if not isinstance(pref, (int, float, np.number)):
+                raise TypeError(f"compartment preference must be numeric, got {type(pref)} for {comp}")
+            if pref < 0:
+                raise ValueError(f"compartment preference must be non-negative, got {pref} for {comp}")
         self.weight_init = weight
         self.delay_init = delay
 
@@ -1616,6 +1814,8 @@ class SynapticClustering(MultiCompartmentConnectivity):
         **kwargs
     ):
         super().__init__(**kwargs)
+        _validate_non_negative_int(cluster_size, 'cluster_size')
+        _validate_non_negative_int(n_clusters_per_neuron, 'n_clusters_per_neuron')
         self.cluster_size = cluster_size
         self.n_clusters_per_neuron = n_clusters_per_neuron
         self.weight_init = weight
@@ -1674,6 +1874,14 @@ class CustomCompartment(MultiCompartmentConnectivity):
 
         result_data = self.connection_func(**kwargs)
 
+        if not isinstance(result_data, (tuple, list)):
+            raise ValueError(
+                f"Custom function must return a tuple/list of 4-6 values, "
+                f"got {type(result_data)}"
+            )
+        if not (4 <= len(result_data) <= 6):
+            raise ValueError(f"Custom function must return 4-6 values, got {len(result_data)}")
+
         if len(result_data) == 4:
             pre_indices, post_indices, pre_compartments, post_compartments = result_data
             weights = None
@@ -1681,10 +1889,8 @@ class CustomCompartment(MultiCompartmentConnectivity):
         elif len(result_data) == 5:
             pre_indices, post_indices, pre_compartments, post_compartments, weights = result_data
             delays = None
-        elif len(result_data) == 6:
+        else:  # len(result_data) == 6
             pre_indices, post_indices, pre_compartments, post_compartments, weights, delays = result_data
-        else:
-            raise ValueError(f"Custom function must return 4-6 values, got {len(result_data)}")
 
         if delays is not None and not isinstance(delays, u.Quantity):
             delays = np.asarray(delays) * u.ms

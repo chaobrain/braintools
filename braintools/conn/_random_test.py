@@ -164,6 +164,47 @@ class TestRandom(unittest.TestCase):
             np.testing.assert_array_almost_equal(u.get_mantissa(result.delays), 1.0)
 
 
+class TestRandomRegression(unittest.TestCase):
+    """Regression tests for conn fixes (RND-1, RND-3, validation)."""
+
+    def test_cross_population_no_self_keeps_all_pairs(self):
+        # RND-1: i==j must NOT be dropped when pre and post are different
+        # populations. With prob=1.0 and 5x3, all 15 pairs must be kept.
+        conn = Random(prob=1.0, allow_self_connections=False, seed=42)
+        result = conn(pre_size=5, post_size=3)
+        self.assertEqual(result.n_connections, 15)
+
+    def test_same_population_no_self_drops_diagonal(self):
+        # Same population (5x5), prob=1.0, no self -> 25 - 5 = 20
+        conn = Random(prob=1.0, allow_self_connections=False, seed=42)
+        result = conn(pre_size=5, post_size=5)
+        self.assertEqual(result.n_connections, 20)
+        self.assertEqual(np.sum(result.pre_indices == result.post_indices), 0)
+
+    def test_vectorized_full_probability_count_and_bounds(self):
+        # RND-3: vectorized generation. prob=1.0 with self-connections allowed
+        # for same population gives every pair.
+        conn = Random(prob=1.0, allow_self_connections=True, seed=42)
+        result = conn(pre_size=6, post_size=4)
+        self.assertEqual(result.n_connections, 24)
+        self.assertTrue(np.all(result.pre_indices < 6))
+        self.assertTrue(np.all(result.post_indices < 4))
+
+    def test_prob_out_of_range_raises(self):
+        with self.assertRaises(ValueError):
+            Random(prob=-0.1)
+        with self.assertRaises(ValueError):
+            Random(prob=1.5)
+        with self.assertRaises(ValueError):
+            FixedProb(prob=2.0)
+
+    def test_clustered_random_validation(self):
+        with self.assertRaises(ValueError):
+            ClusteredRandom(prob=1.5, cluster_radius=10.0)
+        with self.assertRaises(ValueError):
+            ClusteredRandom(prob=0.1, cluster_radius=10.0, cluster_factor=-1.0)
+
+
 class TestFixedProbabilityAlias(unittest.TestCase):
     def setUp(self):
         self.rng = np.random.default_rng(42)
