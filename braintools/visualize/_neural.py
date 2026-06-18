@@ -116,21 +116,35 @@ def spike_raster(
     elif neuron_ids is None:
         raise ValueError("neuron_ids must be provided when spike_times is not a list")
 
+    # When ``color`` is a per-spike array it must be filtered with the same masks
+    # applied to the spikes; otherwise ``scatter`` raises a length-mismatch error
+    # ("'c' argument has N elements ... inconsistent with x and y").
+    color_arr = color
+    is_color_array = (
+        not isinstance(color, str)
+        and hasattr(color, '__len__')
+        and len(color) == len(spike_times)
+    )
+
     # Apply time filtering
     if time_range is not None:
         mask = (spike_times >= time_range[0]) & (spike_times <= time_range[1])
         spike_times = spike_times[mask]
         neuron_ids = neuron_ids[mask]
+        if is_color_array:
+            color_arr = np.asarray(color_arr)[mask]
 
     # Apply neuron filtering
     if neuron_range is not None:
         mask = (neuron_ids >= neuron_range[0]) & (neuron_ids <= neuron_range[1])
         spike_times = spike_times[mask]
         neuron_ids = neuron_ids[mask]
+        if is_color_array:
+            color_arr = np.asarray(color_arr)[mask]
 
     # Plot spikes
     if len(spike_times) > 0:
-        ax.scatter(spike_times, neuron_ids, c=color, marker=marker,
+        ax.scatter(spike_times, neuron_ids, c=color_arr, marker=marker,
                    s=markersize, alpha=alpha, **kwargs)
 
     # Labels and formatting
@@ -414,12 +428,30 @@ def neural_trajectory(
     """
     data = as_numpy(data)
 
+    if data.ndim != 2:
+        raise ValueError(
+            f"data must be 2D (time, features), got {data.ndim}D."
+        )
+    n_features = data.shape[1]
+
     # Determine dimensions
     if dims is None:
-        if data.shape[1] >= 3:
+        if n_features >= 3:
             dims = (0, 1, 2)
-        else:
+        elif n_features == 2:
             dims = (0, 1)
+        else:
+            raise ValueError(
+                "neural_trajectory needs at least 2 feature columns to plot a "
+                f"trajectory, but data has shape {data.shape}."
+            )
+    else:
+        invalid = [d for d in dims if d < 0 or d >= n_features]
+        if invalid:
+            raise ValueError(
+                f"dims {dims} reference columns outside data with {n_features} "
+                f"features (invalid: {invalid})."
+            )
 
     is_3d = len(dims) == 3
 

@@ -207,10 +207,14 @@ def brain_surface_3d(
         values = as_numpy(values)
         # Average values for each face
         face_values = np.mean(values[faces], axis=1)
-        # Normalize to [0, 1] for the colormap, guarding against an all-zero
-        # (degenerate) range that would produce NaN colors.
+        # Min-max normalize to [0, 1] for the colormap so signed values map
+        # correctly (dividing by ``max`` alone pushed negatives outside [0, 1],
+        # where the colormap clamps them). Guard against a degenerate (constant)
+        # range that would produce NaN colors.
+        min_val = np.min(face_values)
         max_val = np.max(face_values)
-        scaled = face_values / max_val if max_val != 0 else np.zeros_like(face_values)
+        span = max_val - min_val
+        scaled = (face_values - min_val) / span if span != 0 else np.zeros_like(face_values)
         # ``plt.cm.get_cmap`` was deprecated in matplotlib 3.7 and is removed in
         # 3.11; use the colormap registry instead.
         cmap_obj = plt.get_cmap(cmap) if isinstance(cmap, str) else cmap
@@ -471,8 +475,20 @@ def volume_rendering(
     # Create binary mask
     binary_volume = volume > threshold
 
+    # Color the filled voxels by their normalized intensity using ``cmap``
+    # (previously ``cmap`` was documented but never applied).
+    cmap_obj = plt.get_cmap(cmap) if isinstance(cmap, str) else cmap
+    voxel_kwargs = dict(kwargs)
+    if 'facecolors' not in voxel_kwargs and bool(binary_volume.any()):
+        filled = volume[binary_volume]
+        vmin = float(filled.min())
+        vmax = float(filled.max())
+        span = vmax - vmin
+        norm_vol = (volume - vmin) / span if span != 0 else np.zeros_like(volume, dtype=float)
+        voxel_kwargs['facecolors'] = cmap_obj(np.clip(norm_vol, 0.0, 1.0))
+
     # Plot voxels
-    ax.voxels(binary_volume, alpha=alpha, **kwargs)
+    ax.voxels(binary_volume, alpha=alpha, **voxel_kwargs)
 
     # Labels
     ax.set_xlabel('X')
