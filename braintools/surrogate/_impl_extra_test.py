@@ -159,13 +159,23 @@ class TestSurrogateFunSpecificValues:
         assert np.allclose(float(z[0]), -float(z[1]))
 
     def test_erf_at_zero(self):
+        # ERF.surrogate_fun is a proper [0, 1] smooth Heaviside: 0.5 * (1 - erf(-a*x)),
+        # which equals 0.5 at the threshold (NOT 0.0).
         sg = surrogate.ERF(alpha=1.0)
-        assert np.allclose(float(sg.surrogate_fun(jnp.array(0.0))), 0.0, atol=1e-7)
+        assert np.allclose(float(sg.surrogate_fun(jnp.array(0.0))), 0.5, atol=1e-7)
 
     def test_erf_finite(self):
         sg = surrogate.ERF(alpha=1.5)
         z = sg.surrogate_fun(jnp.linspace(-2, 2, 21))
         assert bool(jnp.all(jnp.isfinite(z)))
+
+    def test_erf_is_increasing_in_unit_range(self):
+        # The fixed ERF surrogate function increases monotonically within [0, 1].
+        sg = surrogate.ERF(alpha=1.0)
+        xs = jnp.linspace(-3, 3, 51)
+        z = sg.surrogate_fun(xs)
+        assert bool(jnp.all(jnp.diff(z) > 0))
+        assert float(jnp.min(z)) >= 0.0 and float(jnp.max(z)) <= 1.0
 
     def test_leaky_relu_fun(self):
         sg = surrogate.LeakyRelu(alpha=0.1, beta=1.0)
