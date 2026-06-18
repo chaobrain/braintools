@@ -134,6 +134,7 @@ class Surrogate(PrettyObject):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>

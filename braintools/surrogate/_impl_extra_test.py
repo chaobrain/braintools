@@ -185,11 +185,11 @@ class TestSurrogateFunSpecificValues:
 
     def test_log_tailed_relu_fun_regimes(self):
         sg = surrogate.LogTailedRelu(alpha=0.1)
-        # x <= 0 -> alpha*x ; 0<x<=1 -> x ; x>1 -> log(x)
+        # x <= 0 -> alpha*x ; 0<x<=1 -> x ; x>1 -> 1 + log(x)
         z = sg.surrogate_fun(jnp.array([-2.0, 0.5, jnp.e]))
         assert np.allclose(float(z[0]), -0.2)
         assert np.allclose(float(z[1]), 0.5)
-        assert np.allclose(float(z[2]), 1.0, atol=1e-6)  # log(e) == 1
+        assert np.allclose(float(z[2]), 2.0, atol=1e-6)  # 1 + log(e) == 2
 
     def test_s2nn_fun_two_branches(self):
         sg = surrogate.S2NN(alpha=4.0, beta=1.0)
