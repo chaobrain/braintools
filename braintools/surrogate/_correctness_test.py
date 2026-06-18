@@ -359,6 +359,43 @@ def test_log_tailed_relu_param_grad_finite_at_zero():
 
 
 # ---------------------------------------------------------------------------
+# 7b. LogTailedRelu.surrogate_fun is a *continuous, monotone* original function.
+#     Regression for the x>1 branch returning log(x) (a jump down to 0 at x=1)
+#     instead of the continuous 1 + log(x) (Cai et al. 2017).
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("alpha", [0.0, 0.1, 0.3])
+def test_log_tailed_relu_fun_continuous_at_one(alpha):
+    sg = surrogate.LogTailedRelu(alpha=alpha)
+    # Approach the x=1 break-point from both sides: no jump.
+    left = float(sg.surrogate_fun(jnp.array(1.0 - 1e-5)))
+    at = float(sg.surrogate_fun(jnp.array(1.0)))
+    right = float(sg.surrogate_fun(jnp.array(1.0 + 1e-5)))
+    assert np.allclose(left, 1.0, atol=1e-4)
+    assert np.allclose(at, 1.0, atol=1e-6)
+    assert np.allclose(right, 1.0, atol=1e-4)
+    # The old buggy log(x) branch jumped to ~0 just past x=1.
+    assert right > 0.5
+
+
+@pytest.mark.parametrize("alpha", [0.0, 0.1, 0.3])
+def test_log_tailed_relu_fun_monotone_and_finite(alpha):
+    sg = surrogate.LogTailedRelu(alpha=alpha)
+    xs = jnp.linspace(-2.0, 4.0, 241)
+    z = sg.surrogate_fun(xs)
+    assert bool(jnp.all(jnp.isfinite(z)))
+    assert bool(jnp.all(jnp.diff(z) >= -1e-6))  # monotone non-decreasing
+
+
+def test_log_tailed_relu_fun_derivative_matches_grad_in_tail():
+    # d/dx (1 + log(x)) == 1/x == surrogate_grad for x > 1.
+    sg = surrogate.LogTailedRelu(alpha=0.1)
+    xs = jnp.linspace(1.05, 3.0, 40)
+    auto = jax.vmap(jax.grad(sg.surrogate_fun))(xs)
+    assert jnp.allclose(auto, sg.surrogate_grad(xs), atol=1e-5)
+
+
+# ---------------------------------------------------------------------------
 # 8. Forward pass is the exact Heaviside step for every public surrogate.
 # ---------------------------------------------------------------------------
 

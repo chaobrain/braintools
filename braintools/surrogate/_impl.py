@@ -86,6 +86,7 @@ class Sigmoid(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -115,6 +116,7 @@ class Sigmoid(Surrogate):
 
        >>> import jax
        >>> import brainstate.nn as nn
+       >>> import braintools
        >>> import brainstate as brainstate
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-2, 2, 1000)
@@ -215,6 +217,7 @@ class PiecewiseQuadratic(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -245,6 +248,7 @@ class PiecewiseQuadratic(Surrogate):
        :include-source: True
 
        >>> import jax
+       >>> import braintools
        >>> import brainstate as brainstate
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
@@ -367,6 +371,7 @@ class PiecewiseExp(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -398,6 +403,7 @@ class PiecewiseExp(Surrogate):
        :include-source: True
 
        >>> import jax
+       >>> import braintools
        >>> import brainstate as brainstate
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
@@ -544,6 +550,7 @@ class SoftSign(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -672,6 +679,7 @@ class Arctan(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -687,6 +695,7 @@ class Arctan(Surrogate):
        :include-source: True
 
        >>> import jax
+       >>> import braintools
        >>> import brainstate as brainstate
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
@@ -786,6 +795,7 @@ class NonzeroSignLog(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -800,6 +810,7 @@ class NonzeroSignLog(Surrogate):
        :include-source: True
 
        >>> import jax
+       >>> import braintools
        >>> import brainstate as brainstate
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
@@ -885,6 +896,7 @@ class ERF(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -900,6 +912,7 @@ class ERF(Surrogate):
        :include-source: True
 
        >>> import jax
+       >>> import braintools
        >>> import brainstate as brainstate
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
@@ -997,6 +1010,7 @@ class PiecewiseLeakyRelu(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -1012,6 +1026,7 @@ class PiecewiseLeakyRelu(Surrogate):
        :include-source: True
 
        >>> import jax
+       >>> import braintools
        >>> import brainstate as brainstate
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
@@ -1123,6 +1138,7 @@ class SquarewaveFourierSeries(Surrogate):
     --------
     .. code-block:: python
 
+        >>> import braintools
         >>> import brainstate
         >>> import jax.numpy as jnp
         >>>
@@ -1138,6 +1154,7 @@ class SquarewaveFourierSeries(Surrogate):
        :include-source: True
 
        >>> import jax
+       >>> import braintools
        >>> import brainstate as brainstate
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
@@ -1260,11 +1277,10 @@ class S2NN(Surrogate):
        >>> ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
        >>>
-       >>> # Plot the original function for origin=True
+       >>> # Plot the original (smooth) function via surrogate_fun
        >>> for alpha, beta in [(4., 1.), (8., 2.)]:
        >>>     s2nn_fn = surrogate.S2NN(alpha=alpha, beta=beta)
-       >>>     s2nn_fn.origin = True
-       >>>     ys = jax.vmap(s2nn_fn)(xs)
+       >>>     ys = jax.vmap(s2nn_fn.surrogate_fun)(xs)
        >>>     ax2.plot(xs, ys, label=rf'$\alpha={alpha}, \beta={beta}$')
        >>>
        >>> ax2.set_xlabel('Input (x)')
@@ -1428,11 +1444,10 @@ class QPseudoSpike(Surrogate):
        >>> ax1.grid(True, alpha=0.3)
        >>> ax1.set_ylim([0, 1.2])
        >>>
-       >>> # Plot the original function for origin=True
+       >>> # Plot the original (smooth) function via surrogate_fun
        >>> for alpha in [1.5, 2.0, 3.0]:
        >>>     qps_fn = surrogate.QPseudoSpike(alpha=alpha)
-       >>>     qps_fn.origin = True
-       >>>     ys = jax.vmap(qps_fn)(xs)
+       >>>     ys = jax.vmap(qps_fn.surrogate_fun)(xs)
        >>>     ax2.plot(xs, ys, label=rf'$\alpha={alpha}$')
        >>>
        >>> ax2.set_xlabel('Input (x)')
@@ -1448,10 +1463,15 @@ class QPseudoSpike(Surrogate):
     alpha : float, optional
         Parameter to control tail fatness of gradient. Default is 2.0.
 
-        - alpha < 1: Heavy-tailed gradient (slower decay)
-        - alpha = 1: Exponential-like decay
-        - alpha > 1: Compact support (faster decay)
-        - alpha = 2: Quadratic decay (default)
+        The gradient :math:`(1 + 2|x|/(\alpha+1))^{-\alpha}` has a power-law
+        (polynomial) tail that is strictly positive for every finite ``x``; it
+        never has compact support. Larger ``alpha`` only makes the tail decay
+        faster:
+
+        - alpha < 1: heavy, slowly decaying polynomial tail
+        - alpha = 1: ``~ 1 / (1 + |x|)`` polynomial tail
+        - alpha > 1: lighter polynomial tail (faster decay); still non-zero everywhere
+        - alpha = 2: ``~ |x|^-2`` (quadratic) decay (default)
 
     Examples
     --------
@@ -1595,11 +1615,10 @@ class LeakyRelu(Surrogate):
        >>> ax1.grid(True, alpha=0.3)
        >>> ax1.set_ylim([-0.1, 1.2])
        >>>
-       >>> # Plot the original function for origin=True
+       >>> # Plot the original (smooth) function via surrogate_fun
        >>> for alpha, beta in [(0.1, 1.0), (0.3, 1.0), (0.1, 0.5)]:
        >>>     lr_fn = surrogate.LeakyRelu(alpha=alpha, beta=beta)
-       >>>     lr_fn.origin = True
-       >>>     ys = jax.vmap(lr_fn)(xs)
+       >>>     ys = jax.vmap(lr_fn.surrogate_fun)(xs)
        >>>     ax2.plot(xs, ys, label=rf'$\alpha={alpha}, \beta={beta}$')
        >>>
        >>> ax2.set_xlabel('Input (x)')
@@ -1707,8 +1726,12 @@ class LogTailedRelu(Surrogate):
         \begin{cases}
         \alpha x, & x \leq 0 \\
         x, & 0 < x \leq 1 \\
-        \log(x), & x > 1 \\
+        1 + \log(x), & x > 1 \\
         \end{cases}\end{split}
+
+    The ``1 +`` keeps the original function continuous (and :math:`C^1`) at
+    :math:`x = 1`, where both the linear branch and :math:`1 + \log(x)` equal 1
+    and share the unit slope.
 
     Backward gradient:
 
@@ -1746,11 +1769,10 @@ class LogTailedRelu(Surrogate):
        >>> ax1.grid(True, alpha=0.3)
        >>> ax1.set_ylim([-0.1, 1.2])
        >>>
-       >>> # Plot the original function for origin=True
+       >>> # Plot the original (smooth) function via surrogate_fun
        >>> for alpha in [0.0, 0.1, 0.3]:
        >>>     ltr_fn = surrogate.LogTailedRelu(alpha=alpha)
-       >>>     ltr_fn.origin = True
-       >>>     ys = jax.vmap(ltr_fn)(xs)
+       >>>     ys = jax.vmap(ltr_fn.surrogate_fun)(xs)
        >>>     ax2.plot(xs, ys, label=rf'$\alpha={alpha}$')
        >>>
        >>> ax2.set_xlabel('Input (x)')
@@ -1811,9 +1833,13 @@ class LogTailedRelu(Surrogate):
         self.alpha = alpha
 
     def surrogate_fun(self, x):
+        # Guard the dead ``x > 1`` branch so ``log`` stays finite for x <= 1
+        # (jnp.where evaluates both branches; a ``nan`` here would poison
+        # gradients of ``surrogate_fun``).
+        x_safe = jnp.where(x > 1, x, 1.0)
         z = jnp.where(
             x > 1,
-            jnp.log(x),
+            1.0 + jnp.log(x_safe),  # continuous (and C^1) with the x branch at x = 1
             jnp.where(
                 x > 0,
                 x,
