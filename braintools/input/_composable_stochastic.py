@@ -155,7 +155,7 @@ class WienerProcess(Input):
     - Increments are independent and normally distributed
     - The process is non-differentiable but continuous
     - Useful for modeling synaptic background noise
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -362,7 +362,7 @@ class OUProcess(Input):
     - For tau → ∞, approaches a Wiener process
     - For tau → 0, approaches white noise
     - Useful for modeling synaptic background activity
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -568,7 +568,7 @@ class Poisson(Input):
     - For small dt, probability of multiple spikes per bin is negligible
     - Can be combined with continuous inputs for rate modulation
     - Useful for modeling synaptic background noise
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------

@@ -65,11 +65,11 @@ def dde_euler_step(
     """
     Explicit Euler step for delay differential equations.
     
-    Implements a single forward Euler step for DDEs of the form:
+    Implements a single forward Euler step for DDEs of the form::
     
         dy/dt = f(t, y(t), y(t-τ), *args)
         
-    or with multiple delays:
+    or with multiple delays::
     
         dy/dt = f(t, y(t), y(t-τ₁), y(t-τ₂), ..., *args)
 
@@ -280,7 +280,8 @@ def dde_euler_pc_step(
     Notes
     -----
     This method can be more stable for stiff DDEs compared to explicit methods.
-    The corrector equation is:
+    The corrector equation is::
+
         y_{n+1} = y_n + h*f(t_{n+1}, y_{n+1}, y(t_{n+1}-τ))
     """
     dt = brainstate.environ.get_dt()
@@ -336,7 +337,8 @@ def dde_heun_pc_step(
     Notes
     -----
     Higher-order predictor-corrector method that combines the stability
-    of implicit methods with good accuracy. The corrector equation is:
+    of implicit methods with good accuracy. The corrector equation is::
+
         y_{n+1} = y_n + h/2*[f(t_n, y_n, y(t_n-τ)) + f(t_{n+1}, y_{n+1}, y(t_{n+1}-τ))]
     """
     dt = brainstate.environ.get_dt()

@@ -83,6 +83,11 @@ def cos_sin(
         If True, map cos/sin from [-1,1] to [0,1], then to [base_value, 1].
         If False, keep raw cos/sin in [-1,1].
 
+    Returns
+    -------
+    Callable
+        Encoder function (ctx, feature) -> np.ndarray
+
     Notes
     -----
     - This encoder ignores feature.num (it will validate it equals 2*repeats).
@@ -195,6 +200,11 @@ def circular(
     num_dirs : int, optional
         Number of discrete directions when ``as_index=True``. Defaults to
         ``feature.num``.
+
+    Returns
+    -------
+    Callable
+        Encoder function (ctx, feature) -> np.ndarray
 
     Examples
     --------
@@ -325,6 +335,11 @@ def von_mises(
     num_dirs : int, optional
         Number of discrete directions when ``as_index=True``. Defaults to
         ``feature.num``.
+
+    Returns
+    -------
+    Callable
+        Encoder function (ctx, feature) -> np.ndarray
 
     Examples
     --------

@@ -15,13 +15,16 @@
 
 # -*- coding: utf-8 -*-
 
-from typing import Dict, Optional, Union, Callable, Any, List, Sequence
+from typing import TYPE_CHECKING, Dict, Optional, Union, Callable, Any, List, Sequence
 
 import brainstate.transform
 import jax
 import jax.numpy as jnp
 
 from ._base import OptimState
+
+if TYPE_CHECKING:
+    from ._optax_optimizer import OptaxOptimizer
 
 __all__ = [
     # Learning Rate Schedulers
@@ -246,6 +249,9 @@ class StepLR(LRScheduler):
     - ImageNet training: step_size=30, total_epochs=90 (decay at epochs 30, 60)
     - CIFAR training: step_size=50, total_epochs=150 (decay at epochs 50, 100)
 
+    Step decay schedules of this kind were used to train AlexNet [1]_ and
+    ResNet [2]_.
+
     Examples
     --------
     **Basic usage with SGD:**
@@ -436,8 +442,8 @@ class MultiStepLR(LRScheduler):
 
     **Common milestone patterns:**
 
-    - ImageNet (90 epochs): milestones=[30, 60], gamma=0.1
-    - CIFAR (200 epochs): milestones=[60, 120, 160], gamma=0.2
+    - ImageNet (90 epochs): milestones=[30, 60], gamma=0.1 (as in ResNet [1]_)
+    - CIFAR (200 epochs): milestones=[60, 120, 160], gamma=0.2 (as in Wide ResNet [2]_)
     - Fine-tuning: milestones=[10, 20], gamma=0.5
 
     Examples
@@ -642,6 +648,9 @@ class ExponentialLR(LRScheduler):
     - When step-based schedules are too abrupt
     - For long training runs with gradual convergence
 
+    Practical guidance on decaying the learning rate during stochastic gradient
+    training is given in [1]_ and [2]_.
+
     Examples
     --------
     **Basic exponential decay:**
@@ -804,7 +813,7 @@ class ExponentialLR(LRScheduler):
 class ExponentialDecayLR(LRScheduler):
     r"""Exponential decay learning rate scheduler with step-based control.
 
-    ExponentialDecayLR implements optax's exponential_decay schedule, providing more fine-grained
+    ExponentialDecayLR implements optax's exponential_decay schedule [1]_, providing more fine-grained
     control compared to ExponentialLR. It supports transition steps, staircase mode, delayed start,
     and bounded decay, making it suitable for step-level (rather than epoch-level) learning rate control.
 
@@ -1072,6 +1081,7 @@ class CosineAnnealingLR(LRScheduler):
     CosineAnnealingLR adjusts the learning rate following a cosine curve, starting from the
     initial learning rate and decreasing to a minimum value (eta_min) over T_max epochs.
     This provides a smooth, gradual decay that is popular for training deep neural networks.
+    The cosine annealing schedule was introduced in SGDR [1]_.
 
     Parameters
     ----------
@@ -1103,7 +1113,7 @@ class CosineAnnealingLR(LRScheduler):
     - Smooth cosine curve decay (no abrupt changes)
     - Learning rate starts high, decreases smoothly to eta_min
     - Most decay happens in the middle epochs
-    - Popular for training vision models (ResNets, ViTs, etc.)
+    - Popular for training vision models (ResNets [2]_, ViTs [3]_, etc.)
     - Often combined with warmup for best results
 
     **Decay pattern:**
@@ -1372,6 +1382,7 @@ class PolynomialLR(LRScheduler):
         - power=1.0: Linear decay
         - power>1.0: Slower initial decay, faster later
         - power<1.0: Faster initial decay, slower later
+
         Default: 1.0.
     last_epoch : int, optional
         The index of the last epoch. Used for resuming training. Default: 0.
@@ -1402,8 +1413,8 @@ class PolynomialLR(LRScheduler):
 
     **When to use:**
 
-    - Training semantic segmentation models (DeepLab, FCN)
-    - Object detection training (YOLO, RetinaNet)
+    - Training semantic segmentation models (DeepLab [1]_, FCN)
+    - Object detection training (YOLO, RetinaNet [2]_)
     - When you want smooth decay to very low learning rates
     - Tasks that benefit from extended low-lr fine-tuning
 
@@ -1675,8 +1686,8 @@ class WarmupScheduler(LRScheduler):
 
     **When to use:**
 
-    - Training with large batch sizes (>256)
-    - Training transformer models (BERT, GPT, ViT)
+    - Training with large batch sizes (>256) [1]_
+    - Training transformer models (BERT [2]_, GPT, ViT [3]_)
     - When model shows initial training instability
     - Fine-tuning with aggressive learning rates
 
@@ -1929,7 +1940,7 @@ class CyclicLR(LRScheduler):
     minimum (base_lr) and maximum (max_lr) learning rate. This helps the optimizer
     explore different regions of the loss landscape and can lead to better convergence
     and generalization. The policy was originally proposed for faster convergence
-    without extensive hyperparameter tuning.
+    without extensive hyperparameter tuning [1]_.
 
     Parameters
     ----------
@@ -1991,7 +2002,8 @@ class CyclicLR(LRScheduler):
 
     **Finding Optimal LR Range:**
 
-    Use the LR range test to find optimal base_lr and max_lr:
+    Use the LR range test [2]_ to find optimal base_lr and max_lr:
+
     1. Start with very low LR (e.g., 1e-7)
     2. Increase LR exponentially each batch
     3. Plot loss vs LR and find:
@@ -2003,7 +2015,7 @@ class CyclicLR(LRScheduler):
     - **No manual schedule tuning**: Automatically handles LR scheduling
     - **Escapes saddle points**: Periodic high LR helps escape flat regions
     - **Better generalization**: Oscillation prevents overfitting to sharp minima
-    - **Fast convergence**: Can achieve super-convergence with proper range
+    - **Fast convergence**: Can achieve super-convergence [3]_ with proper range
 
     Examples
     --------
@@ -2261,6 +2273,7 @@ class OneCycleLR(LRScheduler):
     The policy consists of two phases: first increasing the learning rate from a low value
     to a maximum value, then decreasing it to a value much lower than the initial one.
     This is typically combined with momentum scheduling in the opposite direction.
+    The policy was introduced in [1]_ and [2]_.
 
     Parameters
     ----------
@@ -2333,6 +2346,7 @@ class OneCycleLR(LRScheduler):
     **Finding Optimal max_lr:**
 
     Use the LR range test:
+
     1. Start with very small LR
     2. Gradually increase LR each batch
     3. Plot loss vs LR
@@ -2341,8 +2355,11 @@ class OneCycleLR(LRScheduler):
     **Momentum Scheduling:**
 
     OneCycleLR works best with momentum scheduling in opposite direction:
+
     - When LR increases, momentum decreases
     - When LR decreases, momentum increases
+
+    The fastai library [3]_ popularized this policy as its default training loop.
 
     Examples
     --------
@@ -2662,7 +2679,8 @@ class ReduceLROnPlateau(LRScheduler):
     ReduceLROnPlateau monitors a validation metric (like loss or accuracy) and reduces the
     learning rate when the metric stops improving for a specified number of epochs (patience).
     This is useful when you don't know in advance when to reduce the learning rate, letting
-    the training dynamics determine the schedule.
+    the training dynamics determine the schedule. The interface follows PyTorch's
+    ``ReduceLROnPlateau`` [3]_.
 
     Parameters
     ----------
@@ -2674,6 +2692,7 @@ class ReduceLROnPlateau(LRScheduler):
 
         - 'min': Reduce lr when metric stops decreasing (e.g., for loss)
         - 'max': Reduce lr when metric stops increasing (e.g., for accuracy)
+
         Default: 'min'.
     factor : float, optional
         Factor by which to reduce the learning rate. new_lr = lr * factor.
@@ -2690,6 +2709,7 @@ class ReduceLROnPlateau(LRScheduler):
 
         - 'rel': dynamic threshold = best * (1 ± threshold)
         - 'abs': static threshold = best ± threshold
+
         Default: 'rel'.
     cooldown : int, optional
         Number of epochs to wait before resuming normal operation after lr has been reduced.
@@ -2744,6 +2764,9 @@ class ReduceLROnPlateau(LRScheduler):
     - For validation-driven training
     - When training dynamics are unpredictable
     - For automatic hyperparameter tuning
+
+    For schedule-based alternatives that do not depend on a monitored metric, see
+    cyclical learning rates [1]_ and cosine annealing with warm restarts [2]_.
 
     Examples
     --------
@@ -3225,7 +3248,7 @@ class LinearLR(LRScheduler):
 
     **Common usage patterns:**
 
-    - Warmup: start_factor=0.01, end_factor=1.0, total_iters=5-10
+    - Warmup: start_factor=0.01, end_factor=1.0, total_iters=5-10 (see [1]_, [2]_)
     - Cooldown: start_factor=1.0, end_factor=0.1, total_iters=10-20
     - Gradual increase: start_factor=0.1, end_factor=1.0, total_iters=100
 
@@ -3420,7 +3443,7 @@ class ConstantLR(LRScheduler):
     **Key characteristics:**
 
     - Simple two-phase learning rate schedule
-    - Commonly used for warmup with constant reduced lr
+    - Commonly used for warmup with constant reduced lr (constant warmup in [1]_)
     - Automatically returns to base_lr after warmup period
     - No gradual transition (step change at total_iters)
 
@@ -3428,6 +3451,9 @@ class ConstantLR(LRScheduler):
 
     - ConstantLR: Instant jump from (factor * base_lr) to base_lr at total_iters
     - LinearLR: Smooth linear transition from start_factor to end_factor
+
+    For learning-rate range exploration beyond simple two-phase schedules, see
+    cyclical learning rates [2]_.
 
     Examples
     --------
@@ -3627,7 +3653,7 @@ class ChainedScheduler(LRScheduler):
     **Key characteristics:**
 
     - Enables complex multi-phase learning rate schedules
-    - Common pattern: warmup + decay
+    - Common pattern: warmup + decay (e.g., [1]_, [2]_)
     - All schedulers share the same epoch counter
     - Useful for combining complementary scheduling strategies
 
@@ -3884,7 +3910,8 @@ class SequentialLR(LRScheduler):
     SequentialLR allows you to chain multiple learning rate schedulers, with each scheduler
     being active during specific epoch ranges defined by milestones. This is particularly
     useful for complex training strategies that require different learning rate policies
-    at different stages of training.
+    at different stages of training, such as the warmup phases used for large-batch
+    SGD [1]_, adaptive optimizers [2]_, and large-batch BERT training [3]_.
 
     Parameters
     ----------
@@ -4206,6 +4233,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
     decreases following a cosine annealing schedule, then periodically restarts from the
     initial value. This creates a series of cosine waves with potentially increasing periods,
     allowing the model to escape local minima and explore different regions of the loss landscape.
+    This is the SGDR schedule of Loshchilov & Hutter [1]_.
 
     Parameters
     ----------
@@ -4253,8 +4281,8 @@ class CosineAnnealingWarmRestarts(LRScheduler):
     **Benefits of Warm Restarts:**
 
     1. **Escape Local Minima**: Periodic restarts help the optimizer escape sharp minima
-    2. **Ensemble Effect**: Each restart produces a different model, creating an implicit ensemble
-    3. **Fast Convergence**: Combines rapid initial progress with fine-tuning
+    2. **Ensemble Effect**: Each restart produces a different model, creating an implicit ensemble [2]_
+    3. **Fast Convergence**: Combines rapid initial progress with fine-tuning [3]_
     4. **Exploration**: Allows exploring different regions of the parameter space
 
     **JIT Compatibility:**
@@ -4559,8 +4587,8 @@ class WarmupCosineSchedule(LRScheduler):
     to a minimum value.
 
     This scheduler is widely used in:
-    - Vision Transformers (ViT) and other transformer architectures
-    - Self-supervised learning (SimCLR, BYOL, MAE)
+    - Vision Transformers (ViT [1]_) and other transformer architectures
+    - Self-supervised learning (SimCLR [4]_, BYOL, MAE [2]_)
     - Large-scale distributed training
     - Fine-tuning pre-trained models
 
@@ -4617,7 +4645,7 @@ class WarmupCosineSchedule(LRScheduler):
     1. **Stability**: Prevents divergence in early training with large learning rates
     2. **Gradient Statistics**: Allows optimizer to gather statistics before full LR
     3. **Weight Initialization**: Gives random weights time to organize
-    4. **Large Batch Training**: Essential for stable training with large batches
+    4. **Large Batch Training**: Essential for stable training with large batches [3]_
 
     **JIT Compatibility:**
 
@@ -4908,7 +4936,7 @@ class PiecewiseConstantSchedule(LRScheduler):
     - Multi-stage training pipelines
     - Transfer learning with progressive unfreezing
     - Training with curriculum learning
-    - Reproducing specific research papers with fixed schedules
+    - Reproducing specific research papers with fixed schedules (e.g., [1]_, [2]_)
     - Budget-constrained training with predetermined phases
 
     Parameters
@@ -4962,6 +4990,9 @@ class PiecewiseConstantSchedule(LRScheduler):
 
     This implementation is JIT-compatible through the use of `jnp.searchsorted`
     for efficient boundary-based value selection without Python conditionals.
+
+    For smoother alternatives to step-wise schedules, see cyclical learning
+    rates [3]_ and the training refinements surveyed in [4]_.
 
     Examples
     --------

@@ -62,26 +62,34 @@ class LatencyEncoder:
              [1., 0., 0.]])
 
 
-    Args:
-      min_val: float. The minimal value in the given data `x`, used to the data normalization.
-      max_val: float. The maximum value in the given data `x`, used to the data normalization.
-      method: str. How to convert intensity to firing time. Currently, we support `linear` or `log`.
+    Parameters
+    ----------
+    min_val : float, optional
+        The minimal value in the given data ``x``, used to the data normalization.
+    max_val : float, optional
+        The maximum value in the given data ``x``, used to the data normalization.
+    method : str, default='log'
+        How to convert intensity to firing time. Currently, we support ``linear`` or ``log``.
+
         - If ``method='linear'``, the firing rate is calculated as
           :math:`t_f(x) = (\text{num_period} - 1)(1 - x)`.
         - If ``method='log'``, the firing rate is calculated as
           :math:`t_f(x) = (\text{num_period} - 1) - ln(\alpha * x + 1)`,
           where :math:`\alpha` satisfies :math:`t_f(1) = \text{num_period} - 1`.
-      threshold: float. Input features below the threhold will fire at the
+    threshold : float, default=0.01
+        Input features below the threhold will fire at the
         final time step unless ``clip=True`` in which case they will not
-        fire at all, defaults to ``0.01``.
-      clip: bool. Option to remove spikes from features that fall
-          below the threshold, defaults to ``False``.
-      tau: float. RC Time constant for LIF model used to calculate
-        firing time, defaults to ``1``.
-      normalize: bool. Option to normalize the latency code such that
-        the final spike(s) occur within num_steps, defaults to ``False``.
-      epsilon: float. A tiny positive value to avoid rounding errors when
-        using torch.arange, defaults to ``1e-7``.
+        fire at all.
+    clip : bool, default=False
+        Option to remove spikes from features that fall below the threshold.
+    tau : float, default=1
+        RC Time constant for LIF model used to calculate firing time.
+    normalize : bool, default=False
+        Option to normalize the latency code such that
+        the final spike(s) occur within num_steps.
+    epsilon : float, default=1e-7
+        A tiny positive value to avoid rounding errors when
+        using torch.arange.
     """
     __module__ = 'braintools'
 
