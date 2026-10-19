@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import inspect
 import warnings
 from typing import Dict, Optional, Union, Callable, Any, List, Tuple, NamedTuple
 
@@ -3377,18 +3378,24 @@ class LBFGS(OptaxOptimizer):
         >>> optimizer.update(grads)
 
     With a line search (``linesearch='zoom'`` or ``'backtracking'``), the line
-    search needs the current objective value and a callable to re-evaluate it, so
-    pass ``value`` and ``value_fn`` to :meth:`update`:
+    search needs the current objective value and a function that evaluates the
+    objective at trial points. That function must be **pure**: it receives the
+    parameter values as a dict keyed like the weights given to
+    :meth:`register_trainable_weights` and returns a scalar.
 
     .. code-block:: python
 
-        >>> @brainstate.transform.grad(
-        ...     grad_states=model.states(brainstate.ParamState), return_value=True
-        ... )
-        ... def loss_fn():
-        ...     return objective(model)
-        >>> grads, value = loss_fn()
-        >>> optimizer.update(grads, value=value, value_fn=loss_fn)
+        >>> params = {'w': brainstate.ParamState(jnp.array([-1.5, 2.0]))}
+        >>> optimizer = braintools.optim.LBFGS(linesearch='zoom')
+        >>> optimizer.register_trainable_weights(params)
+        >>> def objective(values):  # pure function of the parameter values
+        ...     w = values['w']
+        ...     return (1 - w[0]) ** 2 + 100 * (w[1] - w[0] ** 2) ** 2
+        >>> for _ in range(40):
+        ...     grads = brainstate.transform.grad(
+        ...         lambda: objective({'w': params['w'].value}), grad_states=params)()
+        ...     optimizer.update(grads, value=objective({'w': params['w'].value}),
+        ...                      value_fn=objective)
 
     References
     ----------
@@ -3586,7 +3593,12 @@ class LBFGS(OptaxOptimizer):
             linesearch = optax.identity()
         elif isinstance(linesearch, str):
             if linesearch == 'zoom':
-                linesearch = optax.scale_by_zoom_linesearch(max_linesearch_steps=100)
+                # ``initial_guess_strategy='one'`` starts every line search at the
+                # full quasi-Newton step, as ``optax.lbfgs`` does by default; the
+                # standalone default ('keep') reuses the previous step size and
+                # can stall L-BFGS far from the minimum.
+                linesearch = optax.scale_by_zoom_linesearch(
+                    max_linesearch_steps=100, initial_guess_strategy='one')
             elif linesearch == 'backtracking':
                 linesearch = optax.scale_by_backtracking_linesearch(max_backtracking_steps=100)
             else:
@@ -3640,7 +3652,8 @@ class LBFGS(OptaxOptimizer):
         value : float, optional
             Current value of the objective function. Required for linesearch.
         value_fn : callable, optional
-            Function to compute objective value. Required for linesearch.
+            Pure function ``value_fn(params) -> value`` of the parameter values (a
+            dict keyed like the registered weights). Required for linesearch.
         **kwargs
             Additional arguments passed to the optimizer update.
 
@@ -3651,28 +3664,44 @@ class LBFGS(OptaxOptimizer):
         - grad: gradients (automatically passed)
         - value_fn: callable to evaluate objective function
 
-        For best performance, use with optax.value_and_grad_from_state:
-
-        .. code-block:: python
-
-            >>> value_and_grad = optax.value_and_grad_from_state(loss_fn)
-            >>> value, grad = value_and_grad(params, state=opt_state)
-            >>> updates, opt_state = optimizer.update(
-            ...     grad, opt_state, params,
-            ...     value=value, grad=grad, value_fn=loss_fn
-            ... )
+        ``value`` may also be the ``(grads, value)`` pair returned by
+        ``brainstate.transform.grad(..., return_value=True)``.
         """
         # Pass extra arguments needed for LBFGS with linesearch
         extra_args = {}
         if value is not None:
+            if isinstance(value, tuple):  # a (grads, value) pair from grad(return_value=True)
+                value = value[-1]
             extra_args['value'] = value
         if value_fn is not None:
-            extra_args['value_fn'] = value_fn
+            extra_args['value_fn'] = self._as_params_value_fn(value_fn)
         # grad is automatically included from grads parameter
         extra_args['grad'] = grads
 
         # Call parent update with extra arguments
         return super().update(grads, **extra_args, **kwargs)
+
+    @staticmethod
+    def _as_params_value_fn(value_fn):
+        """Check that ``value_fn`` has the ``value_fn(params) -> value`` form.
+
+        The line search evaluates the objective at trial points inside a JAX loop,
+        so it needs a pure function of the parameter values (a dict keyed like the
+        registered weights); it cannot re-run a zero-argument function that reads
+        ``brainstate`` states.
+        """
+        try:
+            params = inspect.signature(value_fn).parameters.values()
+        except (TypeError, ValueError):
+            return value_fn
+        if not any(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.VAR_POSITIONAL) for p in params):
+            raise TypeError(
+                '`value_fn` must take the parameter values and return the objective, '
+                'i.e. `value_fn(params)` where `params` is a dict keyed like the weights '
+                'passed to `register_trainable_weights`; a zero-argument function that '
+                'reads model states cannot be evaluated at the line-search trial points.'
+            )
+        return value_fn
 
 
 class Rprop(OptaxOptimizer):

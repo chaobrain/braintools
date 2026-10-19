@@ -1,6 +1,6 @@
 # Spike Encoding
 
-Convert continuous signals into event-based spike trains and back again. This section explains encoding schemes, parameter choices, and diagnostics for validating spike representations.
+Convert numbers and time series into spike trains for spiking networks. The tutorial covers all ten encoders in `braintools`: rate codes (`RateEncoder`, `PoissonEncoder`, `BernoulliEncoder`, `PopulationEncoder`), timing codes (`LatencyEncoder`, `RankOrderEncoder`, `SpikeCountEncoder`), signal codes (`DeltaEncoder`, `StepCurrentEncoder`), and symbol codes (`TemporalEncoder`). Each is checked against the rates, timings, or counts it should produce, and the tutorial ends with a guide to choosing one.
 
 ```{toctree}
 :maxdepth: 1

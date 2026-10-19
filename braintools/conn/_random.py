@@ -37,6 +37,7 @@ from scipy.spatial.distance import cdist
 
 from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
+from ._spatial import _same_population
 
 __all__ = [
     'Random',
@@ -292,6 +293,11 @@ class ClusteredRandom(PointConnectivity):
 
         The final probability is clipped to the range [0, 1], so
         ``prob × cluster_factor`` can exceed 1.0.
+    allow_self_connections : bool, default=False
+        Whether to keep self-connections (autapses) when ``pre`` and ``post`` are
+        the same population, i.e. the same position array object or equal-size
+        populations with identical positions. Cross-population projections never
+        drop edges whose pre and post indices merely happen to be equal.
     weight : Initializer, optional
         Initializer for synaptic weights. Supports:
 
@@ -334,6 +340,8 @@ class ClusteredRandom(PointConnectivity):
       - The global connection density is higher than pure random connectivity
 
     - Empty connection results are returned if no connections are established
+    - When ``pre`` and ``post`` are the same population, self-connections (autapses) are
+      excluded by default; pass ``allow_self_connections=True`` to keep them
     - This pattern captures the distance-dependent connectivity observed in local cortical circuits
       while maintaining stochastic variability
 
@@ -499,6 +507,7 @@ class ClusteredRandom(PointConnectivity):
         prob: float,
         cluster_radius: Union[float, u.Quantity],
         cluster_factor: float = 2.0,
+        allow_self_connections: bool = False,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         **kwargs
@@ -511,6 +520,7 @@ class ClusteredRandom(PointConnectivity):
         self.prob = prob
         self.cluster_radius = cluster_radius
         self.cluster_factor = cluster_factor
+        self.allow_self_connections = allow_self_connections
         self.weight_init = weight
         self.delay_init = delay
 
@@ -554,6 +564,12 @@ class ClusteredRandom(PointConnectivity):
         # Vectorized connection generation
         random_vals = self.rng.random((pre_num, post_num))
         connection_mask = random_vals < probs
+
+        # Drop autapses (self-connections) when pre and post are the same population.
+        if not self.allow_self_connections and _same_population(
+            pre_positions, post_positions, pre_num, post_num
+        ):
+            np.fill_diagonal(connection_mask, False)
 
         pre_indices, post_indices = np.where(connection_mask)
 
@@ -604,6 +620,7 @@ class ClusteredRandom(PointConnectivity):
             metadata={
                 'pattern': 'clustered_random',
                 'prob': self.prob,
-                'cluster_radius': self.cluster_radius
+                'cluster_radius': self.cluster_radius,
+                'allow_self_connections': self.allow_self_connections,
             }
         )

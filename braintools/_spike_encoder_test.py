@@ -35,7 +35,8 @@ class TestLatencyEncoder(unittest.TestCase):
         data = jnp.array([0.0, 0.5, 1.0])
         spikes = encoder(data, n_time=10)
 
-        self.assertEqual(spikes.shape, (100, 3))
+        # n_time is a number of time steps
+        self.assertEqual(spikes.shape, (10, 3))
         # Check that each neuron spikes exactly once
         self.assertTrue(jnp.all(jnp.sum(spikes, axis=0) == 1))
 
@@ -51,7 +52,7 @@ class TestLatencyEncoder(unittest.TestCase):
         data = jnp.array([0.1, 0.5, 0.9])
         spikes = encoder(data, n_time=10)
 
-        self.assertEqual(spikes.shape, (100, 3))
+        self.assertEqual(spikes.shape, (10, 3))
         self.assertTrue(jnp.all(jnp.sum(spikes, axis=0) == 1))  # Each neuron spikes once
 
     def test_invalid_method(self):
@@ -65,7 +66,7 @@ class TestLatencyEncoder(unittest.TestCase):
         data = jnp.array([0, 5, 10])
         spikes = encoder(data, n_time=5)
 
-        self.assertEqual(spikes.shape, (50, 3))
+        self.assertEqual(spikes.shape, (5, 3))
 
 
 class TestRateEncoder(unittest.TestCase):
@@ -246,8 +247,8 @@ class TestDeltaEncoder(unittest.TestCase):
         spikes = encoder(time_series)
 
         self.assertEqual(spikes.shape, (6,))
-        # Should spike at significant changes
-        self.assertGreater(jnp.sum(spikes), 0)
+        # Should spike at significant changes (events are signed +1 / -1)
+        self.assertGreater(jnp.sum(jnp.abs(spikes)), 0)
 
     def test_positive_only_encoding(self):
         """Test positive-only delta encoding."""
@@ -482,3 +483,65 @@ class TestRankOrderEncoder(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestEncoderSemantics(unittest.TestCase):
+    """Window, units, and send-on-delta behaviour."""
+
+    def setUp(self):
+        brainstate.random.seed(0)
+
+    def test_latency_linear_spans_window(self):
+        spikes = braintools.LatencyEncoder(method='linear', normalize=True)(jnp.array([0.0, 0.5, 1.0]), n_time=21)
+        np.testing.assert_array_equal(jnp.argmax(spikes, axis=0), [20, 10, 0])
+
+    def test_latency_quantity_window(self):
+        import brainunit as u
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            spikes = braintools.LatencyEncoder(method='linear', normalize=True)(jnp.array([0.5]), n_time=5 * u.ms)
+        self.assertEqual(spikes.shape, (50, 1))
+
+    def test_latency_log_normalized_threshold_at_last_step(self):
+        enc = braintools.LatencyEncoder(method='log', normalize=True, threshold=0.1)
+        spikes = enc(jnp.array([0.1, 1.0]), n_time=100)
+        # x = threshold fires last; x = 1 fires at 99 * log(1 / 0.9) / log(0.1 / 1e-7), i.e. step 1
+        np.testing.assert_array_equal(jnp.argmax(spikes, axis=0), [99, 1])
+
+    def test_latency_unnormalized_uses_tau_and_drops_late_spikes(self):
+        import brainunit as u
+        with brainstate.environ.context(dt=1. * u.ms):
+            enc = braintools.LatencyEncoder(method='linear', normalize=False, tau=10 * u.ms)
+            spikes = enc(jnp.array([1.0, 0.7, 0.2]), n_time=5)  # times 0, 3, 8 ms
+        np.testing.assert_array_equal(jnp.sum(spikes, axis=0), [1, 1, 0])
+        self.assertEqual(int(jnp.argmax(spikes[:, 1])), 3)
+
+    def test_rate_encoders_independent_of_time_unit(self):
+        import brainunit as u
+        rates = {}
+        for dt in [0.1 * u.ms, 1e-4 * u.second]:
+            brainstate.random.seed(1)
+            with brainstate.environ.context(dt=dt):
+                r = braintools.RateEncoder(gain=100.)(jnp.array([0.5]), 200000)
+                rates[str(dt)] = float(r.mean()) / 1e-4
+        for v in rates.values():
+            self.assertAlmostEqual(v, 50.0, delta=3.0)
+
+    def test_poisson_time_window_deprecated(self):
+        with self.assertWarns(DeprecationWarning):
+            braintools.PoissonEncoder(time_window=500.)
+
+    def test_delta_send_on_delta(self):
+        enc = braintools.DeltaEncoder(threshold=0.25, normalize=False)
+        np.testing.assert_array_equal(enc(jnp.array([0.0, 0.1, 0.2, 0.3, 0.3, 0.0])), [0, 0, 0, 1, 0, -1])
+        # Slow ramps are encoded: about height / threshold events
+        self.assertEqual(int(braintools.DeltaEncoder(threshold=0.1, normalize=False)(jnp.linspace(0, 1, 100)).sum()), 9)
+        absolute = braintools.DeltaEncoder(threshold=0.25, normalize=False, absolute=True)
+        np.testing.assert_array_equal(absolute(jnp.array([0.0, 0.3, 0.0])), [0, 1, 1])
+        positive = braintools.DeltaEncoder(threshold=0.25, normalize=False, positive_only=True)
+        np.testing.assert_array_equal(positive(jnp.array([0.0, 0.3, 0.0, 0.3])), [0, 1, 0, 1])
+
+    def test_spike_count_saturates_at_window(self):
+        # Requesting more spikes than time steps fills the window instead of giving none.
+        for dist in ['random', 'uniform']:
+            enc = braintools.SpikeCountEncoder(max_spikes=20, distribution=dist, normalize=False)
+            np.testing.assert_array_equal(enc(jnp.array([1.0, 0.5]), n_time=10).sum(0), [10, 10])

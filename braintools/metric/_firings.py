@@ -37,6 +37,28 @@ __all__ = [
 ]
 
 
+def _in_unit(x, unit) -> float:
+    """Magnitude of a time ``x`` in ``unit``.
+
+    A ``brainunit.Quantity`` is converted; a plain number is taken to be
+    already in ``unit`` (the function's documented convention for floats).
+    """
+    if isinstance(x, u.Quantity):
+        return float(x.to_decimal(unit))
+    return float(x)
+
+
+def _steps(a, b, unit) -> float:
+    """Ratio ``a / b`` of two times, converting Quantities to ``unit`` first."""
+    return _in_unit(a, unit) / _in_unit(b, unit)
+
+
+def _floor_ratio(r: float) -> int:
+    """``floor(r)``, but treat values within 1e-9 of an integer as that integer."""
+    n = round(r)
+    return int(n) if abs(r - n) <= 1e-9 * max(1.0, abs(r)) else int(onp.floor(r))
+
+
 @set_module_as('braintools.metric')
 def raster_plot(
     sp_matrix: brainstate.typing.ArrayLike,
@@ -239,17 +261,14 @@ def firing_rate(
     dt = brainstate.environ.get_dt() if (dt is None) else dt
     # Number of samples in the (odd-sized) smoothing window. ``width / dt`` must be
     # dimensionless; ``u.get_magnitude`` strips the unit when both are Quantities.
-    width1 = int(u.get_magnitude(width / 2 / dt)) * 2 + 1
+    width1 = _floor_ratio(_steps(width, dt, u.second) / 2) * 2 + 1
     # Normalize by the *realized* window duration (``width1 * dt``) rather than the
     # nominal ``width`` so the kernel integrates spike counts to a rate over exactly
     # the samples that are used.
-    duration = width1 * dt
-    inv_duration = 1.0 / duration
-    if isinstance(inv_duration, u.Quantity):
-        # Quantity time step -> express the rate in Hz (spikes per second).
-        inv_duration = inv_duration.to_decimal(u.Hz)
-    # Float ``dt``/``width`` are taken to be in seconds, so ``1 / duration`` is Hz.
-    window = jnp.ones(width1) * inv_duration
+    # Float ``dt``/``width`` are taken to be in seconds and Quantities are
+    # converted, so ``1 / duration`` is in Hz.
+    duration = width1 * _in_unit(dt, u.second)
+    window = jnp.ones(width1) / duration
     rate = jnp.mean(jnp.asarray(u.get_magnitude(spikes)), axis=1)
     return jnp.convolve(rate, window, mode='same')
 
@@ -396,13 +415,18 @@ def van_rossum_distance(
     :math:`K(t) = \frac{1}{\tau} e^{-t/\tau} H(t)` and the distance is
     :math:`\sqrt{\int (f_1 - f_2)^2\, dt}` (no extra :math:`1/\tau` prefactor on the
     integral). Other texts use :math:`K(t) = e^{-t/\tau}` with a :math:`1/\tau`
-    integral prefactor; both differ only by an overall scale. The integral is
-    truncated at ``t_max`` (default ``max(spike_time) + 5*tau``) and discretized at
-    ``dt = tau / 20``; the ``5*tau`` tail captures >99% of the exponential.
+    integral prefactor; both differ only by an overall scale.
 
-    This function runs on host (concrete) arrays (Python loop over spikes, ``len``)
-    and returns a Python ``float``, so it is not ``jit``/``vmap``/``grad``-compatible.
-    ``tau``, ``t_max`` and the spike times must use consistent time units.
+    The integral over :math:`[0, T]` is evaluated in **closed form** (one term per
+    spike pair), so there is no quadrature error; only the deliberate truncation at
+    ``t_max`` (default ``max(spike_time) + 5*tau``, whose ``5*tau`` tail leaves out
+    less than :math:`e^{-10} \\approx 5\\cdot10^{-5}` of the exponential) remains.
+    Pass a larger ``t_max`` to reduce that further. Spike pairs are evaluated with
+    vectorized array ops rather than a Python loop over spikes.
+
+    This function returns a Python ``float``, so it is not
+    ``jit``/``vmap``/``grad``-compatible. ``tau``, ``t_max`` and the spike times
+    must use consistent time units.
 
     Examples
     --------
@@ -424,42 +448,52 @@ def van_rossum_distance(
     spikes1 = jnp.asarray(spike_times_1)
     spikes2 = jnp.asarray(spike_times_2)
 
-    # Determine time window
+    # Determine time window (unchanged: default is max spike time + 5*tau)
     if t_max is None:
         all_spikes = jnp.concatenate([spikes1, spikes2])
-        if len(all_spikes) == 0:
+        if all_spikes.size == 0:
             return 0.0
-        t_max = jnp.max(all_spikes) + 5 * tau
+        t_max = float(jnp.max(all_spikes)) + 5.0 * tau
 
-    # Create time grid
-    dt = tau / 20  # Fine temporal resolution
-    t_grid = jnp.arange(0, t_max + dt, dt)
+    def pair_integral(times_a, times_b):
+        r"""Exact ``\int_0^{T} f_a(t) f_b(t)\, dt`` for the exponential kernel.
 
-    def convolve_spikes(spike_times):
-        """Convolve spike train with exponential kernel."""
-        if len(spike_times) == 0:
-            return jnp.zeros_like(t_grid)
+        With :math:`f_a(t) = \frac{1}{\tau}\sum_k e^{-(t-a_k)/\tau} H(t-a_k)`,
+        the product of two such responses integrates in closed form to one term
+        per spike pair:
 
-        # For each time point, sum contributions from all spikes
-        response = jnp.zeros_like(t_grid)
-        for spike_time in spike_times:
-            # Exponential kernel starting from spike time
-            mask = t_grid >= spike_time
-            kernel = jnp.where(mask,
-                               (1.0 / tau) * jnp.exp(-(t_grid - spike_time) / tau),
-                               0.0)
-            response = response + kernel
-        return response
+        .. math::
 
-    # Convolve both spike trains
-    f1 = convolve_spikes(spikes1)
-    f2 = convolve_spikes(spikes2)
+            \frac{1}{2\tau}\left[
+                e^{(a+b-2m)/\tau} - e^{(a+b-2T)/\tau}
+            \right], \qquad m = \max(0, a, b),
 
-    # Compute Euclidean distance
-    diff = f1 - f2
-    distance_squared = jnp.sum(diff ** 2) * dt
+        for :math:`m < T` (a pair contributes nothing once :math:`m \ge T`, since
+        the integrand vanishes on :math:`[0, T]`).
 
-    return float(jnp.sqrt(distance_squared))
+        This replaces the former left-endpoint rectangle rule on a grid of step
+        ``tau / 20``, which biased every result high by ~2.5% (an O(h) error:
+        ``h / (1 - e^{-2h/tau})`` vs the exact ``tau/2``, i.e. 1.0508 in the
+        squared distance for ``h = tau/20``).
+        """
+        if times_a.size == 0 or times_b.size == 0:
+            return 0.0
+        a = times_a[:, None]
+        b = times_b[None, :]
+        m = jnp.maximum(jnp.maximum(0.0, a), b)
+        terms = (
+            jnp.exp((a + b - 2.0 * m) / tau)
+            - jnp.exp((a + b - 2.0 * t_max) / tau)
+        )
+        return jnp.sum(jnp.where(m < t_max, terms, 0.0))
+
+    distance_squared = (1.0 / (2.0 * tau)) * (
+        pair_integral(spikes1, spikes1)
+        + pair_integral(spikes2, spikes2)
+        - 2.0 * pair_integral(spikes1, spikes2)
+    )
+    # Round-off can push an exactly-zero distance marginally negative.
+    return float(jnp.sqrt(jnp.maximum(distance_squared, 0.0)))
 
 
 @set_module_as('braintools.metric')
@@ -497,7 +531,11 @@ def spike_train_synchrony(
         when they are at most ``window_size / 2`` apart. Must use the same time unit
         as ``dt``.
     dt : float or brainunit.Quantity, optional
-        Time step between successive samples. If None, uses brainstate default.
+        Time step between successive samples. If None, uses the default from
+        ``brainstate.environ.get_dt()``. A plain float is assumed to be in
+        **milliseconds** (the ``brainstate`` convention), so it must be expressed
+        in the same unit as ``window_size``/``max_isi``/``tau``; a
+        ``brainunit.Quantity`` is converted automatically.
 
     Returns
     -------
@@ -526,9 +564,8 @@ def spike_train_synchrony(
     if n_neurons < 2:
         return 0.0
 
-    # Half-coincidence window in samples. ``window_size`` and ``dt`` must share the
-    # same time unit; only their magnitudes are compared.
-    half_steps = u.get_magnitude(window_size) / (2.0 * u.get_magnitude(dt))
+    # Half-coincidence window in samples (Quantities converted, floats in ms).
+    half_steps = _steps(window_size, dt, u.ms) / 2.0
 
     # Spike sample indices for each neuron.
     spike_idx_list = [onp.where(spikes[:, i] > 0)[0] for i in range(n_neurons)]
@@ -582,7 +619,11 @@ def burst_synchrony_index(
         Maximum inter-spike interval within a burst. Must use the same time unit
         as ``dt``.
     dt : float or brainunit.Quantity, optional
-        Time step between successive samples. If None, uses brainstate default.
+        Time step between successive samples. If None, uses the default from
+        ``brainstate.environ.get_dt()``. A plain float is assumed to be in
+        **milliseconds** (the ``brainstate`` convention), so it must be expressed
+        in the same unit as ``window_size``/``max_isi``/``tau``; a
+        ``brainunit.Quantity`` is converted automatically.
 
     Returns
     -------
@@ -611,8 +652,8 @@ def burst_synchrony_index(
     dt = brainstate.environ.get_dt() if dt is None else dt
     spikes = onp.asarray(u.get_magnitude(spike_matrix))
     n_time, n_neurons = spikes.shape
-    dt_m = u.get_magnitude(dt)
-    max_isi_m = u.get_magnitude(max_isi)
+    dt_m = _in_unit(dt, u.ms)
+    max_isi_m = _in_unit(max_isi, u.ms)
 
     def detect_bursts(spike_train):
         """Detect burst events in a single spike train."""
@@ -787,7 +828,7 @@ def phase_locking_value(
 def spike_time_tiling_coefficient(
     spike_matrix: brainstate.typing.ArrayLike,
     dt: float = None,
-    tau: float = 0.005
+    tau: float = 5.0
 ):
     r"""Calculate Spike Time Tiling Coefficient (STTC).
     
@@ -810,10 +851,15 @@ def spike_time_tiling_coefficient(
     spike_matrix : brainstate.typing.ArrayLike
         Spike matrix with shape ``(n_time_steps, n_neurons)``.
     dt : float or brainunit.Quantity, optional
-        Time step between successive samples. If None, uses brainstate default.
-    tau : float or brainunit.Quantity, default=0.005
-        Half-width of the temporal window for coincidence detection. Must use the
-        same time unit as ``dt`` (default assumes seconds).
+        Time step between successive samples. If None, uses the default from
+        ``brainstate.environ.get_dt()``. A plain float is assumed to be in
+        **milliseconds** (the ``brainstate`` convention), so it must be expressed
+        in the same unit as ``window_size``/``max_isi``/``tau``; a
+        ``brainunit.Quantity`` is converted automatically.
+    tau : float or brainunit.Quantity, default=5.0
+        Half-width of the temporal window for coincidence detection. A plain
+        float is in milliseconds (like ``dt``); a Quantity is converted. The
+        default is 5 ms.
 
     Returns
     -------
@@ -855,9 +901,8 @@ def spike_time_tiling_coefficient(
     spikes = onp.asarray(u.get_magnitude(spike_matrix))
     n_time, n_neurons = spikes.shape
 
-    # Coincidence half-window in samples. ``tau`` and ``dt`` must share a time unit;
-    # only their magnitudes are used.
-    tau_steps = int(round(u.get_magnitude(tau) / u.get_magnitude(dt)))
+    # Coincidence half-window in samples (Quantities converted, floats in ms).
+    tau_steps = int(round(_steps(tau, dt, u.ms)))
 
     def covered_fraction(idx):
         # Fraction of the recording covered by the *union* of [s - tau, s + tau]
@@ -928,7 +973,11 @@ def correlation_index(
         Size of the time windows used to bin spikes. Must use the same time unit
         as ``dt``.
     dt : float or brainunit.Quantity, optional
-        Time step between successive samples. If None, uses brainstate default.
+        Time step between successive samples. If None, uses the default from
+        ``brainstate.environ.get_dt()``. A plain float is assumed to be in
+        **milliseconds** (the ``brainstate`` convention), so it must be expressed
+        in the same unit as ``window_size``/``max_isi``/``tau``; a
+        ``brainunit.Quantity`` is converted automatically.
 
     Returns
     -------
@@ -976,7 +1025,7 @@ def correlation_index(
         return 0.0
 
     # Bin size in samples (``window_size`` and ``dt`` must share a time unit).
-    bin_size = max(1, int(u.get_magnitude(window_size) / u.get_magnitude(dt)))
+    bin_size = max(1, _floor_ratio(_steps(window_size, dt, u.ms)))
     # Only whole bins are used; any trailing samples that do not fill a complete
     # bin are discarded so every bin has the same width.
     n_bins = n_time // bin_size

@@ -22,11 +22,27 @@ import scipy.stats as stats
 
 from braintools._misc import set_module_as
 from braintools.tree import as_numpy
+from ._utils import as_array
 
 # ``np.trapz`` was renamed to ``np.trapezoid`` in NumPy 2.0 and removed
 # outright in NumPy 2.4, so resolve whichever name the installed NumPy
 # provides (falling back to ``np.trapz`` for NumPy < 2.0).
 _trapezoid = getattr(np, 'trapezoid', None) or np.trapz
+
+
+def _as_groups(data):
+    """Split plotting input into a list of 1-D groups.
+
+    A list or tuple holds one array per group; a 2-D array of shape
+    ``(samples, groups)`` holds one group per column; anything else is a single
+    group.
+    """
+    if isinstance(data, (list, tuple)):
+        return [np.ravel(as_numpy(d)) for d in data]
+    data = as_array(data)
+    if data.ndim == 2:
+        return [data[:, i] for i in range(data.shape[1])]
+    return [np.ravel(data)]
 
 __all__ = [
     'correlation_matrix',
@@ -97,7 +113,7 @@ def correlation_matrix(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    data = as_numpy(data)
+    data = as_array(data)
     if data.ndim == 1:
         data = data.reshape(-1, 1)
 
@@ -188,7 +204,8 @@ def distribution_plot(
     Parameters
     ----------
     data : array-like or list of arrays
-        Data to plot distribution for.
+        Data to plot distribution for: one array, a list of arrays (one per
+        dataset), or a 2-D array of shape ``(samples, datasets)``.
     labels : list, optional
         Labels for each dataset.
     plot_type : str
@@ -220,12 +237,7 @@ def distribution_plot(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    # Ensure data is a list
-    if not isinstance(data, list):
-        data = [data]
-
-    # Convert to numpy arrays
-    data = [as_numpy(d) for d in data]
+    data = _as_groups(data)
 
     # Set up colors
     if colors is None:
@@ -314,17 +326,22 @@ def qq_plot(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    data = as_numpy(data)
+    data = as_array(data)
 
-    # Get theoretical quantiles
+    # Theoretical quantiles at the plotting positions p_i = (i - 0.5) / n, so the
+    # i-th smallest of n samples is matched with the quantile it estimates. (A
+    # fixed range such as linspace(0.01, 0.99, n) squeezes the tails and makes a
+    # correctly distributed large sample look heavy-tailed.)
+    n = len(data)
+    probs = (np.arange(1, n + 1) - 0.5) / n
     if distribution == 'norm':
-        theoretical_q = stats.norm.ppf(np.linspace(0.01, 0.99, len(data)))
+        theoretical_q = stats.norm.ppf(probs)
         dist_name = 'Normal'
     elif distribution == 'uniform':
-        theoretical_q = stats.uniform.ppf(np.linspace(0.01, 0.99, len(data)))
+        theoretical_q = stats.uniform.ppf(probs)
         dist_name = 'Uniform'
     elif distribution == 'expon':
-        theoretical_q = stats.expon.ppf(np.linspace(0.01, 0.99, len(data)))
+        theoretical_q = stats.expon.ppf(probs)
         dist_name = 'Exponential'
     else:
         raise ValueError(f"Unknown distribution: {distribution}")
@@ -335,10 +352,16 @@ def qq_plot(
     # Plot Q-Q
     ax.scatter(theoretical_q, sample_q, color=color, alpha=alpha, **kwargs)
 
-    # Add reference line
-    min_val = min(theoretical_q.min(), sample_q.min())
-    max_val = max(theoretical_q.max(), sample_q.max())
-    ax.plot([min_val, max_val], [min_val, max_val], color=line_color, linestyle='--')
+    # Add reference line. The sample quantiles here are the *raw* data values, not
+    # standardized ones, so the ideal line is ``y = mean + std * x`` (equivalently
+    # the least-squares fit that ``scipy.stats.probplot`` draws) -- the identity
+    # ``y = x`` only holds when the data has been standardized first. Drawing
+    # ``y = x`` through unstandardized data makes a correctly distributed sample
+    # look systematically off. The line is drawn over the theoretical quantile
+    # range, which is the x-range actually spanned by the scatter.
+    slope, intercept = np.polyfit(theoretical_q, sample_q, 1)
+    line_x = np.array([theoretical_q.min(), theoretical_q.max()])
+    ax.plot(line_x, slope * line_x + intercept, color=line_color, linestyle='--')
 
     # Labels
     ax.set_xlabel(f'Theoretical Quantiles ({dist_name})')
@@ -373,7 +396,8 @@ def box_plot(
     Parameters
     ----------
     data : array-like or list of arrays
-        Data for each group.
+        Data for each group: a list of arrays, or a 2-D array of shape
+        ``(samples, groups)``; a 1-D array is a single group.
     labels : list, optional
         Group labels.
     positions : list, optional
@@ -401,12 +425,7 @@ def box_plot(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    # Ensure data is a list
-    if not isinstance(data, list):
-        data = [data]
-
-    # Convert to numpy arrays
-    data = [as_numpy(d) for d in data]
+    data = _as_groups(data)
 
     # Create box plot
     bp = ax.boxplot(data, positions=positions, notch=notch,
@@ -451,7 +470,8 @@ def violin_plot(
     Parameters
     ----------
     data : array-like or list of arrays
-        Data for each group.
+        Data for each group: a list of arrays, or a 2-D array of shape
+        ``(samples, groups)``; a 1-D array is a single group.
     labels : list, optional
         Group labels.
     positions : list, optional
@@ -479,12 +499,7 @@ def violin_plot(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    # Ensure data is a list
-    if not isinstance(data, list):
-        data = [data]
-
-    # Convert to numpy arrays
-    data = [as_numpy(d) for d in data]
+    data = _as_groups(data)
 
     # Create violin plot
     vp = ax.violinplot(data, positions=positions, showmeans=showmeans,
@@ -548,7 +563,7 @@ def scatter_matrix(
     fig : matplotlib.figure.Figure
         The figure object containing all subplots.
     """
-    data = as_numpy(data)
+    data = as_array(data)
     n_features = data.shape[1]
 
     if ax is not None:
@@ -665,8 +680,8 @@ def regression_plot(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    x = as_numpy(x)
-    y = as_numpy(y)
+    x = as_array(x)
+    y = as_array(y)
 
     # Scatter plot
     ax.scatter(x, y, alpha=alpha, color=color, **kwargs)
@@ -762,8 +777,8 @@ def residual_plot(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    y_true = as_numpy(y_true)
-    y_pred = as_numpy(y_pred)
+    y_true = as_array(y_true)
+    y_pred = as_array(y_pred)
 
     residuals = y_true - y_pred
 
@@ -827,8 +842,8 @@ def confusion_matrix(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    y_true = as_numpy(y_true)
-    y_pred = as_numpy(y_pred)
+    y_true = as_array(y_true)
+    y_pred = as_array(y_pred)
 
     # Get unique classes
     classes = np.unique(np.concatenate([y_true, y_pred]))
@@ -927,8 +942,8 @@ def roc_curve(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    y_true = as_numpy(y_true)
-    y_scores = as_numpy(y_scores)
+    y_true = as_array(y_true)
+    y_scores = as_array(y_scores)
 
     # Calculate ROC curve
     thresholds = np.unique(y_scores)
@@ -1012,8 +1027,8 @@ def precision_recall_curve(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    y_true = as_numpy(y_true)
-    y_scores = as_numpy(y_scores)
+    y_true = as_array(y_true)
+    y_scores = as_array(y_scores)
 
     # Calculate Precision-Recall curve
     thresholds = np.unique(y_scores)
@@ -1038,8 +1053,11 @@ def precision_recall_curve(
     precision = np.array(precision)
     recall = np.array(recall)
 
-    # Calculate average precision
-    ap = _trapezoid(precision, recall)
+    # Average precision: precision weighted by the recall increment at each
+    # threshold, AP = sum_k (R_k - R_{k-1}) P_k with R_0 = 0 (the standard
+    # step-wise definition, as in scikit-learn). A trapezoidal area would
+    # interpolate linearly between operating points, which overestimates it.
+    ap = float(np.sum(np.diff(np.concatenate([[0.0], recall])) * precision))
 
     # Plot PR curve
     ax.plot(recall, precision, color=color, linewidth=2,
@@ -1098,9 +1116,9 @@ def learning_curve(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    train_sizes = as_numpy(train_sizes)
-    train_scores = as_numpy(train_scores)
-    validation_scores = as_numpy(validation_scores)
+    train_sizes = as_array(train_sizes)
+    train_scores = as_array(train_scores)
+    validation_scores = as_array(validation_scores)
 
     # Handle 1D or 2D score arrays
     if train_scores.ndim == 1:

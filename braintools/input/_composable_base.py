@@ -31,6 +31,7 @@ import brainunit as u
 import numpy as np
 
 from ._deprecation import create_deprecated_class
+from ._steps import ceil_steps, floor_steps
 
 __all__ = [
     'Input',
@@ -290,7 +291,7 @@ class Input:
         n_steps : int
             Number of time steps based on duration and dt.
         """
-        return int(np.ceil(self.duration / self.dt))
+        return ceil_steps(self.duration, self.dt)
 
     def __add__(self, other):
         """Add two inputs or add a constant.
@@ -716,7 +717,8 @@ class Composite(Input):
     When inputs have different durations, the shorter one is padded
     with zeros to match the longer duration.
     
-    Division by zero returns the numerator value (avoiding NaN).
+    Where the divisor is 0 it is treated as 1 (in its own unit), so a
+    dimensionless divisor returns the numerator value there (avoiding NaN).
     
     Examples
     --------
@@ -759,13 +761,22 @@ class Composite(Input):
         arr1 = self.input1()
         arr2 = self.input2()
 
+        # A single-channel input (T,) combines with a multi-channel one (T, n)
+        # by broadcasting over the channel axis.
+        if u.math.ndim(arr1) == 1 and u.math.ndim(arr2) > 1:
+            arr1 = arr1[:, None]
+        elif u.math.ndim(arr2) == 1 and u.math.ndim(arr1) > 1:
+            arr2 = arr2[:, None]
+
         # Ensure arrays have the same length (pad with zeros if needed)
         max_len = max(len(arr1), len(arr2))
         if len(arr1) < max_len:
-            padding = u.math.zeros(max_len - len(arr1), dtype=arr1.dtype, unit=u.get_unit(arr1))
+            padding = u.math.zeros((max_len - len(arr1),) + tuple(arr1.shape[1:]),
+                                   dtype=arr1.dtype, unit=u.get_unit(arr1))
             arr1 = u.math.concatenate([arr1, padding])
         if len(arr2) < max_len:
-            padding = u.math.zeros(max_len - len(arr2), dtype=arr2.dtype, unit=u.get_unit(arr2))
+            padding = u.math.zeros((max_len - len(arr2),) + tuple(arr2.shape[1:]),
+                                   dtype=arr2.dtype, unit=u.get_unit(arr2))
             arr2 = u.math.concatenate([arr2, padding])
 
         # Apply the operator
@@ -776,8 +787,11 @@ class Composite(Input):
         elif self.operator == '*':
             return arr1 * arr2
         elif self.operator == '/':
-            # Avoid division by zero
-            return u.math.where(arr2 != 0, arr1 / arr2, arr1)
+            # Zeros in the denominator (including zero padding) are treated as
+            # 1 in the denominator's unit, so a dimensionless divisor keeps the
+            # numerator there and no divide-by-zero warning is raised.
+            safe = u.math.where(arr2 != 0, arr2, u.math.ones_like(arr2))
+            return arr1 / safe
         elif self.operator == 'max':
             return u.math.maximum(arr1, arr2)
         elif self.operator == 'min':
@@ -911,7 +925,7 @@ class TimeShifted(Input):
     def generate(self) -> brainstate.typing.ArrayLike:
         """Generate the shifted input."""
         arr = self.input_obj()
-        shift_steps = int(self.time_shift / self.dt)
+        shift_steps = floor_steps(self.time_shift, self.dt)
 
         if shift_steps > 0:
             # Delay: pad with zeros at the beginning

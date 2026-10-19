@@ -23,6 +23,7 @@ generation across different neuron model types:
 - Multi-compartment models: Detailed morphological neuron models
 """
 
+import hashlib
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple, Union, Dict, Any, Sequence
 
@@ -266,9 +267,10 @@ class Connectivity(ABC):
         """Generate connectivity pattern.
 
         The result is cached and reused only when the connectivity is called again
-        with the same sizes and the same position arrays. Changing ``pre_size``,
-        ``post_size`` or the positions (or passing ``recompute=True``) regenerates
-        the pattern instead of returning a stale cached result.
+        with the same sizes and the same position *values*. Changing ``pre_size``,
+        ``post_size`` or the positions -- including mutating a position array in
+        place -- (or passing ``recompute=True``) regenerates the pattern instead
+        of returning a stale cached result.
         """
         effective_pre_size = pre_size if pre_size is not None else self.pre_size
         effective_post_size = post_size if post_size is not None else self.post_size
@@ -276,8 +278,8 @@ class Connectivity(ABC):
         cache_key = (
             _normalize_size_key(effective_pre_size),
             _normalize_size_key(effective_post_size),
-            id(pre_positions),
-            id(post_positions),
+            _positions_key(pre_positions),
+            _positions_key(post_positions),
         )
         if self._cached_result is None or recompute or self._cache_key != cache_key:
             self._cached_result = self._generate(
@@ -781,37 +783,36 @@ class CompositeConnectivity(Connectivity):
             else:
                 weights = final_weights
 
-        # Handle delays using array operations (average delays from both patterns)
+        # Handle delays: average them when both patterns carry delays. A pattern
+        # without delays is neutral (its partner's delays are kept as-is), the
+        # same way a pattern without weights acts as a weight of 1 above --
+        # treating missing delays as 0 would silently halve the other pattern's.
         delays = None
         if result1.delays is not None or result2.delays is not None:
-            delays1_vals, delays1_unit = (
-                u.split_mantissa_unit(result1.delays) if result1.delays is not None else (None, None)
-            )
-            delays2_vals, delays2_unit = (
-                u.split_mantissa_unit(result2.delays) if result2.delays is not None else (None, None)
+            common_unit = u.get_unit(
+                result1.delays if result1.delays is not None else result2.delays
             )
 
-            common_unit = delays1_unit or delays2_unit or u.ms
+            def _delay_array(result):
+                if result.delays is None:
+                    return None
+                vals = u.Quantity(result.delays).to(common_unit).mantissa
+                if u.math.isscalar(vals):
+                    return np.full(len(result.pre_indices), vals)
+                return np.asarray(vals)
 
-            # Prepare delay arrays
-            if delays1_vals is None:
-                delays1_array = np.zeros(len(result1.pre_indices))
-            elif u.math.isscalar(delays1_vals):
-                delays1_array = np.full(len(result1.pre_indices), delays1_vals)
+            delays1_array = _delay_array(result1)
+            delays2_array = _delay_array(result2)
+
+            # Extract delays for common connections, averaging when both exist
+            if delays1_array is not None and delays2_array is not None:
+                final_delays = (
+                    delays1_array[mask1][sort_idx1] + delays2_array[mask2][sort_idx2]
+                ) / 2.0
+            elif delays1_array is not None:
+                final_delays = delays1_array[mask1][sort_idx1]
             else:
-                delays1_array = np.asarray(delays1_vals)
-
-            if delays2_vals is None:
-                delays2_array = np.zeros(len(result2.pre_indices))
-            elif u.math.isscalar(delays2_vals):
-                delays2_array = np.full(len(result2.pre_indices), delays2_vals)
-            else:
-                delays2_array = np.asarray(delays2_vals)
-
-            # Extract and average delays for common connections
-            delays1_common = delays1_array[mask1][sort_idx1]
-            delays2_common = delays2_array[mask2][sort_idx2]
-            final_delays = (delays1_common + delays2_common) / 2.0
+                final_delays = delays2_array[mask2][sort_idx2]
 
             delays = u.maybe_decimal(final_delays * common_unit)
 
@@ -1092,6 +1093,35 @@ def _normalize_size_key(size):
     if size is None or isinstance(size, (int, np.integer)):
         return size
     return tuple(int(x) for x in np.atleast_1d(size))
+
+
+def _positions_key(positions):
+    """Return a hashable, *value*-based cache key for a positions array.
+
+    ``id()`` must not be used here. Object identity is not a safe cache key:
+
+    - mutating an array in place leaves its ``id`` unchanged while changing the
+      connectivity that should be generated, and
+    - the address of a garbage-collected array can be reused by an unrelated
+      array,
+
+    both of which silently return a connectivity pattern generated for different
+    positions. The digest covers shape, dtype, physical unit, and the raw values,
+    so any of those changing invalidates the cache entry.
+    """
+    if positions is None:
+        return None
+    if isinstance(positions, u.Quantity):
+        values, unit = u.get_mantissa(positions), str(u.get_unit(positions))
+    else:
+        values, unit = positions, None
+    arr = np.ascontiguousarray(np.asarray(values))
+    return (
+        arr.shape,
+        arr.dtype.str,
+        unit,
+        hashlib.blake2b(arr.tobytes(), digest_size=16).digest(),
+    )
 
 
 def merge_dict(*dicts):

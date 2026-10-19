@@ -14,6 +14,7 @@
 # ==============================================================================
 
 
+import jax.numpy as jnp
 from brainstate.typing import ArrayLike
 
 from braintools._misc import set_module_as
@@ -27,6 +28,25 @@ __all__ = [
     'spike_bitwise_ixor',
     'spike_bitwise',
 ]
+
+
+def _is_bool(a: ArrayLike) -> bool:
+    return jnp.asarray(a).dtype == jnp.bool_
+
+
+def _as_numeric(a: ArrayLike) -> ArrayLike:
+    """Promote boolean spike masks to integers for the arithmetic identities.
+
+    ``bool + bool`` is *logical OR* in numpy/jax (and ``bool - bool`` is rejected
+    outright), so the polynomial formulas used below are wrong or raise for
+    boolean inputs. When *every* input is boolean the ops use the logical
+    functions instead and return a boolean mask; this promotion only covers a
+    boolean mask mixed with a numeric spike tensor, so the result takes the
+    numeric dtype. Non-boolean inputs are returned untouched.
+    """
+    if _is_bool(a):
+        return jnp.asarray(a, dtype=jnp.int32)
+    return a
 
 
 @set_module_as('braintools')
@@ -49,7 +69,13 @@ def spike_bitwise_or(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     Note:
         This operation assumes that the input tensors contain binary (0 or 1) values.
         For non-binary inputs, the behavior may not correspond to a true bitwise OR.
+        Boolean inputs give a boolean result (computed with the logical
+        functions); numeric inputs use the arithmetic formula, which keeps the
+        dtype and stays differentiable for surrogate-gradient spikes.
     """
+    if _is_bool(x) and _is_bool(y):
+        return jnp.logical_or(x, y)
+    x, y = _as_numeric(x), _as_numeric(y)
     return x + y - x * y
 
 
@@ -72,7 +98,13 @@ def spike_bitwise_and(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     Note:
         This operation is implemented using element-wise multiplication (x * y),
         which is equivalent to the AND operation for binary values.
+        Boolean inputs give a boolean result (computed with the logical
+        functions); numeric inputs use the arithmetic formula, which keeps the
+        dtype and stays differentiable for surrogate-gradient spikes.
     """
+    if _is_bool(x) and _is_bool(y):
+        return jnp.logical_and(x, y)
+    x, y = _as_numeric(x), _as_numeric(y)
     return x * y
 
 
@@ -95,7 +127,13 @@ def spike_bitwise_iand(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     Note:
         This operation is implemented using the formula: (1 - x) * y,
         which is equivalent to the IAND operation for binary values.
+        Boolean inputs give a boolean result (computed with the logical
+        functions); numeric inputs use the arithmetic formula, which keeps the
+        dtype and stays differentiable for surrogate-gradient spikes.
     """
+    if _is_bool(x) and _is_bool(y):
+        return jnp.logical_and(jnp.logical_not(x), y)
+    x, y = _as_numeric(x), _as_numeric(y)
     return (1 - x) * y
 
 
@@ -117,7 +155,12 @@ def spike_bitwise_not(x: ArrayLike) -> ArrayLike:
     Note:
         This operation is implemented using the formula: 1 - x,
         which is equivalent to the NOT operation for binary values.
+        Boolean inputs give a boolean result (computed with the logical
+        functions); numeric inputs use the arithmetic formula, which keeps the
+        dtype and stays differentiable for surrogate-gradient spikes.
     """
+    if _is_bool(x):
+        return jnp.logical_not(x)
     return 1 - x
 
 
@@ -140,7 +183,13 @@ def spike_bitwise_xor(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     Note:
         This operation is implemented using the formula: x + y - 2 * x * y,
         which is equivalent to the XOR operation for binary values.
+        Boolean inputs give a boolean result (computed with the logical
+        functions); numeric inputs use the arithmetic formula, which keeps the
+        dtype and stays differentiable for surrogate-gradient spikes.
     """
+    if _is_bool(x) and _is_bool(y):
+        return jnp.logical_xor(x, y)
+    x, y = _as_numeric(x), _as_numeric(y)
     return x + y - 2 * x * y
 
 
@@ -163,7 +212,13 @@ def spike_bitwise_ixor(x: ArrayLike, y: ArrayLike) -> ArrayLike:
     Note:
         This operation is implemented using the formula: x * (1 - y) + (1 - x) * y,
         which is equivalent to the IXOR operation for binary values.
+        Boolean inputs give a boolean result (computed with the logical
+        functions); numeric inputs use the arithmetic formula, which keeps the
+        dtype and stays differentiable for surrogate-gradient spikes.
     """
+    if _is_bool(x) and _is_bool(y):
+        return jnp.logical_xor(x, y)
+    x, y = _as_numeric(x), _as_numeric(y)
     return x * (1 - y) + (1 - x) * y
 
 

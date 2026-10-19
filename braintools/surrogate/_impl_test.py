@@ -24,6 +24,15 @@ import pytest
 import braintools.surrogate as surrogate
 
 
+def _surrogate_grad_param_grad(fn, argnums):
+    """Derivative w.r.t. a surrogate parameter of the surrogate gradient d spike / d x.
+
+    The spike itself does not depend on surrogate parameters (its parameter
+    gradient is 0); the parameters act through the gradient with respect to x.
+    """
+    return brainstate.transform.vector_grad(brainstate.transform.vector_grad(fn, argnums=0), argnums=argnums)
+
+
 class TestSigmoid:
     """Test sigmoid-based surrogate gradients."""
 
@@ -57,7 +66,7 @@ class TestSigmoid:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.sigmoid, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.sigmoid, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.Sigmoid(alpha=alpha).surrogate_grad(x)
@@ -99,7 +108,7 @@ class TestPiecewiseQuadratic:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.piecewise_quadratic, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.piecewise_quadratic, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.PiecewiseQuadratic(alpha=alpha).surrogate_grad(x)
@@ -141,7 +150,7 @@ class TestPiecewiseExp:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.piecewise_exp, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.piecewise_exp, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.PiecewiseExp(alpha=alpha).surrogate_grad(x)
@@ -183,7 +192,7 @@ class TestSoftSign:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.soft_sign, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.soft_sign, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.SoftSign(alpha=alpha).surrogate_grad(x)
@@ -225,7 +234,7 @@ class TestArctan:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.arctan, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.arctan, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.Arctan(alpha=alpha).surrogate_grad(x)
@@ -267,7 +276,7 @@ class TestNonzeroSignLog:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.nonzero_sign_log, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.nonzero_sign_log, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.NonzeroSignLog(alpha=alpha).surrogate_grad(x)
@@ -309,7 +318,7 @@ class TestERF:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.erf, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.erf, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.ERF(alpha=alpha).surrogate_grad(x)
@@ -351,7 +360,7 @@ class TestQPseudoSpike:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.q_pseudo_spike, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.q_pseudo_spike, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.QPseudoSpike(alpha=alpha).surrogate_grad(x)
@@ -393,7 +402,7 @@ class TestLogTailedRelu:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.log_tailed_relu, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.log_tailed_relu, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.LogTailedRelu(alpha=alpha).surrogate_grad(x)
@@ -435,7 +444,7 @@ class TestInvSquareGrad:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.inv_square_grad, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.inv_square_grad, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.InvSquareGrad(alpha=alpha).surrogate_grad(x)
@@ -477,7 +486,7 @@ class TestSlayerGrad:
     def test_grad_of_parameters(self, x, alpha):
         """Test gradient of parameters."""
         x = jnp.array(x)
-        grad = brainstate.transform.vector_grad(surrogate.slayer_grad, argnums=1)(x, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.slayer_grad, 1)(x, alpha)
 
         def f(alpha):
             return surrogate.SlayerGrad(alpha=alpha).surrogate_grad(x)
@@ -521,7 +530,7 @@ class TestPiecewiseLeakyRelu:
         """Test gradient of c parameter."""
         x = jnp.array(x)
         c, w = 0.01, 1.0
-        grad = brainstate.transform.vector_grad(surrogate.piecewise_leaky_relu, argnums=1)(x, c, w)
+        grad = _surrogate_grad_param_grad(surrogate.piecewise_leaky_relu, 1)(x, c, w)
 
         def f(c):
             return surrogate.PiecewiseLeakyRelu(c=c, w=w).surrogate_grad(x)
@@ -534,7 +543,7 @@ class TestPiecewiseLeakyRelu:
         """Test gradient of w parameter."""
         x = jnp.array(x)
         c, w = 0.01, 1.0
-        grad = brainstate.transform.vector_grad(surrogate.piecewise_leaky_relu, argnums=2)(x, c, w)
+        grad = _surrogate_grad_param_grad(surrogate.piecewise_leaky_relu, 2)(x, c, w)
 
         def f(w):
             return surrogate.PiecewiseLeakyRelu(c=c, w=w).surrogate_grad(x)
@@ -578,7 +587,7 @@ class TestLeakyRelu:
         """Test gradient of alpha parameter."""
         x = jnp.array(x)
         alpha, beta = 0.1, 1.0
-        grad = brainstate.transform.vector_grad(surrogate.leaky_relu, argnums=1)(x, alpha, beta)
+        grad = _surrogate_grad_param_grad(surrogate.leaky_relu, 1)(x, alpha, beta)
 
         def f(alpha):
             return surrogate.LeakyRelu(alpha=alpha, beta=beta).surrogate_grad(x)
@@ -591,7 +600,7 @@ class TestLeakyRelu:
         """Test gradient of beta parameter."""
         x = jnp.array(x)
         alpha, beta = 0.1, 1.0
-        grad = brainstate.transform.vector_grad(surrogate.leaky_relu, argnums=2)(x, alpha, beta)
+        grad = _surrogate_grad_param_grad(surrogate.leaky_relu, 2)(x, alpha, beta)
 
         def f(beta):
             return surrogate.LeakyRelu(alpha=alpha, beta=beta).surrogate_grad(x)
@@ -635,7 +644,7 @@ class TestReluGrad:
         """Test gradient of alpha parameter."""
         x = jnp.array(x)
         alpha, width = 0.3, 1.0
-        grad = brainstate.transform.vector_grad(surrogate.relu_grad, argnums=1)(x, alpha, width)
+        grad = _surrogate_grad_param_grad(surrogate.relu_grad, 1)(x, alpha, width)
 
         def f(alpha):
             return surrogate.ReluGrad(alpha=alpha, width=width).surrogate_grad(x)
@@ -648,7 +657,7 @@ class TestReluGrad:
         """Test gradient of width parameter."""
         x = jnp.array(x)
         alpha, width = 0.3, 1.0
-        grad = brainstate.transform.vector_grad(surrogate.relu_grad, argnums=2)(x, alpha, width)
+        grad = _surrogate_grad_param_grad(surrogate.relu_grad, 2)(x, alpha, width)
 
         def f(width):
             return surrogate.ReluGrad(alpha=alpha, width=width).surrogate_grad(x)
@@ -692,7 +701,7 @@ class TestGaussianGrad:
         """Test gradient of sigma parameter."""
         x = jnp.array(x)
         sigma, alpha = 0.5, 0.5
-        grad = brainstate.transform.vector_grad(surrogate.gaussian_grad, argnums=1)(x, sigma, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.gaussian_grad, 1)(x, sigma, alpha)
 
         def f(sigma):
             return surrogate.GaussianGrad(sigma=sigma, alpha=alpha).surrogate_grad(x)
@@ -705,7 +714,7 @@ class TestGaussianGrad:
         """Test gradient of alpha parameter."""
         x = jnp.array(x)
         sigma, alpha = 0.5, 0.5
-        grad = brainstate.transform.vector_grad(surrogate.gaussian_grad, argnums=2)(x, sigma, alpha)
+        grad = _surrogate_grad_param_grad(surrogate.gaussian_grad, 2)(x, sigma, alpha)
 
         def f(alpha):
             return surrogate.GaussianGrad(sigma=sigma, alpha=alpha).surrogate_grad(x)
@@ -751,7 +760,7 @@ class TestS2NN:
         """Test gradient of alpha parameter."""
         x = jnp.array(x)
         alpha, beta, epsilon = 4.0, 1.0, 1e-8
-        grad = brainstate.transform.vector_grad(surrogate.s2nn, argnums=1)(x, alpha, beta, epsilon)
+        grad = _surrogate_grad_param_grad(surrogate.s2nn, 1)(x, alpha, beta, epsilon)
 
         def f(alpha):
             return surrogate.S2NN(alpha=alpha, beta=beta, epsilon=epsilon).surrogate_grad(x)
@@ -764,7 +773,7 @@ class TestS2NN:
         """Test gradient of beta parameter."""
         x = jnp.array(x)
         alpha, beta, epsilon = 4.0, 1.0, 1e-8
-        grad = brainstate.transform.vector_grad(surrogate.s2nn, argnums=2)(x, alpha, beta, epsilon)
+        grad = _surrogate_grad_param_grad(surrogate.s2nn, 2)(x, alpha, beta, epsilon)
 
         def f(beta):
             return surrogate.S2NN(alpha=alpha, beta=beta, epsilon=epsilon).surrogate_grad(x)
@@ -808,7 +817,7 @@ class TestMultiGaussianGrad:
         """Test gradient of h parameter."""
         x = jnp.array(x)
         h, s, sigma, scale = 0.15, 6.0, 0.5, 0.5
-        grad = brainstate.transform.vector_grad(surrogate.multi_gaussian_grad, argnums=1)(x, h, s, sigma, scale)
+        grad = _surrogate_grad_param_grad(surrogate.multi_gaussian_grad, 1)(x, h, s, sigma, scale)
 
         def f(h):
             return surrogate.MultiGaussianGrad(h=h, s=s, sigma=sigma, scale=scale).surrogate_grad(x)
@@ -821,7 +830,7 @@ class TestMultiGaussianGrad:
         """Test gradient of s parameter."""
         x = jnp.array(x)
         h, s, sigma, scale = 0.15, 6.0, 0.5, 0.5
-        grad = brainstate.transform.vector_grad(surrogate.multi_gaussian_grad, argnums=2)(x, h, s, sigma, scale)
+        grad = _surrogate_grad_param_grad(surrogate.multi_gaussian_grad, 2)(x, h, s, sigma, scale)
 
         def f(s):
             return surrogate.MultiGaussianGrad(h=h, s=s, sigma=sigma, scale=scale).surrogate_grad(x)

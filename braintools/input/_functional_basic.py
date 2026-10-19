@@ -30,6 +30,7 @@ import numpy as np
 
 from braintools._misc import set_module_as
 from ._deprecation import create_deprecated_function
+from ._steps import ceil_steps, floor_steps
 
 __all__ = [
     'section',
@@ -160,7 +161,7 @@ def section(
     # format the current
     currents = []
     for c_size, duration in zip(value_mantissas, duration_mantissas):
-        length = int(np.ceil(duration / dt_value))
+        length = ceil_steps(duration, dt_value)
         current = np.ones((length,) + i_shape, dtype=brainstate.environ.dftype())
         currents.append(current * c_size)
     currents = np.concatenate(currents, axis=0)
@@ -221,9 +222,9 @@ def constant(I_and_duration):
     .. code-block:: python
 
         >>> current, duration = constant([
-        ...     (0, 50 * u.ms),
+        ...     (np.zeros(3) * u.nA, 50 * u.ms),
         ...     (np.array([1, 2, 3]) * u.nA, 100 * u.ms),
-        ...     (0, 50 * u.ms)
+        ...     (np.zeros(3) * u.nA, 50 * u.ms)
         ... ])
     
     Complex multi-phase stimulation
@@ -294,7 +295,7 @@ def constant(I_and_duration):
     # get the current
     currents = []
     for c_size, duration in zip(I_mantissas, duration_mantissas):
-        length = int(np.ceil(duration / dt_value))
+        length = ceil_steps(duration, dt_value)
         current = np.ones((length,) + I_shape, dtype=brainstate.environ.dftype()) * c_size
         currents.append(current)
     currents = np.concatenate(currents, axis=0)
@@ -418,7 +419,7 @@ def step(
         if c_unit is None: c_unit = u.get_unit(amp)
         amp_mantissas.append(u.Quantity(amp).to(c_unit).mantissa)
 
-    n_steps = int(duration_value / dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
 
     # Convert step times to mantissa values for sorting
@@ -433,9 +434,9 @@ def step(
 
     # Set amplitude for each interval
     for i, (time, amp) in enumerate(zip(sorted_times, sorted_amps)):
-        start_i = int(time / dt_value)
+        start_i = floor_steps(time, dt_value)
         if i < len(sorted_times) - 1:
-            end_i = int(sorted_times[i + 1] / dt_value)
+            end_i = floor_steps(sorted_times[i + 1], dt_value)
         else:
             end_i = n_steps
         if start_i < n_steps:
@@ -589,9 +590,9 @@ def ramp(
     c_start, c_unit = u.split_mantissa_unit(c_start)
     c_end = u.Quantity(c_end).to(c_unit).mantissa
 
-    length = int(np.ceil(duration / dt))
-    p1 = int(np.ceil(t_start / dt))
-    p2 = int(np.ceil(t_end / dt))
+    length = ceil_steps(duration, dt)
+    p1 = ceil_steps(t_start, dt)
+    p2 = ceil_steps(t_end, dt)
 
     current = np.zeros(length, dtype=brainstate.environ.dftype())
     cc = np.linspace(c_start, c_end, p2 - p1)

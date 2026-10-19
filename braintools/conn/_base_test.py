@@ -1103,6 +1103,26 @@ class TestCompositeWeightedComprehensive(unittest.TestCase):
         dd = _mant(out.delay2matrix())
         self.assertAlmostEqual(dd[1, 1], (4.0 + 10.0) / 2.0)  # average
 
+    def test_intersection_one_side_missing_delays_is_neutral(self):
+        # A delay-free mask must keep the other side's delays, not average them with 0.
+        r1 = self._r([0, 1, 2], [0, 1, 2], weights=np.array([1., 2., 3.]) * u.nS,
+                     delays=np.array([2., 4., 6.]) * u.ms)
+        mask = self._r([1, 2, 3], [1, 2, 3])
+        for out in [(_FixedConn(r1) * _FixedConn(mask))(pre_size=4, post_size=4),
+                    (_FixedConn(mask) * _FixedConn(r1))(pre_size=4, post_size=4)]:
+            dd = _mant(out.delay2matrix())
+            self.assertAlmostEqual(dd[1, 1], 4.0)
+            self.assertAlmostEqual(dd[2, 2], 6.0)
+            self.assertAlmostEqual(_mant(out.weight2dense())[2, 2], 3.0)
+
+    def test_intersection_delays_differing_units(self):
+        # 4 ms and 0.010 s average to 7 ms; raw mantissas would give 2.005 ms.
+        r1 = self._r([1], [1], delays=np.array([4.]) * u.ms)
+        r2 = self._r([1], [1], delays=np.array([0.010]) * u.second)
+        out = (_FixedConn(r1) * _FixedConn(r2))(pre_size=4, post_size=4)
+        self.assertEqual(u.get_unit(out.delays), u.ms)
+        self.assertAlmostEqual(_mant(out.delays)[0], 7.0, places=4)
+
     def test_intersection_empty(self):
         r1 = self._r([0], [0], weights=np.array([1.]) * u.nS)
         r2 = self._r([3], [3], weights=np.array([9.]) * u.nS)
@@ -1188,6 +1208,25 @@ class TestBaseRegressions(unittest.TestCase):
         a = c(pre_size=7, post_size=7)
         b = c(pre_size=7, post_size=7)
         self.assertIs(a, b)
+
+    def test_call_cache_is_keyed_on_position_values(self):
+        # The cache key is the position *values*, not the array object's ``id``.
+        class P(Connectivity):
+            def generate(self, pre_size, post_size, pre_positions=None, **kwargs):
+                return ConnectionResult(np.array([0]), np.array([0]), pre_size, post_size,
+                                        pre_positions=pre_positions)
+
+        c = P()
+        pos = np.random.rand(3, 2)
+        a = c(pre_size=3, post_size=3, pre_positions=pos)
+        # equal values in a different array object -> cache hit
+        self.assertIs(c(pre_size=3, post_size=3, pre_positions=pos.copy()), a)
+        # in-place mutation keeps the id but changes the values -> recompute
+        pos[0, 0] += 1.0
+        self.assertIsNot(c(pre_size=3, post_size=3, pre_positions=pos), a)
+        # the same values with a different unit are different positions
+        b = c(pre_size=3, post_size=3, pre_positions=pos * u.mm)
+        self.assertIsNot(c(pre_size=3, post_size=3, pre_positions=pos * u.um), b)
 
     def test_scaled_does_not_mutate_base(self):
         # BASE-3: scaling must not mutate the base connectivity's cached result.

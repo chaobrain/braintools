@@ -849,3 +849,74 @@ class TestMiscBranches:
             opt.step({'w': jnp.array([0.2, -0.3, 0.1])})
         assert jnp.all(jnp.isfinite(w.value))
         assert not jnp.allclose(w.value, before)
+
+
+class TestCyclicLRAsymmetric:
+    """``step_size_down`` must shape the falling half of the cycle (PyTorch formula)."""
+
+    def test_matches_reference_formula(self):
+        up, down, lo, hi = 4, 3, 0.001, 0.01
+        sch = O.CyclicLR(lo, max_lr=hi, step_size_up=up, step_size_down=down, mode='triangular2')
+        got = [float(np.asarray(sch.get_lr())[0])]
+        for _ in range(30):
+            sch.step()
+            got.append(float(np.asarray(sch.get_lr())[0]))
+        expected = []
+        for it in range(31):
+            cycle = np.floor(1 + it / (up + down))
+            frac = 1 + it / (up + down) - cycle
+            ratio = up / (up + down)
+            h = frac / ratio if frac <= ratio else (frac - 1) / (ratio - 1)
+            expected.append(lo + (hi - lo) * h / 2 ** (cycle - 1))
+        np.testing.assert_allclose(got, expected, rtol=1e-6)
+        # one step into the falling half of the first cycle: 2/3 of the way back up
+        np.testing.assert_allclose(got[5], lo + (hi - lo) * 2 / 3, rtol=1e-6)
+
+
+class TestLBFGSLinesearch:
+    """L-BFGS with a line search converges like ``optax.lbfgs`` and checks ``value_fn``."""
+
+    @staticmethod
+    def _rosen(values):
+        w = values['w']
+        return (1 - w[0]) ** 2 + 100 * (w[1] - w[0] ** 2) ** 2
+
+    @pytest.mark.parametrize('linesearch', ['zoom', 'backtracking'])
+    def test_rosenbrock(self, linesearch):
+        params = {'w': brainstate.ParamState(jnp.array([-1.5, 2.0]))}
+        opt = O.LBFGS(linesearch=linesearch)
+        opt.register_trainable_weights(params)
+        for _ in range(60):
+            grads = brainstate.transform.grad(lambda: self._rosen({'w': params['w'].value}), grad_states=params)()
+            opt.update(grads, value=self._rosen({'w': params['w'].value}), value_fn=self._rosen)
+        np.testing.assert_allclose(params['w'].value, [1.0, 1.0], atol=1e-3)
+
+    def test_zero_argument_value_fn_rejected(self):
+        params = {'w': brainstate.ParamState(jnp.zeros(2))}
+        opt = O.LBFGS(linesearch='zoom')
+        opt.register_trainable_weights(params)
+        with pytest.raises(TypeError, match='value_fn'):
+            opt.update({'w': jnp.ones(2)}, value=1.0, value_fn=lambda: 1.0)
+
+
+class TestNevergradUnitStripping:
+    """With quantity bounds the loss receives plain numbers in the lower bound's unit."""
+
+    def test_loss_receives_plain_numbers(self):
+        import brainunit as u
+        seen = {}
+
+        def loss(tau, v):
+            seen['types'] = (type(tau), type(v))
+            seen['range'] = (float(jnp.min(tau)), float(jnp.max(tau)))
+            return (tau - 20.0) ** 2 + (v + 50.0) ** 2  # ms and mV as plain numbers
+
+        opt = O.NevergradOptimizer(loss, bounds=[(5.0 * u.ms, 0.05 * u.second), (-60.0 * u.mV, -40.0 * u.mV)],
+                                   n_sample=16, method='DE', seed=0)
+        tau, v = opt.minimize(n_iter=30, verbose=False)
+        assert not any(issubclass(t, u.Quantity) for t in seen['types'])
+        assert 5.0 <= seen['range'][0] and seen['range'][1] <= 50.0  # 0.05 s converted to ms
+        # the returned best parameters carry the bounds' units again
+        assert isinstance(tau, u.Quantity) and isinstance(v, u.Quantity)
+        np.testing.assert_allclose(tau.to_decimal(u.ms), 20.0, atol=1.0)
+        np.testing.assert_allclose(v.to_decimal(u.mV), -50.0, atol=1.0)

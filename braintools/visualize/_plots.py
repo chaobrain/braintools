@@ -434,7 +434,7 @@ def animate_2D(
 
     anim = animation.FuncAnimation(fig=fig,
                                    func=frame,
-                                   frames=list(range(1, num_step, frame_step)),
+                                   frames=list(range(0, num_step, frame_step)),
                                    init_func=None,
                                    interval=frame_delay,
                                    repeat_delay=3000)
@@ -444,7 +444,7 @@ def animate_2D(
     else:
         logging.warning(f'Saving the animation into {save_path} ...')
         if save_path[-3:] == 'gif':
-            anim.save(save_path, dpi=gif_dpi, writer='imagemagick')
+            anim.save(save_path, dpi=gif_dpi, writer='pillow')
         elif save_path[-3:] == 'mp4':
             anim.save(save_path, writer='ffmpeg', fps=video_fps, bitrate=3000)
         else:
@@ -516,7 +516,9 @@ def animate_1D(
     Returns
     -------
     figure : plt.figure
-        The created figure instance.
+        The created figure instance. The animation object is attached as
+        ``figure.animation`` (a ``matplotlib.animation.FuncAnimation``); use it
+        to display the animation in a notebook (``to_jshtml()``) or to save it.
     """
 
     # check dt
@@ -645,10 +647,16 @@ def animate_1D(
 
     anim_result = animation.FuncAnimation(fig=fig,
                                           func=frame,
-                                          frames=range(1, lengths[0], frame_step),
+                                          frames=range(0, lengths[0], frame_step),
                                           init_func=None,
                                           interval=frame_delay,
                                           repeat_delay=3000)
+
+    # Keep a reference on the figure: an animation object without a live
+    # reference is garbage-collected before it renders anything. Display it in a
+    # notebook with ``HTML(fig.animation.to_jshtml())`` or save it with
+    # ``fig.animation.save(...)``.
+    fig.animation = anim_result
 
     # save or show
     if save_path is None:
@@ -656,7 +664,7 @@ def animate_1D(
     else:
         logging.warning(f'Saving the animation into {save_path} ...')
         if save_path[-3:] == 'gif':
-            anim_result.save(save_path, dpi=gif_dpi, writer='imagemagick')
+            anim_result.save(save_path, dpi=gif_dpi, writer='pillow')
         elif save_path[-3:] == 'mp4':
             anim_result.save(save_path, writer='ffmpeg', fps=video_fps, bitrate=3000)
         else:

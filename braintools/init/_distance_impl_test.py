@@ -867,3 +867,24 @@ class TestProfileJitTraceable(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSigmoidSlopeUnits(unittest.TestCase):
+    """A 1/length slope gives the same profile whatever unit ``midpoint`` uses."""
+
+    def test_quantity_slope_is_unit_independent(self):
+        from braintools.init import LogisticProfile, SigmoidProfile
+        d = np.array([0.0, 50.0, 100.0, 150.0]) * u.um
+        ref = SigmoidProfile(100.0 * u.um, slope=0.05)(d)
+        for cls, kw in ((SigmoidProfile, 'slope'), (LogisticProfile, 'growth_rate')):
+            p_um = cls(midpoint=100.0 * u.um, **{kw: 0.05 / u.um})(d)
+            p_mm = cls(midpoint=0.1 * u.mm, **{kw: 0.05 / u.um})(d)
+            np.testing.assert_allclose(p_um, ref, rtol=1e-6)
+            np.testing.assert_allclose(p_mm, ref, rtol=1e-6)
+
+    def test_plain_slope_is_per_midpoint_unit(self):
+        from braintools.init import SigmoidProfile
+        d = np.array([0.0, 100.0]) * u.um
+        # 0.05 per mm is a much shallower transition than 0.05 per um.
+        p = SigmoidProfile(midpoint=0.05 * u.mm, slope=0.05)(d)
+        np.testing.assert_allclose(p, 1 / (1 + np.exp(0.05 * (np.array([0.0, 0.1]) - 0.05))), rtol=1e-6)

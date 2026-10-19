@@ -131,13 +131,13 @@ class DeltaOrthogonal(Initialization):
 
     Notes
     -----
-    The kernel uses the **channels-first** convention ``(out_channels,
-    in_channels, *spatial)``. The channel matrix placed at the spatial centre is
-    (semi-)orthogonal for any channel counts: when ``out_channels >=
-    in_channels`` it has orthonormal columns (``W.T @ W == I``, the
-    norm-preserving *expanding* case), and when ``out_channels < in_channels`` it
-    has orthonormal rows (``W @ W.T == I``). Both yield unit singular values, so
-    the convolution is an isometry on its column/row space.
+    The kernel uses the **channels-last** convention ``(*spatial, in_channels,
+    out_channels)`` of ``brainstate`` convolution layers (e.g. ``(3, 3, 64, 128)``
+    for a 3x3 kernel). The ``(in_channels, out_channels)`` matrix placed at the
+    spatial centre is (semi-)orthogonal for any channel counts: it has
+    orthonormal rows when ``in_channels <= out_channels`` (``W @ W.T == I``, the
+    norm-preserving case for ``y = x @ W``) and orthonormal columns otherwise.
+    Both yield unit singular values. Every other spatial position is zero.
 
     Parameters
     ----------
@@ -154,7 +154,7 @@ class DeltaOrthogonal(Initialization):
         >>> # For a 3x3 convolutional kernel with 64 input and 128 output channels
         >>> init = DeltaOrthogonal(scale=1.0)
         >>> rng = np.random.default_rng(0)
-        >>> weights = init((128, 64, 3, 3), rng=rng)
+        >>> weights = init((3, 3, 64, 128), rng=rng)
     """
     __module__ = 'braintools.init'
 
@@ -175,23 +175,17 @@ class DeltaOrthogonal(Initialization):
         shape = (size,) if isinstance(size, int) else size
 
         if len(shape) < 3:
-            raise ValueError("DeltaOrthogonal requires at least 3D shape (out_channels, in_channels, ...)")
+            raise ValueError("DeltaOrthogonal requires at least 3D shape (*spatial, in_channels, out_channels)")
 
-        out_channels = shape[0]
-        in_channels = shape[1]
-        receptive_field_shape = shape[2:]
+        receptive_field_shape = shape[:-2]
+        in_channels, out_channels = shape[-2], shape[-1]
 
-        # Initialize with zeros
-        weights = jnp.zeros(shape)
-
-        # Compute center index for each spatial dimension
+        # Place an orthogonal (in, out) channel matrix at the centre of the
+        # receptive field; every other spatial position stays zero.
         center = tuple(s // 2 for s in receptive_field_shape)
-
-        # Create orthogonal matrix for the channel dimensions
-        ortho_matrix = Orthogonal(scale=self.scale)((out_channels, in_channels), rng=rng)
-
-        # Place the orthogonal matrix at the center of the receptive field
-        weights = weights.at[(slice(None), slice(None)) + center].set(ortho_matrix)
+        ortho_matrix = Orthogonal(scale=self.scale)((in_channels, out_channels), rng=rng)
+        weights = jnp.zeros(shape, dtype=ortho_matrix.dtype)
+        weights = weights.at[center].set(ortho_matrix)
 
         return u.maybe_decimal(weights * self.unit)
 

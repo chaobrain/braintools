@@ -79,7 +79,7 @@ during backpropagation, enabling gradient-based optimization of SNNs.
     output_spikes = layer(x)
 
     # Gradients work through the spike function!
-    @bst.transform.grad(layer.states(bst.ParamState))
+    @bst.transform.grad(grad_states=layer.states(bst.ParamState))
     def loss_fn(x, target):
         return jnp.mean((layer(x) - target) ** 2)
 
@@ -133,7 +133,7 @@ during backpropagation, enabling gradient-based optimization of SNNs.
     y2 = pe_fn(x)
 
     # Piecewise leaky ReLU
-    plr_fn = PiecewiseLeakyRelu(c=0.01, alpha=1.0)
+    plr_fn = PiecewiseLeakyRelu(c=0.01, w=1.0)
     y3 = plr_fn(x)
 
 **ReLU-Based Surrogates:**
@@ -174,11 +174,12 @@ during backpropagation, enabling gradient-based optimization of SNNs.
     gaussian_fn = GaussianGrad(sigma=0.5, alpha=1.0)
     y1 = gaussian_fn(x)
 
-    # Multiple Gaussians (sum of Gaussians at different positions)
+    # Central Gaussian minus two wider negative side Gaussians
     multi_gaussian_fn = MultiGaussianGrad(
-        h=0.15,  # height
-        s=6.0,   # sigma
-        gamma=0.5  # spacing
+        h=0.15,      # weight of the negative side Gaussians
+        s=6.0,       # width of the side Gaussians relative to sigma
+        sigma=0.5,   # width of the central Gaussian
+        scale=0.5,   # overall scale
     )
     y2 = multi_gaussian_fn(x)
 
@@ -407,6 +408,7 @@ during backpropagation, enabling gradient-based optimization of SNNs.
 .. code-block:: python
 
     import brainstate as bst
+    import braintools
     import jax.numpy as jnp
     from braintools.surrogate import Sigmoid
 
@@ -442,10 +444,10 @@ during backpropagation, enabling gradient-based optimization of SNNs.
 
     # Create and train
     model = SpikingMLP([784, 256, 128, 10])
-    optimizer = bst.optim.Adam(lr=1e-3)
+    optimizer = braintools.optim.Adam(lr=1e-3)
     optimizer.register_trainable_weights(model.states(bst.ParamState))
 
-    @bst.transform.grad(model.states(bst.ParamState), return_value=True)
+    @bst.transform.grad(grad_states=model.states(bst.ParamState), return_value=True)
     def loss_fn(x, target):
         output = model(x)
         return jnp.mean((output - target) ** 2)
