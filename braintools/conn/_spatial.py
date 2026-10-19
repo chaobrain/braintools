@@ -13,17 +13,30 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Optional, Union
+from typing import Iterator, Optional, Tuple, Union
 
 import brainunit as u
 import numpy as np
 from brainstate.typing import ArrayLike
+from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 
 from braintools.init._distance_base import DistanceProfile
-from braintools.init._distance_impl import GaussianProfile, ExponentialProfile
+from braintools.init._distance_impl import (
+    BimodalProfile,
+    DoGProfile,
+    ExponentialProfile,
+    GaussianProfile,
+    LinearProfile,
+    LogisticProfile,
+    MexicanHatProfile,
+    PowerLawProfile,
+    SigmoidProfile,
+    StepProfile,
+)
 from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
+from ._sampling import MAX_CHUNK_PAIRS, row_chunks, sample_rows_without_replacement
 
 __all__ = [
     'DistanceDependent',
@@ -33,6 +46,150 @@ __all__ = [
     'Grid2d',
     'RadialPatches',
 ]
+
+# Built-in profiles whose ``probability`` is exactly zero beyond ``max_distance``
+# (when it is set). Matched by exact type, so a subclass that overrides
+# ``probability`` never has pairs silently dropped by the cutoff search.
+_MAX_DISTANCE_PROFILES = (
+    GaussianProfile,
+    ExponentialProfile,
+    PowerLawProfile,
+    LinearProfile,
+    SigmoidProfile,
+    DoGProfile,
+    LogisticProfile,
+    BimodalProfile,
+    MexicanHatProfile,
+)
+
+# Relative slack added to a cutoff radius for the KD-tree search, so that pairs
+# whose distance rounds differently in the tree and in the profile are still
+# handed to the profile, which applies its own ``d > max_distance`` test.
+_CUTOFF_SLACK = 1e-9
+
+
+def _size_num(size) -> int:
+    """Number of elements of an int or shape-tuple population size."""
+    if isinstance(size, (tuple, list)):
+        return int(np.prod(size))
+    return int(size)
+
+
+def _position_values(pre_positions, post_positions) -> Tuple[np.ndarray, np.ndarray, object]:
+    """Return float64 ``(N, d)`` mantissas of both position arrays, in the pre unit."""
+    pre_val, unit = u.split_mantissa_unit(pre_positions)
+    post_val = u.Quantity(post_positions).to(unit).mantissa
+    pre_val = np.asarray(pre_val, dtype=np.float64)
+    post_val = np.asarray(post_val, dtype=np.float64)
+    if pre_val.ndim == 1:
+        pre_val = pre_val[:, None]
+    if post_val.ndim == 1:
+        post_val = post_val[:, None]
+    return pre_val, post_val, unit
+
+
+def _profile_cutoff(profile):
+    """Distance beyond which ``profile.probability`` is exactly zero, or None."""
+    if type(profile) is StepProfile:
+        return profile.threshold if profile.outside_prob == 0 else None
+    if type(profile) in _MAX_DISTANCE_PROFILES:
+        return getattr(profile, 'max_distance', None)
+    return None
+
+
+def _chunks_by_counts(counts: np.ndarray, max_pairs: Optional[int] = None) -> Iterator[Tuple[int, int]]:
+    """Yield ``(start, stop)`` row ranges whose summed ``counts`` stay within ``max_pairs``.
+
+    ``max_pairs`` defaults to the module's ``MAX_CHUNK_PAIRS``. Every chunk
+    holds at least one row, so a single row heavier than ``max_pairs`` forms a
+    chunk of its own.
+    """
+    max_pairs = MAX_CHUNK_PAIRS if max_pairs is None else max_pairs
+    n = len(counts)
+    csum = np.cumsum(np.asarray(counts, dtype=np.int64))
+    start = 0
+    while start < n:
+        base = int(csum[start - 1]) if start else 0
+        stop = int(np.searchsorted(csum, base + int(max_pairs), side='right'))
+        stop = min(max(stop, start + 1), n)
+        yield start, stop
+        start = stop
+
+
+def _pairs_within(
+    pre_val: np.ndarray,
+    post_val: np.ndarray,
+    radius: float,
+    max_pairs: Optional[int] = None,
+) -> Iterator[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Yield all ``(pre, post, distance)`` pairs with ``distance <= radius``, in pre-row chunks.
+
+    The candidate count of every pre row is obtained first (O(N) memory), and the
+    rows are grouped so that each chunk holds at most ``max_pairs`` pairs (or one
+    row). Chunks cover increasing ``pre`` ranges, but the pairs inside a chunk
+    come in KD-tree traversal order (deterministic for given inputs); callers
+    sort what they keep with :func:`_sort_pairs`, which is far cheaper than
+    sorting every candidate.
+    """
+    n_post = len(post_val)
+    if len(pre_val) == 0 or n_post == 0:
+        return
+    post_tree = cKDTree(post_val)
+    counts = post_tree.query_ball_point(pre_val, radius, return_length=True)
+    for start, stop in _chunks_by_counts(counts, max_pairs):
+        if int(np.sum(counts[start:stop])) == 0:
+            continue
+        found = cKDTree(pre_val[start:stop]).sparse_distance_matrix(post_tree, radius, output_type='ndarray')
+        yield found['i'] + start, found['j'], found['v']
+
+
+def _sort_pairs(pre: np.ndarray, post: np.ndarray, n_post: int, *extra):
+    """Sort ``pre``, ``post`` and parallel arrays by ``(pre, post)``."""
+    order = np.argsort(pre * n_post + post)
+    return (pre[order], post[order]) + tuple(e[order] for e in extra)
+
+
+def _sorted_unique(values: np.ndarray) -> np.ndarray:
+    """Sorted distinct values of an integer array.
+
+    Same result as ``np.unique``, but always sort-based: NumPy >= 2.3 routes
+    ``np.unique`` through a hash table that is an order of magnitude slower on
+    the millions of encoded pair ids handled here.
+    """
+    values = np.sort(np.asarray(values).ravel())
+    if values.size == 0:
+        return values
+    keep = np.empty(values.size, dtype=bool)
+    keep[0] = True
+    np.not_equal(values[1:], values[:-1], out=keep[1:])
+    return values[keep]
+
+
+def _concat_pairs(pres, posts, *extra):
+    """Concatenate per-chunk index lists (int64) and parallel float lists (float64)."""
+    out = [np.concatenate(pres).astype(np.int64, copy=False) if pres else np.zeros(0, np.int64),
+           np.concatenate(posts).astype(np.int64, copy=False) if posts else np.zeros(0, np.int64)]
+    for values in extra:
+        out.append(np.concatenate(values).astype(np.float64, copy=False) if values else np.zeros(0))
+    return tuple(out)
+
+
+def _drop_self_pairs(pre: np.ndarray, post: np.ndarray, *extra):
+    """Remove pairs with ``pre == post`` from ``pre``, ``post`` and any parallel arrays."""
+    keep = pre != post
+    return (pre[keep], post[keep]) + tuple(e[keep] for e in extra)
+
+
+def _empty_point_result(pre_size, post_size, pre_positions, post_positions) -> ConnectionResult:
+    return ConnectionResult(
+        np.array([], dtype=np.int64),
+        np.array([], dtype=np.int64),
+        pre_size=pre_size,
+        post_size=post_size,
+        pre_positions=pre_positions,
+        post_positions=post_positions,
+        model_type='point',
+    )
 
 
 def _same_population(pre_positions, post_positions, pre_num, post_num) -> bool:
@@ -68,6 +225,15 @@ class DistanceDependent(PointConnectivity):
     3. Stochastically generates connections based on these probabilities
     4. Assigns weights and delays to established connections using initializers
 
+    .. versionchanged:: 0.7.0
+       Generation is chunked over pre neurons and never holds an
+       ``N_pre x N_post`` array. When the profile has a hard cutoff (the
+       ``max_distance`` of the built-in profiles, or the ``threshold`` of a
+       ``StepProfile`` with ``outside_prob=0``) and positions are given, only
+       the pairs within the cutoff are found (KD-tree search) and drawn, which
+       changes the edges a given ``seed`` produces in that case. Without a
+       cutoff, the edges for a given ``seed`` are unchanged.
+
     Parameters
     ----------
     distance_profile : DistanceProfile or ArrayLike
@@ -93,6 +259,10 @@ class DistanceDependent(PointConnectivity):
         - A constant value (e.g., ``1.0 * u.ms``)
         - An initializer object (e.g., ``Uniform(0.5*u.ms, 2.0*u.ms)``)
         - ``None`` to create connections without explicit delays
+    allow_self_connections : bool, default=False
+        Whether to keep self-connections (autapses) when ``pre`` and ``post`` are
+        the same population (the same position array object, or equal-size
+        populations with identical positions).
     **kwargs
         Additional keyword arguments passed to the parent ``PointConnectivity`` class,
         such as ``seed`` for reproducible random number generation.
@@ -121,6 +291,16 @@ class DistanceDependent(PointConnectivity):
     - When ``pre`` and ``post`` are the same population, self-connections (autapses) are
       excluded by default; pass ``allow_self_connections=True`` to keep them
     - Connection probabilities are expected in ``[0, 1]`` and are clipped to this range
+    - Edges are returned sorted by ``(pre, post)``
+    - Without a cutoff, distances and probabilities are evaluated in blocks of
+      pre neurons holding at most ``2**22`` pairs, so memory is bounded but the
+      time is ``O(N_pre * N_post)``. With a cutoff, a ``scipy.spatial.cKDTree``
+      search visits only the pairs within it, so time and memory scale with
+      the number of candidate pairs (e.g. 1e5 neurons on a 2-D sheet with
+      about 1e7 edges build in seconds)
+    - A pre-computed ``distances`` matrix is processed in the same row blocks
+    - This is host-side NumPy/SciPy build-time code; it is not traceable by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``
 
     See Also
     --------
@@ -141,7 +321,7 @@ class DistanceDependent(PointConnectivity):
         >>> from braintools.init import GaussianProfile, Normal, Constant
         >>>
         >>> # Create neuron positions in 2D space
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>>
         >>> # Define Gaussian distance-dependent connectivity
         >>> conn = DistanceDependent(
@@ -162,6 +342,7 @@ class DistanceDependent(PointConnectivity):
         ...     post_positions=positions
         ... )
         >>> print(f"Generated {len(result.pre_indices)} connections")
+        Generated 12864 connections
 
     Using exponential distance profile:
 
@@ -217,28 +398,17 @@ class DistanceDependent(PointConnectivity):
 
         pre_size = kwargs['pre_size']
         post_size = kwargs['post_size']
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
+        pre_num = _size_num(pre_size)
+        post_num = _size_num(post_size)
 
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
-        # Calculate distance matrix
         pre_positions = kwargs.get('pre_positions', None)
         post_positions = kwargs.get('post_positions', None)
         distances = kwargs.get('distances', None)
-        if distances is not None:
-            # Use provided distances directly
-            distances = distances
-        elif pre_positions is None or post_positions is None:
-            raise ValueError('Positions required for distance-dependent connectivity, '
-                             'for example: pre_positions=positions, post_positions=positions, '
-                             'or provide distances directly.')
-        else:
+        if distances is None:
+            if pre_positions is None or post_positions is None:
+                raise ValueError('Positions required for distance-dependent connectivity, '
+                                 'for example: pre_positions=positions, post_positions=positions, '
+                                 'or provide distances directly.')
             if len(pre_positions) != pre_num:
                 raise ValueError(
                     f"Number of pre_positions ({len(pre_positions)}) must equal "
@@ -249,41 +419,27 @@ class DistanceDependent(PointConnectivity):
                     f"Number of post_positions ({len(post_positions)}) must equal "
                     f"post_size ({post_num})."
                 )
-            pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-            post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-            distances = u.maybe_decimal(cdist(pre_pos_val, post_pos_val) * pos_unit)
 
-        # Calculate connection probabilities using distance profile
-        probs = self.distance_profile.probability(distances)
-        # Probabilities are expected in [0, 1]; clip to guard against profiles or
-        # custom arrays that exceed this range (e.g. distance 0 -> prob slightly >1).
-        probs = np.clip(probs, 0.0, 1.0)
-
-        # Vectorized connection generation
-        random_vals = self.rng.random((pre_num, post_num))
-        connection_mask = (probs > 0) & (random_vals < probs)
-
-        # Drop autapses (self-connections) when pre and post are the same population.
-        if not self.allow_self_connections and _same_population(
+        drop_self = not self.allow_self_connections and _same_population(
             pre_positions, post_positions, pre_num, post_num
-        ):
-            np.fill_diagonal(connection_mask, False)
-
-        pre_indices, post_indices = np.where(connection_mask)
-        connection_distances = distances[connection_mask]
+        )
+        cutoff = _profile_cutoff(self.distance_profile) if distances is None else None
+        if cutoff is None:
+            pre_indices, post_indices, dist_val, dist_unit = self._sample_dense(
+                pre_num, post_num, pre_positions, post_positions, distances
+            )
+        else:
+            pre_indices, post_indices, dist_val, dist_unit = self._sample_cutoff(
+                pre_positions, post_positions, cutoff
+            )
+        if drop_self:
+            pre_indices, post_indices, dist_val = _drop_self_pairs(pre_indices, post_indices, dist_val)
 
         if len(pre_indices) == 0:
-            return ConnectionResult(
-                np.array([], dtype=np.int64),
-                np.array([], dtype=np.int64),
-                pre_size=pre_size,
-                post_size=post_size,
-                pre_positions=pre_positions,
-                post_positions=post_positions,
-                model_type='point',
-            )
+            return _empty_point_result(pre_size, post_size, pre_positions, post_positions)
 
         n_connections = len(pre_indices)
+        connection_distances = u.maybe_decimal(dist_val * dist_unit)
 
         # Generate weights using initialization class
         # Pass distances for distance-dependent weight distributions
@@ -312,8 +468,8 @@ class DistanceDependent(PointConnectivity):
         )
 
         return ConnectionResult(
-            np.array(pre_indices, dtype=np.int64),
-            np.array(post_indices, dtype=np.int64),
+            pre_indices,
+            post_indices,
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,
@@ -328,6 +484,56 @@ class DistanceDependent(PointConnectivity):
                 'delay_initialization': self.delay_init,
             }
         )
+
+    def _connect(self, distances, n_draws: int, shape) -> np.ndarray:
+        """Draw the connection mask for a block of distances (one uniform per pair)."""
+        probs = self.distance_profile.probability(distances)
+        # Probabilities are expected in [0, 1]; clip to guard against profiles or
+        # custom arrays that exceed this range (e.g. distance 0 -> prob slightly >1).
+        probs = np.clip(probs, 0.0, 1.0)
+        random_vals = self.rng.random(n_draws).reshape(shape)
+        return np.asarray((probs > 0) & (random_vals < probs), dtype=bool)
+
+    def _sample_dense(self, pre_num, post_num, pre_positions, post_positions, distances):
+        """Evaluate all pairs, in pre-row chunks of at most ``MAX_CHUNK_PAIRS`` pairs.
+
+        One uniform is drawn per pair in row-major order, which reproduces the
+        random stream of the former single-matrix implementation exactly.
+        """
+        if distances is not None:
+            dist_all, dist_unit = u.split_mantissa_unit(distances)
+            pos_val = None
+        else:
+            pre_val, post_val, dist_unit = _position_values(pre_positions, post_positions)
+            pos_val = (pre_val, post_val)
+        pres, posts, dists = [], [], []
+        for start, stop in row_chunks(pre_num, post_num, MAX_CHUNK_PAIRS):
+            if pos_val is None:
+                block_val = np.asarray(dist_all[start:stop], dtype=np.float64)
+            else:
+                block_val = cdist(pos_val[0][start:stop], pos_val[1])
+            mask = self._connect(u.maybe_decimal(block_val * dist_unit), block_val.size, block_val.shape)
+            rows, cols = np.nonzero(mask)
+            pres.append(rows + start)
+            posts.append(cols)
+            dists.append(block_val[rows, cols])
+        return _concat_pairs(pres, posts, dists) + (dist_unit,)
+
+    def _sample_cutoff(self, pre_positions, post_positions, cutoff):
+        """Evaluate only the pairs within the profile's cutoff, found with a KD-tree."""
+        pre_val, post_val, dist_unit = _position_values(pre_positions, post_positions)
+        radius = float(u.Quantity(cutoff).to(dist_unit).mantissa)
+        radius = radius * (1.0 + _CUTOFF_SLACK)
+        pres, posts, dists = [], [], []
+        for pre, post, dist in _pairs_within(pre_val, post_val, radius):
+            mask = self._connect(u.maybe_decimal(dist * dist_unit), dist.size, dist.shape)
+            # Chunks cover increasing pre ranges, so sorting each chunk's kept
+            # pairs makes the concatenation sorted by (pre, post).
+            pre, post, dist = _sort_pairs(pre[mask], post[mask], len(post_val), dist[mask])
+            pres.append(pre)
+            posts.append(post)
+            dists.append(dist)
+        return _concat_pairs(pres, posts, dists) + (dist_unit,)
 
 
 class Gaussian(DistanceDependent):
@@ -349,6 +555,13 @@ class Gaussian(DistanceDependent):
     - :math:`d` is the distance between neurons
     - :math:`\\sigma` is the spread parameter (standard deviation)
     - :math:`d_{\\text{max}}` is the maximum connection distance
+
+    .. versionchanged:: 0.7.0
+       With ``max_distance`` set, only the pairs within it are found (KD-tree
+       search, chunked over pre neurons) and drawn, so large sheets build in
+       time and memory proportional to the candidate pairs; this changes the
+       edges a given ``seed`` produces. Without ``max_distance`` the edges are
+       unchanged. See :class:`DistanceDependent`.
 
     Parameters
     ----------
@@ -537,6 +750,13 @@ class Exponential(DistanceDependent):
     - :math:`\\lambda` is the spatial scale (decay length constant)
     - :math:`d_{\\text{max}}` is the maximum connection distance
 
+    .. versionchanged:: 0.7.0
+       With ``max_distance`` set, only the pairs within it are found (KD-tree
+       search, chunked over pre neurons) and drawn, so large sheets build in
+       time and memory proportional to the candidate pairs; this changes the
+       edges a given ``seed`` produces. Without ``max_distance`` the edges are
+       unchanged. See :class:`DistanceDependent`.
+
     Parameters
     ----------
     distance_profile : ExponentialProfile
@@ -684,6 +904,8 @@ class Exponential(DistanceDependent):
 
     .. code-block:: python
 
+        >>> from braintools.init import LogNormal
+        >>>
         >>> # Exponential connectivity pattern typical of hippocampal networks
         >>> positions_1d = np.linspace(0, 2000, 200).reshape(-1, 1) * u.um
         >>>
@@ -789,6 +1011,13 @@ class Ring(PointConnectivity):
     - This topology is useful for modeling networks with periodic spatial structure
     - Self-connections are excluded (neurons do not connect to themselves)
     - The ring wraps around, so neuron 0 connects to neuron N-1 when neighbors > 0
+    - ``neighbors`` must satisfy ``1 <= neighbors <= (N - 1) // 2``, otherwise a
+      ``ValueError`` is raised
+    - Edges are built with vectorised index arithmetic (``O(N * neighbors)``)
+      and returned sorted by ``(pre, post)``; the output is deterministic and
+      identical to earlier versions
+    - This is host-side NumPy build-time code; it is not traceable by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``
 
     See Also
     --------
@@ -808,7 +1037,8 @@ class Ring(PointConnectivity):
         >>> # Each neuron connects to 2 neighbors on each side
         >>> ring = Ring(neighbors=2, weight=Constant(1.0 * u.nS))
         >>> result = ring(pre_size=100, post_size=100)
-        >>> print(f"Total connections: {len(result.pre_indices)}")  # 400 connections
+        >>> print(f"Total connections: {len(result.pre_indices)}")
+        Total connections: 400
 
     Unidirectional ring (feed-forward):
 
@@ -821,7 +1051,8 @@ class Ring(PointConnectivity):
         ...     bidirectional=False
         ... )
         >>> result = ff_ring(pre_size=100, post_size=100)
-        >>> print(f"Total connections: {len(result.pre_indices)}")  # 100 connections
+        >>> print(f"Total connections: {len(result.pre_indices)}")
+        Total connections: 100
 
     Ring with stochastic weights:
 
@@ -891,26 +1122,17 @@ class Ring(PointConnectivity):
                 f"for a ring of {n} neurons, got {self.neighbors}."
             )
 
-        # Use a set to avoid duplicate (pre, post) edges (which can otherwise arise
-        # when (i + offset) % n == (i - offset) % n) and skip self-loops.
-        edges = set()
-        for i in range(n):
-            for offset in range(1, self.neighbors + 1):
-                # Forward connections
-                target = (i + offset) % n
-                if target != i:
-                    edges.add((i, target))
-
-                # Backward connections if bidirectional
-                if self.bidirectional:
-                    target = (i - offset) % n
-                    if target != i:
-                        edges.add((i, target))
-
-        if edges:
-            pre_indices, post_indices = (list(t) for t in zip(*sorted(edges)))
-        else:
-            pre_indices, post_indices = [], []
+        # Index arithmetic: row i holds (i + offset) % n for offset in +-[1, neighbors].
+        # Since 2 * neighbors < n, these targets are distinct and never equal i, so
+        # sorting each row gives the edges in (pre, post) order without dedup.
+        n = int(n)
+        offsets = np.arange(1, int(self.neighbors) + 1, dtype=np.int64)
+        if self.bidirectional:
+            offsets = np.concatenate([offsets, -offsets])
+        targets = (np.arange(n, dtype=np.int64)[:, None] + offsets[None, :]) % n
+        targets.sort(axis=1)
+        pre_indices = np.repeat(np.arange(n, dtype=np.int64), offsets.size)
+        post_indices = targets.ravel()
 
         n_connections = len(pre_indices)
 
@@ -937,8 +1159,8 @@ class Ring(PointConnectivity):
         )
 
         return ConnectionResult(
-            np.array(pre_indices, dtype=np.int64),
-            np.array(post_indices, dtype=np.int64),
+            pre_indices,
+            post_indices,
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,
@@ -1041,6 +1263,14 @@ class Grid2d(PointConnectivity):
       - Von Neumann: ~4 × rows × cols (periodic) or fewer (non-periodic)
       - Moore: ~8 × rows × cols (periodic) or fewer (non-periodic)
 
+    - On periodic grids with a side of at most 2, offsets that wrap onto the
+      same cell give one edge, not duplicates
+    - Edges are built with vectorised index arithmetic (``O(rows * cols)``) and
+      returned sorted by ``(pre, post)``; the output is deterministic and
+      identical to earlier versions
+    - This is host-side NumPy build-time code; it is not traceable by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``
+
     See Also
     --------
     Ring : One-dimensional ring connectivity
@@ -1076,7 +1306,8 @@ class Grid2d(PointConnectivity):
         ...     periodic=True  # Torus topology
         ... )
         >>> result = moore_grid(pre_size=(20, 20), post_size=(20, 20))
-        >>> print(f"Connections per neuron: {len(result.pre_indices) // 400}")  # Should be 8
+        >>> print(f"Connections per neuron: {len(result.pre_indices) // 400}")
+        Connections per neuron: 8
 
     Stochastic weights on grid:
 
@@ -1159,33 +1390,29 @@ class Grid2d(PointConnectivity):
         else:
             raise ValueError(f"Unknown connectivity type: {self.connectivity}")
 
-        # Use a set to avoid duplicate (source, target) edges, which periodic wrapping
-        # produces on small grids (e.g. dim <= 2 maps several offsets to the same cell),
-        # and skip self-targets.
-        edges = set()
-        for i in range(rows):
-            for j in range(cols):
-                source_idx = i * cols + j
-
-                for di, dj in offsets:
-                    ni, nj = i + di, j + dj
-
-                    # Handle boundary conditions
-                    if self.periodic:
-                        ni = ni % rows
-                        nj = nj % cols
-                    else:
-                        if ni < 0 or ni >= rows or nj < 0 or nj >= cols:
-                            continue
-
-                    target_idx = ni * cols + nj
-                    if target_idx != source_idx:
-                        edges.add((source_idx, target_idx))
-
-        if edges:
-            pre_indices, post_indices = (list(t) for t in zip(*sorted(edges)))
+        # Index arithmetic over the (n_cells, n_offsets) target table. Invalid
+        # targets (off-grid when not periodic, or the cell itself) become -1; after
+        # sorting each row, repeated targets (periodic wrap on grids with a side
+        # <= 2) are adjacent and dropped, so rows come out in (pre, post) order.
+        rows, cols = int(rows), int(cols)
+        offsets = np.asarray(offsets, dtype=np.int64)
+        source = np.arange(rows * cols, dtype=np.int64)
+        row_of, col_of = np.divmod(source, cols) if cols > 0 else (source, source)
+        target_row = row_of[:, None] + offsets[None, :, 0]
+        target_col = col_of[:, None] + offsets[None, :, 1]
+        if self.periodic:
+            target_row %= rows
+            target_col %= cols
+            target = target_row * cols + target_col
         else:
-            pre_indices, post_indices = [], []
+            on_grid = (target_row >= 0) & (target_row < rows) & (target_col >= 0) & (target_col < cols)
+            target = np.where(on_grid, target_row * cols + target_col, -1)
+        target[target == source[:, None]] = -1
+        target.sort(axis=1)
+        keep = target >= 0
+        keep[:, 1:] &= target[:, 1:] != target[:, :-1]
+        pre_indices = np.broadcast_to(source[:, None], target.shape)[keep]
+        post_indices = target[keep]
 
         n_connections = len(pre_indices)
 
@@ -1212,8 +1439,8 @@ class Grid2d(PointConnectivity):
         )
 
         return ConnectionResult(
-            np.array(pre_indices, dtype=np.int64),
-            np.array(post_indices, dtype=np.int64),
+            pre_indices,
+            post_indices,
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,
@@ -1246,6 +1473,18 @@ class RadialPatches(PointConnectivity):
     2. For each patch center, identify all postsynaptic neurons within ``patch_radius``
     3. Connect to each candidate neuron with probability ``prob``
     4. Remove duplicate connections (a neuron may appear in multiple patches)
+
+    A post neuron that lies in several patches of the same pre neuron gets one
+    independent ``prob`` draw per patch, so it is connected with probability
+    ``1 - (1 - prob) ** m`` when it lies in ``m`` patches.
+
+    .. versionchanged:: 0.7.0
+       Vectorised: patch centres are drawn for all pre neurons at once as an
+       ``(N_pre, n_patches)`` table, the patch members come from a chunked
+       KD-tree search, and duplicates are removed through encoded pair ids.
+       The connection distribution is unchanged, but the edges a given
+       ``seed`` produces differ from earlier versions, and the edges are now
+       returned sorted by ``(pre, post)``.
 
     Parameters
     ----------
@@ -1284,6 +1523,10 @@ class RadialPatches(PointConnectivity):
         - Stochastic delay distributions
         - Distance-proportional delays
         - ``None`` for connections without explicit delays
+    allow_self_connections : bool, default=False
+        Whether to keep self-connections (autapses) when ``pre`` and ``post`` are
+        the same population (the same position array object, or equal-size
+        populations with identical positions).
     **kwargs
         Additional arguments passed to ``PointConnectivity``, such as ``seed`` for
         reproducible random number generation.
@@ -1317,6 +1560,12 @@ class RadialPatches(PointConnectivity):
 
     - Empty connection results are returned if no connections are established
     - This pattern models the patchy horizontal connectivity observed in cortical circuits
+    - Pre neurons are processed in chunks holding at most ``2**22`` candidate
+      (pre, patch, member) triples, so memory is bounded by the chunk size plus
+      the output; nothing of size ``N_pre x N_post`` is built
+    - Edges are returned sorted by ``(pre, post)``
+    - This is host-side NumPy/SciPy build-time code; it is not traceable by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``
 
     See Also
     --------
@@ -1485,74 +1734,20 @@ class RadialPatches(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for radial patch connectivity")
 
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
+        pre_num = _size_num(pre_size)
+        post_num = _size_num(post_size)
 
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
-        # Calculate distances
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        # distances = cdist(pre_pos_val, post_pos_val)
-
-        # Get radius value
-        radius_val = u.Quantity(self.patch_radius).to(pos_unit).mantissa
-
-        # For each pre neuron, select random patch centers and connect within radius
-        pre_indices = []
-        post_indices = []
-
-        for i in range(pre_num):
-            # Select random patch centers from post population
-            patch_centers = self.rng.choice(post_num, size=min(self.n_patches, post_num), replace=False)
-
-            # For each patch, find neurons within radius
-            for center in patch_centers:
-                # Find candidates within radius of patch center
-                center_pos = post_pos_val[center]
-                dists_from_center = np.sqrt(np.sum((post_pos_val - center_pos) ** 2, axis=1))
-                candidates = np.where(dists_from_center <= radius_val)[0]
-
-                # Apply connection probability
-                if len(candidates) > 0:
-                    random_vals = self.rng.random(len(candidates))
-                    selected = candidates[random_vals < self.prob]
-                    pre_indices.extend([i] * len(selected))
-                    post_indices.extend(selected)
-
-        # Drop autapses (self-connections) when pre and post are the same population.
+        _, post_val, pos_unit = _position_values(pre_positions, post_positions)
+        radius_val = float(u.Quantity(self.patch_radius).to(pos_unit).mantissa)
         drop_self = not self.allow_self_connections and _same_population(
             pre_positions, post_positions, pre_num, post_num
         )
-        if drop_self:
-            filtered = [(p, q) for p, q in zip(pre_indices, post_indices) if p != q]
-            if filtered:
-                pre_indices, post_indices = (list(t) for t in zip(*filtered))
-            else:
-                pre_indices, post_indices = [], []
+        pair_ids = self._sample_pair_ids(pre_num, post_num, post_val, radius_val, drop_self)
 
-        if len(pre_indices) == 0:
-            return ConnectionResult(
-                np.array([], dtype=np.int64),
-                np.array([], dtype=np.int64),
-                pre_size=pre_size,
-                post_size=post_size,
-                pre_positions=pre_positions,
-                post_positions=post_positions,
-                model_type='point'
-            )
+        if pair_ids.size == 0:
+            return _empty_point_result(pre_size, post_size, pre_positions, post_positions)
 
-        # Remove duplicates
-        connections = set(zip(pre_indices, post_indices))
-        pre_indices, post_indices = zip(*connections)
-        pre_indices = np.array(pre_indices, dtype=np.int64)
-        post_indices = np.array(post_indices, dtype=np.int64)
-
+        pre_indices, post_indices = np.divmod(pair_ids, post_num)
         n_connections = len(pre_indices)
 
         weights = param(
@@ -1592,3 +1787,46 @@ class RadialPatches(PointConnectivity):
                 'n_patches': self.n_patches,
             }
         )
+
+    def _sample_pair_ids(self, pre_num, post_num, post_val, radius, drop_self) -> np.ndarray:
+        """Return the sorted, distinct encoded edges ``pre * post_num + post``.
+
+        Patch centres are an ``(pre_num, n_centres)`` table of distinct post
+        indices per row. Rows are processed in chunks whose candidate triples
+        (pre, patch, post-within-radius) number at most ``MAX_CHUNK_PAIRS``; the
+        neighbourhoods of the chunk's distinct centres come from one KD-tree
+        search, and each triple is kept with probability ``prob``.
+        """
+        n_centres = min(int(self.n_patches), post_num)
+        if n_centres <= 0 or pre_num == 0 or self.prob <= 0:
+            return np.zeros(0, dtype=np.int64)
+        centres = sample_rows_without_replacement(self.rng, pre_num, post_num, n_centres)
+        post_tree = cKDTree(post_val)
+        degree = post_tree.query_ball_point(post_val, radius, return_length=True)
+        row_load = degree[centres].sum(axis=1)
+
+        chunks = []
+        for start, stop in _chunks_by_counts(row_load):
+            slots = centres[start:stop].ravel()
+            uniq = _sorted_unique(slots)
+            inverse = np.searchsorted(uniq, slots)
+            found = cKDTree(post_val[uniq]).sparse_distance_matrix(post_tree, radius, output_type='ndarray')
+            order = np.lexsort((found['j'], found['i']))
+            neighbours = found['j'][order]
+            n_nbr = np.bincount(found['i'], minlength=uniq.size)
+            nbr_start = np.cumsum(n_nbr) - n_nbr
+            # Expand every (row, patch) slot into the neighbour list of its centre.
+            # Every centre lies in its own patch (distance 0), so total >= 1.
+            counts = n_nbr[inverse]
+            total = int(counts.sum())
+            slot_offset = np.cumsum(counts) - counts
+            flat = np.repeat(nbr_start[inverse] - slot_offset, counts) + np.arange(total)
+            post = neighbours[flat]
+            pre = np.repeat(np.repeat(np.arange(start, stop, dtype=np.int64), n_centres), counts)
+            if self.prob < 1.0:
+                keep = self.rng.random(total) < self.prob
+                pre, post = pre[keep], post[keep]
+            if drop_self:
+                pre, post = _drop_self_pairs(pre, post)
+            chunks.append(_sorted_unique(pre * post_num + post))
+        return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.int64)

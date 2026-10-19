@@ -9,14 +9,16 @@ Overview
 
 ``braintools`` is a lightweight, JAX-friendly collection of utilities used across computational neuroscience workflows:
 
-- Declarative, unit-aware synaptic connectivity builders (:mod:`braintools.conn`) for point neurons, multi-compartment morphologies, and convolution kernels, with parameter initializers and distance profiles in :mod:`braintools.init`
+- Declarative, unit-aware synaptic connectivity builders (:mod:`braintools.conn`) for point neurons, multi-compartment morphologies, and convolution kernels, population networks built from populations and projections, memory-bounded generation for large networks, and export to ``brainevent`` sparse formats; parameter initializers and distance profiles are in :mod:`braintools.init`
 - Spike data utilities (:mod:`braintools.spike`): the ``SpikeTrains`` container (a padded, ``jit``/``vmap``-friendly spike-time layout with dense/event conversions), spike encoders, and bitwise spike operations
-- Neural data analysis (:mod:`braintools.analysis`): spike-train statistics (firing rates, distances, synchrony), spectral and LFP analysis (power spectra, coherence, cross-frequency coupling, current source density), and population correlations and functional connectivity
+- Neural data analysis (:mod:`braintools.analysis`): spike-train statistics (ISI/CV/Fano, PSTHs, correlograms, spike-train distances, synchrony), spectral and LFP analysis (multitaper and wavelet spectra, filtering, phase synchrony, cross-frequency coupling, current source density), population analysis (PCA, decoding, Granger causality, avalanches, functional connectivity), structural graph measures, and resampling-based statistics
 - A composable **cognitive task framework** (:mod:`braintools.cogtask`) for constructing trial-structured tasks — decision making, working memory, reasoning, motor — with JIT/``vmap``-friendly batch sampling and a registry of pre-built paradigms
-- Numerical integration utilities for ODE/SDE/DDE/IMEX one-step steppers (:mod:`braintools.quad`) designed for PyTrees and functional APIs
+- Numerical integration utilities for ODE/SDE/DDE/IMEX one-step steppers (:mod:`braintools.quad`) designed for PyTrees and functional APIs, with a trajectory driver (``odeint``) and a differentiable adaptive solver (``solve_ivp``)
+- Model fitting (:mod:`braintools.fit`): composable objectives, summary-statistic losses, vmapped multi-start fitting of functions or ``brainstate`` modules, parameter sweeps, and confidence intervals
 - Losses and metrics for model training (:mod:`braintools.metric`): classification, regression, ranking, and pairwise similarity
 - Visualization helpers (:mod:`braintools.visualize`), input generators (:mod:`braintools.input`), surrogate gradients (:mod:`braintools.surrogate`), and PyTree utilities (:mod:`braintools.tree`)
-- Optimizer wrappers (:mod:`braintools.optim`) and a lightweight training loop (:mod:`braintools.trainer`)
+- Optimizer wrappers (:mod:`braintools.optim`) including a multi-start minimizer, online readout learning (RLS, LMS, FORCE) and closed-form regressions, and a lightweight training loop (:mod:`braintools.trainer`)
+- Data files (:mod:`braintools.file`): checkpoints, MATLAB files, and optional HDF5, NWB, and NEO formats
 
 The project favors a simple, well-typed functional style that works seamlessly with `brainstate <https://brainx.chaobrain.com/brainstate/>`_,
 `brainunit <https://brainx.chaobrain.com/brainunit/>`_, and just-in-time compilation (``jit``/``vmap``).

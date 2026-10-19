@@ -181,3 +181,33 @@ Resampling for significance testing, and bootstrap confidence intervals:
    shuffle_isi
    phase_randomize
    bootstrap_ci
+
+
+Graph Measures
+--------------
+
+.. currentmodule:: braintools.analysis.graph
+.. automodule:: braintools.analysis.graph
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   degree_distribution
+   clustering_coefficient
+   characteristic_path_length
+   modularity
+   motif_counts
+   spectral_radius
+   small_world_index
+
+Result containers (named tuples, documented by their ``Attributes``):
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   DegreeDistribution
+   PathLengthResult
+   MotifCounts
+   SmallWorldResult

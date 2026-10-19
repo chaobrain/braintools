@@ -36,6 +36,7 @@ __all__ = [
     'ContextDecisionMaking',
     'SingleContextDecisionMaking',
     'PulseDecisionMaking',
+    'MultiSensoryIntegration',
 ]
 
 
@@ -592,3 +593,225 @@ class PulseDecisionMaking(Task):
         total_evidence = jnp.sum(pulses)
         ctx['ground_truth'] = jnp.where(total_evidence > 0, 1, 0)
         ctx['total_evidence'] = total_evidence
+
+
+class MultiSensoryIntegration(Task):
+    r"""
+    Multi-sensory integration task.
+
+    Two-alternative (or ``num_choices``-alternative) forced choice in which the
+    motion direction is conveyed through two sensory modalities at once, as in
+    the visual/auditory rate-discrimination paradigm of Raposo et al. [1]_.
+    Both modalities point toward the same (correct) direction; the trial's
+    total coherence ``coh`` is split between them, so the evidence of the two
+    modalities has to be combined to reach the best decision. This is the
+    ``MultiSensoryIntegration`` environment of NeuroGym [2]_.
+
+    Structure: Fixation >> Stimulus >> Decision
+
+    Parameters
+    ----------
+    t_fixation : Duration
+        Fixation period (default: 300 ms, as in NeuroGym).
+    t_stimulus : Duration
+        Stimulus period, during which both modalities are shown
+        (default: 750 ms).
+    t_decision : Duration
+        Decision period (default: 100 ms).
+    num_choices : int
+        Number of choice directions, NeuroGym's ``dim_ring`` (default: 2).
+        Must be at least 2.
+    coherences : sequence of float
+        Total coherence levels in ``[0, 100]`` from which ``coh`` is drawn
+        (default: ``(5, 15, 50)``).
+    noise_sigma : Data
+        Standard deviation of the Gaussian input noise added to both modality
+        channels during the stimulus, in units of ``ms ** 0.5``; it is scaled
+        by ``1 / sqrt(dt)`` (default: ``1.0 * u.ms ** 0.5``).
+    pop_per_choice : int
+        Number of cosine-tuned units per choice in each modality (default: 1,
+        which reproduces NeuroGym's observation space).
+    p_unisensory : float
+        Probability in ``[0, 1]`` that a trial is unisensory: only one of the
+        two modalities (chosen with equal probability) is shown and carries the
+        whole coherence, while the other channel is silent (zero input plus
+        noise). The default ``0.0`` gives NeuroGym's always-multisensory
+        trials.
+    **kwargs
+        Forwarded to :class:`~braintools.cogtask.Task` (e.g. ``seed``,
+        ``dt``, ``output_mode``).
+
+    Raises
+    ------
+    ValueError
+        If ``num_choices < 2``, ``pop_per_choice < 1``, ``coherences`` is
+        empty or ``p_unisensory`` is outside ``[0, 1]``.
+
+    See Also
+    --------
+    ContextDecisionMaking : Two modalities, but a context cue selects one.
+    PerceptualDecisionMaking : A single noisy motion stimulus.
+
+    Notes
+    -----
+    **Inputs** (``1 + 2 * num_choices * pop_per_choice`` channels):
+    ``fixation`` (1), ``modality1`` and ``modality2``. Unit ``i`` of a modality
+    with preferred direction :math:`\phi_i` receives
+
+    .. math::
+
+        x_i = 0.5 + \frac{c_m}{200} \cos(\phi_i - \theta^*)
+
+    where :math:`\theta^*` is the correct direction and :math:`c_m` the
+    modality's coherence. Multisensory trials draw a split ``coh_prop``
+    :math:`\sim U(0, 1)` and set :math:`c_1 = coh \cdot coh\_prop` and
+    :math:`c_2 = coh \cdot (1 - coh\_prop)`, so :math:`c_1 + c_2 = coh`.
+    The fixation input is 1 during fixation and stimulus and 0 during the
+    decision period.
+
+    **Labels** (categorical): 0 (fixate) during fixation and stimulus,
+    ``ground_truth + 1`` during the decision period; ``num_classes`` is
+    ``1 + num_choices``.
+
+    **Trial state**: ``ground_truth``, ``coherence`` (total), ``coh_prop``,
+    ``mod1_coherence``, ``mod2_coherence``, ``modality_condition``
+    (0 = both, 1 = only modality 1, 2 = only modality 2),
+    ``mod1_present``, ``mod2_present`` and ``stimulus_direction``.
+
+    **Differences from NeuroGym.** Phase names follow this package
+    (``'decision'`` is a :class:`~braintools.cogtask.Response` phase);
+    ``pop_per_choice`` and ``p_unisensory`` are additions (their defaults
+    reproduce NeuroGym); noise is added to the two modality channels only,
+    not to the fixation channel; there is no reward or abort signal, the task
+    is supervised through the labels.
+
+    Trials are generated with JAX, so ``batch_sample`` runs under
+    ``jax.jit`` and ``vmap``.
+
+    References
+    ----------
+    .. [1] Raposo, D., Sheppard, J. P., Schrater, P. R., & Churchland, A. K.
+       (2012). Multisensory decision-making in rats and humans. *Journal of
+       Neuroscience*, 32(11), 3726-3735.
+    .. [2] Molano-Mazon, M., et al. (2022). NeuroGym: An open resource for
+       developing and sharing neuroscience tasks. *PsyArXiv*.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.MultiSensoryIntegration(seed=0, dt=1.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (5, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((1150, 5), (1150,))
+        >>> state = info['trial_state']
+        >>> int(Y[-1]) == int(state['ground_truth']) + 1
+        True
+        >>> bool(abs(state['mod1_coherence'] + state['mod2_coherence']
+        ...          - state['coherence']) < 1e-4)
+        True
+        >>>
+        >>> X, Y = task.batch_sample(4)
+        >>> X.shape, Y.shape
+        ((1150, 4, 5), (1150, 4))
+    """
+
+    def __init__(
+        self,
+        t_fixation: Duration = 300.0 * u.ms,
+        t_stimulus: Duration = 750.0 * u.ms,
+        t_decision: Duration = 100.0 * u.ms,
+        num_choices: int = 2,
+        coherences: Sequence[float] = (5.0, 15.0, 50.0),
+        noise_sigma: Data = _DEFAULT_NOISE_SIGMA,
+        pop_per_choice: int = 1,
+        p_unisensory: float = 0.0,
+        **kwargs
+    ):
+        if int(num_choices) < 2:
+            raise ValueError(f"num_choices must be >= 2, got {num_choices}.")
+        if int(pop_per_choice) < 1:
+            raise ValueError(f"pop_per_choice must be >= 1, got {pop_per_choice}.")
+        if len(coherences) == 0:
+            raise ValueError("coherences must contain at least one value.")
+        if not 0.0 <= float(p_unisensory) <= 1.0:
+            raise ValueError(f"p_unisensory must lie in [0, 1], got {p_unisensory}.")
+        self.t_fixation = t_fixation
+        self.t_stimulus = t_stimulus
+        self.t_decision = t_decision
+        self.num_choices = int(num_choices)
+        self.coherences = jnp.asarray(coherences, dtype=jnp.float32)
+        self.noise_sigma = noise_sigma
+        self.pop_per_choice = int(pop_per_choice)
+        self.p_unisensory = float(p_unisensory)
+        super().__init__(**kwargs)
+
+    def define_features(self) -> Tuple:
+        fix_feat = Feature(1, 'fixation')
+        mod1_feat = Feature(self.num_choices * self.pop_per_choice, 'modality1')
+        mod2_feat = Feature(self.num_choices * self.pop_per_choice, 'modality2')
+        input_features = fix_feat + mod1_feat + mod2_feat
+        output_features = fix_feat + Feature(self.num_choices, 'choice')
+        return input_features, output_features
+
+    @staticmethod
+    def _modality_encoder(coherence_key: str, present_key: str):
+        """Cosine-tuned encoder of one modality, silenced when it is absent."""
+        tuned = circular('stimulus_direction', coherence_key, base_value=0.5, max_coherence=100.0)
+
+        def encode(ctx: Context, feature) -> jnp.ndarray:
+            return tuned(ctx, feature) * ctx[present_key]
+
+        encode.__name__ = f"modality({coherence_key})"
+        return encode
+
+    def define_phases(self) -> Phase:
+        return concat([
+            Fixation(
+                duration=self.t_fixation,
+                name='fixation',
+                inputs={'fixation': 1.0},
+                outputs={'label': 0}
+            ),
+            Stimulus(
+                duration=self.t_stimulus,
+                name='stimulus',
+                inputs={
+                    'fixation': 1.0,
+                    'modality1': self._modality_encoder('mod1_coherence', 'mod1_present'),
+                    'modality2': self._modality_encoder('mod2_coherence', 'mod2_present'),
+                },
+                outputs={'label': 0},
+                noise={'modality1': self.noise_sigma, 'modality2': self.noise_sigma}
+            ),
+            Response(
+                duration=self.t_decision,
+                name='decision',
+                inputs={'fixation': 0.0},
+                outputs={'label': lambda ctx, f: ctx['ground_truth'] + 1}
+            ),
+        ])
+
+    def trial_init(self, ctx: Context) -> None:
+        ctx['ground_truth'] = ctx.rng.choice(self.num_choices)
+        coherence = ctx.rng.choice(self.coherences)
+        ctx['coherence'] = coherence
+        # Draw every random number on every trial so the stream does not
+        # depend on the trial type (keeps vmap shapes and seeds stable).
+        coh_prop = ctx.rng.uniform(0.0, 1.0)
+        unisensory = ctx.rng.uniform(0.0, 1.0) < self.p_unisensory
+        only = ctx.rng.choice(2)  # 0 -> only modality 1, 1 -> only modality 2
+        condition = jnp.where(unisensory, 1 + only, 0)
+        coh_prop = jnp.where(unisensory, jnp.where(only == 0, 1.0, 0.0), coh_prop)
+        ctx['modality_condition'] = condition
+        ctx['coh_prop'] = coh_prop
+        ctx['mod1_coherence'] = coherence * coh_prop
+        ctx['mod2_coherence'] = coherence * (1.0 - coh_prop)
+        ctx['mod1_present'] = jnp.where(condition == 2, 0.0, 1.0)
+        ctx['mod2_present'] = jnp.where(condition == 1, 0.0, 1.0)
+        directions = jnp.linspace(0, 2 * jnp.pi, self.num_choices, endpoint=False)
+        ctx['stimulus_direction'] = directions[ctx['ground_truth']]

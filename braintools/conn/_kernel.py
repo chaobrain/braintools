@@ -20,17 +20,25 @@ These patterns apply convolution-like kernels to spatially arranged point neuron
 creating connections based on spatial relationships weighted by kernel functions.
 Useful for implementing center-surround receptive fields, orientation selectivity,
 and other spatially-structured connectivity patterns in spiking neural networks.
+
+All kernels have a finite support (a cutoff distance or a kernel extent), so the
+candidate pairs are found with a k-d tree and processed in chunks of at most
+``MAX_CHUNK_PAIRS`` pairs: time and memory scale with the number of pairs inside
+the support, never with ``N_pre * N_post``. The kernels are deterministic and
+give the same connections, weights and edge order as the per-neuron loops of
+earlier versions.
 """
 
-from typing import Optional, Callable
+from typing import Optional, Callable, Iterator, Tuple
 
 import brainunit as u
 import numpy as np
 from brainstate.typing import ArrayLike
-from scipy.spatial.distance import cdist
+from scipy.spatial import cKDTree
 
 from braintools.init import param, Initializer, DistanceProfile, GaussianProfile
 from ._base import PointConnectivity, ConnectionResult
+from ._sampling import MAX_CHUNK_PAIRS, row_chunks
 
 __all__ = [
     'Conv2dKernel',
@@ -42,32 +50,6 @@ __all__ = [
     'LaplacianKernel',
     'CustomKernel'
 ]
-
-
-def _gaussian(distances: np.ndarray, sigma) -> np.ndarray:
-    """Evaluate the unit-peak Gaussian ``exp(-d**2 / (2 * sigma**2))``.
-
-    The value comes from :class:`braintools.init.GaussianProfile`, the single
-    implementation of the Gaussian distance profile in ``braintools``.
-
-    Parameters
-    ----------
-    distances : numpy.ndarray
-        Distances as plain numbers, in the same unit as ``sigma``.
-    sigma : float
-        Standard deviation of the Gaussian, a plain positive number.
-
-    Returns
-    -------
-    numpy.ndarray
-        Gaussian values in ``(0, 1]``, with the shape of ``distances``.
-
-    Raises
-    ------
-    ValueError
-        If ``sigma`` is not positive.
-    """
-    return np.asarray(GaussianProfile(sigma).probability(distances))
 
 
 def _difference_of_gaussians(
@@ -119,6 +101,183 @@ def _same_population(pre_positions, post_positions) -> bool:
     return pre_val.shape == post_val.shape and np.array_equal(pre_val, post_val)
 
 
+def _xy_values(pre_positions, post_positions, dtype=None):
+    """Return the first two position columns as plain numbers in one unit.
+
+    Returns ``(pre_xy, post_xy, unit)``; ``post_positions`` is converted to the
+    unit of ``pre_positions``. The native dtype is kept unless ``dtype`` is
+    given, so the arithmetic matches the earlier per-neuron loops exactly.
+    """
+    pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
+    post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
+    pre_xy = np.asarray(pre_pos_val, dtype=dtype)[:, :2]
+    post_xy = np.asarray(post_pos_val, dtype=dtype)[:, :2]
+    return pre_xy, post_xy, pos_unit
+
+
+def _length_value(length, pos_unit):
+    """Express a kernel length in the position unit (plain numbers pass through)."""
+    if isinstance(length, u.Quantity):
+        return u.Quantity(length).to(pos_unit).mantissa
+    return length
+
+
+def _candidate_pairs(
+    query: np.ndarray,
+    data: np.ndarray,
+    radius: float,
+) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+    """Yield chunks of ``(query_index, data_index)`` pairs that may lie within ``radius``.
+
+    The pairs are a superset of those whose Euclidean distance is at most
+    ``radius``: the tree search uses a radius inflated by a few machine epsilons
+    of the coordinate dtype (at least ``1e-9`` relative), so no pair is lost to
+    round-off. Callers apply the exact test themselves.
+    Chunks are consecutive ranges of query rows holding at most
+    ``MAX_CHUNK_PAIRS`` candidate pairs (at least one row), and the pairs are
+    sorted by query index, then data index, so concatenating the chunks gives
+    a globally sorted list.
+
+    Parameters
+    ----------
+    query, data : np.ndarray
+        ``(n_query, d)`` and ``(n_data, d)`` coordinates as plain numbers.
+    radius : float
+        Search radius in the same unit. A non-finite radius makes every pair a
+        candidate (chunked by rows); a negative or NaN radius yields nothing.
+
+    Yields
+    ------
+    query_index, data_index : np.ndarray
+        int64 arrays of equal length.
+    """
+    n_query, n_data = query.shape[0], data.shape[0]
+    radius = float(radius)
+    if n_query == 0 or n_data == 0 or not radius >= 0:
+        return
+    max_pairs = int(MAX_CHUNK_PAIRS)
+    if not np.isfinite(radius):
+        cols = np.arange(n_data, dtype=np.int64)
+        for start, stop in row_chunks(n_query, n_data, max_pairs):
+            rows = np.arange(start, stop, dtype=np.int64)
+            yield np.repeat(rows, n_data), np.tile(cols, stop - start)
+        return
+    dtype = np.result_type(query, data)
+    slack = max(1e-9, 64 * float(np.finfo(dtype).eps)) if np.issubdtype(dtype, np.floating) else 1e-9
+    search = radius * (1.0 + slack) + 1e-300
+    data_tree = cKDTree(data)
+    counts = np.asarray(data_tree.query_ball_point(query, search, return_length=True), dtype=np.int64)
+    bounds = np.concatenate([[0], np.cumsum(counts)])
+    start = 0
+    while start < n_query:
+        stop = int(np.searchsorted(bounds, bounds[start] + max_pairs, side='right')) - 1
+        stop = min(max(stop, start + 1), n_query)
+        if bounds[stop] > bounds[start]:
+            found = cKDTree(query[start:stop]).sparse_distance_matrix(
+                data_tree, search, output_type='ndarray'
+            )
+            q_idx = found['i'].astype(np.int64)
+            d_idx = found['j'].astype(np.int64)
+            order = np.lexsort((d_idx, q_idx))
+            yield q_idx[order] + start, d_idx[order]
+        start = stop
+
+
+def _within(query, data, radius, exclude_self):
+    """Yield chunks ``(q, d, rel, dist)`` of pairs with ``dist <= radius``.
+
+    ``rel = data[d] - query[q]`` and ``dist`` is its Euclidean norm, computed as
+    ``sqrt(sum(rel ** 2))`` (bitwise equal to ``scipy.spatial.distance.cdist``).
+    With ``exclude_self`` the pairs ``q == d`` are dropped.
+    """
+    for q, d in _candidate_pairs(query, data, radius):
+        rel = data[d] - query[q]
+        dist = np.sqrt(np.sum(rel ** 2, axis=1))
+        keep = dist <= radius
+        if exclude_self:
+            keep &= q != d
+        if keep.any():
+            yield q[keep], d[keep], rel[keep], dist[keep]
+
+
+def _first_rows(xy, n):
+    """The first ``n`` rows of ``xy`` (the neurons indexed by ``range(n)``)."""
+    n = int(n)
+    if n > xy.shape[0]:
+        raise ValueError(f'Got {xy.shape[0]} positions for {n} neurons.')
+    return xy[:n]
+
+
+def _nearest_index(grid, values):
+    """Index of the nearest ``grid`` point for each value (first one on ties).
+
+    Equivalent to ``np.argmin(np.abs(grid - v))`` per value, evaluated in
+    blocks of at most ``MAX_CHUNK_PAIRS`` grid-value pairs.
+    """
+    out = np.empty(len(values), dtype=np.intp)
+    step = max(1, int(MAX_CHUNK_PAIRS) // max(len(grid), 1))
+    for start in range(0, len(values), step):
+        block = values[start:start + step]
+        out[start:start + step] = np.argmin(np.abs(grid[None, :] - block[:, None]), axis=1)
+    return out
+
+
+def _concat(parts, dtype=None):
+    """Concatenate a list of arrays (an empty list gives an empty array)."""
+    if not parts:
+        return np.zeros(0, dtype=np.int64 if dtype is None else dtype)
+    return np.concatenate(parts)
+
+
+def _empty_result(pre_size, post_size, pre_positions, post_positions, metadata=None):
+    kwargs = {} if metadata is None else {'metadata': metadata}
+    return ConnectionResult(
+        np.array([], dtype=np.int64), np.array([], dtype=np.int64),
+        pre_size=pre_size, post_size=post_size,
+        pre_positions=pre_positions, post_positions=post_positions,
+        model_type='point', **kwargs
+    )
+
+
+def _scaled_weights(conn, kernel_values, pre_size, post_size, pre_positions, post_positions):
+    """Draw the base weights from ``conn.weight_init`` and multiply them by the kernel values."""
+    n_connections = len(kernel_values)
+    weights = param(
+        conn.weight_init,
+        n_connections,
+        param_type='weight',
+        pre_size=pre_size,
+        post_size=post_size,
+        pre_positions=pre_positions,
+        post_positions=post_positions,
+        rng=conn.rng
+    )
+    if weights is None:
+        return kernel_values
+    weights_vals, weights_unit = u.split_mantissa_unit(weights)
+    if u.math.isscalar(weights_vals):
+        weights_vals = np.full(n_connections, weights_vals)
+    else:
+        weights_vals = np.asarray(weights_vals)
+    final_weights = weights_vals * kernel_values
+    if weights_unit is not None:
+        return u.maybe_decimal(final_weights * weights_unit)
+    return final_weights
+
+
+def _delays(conn, n_connections, pre_size, post_size, pre_positions, post_positions):
+    return param(
+        conn.delay_init,
+        n_connections,
+        param_type='delay',
+        pre_size=pre_size,
+        post_size=post_size,
+        pre_positions=pre_positions,
+        post_positions=post_positions,
+        rng=conn.rng
+    )
+
+
 class Conv2dKernel(PointConnectivity):
     """Convolutional kernel connectivity for spatially arranged point neurons.
 
@@ -150,10 +309,21 @@ class Conv2dKernel(PointConnectivity):
     delay : Initialization, optional
         Delay initialization.
 
+    Notes
+    -----
+    Candidate pairs are found with a k-d tree over the positions and handled
+    in chunks of bounded size, so memory grows with the number of edges
+    rather than with ``pre_size * post_size``. The edges, their order and the
+    weights are the same as in version 0.6. Generation runs on the host with
+    NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import Conv2dKernel
         >>> # Create 5x5 Gaussian-like kernel
         >>> kernel = np.array([
         ...     [0.04, 0.12, 0.18, 0.12, 0.04],
@@ -162,7 +332,7 @@ class Conv2dKernel(PointConnectivity):
         ...     [0.12, 0.37, 0.56, 0.37, 0.12],
         ...     [0.04, 0.12, 0.18, 0.12, 0.04]
         ... ])
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>> conn = Conv2dKernel(
         ...     kernel=kernel,
         ...     kernel_size=100 * u.um,
@@ -173,6 +343,8 @@ class Conv2dKernel(PointConnectivity):
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
+        >>> result.n_connections
+        2230
     """
     __module__ = 'braintools.conn'
 
@@ -206,27 +378,13 @@ class Conv2dKernel(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for kernel connectivity")
 
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
+        post_num = int(np.prod(post_size)) if isinstance(post_size, tuple) else post_size
 
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
-        # Extract position values and units (only the first two dims are used)
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
-        post_pos_val = np.asarray(post_pos_val)[:, :2]
-
-        # Get kernel size in position units
-        if isinstance(self.kernel_size, u.Quantity):
-            kernel_size_val = u.Quantity(self.kernel_size).to(pos_unit).mantissa
-        else:
-            kernel_size_val = self.kernel_size
+        # Position values (only the first two dims are used); the post side is
+        # limited to the first ``post_num`` rows, as the earlier loop over posts.
+        pre_pos_val, post_pos_val, pos_unit = _xy_values(pre_positions, post_positions)
+        post_pos_val = _first_rows(post_pos_val, post_num)
+        kernel_size_val = _length_value(self.kernel_size, pos_unit)
 
         # Per-axis physical extents derived from the kernel shape, using the
         # pixel pitch implied by ``kernel_size`` (the larger axis spans
@@ -244,93 +402,38 @@ class Conv2dKernel(PointConnectivity):
             and _same_population(pre_positions, post_positions)
         )
 
-        pre_indices = []
-        post_indices = []
-        kernel_weights = []
+        # Candidates inside the circle circumscribing the kernel box, grouped by
+        # post neuron; the exact per-axis box test follows.
+        radius = float(np.hypot(extent_x / 2, extent_y / 2))
+        pre_parts, post_parts, value_parts = [], [], []
+        for post_c, pre_c in _candidate_pairs(post_pos_val, pre_pos_val, radius):
+            rel = pre_pos_val[pre_c] - post_pos_val[post_c]
+            keep = (np.abs(rel[:, 0]) <= extent_x / 2) & (np.abs(rel[:, 1]) <= extent_y / 2)
+            if same_population:
+                keep &= pre_c != post_c
+            if not keep.any():
+                continue
+            pre_c, post_c, rel = pre_c[keep], post_c[keep], rel[keep]
+            # Nearest kernel cell (first one on ties, as ``np.argmin``).
+            ki = _nearest_index(kernel_y, rel[:, 1])
+            kj = _nearest_index(kernel_x, rel[:, 0])
+            kernel_val = self.kernel[ki, kj]
+            # Threshold on magnitude so signed kernels keep negative coeffs.
+            keep = np.abs(kernel_val) > self.threshold
+            pre_parts.append(pre_c[keep])
+            post_parts.append(post_c[keep])
+            value_parts.append(kernel_val[keep])
 
-        # For each post neuron, check if pre neurons fall within kernel support
-        for post_idx in range(post_num):
-            post_pos = post_pos_val[post_idx]
-
-            # Calculate relative positions of pre neurons to this post neuron
-            rel_positions = pre_pos_val - post_pos  # Shape: (pre_num, 2)
-
-            # Find pre neurons within kernel support (each axis bounded independently)
-            in_range_x = np.abs(rel_positions[:, 0]) <= extent_x / 2
-            in_range_y = np.abs(rel_positions[:, 1]) <= extent_y / 2
-            in_range = in_range_x & in_range_y
-            candidate_pre = np.where(in_range)[0]
-
-            for pre_idx in candidate_pre:
-                if same_population and pre_idx == post_idx:
-                    continue
-
-                rel_x = rel_positions[pre_idx, 0]
-                rel_y = rel_positions[pre_idx, 1]
-
-                # Find nearest kernel position
-                ki = np.argmin(np.abs(kernel_y - rel_y))
-                kj = np.argmin(np.abs(kernel_x - rel_x))
-
-                kernel_val = self.kernel[ki, kj]
-
-                # Threshold on magnitude so signed kernels keep negative coeffs.
-                if np.abs(kernel_val) > self.threshold:
-                    pre_indices.append(pre_idx)
-                    post_indices.append(post_idx)
-                    kernel_weights.append(kernel_val)
-
+        pre_indices = _concat(pre_parts)
         if len(pre_indices) == 0:
-            return ConnectionResult(
-                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
-                pre_size=pre_size, post_size=post_size,
-                pre_positions=pre_positions, post_positions=post_positions,
-                model_type='point'
-            )
+            return _empty_result(pre_size, post_size, pre_positions, post_positions)
 
-        pre_indices = np.array(pre_indices, dtype=np.int64)
-        post_indices = np.array(post_indices, dtype=np.int64)
-        kernel_weights = np.array(kernel_weights)
+        post_indices = _concat(post_parts)
+        kernel_weights = np.concatenate(value_parts)
         n_connections = len(pre_indices)
 
-        # Generate base weights
-        weights = param(
-            self.weight_init,
-            n_connections,
-            param_type='weight',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions,
-            rng=self.rng
-        )
-
-        # Multiply by kernel weights
-        if weights is not None:
-            weights_vals, weights_unit = u.split_mantissa_unit(weights)
-            if u.math.isscalar(weights_vals):
-                weights_vals = np.full(n_connections, weights_vals)
-            else:
-                weights_vals = np.asarray(weights_vals)
-
-            final_weights = weights_vals * kernel_weights
-            if weights_unit is not None:
-                weights = u.maybe_decimal(final_weights * weights_unit)
-            else:
-                weights = final_weights
-        else:
-            weights = kernel_weights
-
-        delays = param(
-            self.delay_init,
-            n_connections,
-            param_type='delay',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions,
-            rng=self.rng
-        )
+        weights = _scaled_weights(self, kernel_weights, pre_size, post_size, pre_positions, post_positions)
+        delays = _delays(self, n_connections, pre_size, post_size, pre_positions, post_positions)
 
         return ConnectionResult(
             pre_indices, post_indices,
@@ -390,11 +493,20 @@ class GaussianKernel(PointConnectivity):
     :class:`braintools.init.GaussianProfile`. Pairs farther apart than
     ``max_distance`` and weights not above ``1e-6`` are dropped.
 
+    Candidate pairs are found with a k-d tree over the positions and handled
+    in chunks of bounded size, so memory grows with the number of edges
+    rather than with ``pre_size * post_size``. The edges, their order and the
+    weights are the same as in version 0.6. Generation runs on the host with
+    NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import GaussianKernel
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>> gauss = GaussianKernel(
         ...     sigma=50 * u.um,
         ...     max_distance=150 * u.um,
@@ -404,6 +516,8 @@ class GaussianKernel(PointConnectivity):
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
+        >>> result.n_connections
+        14104
     """
     __module__ = 'braintools.conn'
 
@@ -435,93 +549,42 @@ class GaussianKernel(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gaussian kernel connectivity")
 
-        # Calculate distances (only the first two position dims are used)
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
-        post_pos_val = np.asarray(post_pos_val)[:, :2]
-        distances = cdist(pre_pos_val, post_pos_val)
+        # Positions as float64 plain numbers (only the first two dims are used)
+        pre_pos_val, post_pos_val, pos_unit = _xy_values(pre_positions, post_positions, dtype=float)
 
-        # Get sigma and max_distance in position units
-        if isinstance(self.sigma, u.Quantity):
-            sigma_val = u.Quantity(self.sigma).to(pos_unit).mantissa
-        else:
-            sigma_val = self.sigma
-
+        # Sigma and max_distance in position units
+        sigma_val = _length_value(self.sigma, pos_unit)
         if self.max_distance is not None:
-            if isinstance(self.max_distance, u.Quantity):
-                max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
-            else:
-                max_dist_val = self.max_distance
+            max_dist_val = _length_value(self.max_distance, pos_unit)
         else:
             max_dist_val = 3 * sigma_val
 
-        # Gaussian weights, from braintools.init.GaussianProfile.
-        gaussian_weights = _gaussian(distances, sigma_val)
+        # Gaussian weights from braintools.init.GaussianProfile (raises for sigma <= 0).
+        profile = GaussianProfile(sigma_val)
+        exclude_self = not self.allow_self_connections and _same_population(pre_positions, post_positions)
 
-        if self.normalize:
-            # 2-D normalization constant (positions are treated as 2-D).
-            gaussian_weights = gaussian_weights / (2 * np.pi * sigma_val ** 2)
+        pre_parts, post_parts, value_parts = [], [], []
+        for pre_c, post_c, _, dist in _within(pre_pos_val, post_pos_val, max_dist_val, exclude_self):
+            values = np.asarray(profile.probability(dist))
+            if self.normalize:
+                # 2-D normalization constant (positions are treated as 2-D).
+                values = values / (2 * np.pi * sigma_val ** 2)
+            # Prune cutoff: 1e-6
+            keep = values > 1e-6
+            pre_parts.append(pre_c[keep])
+            post_parts.append(post_c[keep])
+            value_parts.append(values[keep])
 
-        # Apply distance threshold
-        connection_mask = distances <= max_dist_val
-        # Drop autapses when pre and post are the same population.
-        if not self.allow_self_connections and _same_population(pre_positions, post_positions):
-            np.fill_diagonal(connection_mask, False)
-        gaussian_weights = gaussian_weights * connection_mask
-
-        # Get connections above threshold (prune cutoff: 1e-6)
-        pre_indices, post_indices = np.where(gaussian_weights > 1e-6)
-        gaussian_weights = gaussian_weights[pre_indices, post_indices]
-
+        pre_indices = _concat(pre_parts)
         if len(pre_indices) == 0:
-            return ConnectionResult(
-                np.array([], dtype=np.int64), np.array([], dtype=np.int64),
-                pre_size=pre_size, post_size=post_size,
-                pre_positions=pre_positions, post_positions=post_positions,
-                model_type='point'
-            )
+            return _empty_result(pre_size, post_size, pre_positions, post_positions)
 
+        post_indices = _concat(post_parts)
+        gaussian_weights = np.concatenate(value_parts)
         n_connections = len(pre_indices)
 
-        # Generate base weights
-        weights = param(
-            self.weight_init,
-            n_connections,
-            param_type='weight',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions,
-            rng=self.rng
-        )
-
-        # Multiply by Gaussian weights
-        if weights is not None:
-            weights_vals, weights_unit = u.split_mantissa_unit(weights)
-            if u.math.isscalar(weights_vals):
-                weights_vals = np.full(n_connections, weights_vals)
-            else:
-                weights_vals = np.asarray(weights_vals)
-
-            final_weights = weights_vals * gaussian_weights
-            if weights_unit is not None:
-                weights = u.maybe_decimal(final_weights * weights_unit)
-            else:
-                weights = final_weights
-        else:
-            weights = gaussian_weights
-
-        delays = param(
-            self.delay_init,
-            n_connections,
-            rng=self.rng,
-            param_type='delay',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions
-        )
+        weights = _scaled_weights(self, gaussian_weights, pre_size, post_size, pre_positions, post_positions)
+        delays = _delays(self, n_connections, pre_size, post_size, pre_positions, post_positions)
 
         return ConnectionResult(
             pre_indices, post_indices,
@@ -586,11 +649,20 @@ class GaborKernel(PointConnectivity):
     envelope ``G`` is evaluated by :class:`braintools.init.GaussianProfile`.
     Weights whose magnitude is not above ``1e-3`` are dropped.
 
+    Candidate pairs are found with a k-d tree over the positions and handled
+    in chunks of bounded size, so memory grows with the number of edges
+    rather than with ``pre_size * post_size``. The edges, their order and the
+    weights are the same as in version 0.6. Generation runs on the host with
+    NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import GaborKernel
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>> gabor = GaborKernel(
         ...     sigma=50 * u.um,
         ...     frequency=0.02,  # 1 cycle per 50 um
@@ -601,6 +673,8 @@ class GaborKernel(PointConnectivity):
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
+        >>> result.n_connections
+        15086
     """
     __module__ = 'braintools.conn'
 
@@ -636,28 +710,16 @@ class GaborKernel(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gabor kernel connectivity")
 
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
+        post_num = int(np.prod(post_size)) if isinstance(post_size, tuple) else post_size
 
-        # Extract position values (only the first two dims are used)
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
-        post_pos_val = np.asarray(post_pos_val)[:, :2]
+        # Position values (only the first two dims are used)
+        pre_pos_val, post_pos_val, pos_unit = _xy_values(pre_positions, post_positions)
+        post_pos_val = _first_rows(post_pos_val, post_num)
 
-        # Get sigma and max_distance in position units
-        if isinstance(self.sigma, u.Quantity):
-            sigma_val = u.Quantity(self.sigma).to(pos_unit).mantissa
-        else:
-            sigma_val = self.sigma
-
+        # Sigma and max_distance in position units
+        sigma_val = _length_value(self.sigma, pos_unit)
         if self.max_distance is not None:
-            if isinstance(self.max_distance, u.Quantity):
-                max_dist_val = u.Quantity(self.max_distance).to(pos_unit).mantissa
-            else:
-                max_dist_val = self.max_distance
+            max_dist_val = _length_value(self.max_distance, pos_unit)
         else:
             max_dist_val = 3 * sigma_val
 
@@ -666,10 +728,6 @@ class GaborKernel(PointConnectivity):
             and _same_population(pre_positions, post_positions)
         )
 
-        pre_indices = []
-        post_indices = []
-        gabor_weights = []
-
         cos_theta = np.cos(self.theta)
         sin_theta = np.sin(self.theta)
 
@@ -677,35 +735,22 @@ class GaborKernel(PointConnectivity):
         # (rotation-invariant) distance through braintools.init.GaussianProfile.
         envelope_profile = GaussianProfile(sigma_val)
 
-        # For each post neuron
-        for post_idx in range(post_num):
-            post_pos = post_pos_val[post_idx]
-
-            # Relative positions
-            rel_pos = pre_pos_val - post_pos
-            distances = np.sqrt(np.sum(rel_pos ** 2, axis=1))
-
-            # Filter by max distance, dropping the autapse within one population.
-            candidate_pre = np.where(distances <= max_dist_val)[0]
-            if same_population:
-                candidate_pre = candidate_pre[candidate_pre != post_idx]
-            if candidate_pre.size == 0:
-                continue
-
+        # Pairs within ``max_distance``, grouped by post neuron (rel = pre - post).
+        pre_parts, post_parts, value_parts = [], [], []
+        for post_c, pre_c, rel, dist in _within(post_pos_val, pre_pos_val, max_dist_val, same_population):
             # Rotated coordinate along the carrier wave.
-            x_rot = rel_pos[candidate_pre, 0] * cos_theta + rel_pos[candidate_pre, 1] * sin_theta
+            x_rot = rel[:, 0] * cos_theta + rel[:, 1] * sin_theta
 
             # Gabor function: Gaussian envelope times sinusoidal carrier.
-            envelope = np.asarray(envelope_profile.probability(distances[candidate_pre]))
+            envelope = np.asarray(envelope_profile.probability(dist))
             sinusoid = np.cos(2 * np.pi * self.frequency * x_rot + self.phase)
             gabor_vals = envelope * sinusoid
 
             # Prune cutoff: 1e-3 (magnitude).
             keep = np.abs(gabor_vals) > 1e-3
-            n_keep = int(np.count_nonzero(keep))
-            pre_indices.extend(candidate_pre[keep].tolist())
-            post_indices.extend([post_idx] * n_keep)
-            gabor_weights.extend(gabor_vals[keep].tolist())
+            pre_parts.append(pre_c[keep])
+            post_parts.append(post_c[keep])
+            value_parts.append(gabor_vals[keep])
 
         metadata = {
             'pattern': 'gabor_kernel',
@@ -715,61 +760,16 @@ class GaborKernel(PointConnectivity):
             'phase': self.phase
         }
 
+        pre_indices = _concat(pre_parts)
         if len(pre_indices) == 0:
-            return ConnectionResult(
-                np.array([], dtype=np.int64),
-                np.array([], dtype=np.int64),
-                pre_size=pre_size,
-                post_size=post_size,
-                pre_positions=pre_positions,
-                post_positions=post_positions,
-                model_type='point',
-                metadata=metadata,
-            )
+            return _empty_result(pre_size, post_size, pre_positions, post_positions, metadata)
 
-        pre_indices = np.array(pre_indices, dtype=np.int64)
-        post_indices = np.array(post_indices, dtype=np.int64)
-        gabor_weights = np.array(gabor_weights)
+        post_indices = _concat(post_parts)
+        gabor_weights = np.concatenate(value_parts).astype(float)
         n_connections = len(pre_indices)
 
-        # Generate base weights
-        weights = param(
-            self.weight_init,
-            n_connections,
-            rng=self.rng,
-            param_type='weight',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions
-        )
-
-        # Multiply by Gabor weights
-        if weights is not None:
-            weights_vals, weights_unit = u.split_mantissa_unit(weights)
-            if u.math.isscalar(weights_vals):
-                weights_vals = np.full(n_connections, weights_vals)
-            else:
-                weights_vals = np.asarray(weights_vals)
-
-            final_weights = weights_vals * gabor_weights
-            if weights_unit is not None:
-                weights = u.maybe_decimal(final_weights * weights_unit)
-            else:
-                weights = final_weights
-        else:
-            weights = gabor_weights
-
-        delays = param(
-            self.delay_init,
-            n_connections,
-            rng=self.rng,
-            param_type='delay',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions
-        )
+        weights = _scaled_weights(self, gabor_weights, pre_size, post_size, pre_positions, post_positions)
+        delays = _delays(self, n_connections, pre_size, post_size, pre_positions, post_positions)
 
         return ConnectionResult(
             pre_indices,
@@ -828,11 +828,20 @@ class DoGKernel(PointConnectivity):
     kept, so the surround is inhibitory. Weights whose magnitude is not above
     ``1e-4`` are dropped.
 
+    Candidate pairs are found with a k-d tree over the positions and handled
+    in chunks of bounded size, so memory grows with the number of edges
+    rather than with ``pre_size * post_size``. The edges, their order and the
+    weights are the same as in version 0.6. Generation runs on the host with
+    NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import DoGKernel
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>> dog = DoGKernel(
         ...     sigma_center=30 * u.um,
         ...     sigma_surround=60 * u.um,
@@ -844,6 +853,8 @@ class DoGKernel(PointConnectivity):
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
+        >>> result.n_connections
+        21182
     """
     __module__ = 'braintools.conn'
 
@@ -879,14 +890,10 @@ class DoGKernel(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for DoG kernel connectivity")
 
-        # Calculate distances (only the first two position dims are used)
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
-        post_pos_val = np.asarray(post_pos_val)[:, :2]
-        distances = cdist(pre_pos_val, post_pos_val)
+        # Positions as float64 plain numbers (only the first two dims are used)
+        pre_pos_val, post_pos_val, pos_unit = _xy_values(pre_positions, post_positions, dtype=float)
 
-        # Get sigma values in position units
+        # Sigma values in position units
         sigma_c_val = u.Quantity(self.sigma_center).to(pos_unit).mantissa
         sigma_s_val = u.Quantity(self.sigma_surround).to(pos_unit).mantissa
         if self.max_distance is not None:
@@ -898,66 +905,27 @@ class DoGKernel(PointConnectivity):
         dog_profile = _difference_of_gaussians(
             sigma_c_val, sigma_s_val, self.amplitude_center, self.amplitude_surround
         )
-        dog_weights = np.asarray(dog_profile.probability(distances))
+        exclude_self = not self.allow_self_connections and _same_population(pre_positions, post_positions)
 
-        # Apply distance threshold
-        connection_mask = distances <= max_dist_val
-        # Drop autapses when pre and post are the same population.
-        if not self.allow_self_connections and _same_population(pre_positions, post_positions):
-            np.fill_diagonal(connection_mask, False)
-        dog_weights = dog_weights * connection_mask
+        pre_parts, post_parts, value_parts = [], [], []
+        for pre_c, post_c, _, dist in _within(pre_pos_val, post_pos_val, max_dist_val, exclude_self):
+            values = np.asarray(dog_profile.probability(dist))
+            # Prune cutoff: 1e-4 on magnitude
+            keep = np.abs(values) > 1e-4
+            pre_parts.append(pre_c[keep])
+            post_parts.append(post_c[keep])
+            value_parts.append(values[keep])
 
-        # Get connections above threshold (prune cutoff: 1e-4 on magnitude)
-        pre_indices, post_indices = np.where(np.abs(dog_weights) > 1e-4)
-        dog_weights = dog_weights[pre_indices, post_indices]
-
+        pre_indices = _concat(pre_parts)
         if len(pre_indices) == 0:
-            return ConnectionResult(
-                np.array([], dtype=np.int64),
-                np.array([], dtype=np.int64),
-                pre_size=pre_size,
-                post_size=post_size,
-                pre_positions=pre_positions,
-                post_positions=post_positions,
-                model_type='point',
-            )
+            return _empty_result(pre_size, post_size, pre_positions, post_positions)
 
+        post_indices = _concat(post_parts)
+        dog_weights = np.concatenate(value_parts)
         n_connections = len(pre_indices)
 
-        # Generate base weights
-        weights = param(
-            self.weight_init, n_connections,
-            param_type='weight', pre_size=pre_size, post_size=post_size,
-            pre_positions=pre_positions, post_positions=post_positions,
-            rng=self.rng
-        )
-
-        # Multiply by DoG weights
-        if weights is not None:
-            weights_vals, weights_unit = u.split_mantissa_unit(weights)
-            if u.math.isscalar(weights_vals):
-                weights_vals = np.full(n_connections, weights_vals)
-            else:
-                weights_vals = np.asarray(weights_vals)
-
-            final_weights = weights_vals * dog_weights
-            if weights_unit is not None:
-                weights = u.maybe_decimal(final_weights * weights_unit)
-            else:
-                weights = final_weights
-        else:
-            weights = dog_weights
-
-        delays = param(
-            self.delay_init,
-            n_connections,
-            param_type='delay',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions,
-            rng=self.rng
-        )
+        weights = _scaled_weights(self, dog_weights, pre_size, post_size, pre_positions, post_positions)
+        delays = _delays(self, n_connections, pre_size, post_size, pre_positions, post_positions)
 
         return ConnectionResult(
             pre_indices,
@@ -1001,11 +969,20 @@ class MexicanHat(DoGKernel):
     :class:`braintools.init.MexicanHatProfile`, which is a Ricker wavelet
     clipped at zero.
 
+    Candidate pairs are found with a k-d tree over the positions and handled
+    in chunks of bounded size, so memory grows with the number of edges
+    rather than with ``pre_size * post_size``. The edges, their order and the
+    weights are the same as in version 0.6. Generation runs on the host with
+    NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import MexicanHat
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>> mexican = MexicanHat(
         ...     sigma=40 * u.um,
         ...     weight=1.0 * u.nS
@@ -1014,6 +991,8 @@ class MexicanHat(DoGKernel):
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
+        >>> result.n_connections
+        17110
     """
     __module__ = 'braintools.conn'
 
@@ -1073,11 +1052,22 @@ class SobelKernel(PointConnectivity):
     delay : Initialization, optional
         Delay initialization.
 
+    Notes
+    -----
+    Candidate pairs are found with a k-d tree over the positions and handled
+    in chunks of bounded size, so memory grows with the number of edges
+    rather than with ``pre_size * post_size``. The edges, their order and the
+    weights are the same as in version 0.6. Generation runs on the host with
+    NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import SobelKernel
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>> sobel = SobelKernel(
         ...     direction='horizontal',
         ...     kernel_size=60 * u.um,
@@ -1087,6 +1077,8 @@ class SobelKernel(PointConnectivity):
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
+        >>> result.n_connections
+        418
     """
     __module__ = 'braintools.conn'
 
@@ -1200,11 +1192,22 @@ class LaplacianKernel(PointConnectivity):
     delay : Initialization, optional
         Delay initialization.
 
+    Notes
+    -----
+    Candidate pairs are found with a k-d tree over the positions and handled
+    in chunks of bounded size, so memory grows with the number of edges
+    rather than with ``pre_size * post_size``. The edges, their order and the
+    weights are the same as in version 0.6. Generation runs on the host with
+    NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import LaplacianKernel
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>> laplacian = LaplacianKernel(
         ...     kernel_type='4-connected',
         ...     kernel_size=60 * u.um,
@@ -1214,6 +1217,8 @@ class LaplacianKernel(PointConnectivity):
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
+        >>> result.n_connections
+        634
     """
     __module__ = 'braintools.conn'
 
@@ -1293,16 +1298,27 @@ class CustomKernel(PointConnectivity):
     delay : Initialization, optional
         Delay initialization.
 
+    Notes
+    -----
+    Candidate pairs are found with a k-d tree over the positions and handled
+    in chunks of bounded size, so memory grows with the number of edges
+    rather than with ``pre_size * post_size``. The edges, their order and the
+    weights are the same as in version 0.6. Generation runs on the host with
+    NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import CustomKernel
         >>> def my_kernel(x, y):
         ...     # Custom kernel function
         ...     r = np.sqrt(x**2 + y**2)
         ...     return np.exp(-r/50) * np.cos(r/10)
         >>>
-        >>> positions = np.random.uniform(0, 1000, (500, 2)) * u.um
+        >>> positions = np.random.RandomState(0).uniform(0, 1000, (500, 2)) * u.um
         >>> custom = CustomKernel(
         ...     kernel_func=my_kernel,
         ...     kernel_size=200 * u.um,
@@ -1313,6 +1329,8 @@ class CustomKernel(PointConnectivity):
         ...     pre_size=500, post_size=500,
         ...     pre_positions=positions, post_positions=positions
         ... )
+        >>> result.n_connections
+        5648
     """
     __module__ = 'braintools.conn'
 
@@ -1344,122 +1362,42 @@ class CustomKernel(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for custom kernel connectivity")
 
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
+        post_num = int(np.prod(post_size)) if isinstance(post_size, tuple) else post_size
 
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
-        # Extract position values (only the first two dims are used)
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        pre_pos_val = np.asarray(pre_pos_val)[:, :2]
-        post_pos_val = np.asarray(post_pos_val)[:, :2]
-
-        # Get kernel size in position units
-        if isinstance(self.kernel_size, u.Quantity):
-            kernel_size_val = u.Quantity(self.kernel_size).to(pos_unit).mantissa
-        else:
-            kernel_size_val = self.kernel_size
+        # Position values (only the first two dims are used)
+        pre_pos_val, post_pos_val, pos_unit = _xy_values(pre_positions, post_positions)
+        post_pos_val = _first_rows(post_pos_val, post_num)
+        kernel_size_val = _length_value(self.kernel_size, pos_unit)
 
         same_population = (
             not self.allow_self_connections
             and _same_population(pre_positions, post_positions)
         )
 
-        pre_indices = []
-        post_indices = []
-        kernel_weights = []
+        # Pairs within the kernel support, grouped by post neuron (rel = pre - post).
+        # ``kernel_func`` is called once per chunk on all its offsets.
+        pre_parts, post_parts, value_parts = [], [], []
+        for post_c, pre_c, rel, _ in _within(post_pos_val, pre_pos_val, kernel_size_val / 2, same_population):
+            rel_x = rel[:, 0]
+            rel_y = rel[:, 1]
+            kernel_vals = np.broadcast_to(np.asarray(self.kernel_func(rel_x, rel_y)), rel_x.shape)
 
-        # For each post neuron
-        for post_idx in range(post_num):
-            post_pos = post_pos_val[post_idx]
+            # Apply threshold on magnitude
+            above_threshold = np.abs(kernel_vals) > self.threshold
+            pre_parts.append(pre_c[above_threshold])
+            post_parts.append(post_c[above_threshold])
+            value_parts.append(kernel_vals[above_threshold])
 
-            # Relative positions
-            rel_pos = pre_pos_val - post_pos
-            distances = np.sqrt(np.sum(rel_pos ** 2, axis=1))
-
-            # Filter by kernel size
-            in_range = distances <= kernel_size_val / 2
-            # Drop the autapse when pre and post are the same population.
-            if same_population:
-                in_range[post_idx] = False
-            candidate_pre = np.where(in_range)[0]
-
-            if len(candidate_pre) > 0:
-                rel_x = rel_pos[candidate_pre, 0]
-                rel_y = rel_pos[candidate_pre, 1]
-
-                # Evaluate kernel function
-                kernel_vals = self.kernel_func(rel_x, rel_y)
-
-                # Apply threshold on magnitude
-                above_threshold = np.abs(kernel_vals) > self.threshold
-                valid_pre = candidate_pre[above_threshold]
-                valid_weights = kernel_vals[above_threshold]
-
-                pre_indices.extend(valid_pre)
-                post_indices.extend([post_idx] * len(valid_pre))
-                kernel_weights.extend(valid_weights)
-
+        pre_indices = _concat(pre_parts)
         if len(pre_indices) == 0:
-            return ConnectionResult(
-                np.array([], dtype=np.int64),
-                np.array([], dtype=np.int64),
-                pre_size=pre_size,
-                post_size=post_size,
-                pre_positions=pre_positions,
-                post_positions=post_positions,
-                model_type='point',
-            )
+            return _empty_result(pre_size, post_size, pre_positions, post_positions)
 
-        pre_indices = np.array(pre_indices, dtype=np.int64)
-        post_indices = np.array(post_indices, dtype=np.int64)
-        kernel_weights = np.array(kernel_weights)
+        post_indices = _concat(post_parts)
+        kernel_weights = np.concatenate(value_parts)
         n_connections = len(pre_indices)
 
-        # Generate base weights
-        weights = param(
-            self.weight_init,
-            n_connections,
-            param_type='weight',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions,
-            rng=self.rng
-        )
-
-        # Multiply by kernel weights
-        if weights is not None:
-            weights_vals, weights_unit = u.split_mantissa_unit(weights)
-            if u.math.isscalar(weights_vals):
-                weights_vals = np.full(n_connections, weights_vals)
-            else:
-                weights_vals = np.asarray(weights_vals)
-
-            final_weights = weights_vals * kernel_weights
-            if weights_unit is not None:
-                weights = u.maybe_decimal(final_weights * weights_unit)
-            else:
-                weights = final_weights
-        else:
-            weights = kernel_weights
-
-        delays = param(
-            self.delay_init,
-            n_connections,
-            param_type='delay',
-            pre_size=pre_size,
-            post_size=post_size,
-            pre_positions=pre_positions,
-            post_positions=post_positions,
-            rng=self.rng
-        )
+        weights = _scaled_weights(self, kernel_weights, pre_size, post_size, pre_positions, post_positions)
+        delays = _delays(self, n_connections, pre_size, post_size, pre_positions, post_positions)
 
         return ConnectionResult(
             pre_indices,

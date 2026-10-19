@@ -16,7 +16,7 @@
 """Neuroscience data analysis.
 
 ``braintools.analysis`` groups the measures used to analyse recorded or
-simulated neural activity. Functions live in five subpackages and are always
+simulated neural activity. Functions live in six subpackages and are always
 accessed through them (they are not re-exported at this level):
 
 =========================================  ==========================================================================
@@ -31,9 +31,12 @@ Subpackage                                 Contents
                                            causality, avalanches, branching ratio, functional connectivity
 :mod:`braintools.analysis.stats`           correlation helpers, spike jitter, ISI shuffling, phase randomisation,
                                            bootstrap confidence intervals
+:mod:`braintools.analysis.graph`           structural graph measures of connectivity: degree distribution,
+                                           clustering, path length, modularity, motifs, spectral radius,
+                                           small-world index
 =========================================  ==========================================================================
 
-These functions were previously part of :mod:`braintools.metric`. The old names
+Apart from ``graph``, these functions were previously part of :mod:`braintools.metric`. The old names
 (for example ``braintools.metric.firing_rate``) still work in 0.4 but emit a
 ``BraintoolsDeprecationWarning`` when called and
 will be removed in 1.0.
@@ -88,6 +91,7 @@ Population and statistics helpers:
 """
 
 from . import field
+from . import graph
 from . import population
 from . import spectral
 from . import spike
@@ -99,4 +103,5 @@ __all__ = [
     'field',
     'population',
     'stats',
+    'graph',
 ]

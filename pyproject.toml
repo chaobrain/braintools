@@ -64,6 +64,7 @@ testing = [
     "scikit-learn",
     "mne",
     "statsmodels",
+    "networkx",
     # Optional I/O backends of braintools.file.
     "h5py",
     "pynwb",

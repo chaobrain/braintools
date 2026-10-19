@@ -1749,3 +1749,307 @@ class TestCorePeripheryRandom(unittest.TestCase):
         self.assertEqual(result.metadata['periphery_core_prob'], 0.2)
         self.assertEqual(result.metadata['periphery_periphery_prob'], 0.05)
         self.assertGreater(result.n_connections, 0)
+
+
+# ---------------------------------------------------------------------------
+# v0.7 (B4): vectorised, memory-bounded generators. The random stream of these
+# classes changed, so they are checked through statistics of the output
+# (degrees, block densities within binomial bounds, uniformity), not exact
+# edges. Deterministic parts (the ring lattice, the initial clique) are pinned.
+# ---------------------------------------------------------------------------
+
+import tracemalloc
+
+from scipy import stats
+
+from braintools.conn._topological import (
+    _block_bernoulli,
+    _preferential_attachment,
+    _rewire_targets,
+)
+
+
+def _edge_codes(result, n):
+    return np.asarray(result.pre_indices, dtype=np.int64) * n + np.asarray(result.post_indices, dtype=np.int64)
+
+
+def _assert_simple(result, n):
+    """No self-connections and no duplicate edges."""
+    pre = np.asarray(result.pre_indices)
+    post = np.asarray(result.post_indices)
+    assert np.all(pre != post)
+    codes = _edge_codes(result, n)
+    assert np.unique(codes).size == codes.size
+    assert pre.min(initial=0) >= 0 and pre.max(initial=0) < n
+    assert post.min(initial=0) >= 0 and post.max(initial=0) < n
+
+
+def _assert_binomial(count, trials, p, z=5.0):
+    """``count`` is within ``z`` standard deviations of Binomial(trials, p)."""
+    mean = trials * p
+    sd = np.sqrt(max(trials * p * (1 - p), 1e-12))
+    assert abs(count - mean) <= z * sd + 1e-9, (count, mean, sd)
+
+
+def _block_count(result, pre_range, post_range):
+    pre = np.asarray(result.pre_indices)
+    post = np.asarray(result.post_indices)
+    inside = ((pre >= pre_range[0]) & (pre < pre_range[1])
+              & (post >= post_range[0]) & (post < post_range[1]))
+    return int(inside.sum())
+
+
+def _peak_bytes(fn):
+    tracemalloc.start()
+    try:
+        fn()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+class TestSmallWorldVectorised:
+    def test_ring_lattice_is_exact_without_rewiring(self):
+        n, k = 12, 4
+        result = SmallWorld(k=k, p=0.0, seed=3)(n, n)
+        sources = np.repeat(np.arange(n), k)
+        offsets = np.tile([1, 2, -1, -2], n)
+        np.testing.assert_array_equal(result.pre_indices, sources)
+        np.testing.assert_array_equal(result.post_indices, (sources + offsets) % n)
+
+    def test_kept_edges_follow_the_rewire_draw(self):
+        # The rewiring decision is the first draw of the stream, so the edges
+        # that are not rewired stay exactly the lattice edges.
+        n, k, p, seed = 200, 6, 0.4, 11
+        result = SmallWorld(k=k, p=p, seed=seed)(n, n)
+        rewired = np.random.RandomState(seed).random(n * k) < p
+        lattice = SmallWorld(k=k, p=0.0)(n, n)
+        np.testing.assert_array_equal(result.post_indices[~rewired], lattice.post_indices[~rewired])
+        _assert_simple(result, n)
+        np.testing.assert_array_equal(np.bincount(result.pre_indices, minlength=n), np.full(n, k))
+
+    def test_rewired_fraction_and_uniform_targets(self):
+        n, k, p = 400, 6, 0.3
+        result = SmallWorld(k=k, p=p, seed=5)(n, n)
+        lattice = SmallWorld(k=k, p=0.0)(n, n)
+        moved = result.post_indices != lattice.post_indices
+        # An edge rewired onto its own old target is not "moved"; that happens
+        # with probability about 1 / (n - k), so the moved count is ~Binomial(nk, p).
+        _assert_binomial(int(moved.sum()), n * k, p * (1 - 1.0 / (n - k)))
+        # Rewired targets are uniform over the ring offsets (excluding 0).
+        offsets = (result.post_indices[moved] - result.pre_indices[moved]) % n
+        counts = np.bincount(offsets, minlength=n)[1:]
+        far = counts[k // 2: n - 1 - k // 2]  # offsets that are not lattice neighbours
+        assert stats.chisquare(far).pvalue > 1e-4
+
+    def test_dense_rewiring_terminates_and_stays_simple(self):
+        n, k = 12, 10
+        result = SmallWorld(k=k, p=1.0, seed=2)(n, n)
+        _assert_simple(result, n)
+        assert result.n_connections == n * k
+
+    def test_rewire_helper_without_rewired_edges(self):
+        sources = np.array([0, 0, 1])
+        targets = np.array([1, 2, 2])
+        out = _rewire_targets(np.random.RandomState(0), 3, sources, targets, np.zeros(3, dtype=bool))
+        np.testing.assert_array_equal(out, targets)
+
+
+class TestScaleFreeVectorised:
+    @pytest.mark.parametrize('m', [1, 2, 4])
+    def test_structure(self, m):
+        n = 300
+        result = ScaleFree(m=m, seed=1)(n, n)
+        m0 = max(m, 2)
+        n_undirected = m0 * (m0 - 1) // 2 + m * (n - m0)
+        assert result.n_connections == 2 * n_undirected
+        _assert_simple(result, n)
+        # Undirected: every edge is stored in both directions.
+        codes = set(_edge_codes(result, n).tolist())
+        assert all(int(j) * n + int(i) in codes for i, j in zip(result.pre_indices, result.post_indices))
+        # Every new node attaches exactly m times (its out-edges to older nodes).
+        newer = result.pre_indices > result.post_indices
+        out_to_older = np.bincount(result.pre_indices[newer], minlength=n)
+        np.testing.assert_array_equal(out_to_older[m0:], np.full(n - m0, m))
+
+    def test_initial_clique_is_exact(self):
+        result = ScaleFree(m=3, seed=0)(10, 10)
+        np.testing.assert_array_equal(result.pre_indices[:6], [0, 1, 0, 2, 1, 2])
+        np.testing.assert_array_equal(result.post_indices[:6], [1, 0, 2, 0, 2, 1])
+
+    def test_mean_degree_and_power_law_exponent(self):
+        n, m = 6000, 3
+        result = ScaleFree(m=m, seed=7)(n, n)
+        degree = np.bincount(result.pre_indices, minlength=n)
+        assert abs(degree.mean() - 2 * m) < 0.05
+        # Discrete power-law MLE (Clauset et al. 2009) for k >= k_min; BA gives ~3.
+        k_min = 2 * m
+        tail = degree[degree >= k_min]
+        gamma = 1 + tail.size / np.sum(np.log(tail / (k_min - 0.5)))
+        assert 2.5 < gamma < 3.5, gamma
+        # Preferential attachment: old nodes are hubs.
+        assert degree[:100].mean() > 3 * degree[-1000:].mean()
+
+    def test_attachment_probability_proportional_to_weight(self):
+        # m = 1, m0 = 2: nodes 0 and 1 start with weight 2 each; node 2 attaches
+        # to one of them (weights become 3, 2, 1 or 2, 3, 1), so node 3 picks
+        # nodes 0, 1, 2 with probabilities 5/12, 5/12, 2/12.
+        firsts = np.array([_preferential_attachment(np.random.RandomState(s), 4, 1, 2)[1, 0]
+                           for s in range(4000)])
+        counts = np.bincount(firsts, minlength=3)
+        assert stats.chisquare(counts, f_exp=np.array([5, 5, 2]) / 12 * 4000).pvalue > 1e-4
+
+    def test_seed_reproducible(self):
+        a = ScaleFree(m=2, seed=9)(200, 200)
+        b = ScaleFree(m=2, seed=9)(200, 200)
+        np.testing.assert_array_equal(a.post_indices, b.post_indices)
+
+
+class TestRegularVectorised:
+    def test_exact_out_degree_and_uniform_targets(self):
+        n, d = 500, 20
+        result = Regular(degree=d, seed=3)(n, n)
+        _assert_simple(result, n)
+        np.testing.assert_array_equal(np.bincount(result.pre_indices, minlength=n), np.full(n, d))
+        in_degree = np.bincount(result.post_indices, minlength=n)
+        q = d / (n - 1)
+        assert abs(in_degree.var() - n * q * (1 - q)) < 0.25 * n * q * (1 - q)
+        assert stats.chisquare(in_degree).pvalue > 1e-4
+
+    def test_dense_degree_uses_complement_and_stays_simple(self):
+        n = 40
+        result = Regular(degree=n - 2, seed=1)(n, n)
+        _assert_simple(result, n)
+        assert result.n_connections == n * (n - 2)
+
+    def test_degree_zero_and_full(self):
+        assert Regular(degree=0, seed=1)(10, 10).n_connections == 0
+        full = Regular(degree=9, seed=1)(10, 10)
+        assert full.n_connections == 90
+        _assert_simple(full, 10)
+
+    def test_degree_too_large_raises(self):
+        with pytest.raises(ValueError):
+            Regular(degree=10, seed=1)(10, 10)
+
+
+class TestBlockBernoulliGenerators:
+    def test_modular_block_densities(self):
+        n, n_mod, p_in, p_out = 600, 3, 0.2, 0.02
+        result = ModularRandom(n_modules=n_mod, intra_prob=p_in, inter_prob=p_out, seed=4)(n, n)
+        _assert_simple(result, n)
+        size = n // n_mod
+        for a in range(n_mod):
+            for b in range(n_mod):
+                rows = (a * size, (a + 1) * size)
+                cols = (b * size, (b + 1) * size)
+                count = _block_count(result, rows, cols)
+                if a == b:
+                    _assert_binomial(count, size * (size - 1), p_in)
+                else:
+                    _assert_binomial(count, size * size, p_out)
+        # Sorted by (pre, post).
+        codes = _edge_codes(result, n)
+        assert np.all(np.diff(codes) > 0)
+
+    def test_modular_uneven_and_single_module(self):
+        result = ModularRandom(n_modules=1, intra_prob=1.0, inter_prob=0.5, seed=1)(7, 7)
+        assert result.n_connections == 42
+        result = ModularRandom(n_modules=3, intra_prob=1.0, inter_prob=0.0, seed=1)(10, 10)
+        # Module sizes 4, 3, 3 -> 12 + 6 + 6 directed intra pairs.
+        assert result.n_connections == 24
+
+    def test_modular_zero_probabilities_give_empty_result(self):
+        result = ModularRandom(n_modules=2, intra_prob=0.0, inter_prob=0.0, seed=1)(20, 20)
+        assert result.n_connections == 0
+
+    def test_hierarchical_block_densities(self):
+        n = 400
+        conn = HierarchicalRandom(n_levels=4, feedforward_prob=0.3, feedback_prob=0.1,
+                                  recurrent_prob=0.2, skip_prob=0.05, seed=6)
+        result = conn(n, n)
+        _assert_simple(result, n)
+        size = n // 4
+        for a in range(4):
+            for b in range(4):
+                count = _block_count(result, (a * size, (a + 1) * size), (b * size, (b + 1) * size))
+                if a == b:
+                    _assert_binomial(count, size * (size - 1), 0.2)
+                elif b == a + 1:
+                    _assert_binomial(count, size * size, 0.3)
+                elif b == a - 1:
+                    _assert_binomial(count, size * size, 0.1)
+                elif b > a + 1:
+                    _assert_binomial(count, size * size, 0.05)
+                else:
+                    assert count == 0
+
+    def test_hierarchical_level_ratios_error_messages(self):
+        with pytest.raises(ValueError, match='exceeds remaining'):
+            HierarchicalRandom(n_levels=2, level_ratios=[30])(20, 20)
+        with pytest.raises(ValueError, match='negative'):
+            HierarchicalRandom(n_levels=2, level_ratios=[-1])(20, 20)
+
+    def test_core_periphery_block_densities(self):
+        n, core = 500, 100
+        conn = CorePeripheryRandom(core_size=core, core_core_prob=0.4, core_periphery_prob=0.1,
+                                   periphery_core_prob=0.15, periphery_periphery_prob=0.02, seed=8)
+        result = conn(n, n)
+        _assert_simple(result, n)
+        _assert_binomial(_block_count(result, (0, core), (0, core)), core * (core - 1), 0.4)
+        _assert_binomial(_block_count(result, (0, core), (core, n)), core * (n - core), 0.1)
+        _assert_binomial(_block_count(result, (core, n), (0, core)), (n - core) * core, 0.15)
+        _assert_binomial(_block_count(result, (core, n), (core, n)), (n - core) * (n - core - 1), 0.02)
+
+    def test_core_periphery_empty_core(self):
+        result = CorePeripheryRandom(core_size=0.05, periphery_periphery_prob=1.0, seed=1)(10, 10)
+        assert result.metadata['core_size'] == 0
+        assert result.n_connections == 90
+
+    @pytest.mark.parametrize('make', [
+        lambda: ModularRandom(n_modules=2, intra_prob=1.5),
+        lambda: ModularRandom(n_modules=2, inter_prob=-0.1),
+        lambda: HierarchicalRandom(n_levels=2, feedforward_prob=2.0),
+        lambda: HierarchicalRandom(n_levels=2, skip_prob=-1.0),
+        lambda: CorePeripheryRandom(core_size=2, core_core_prob=1.1),
+        lambda: CorePeripheryRandom(core_size=2, periphery_periphery_prob=-0.5),
+    ])
+    def test_probability_out_of_range_raises(self, make):
+        # .. versionchanged:: 0.7.0 -- probabilities outside [0, 1] used to be
+        # clipped silently by the per-pair comparison; they now raise.
+        with pytest.raises(ValueError, match=r'\[0, 1\]'):
+            make()(10, 10)
+
+    def test_block_helper_skips_empty_and_zero_blocks(self):
+        pre, post = _block_bernoulli(np.random.RandomState(0), [(0, 0, 0, 5, 0.5), (0, 5, 0, 5, 0.0)])
+        assert pre.size == 0 and post.size == 0
+        pre, post = _block_bernoulli(np.random.RandomState(0), [(0, 3, 3, 6, 1.0), (0, 3, 0, 3, 1.0)])
+        assert pre.size == 9 + 6
+        assert np.all(np.diff(pre * 6 + post) > 0)
+
+
+class TestTopologicalMemoryBound:
+    """N = 2e4 builds without any N x N intermediate (3.2 GB as float64)."""
+
+    def test_modular_random_large(self):
+        n = 20000
+        peak = _peak_bytes(lambda: ModularRandom(n_modules=10, intra_prob=0.01, inter_prob=0.0005, seed=1)(n, n))
+        assert peak < 150 * 2 ** 20, peak
+
+    def test_hierarchical_and_core_periphery_large(self):
+        n = 20000
+        peak = _peak_bytes(lambda: HierarchicalRandom(
+            n_levels=4, feedforward_prob=0.002, feedback_prob=0.001, recurrent_prob=0.002, seed=1)(n, n))
+        assert peak < 150 * 2 ** 20, peak
+        peak = _peak_bytes(lambda: CorePeripheryRandom(
+            core_size=0.05, core_core_prob=0.05, core_periphery_prob=0.002,
+            periphery_core_prob=0.002, periphery_periphery_prob=0.0005, seed=1)(n, n))
+        assert peak < 150 * 2 ** 20, peak
+
+    def test_scale_free_regular_small_world_large(self):
+        n = 20000
+        for make in (lambda: ScaleFree(m=3, seed=1)(n, n),
+                     lambda: Regular(degree=20, seed=1)(n, n),
+                     lambda: SmallWorld(k=10, p=0.2, seed=1)(n, n)):
+            peak = _peak_bytes(make)
+            assert peak < 150 * 2 ** 20, peak

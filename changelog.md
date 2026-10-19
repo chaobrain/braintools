@@ -1,6 +1,127 @@
 # Release Notes
 
 
+## Version 0.7.0 (unreleased)
+
+Phase 0.7 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *building
+blocks and scale*. `braintools.conn` gains degree-constrained generators,
+population networks and exporters to every `brainevent` format, and all
+generators are vectorised and memory-bounded so that 1e5-neuron networks build
+in seconds. It also adds structural graph measures, readout learning rules and
+three cognitive tasks. The design is in
+`docs/specs/2026-10-19-v0.7-building-blocks.md`.
+
+### Added
+
+- **`conn`: fixed-degree generators.** `FixedOutDegree(k)`,
+  `FixedInDegree(k)` and `FixedTotalNum(n)` fix the number of connections
+  exactly. `k` and `n` may be fractions of the population size. Partners are
+  distinct by default (`with_replacement=False`), and self-connections can be
+  excluded.
+- **`conn`: population networks.**
+  - `Population` is a named group of neurons with optional positions.
+  - `Projection` binds a generator to a pre- and a postsynaptic population.
+  - `Network` numbers all neurons globally (`offsets`, `n_neurons`), builds
+    every projection, and assembles them into one block `brainevent.CSR` with
+    `to_csr()`.
+- **`conn`: exporters on `ConnectionResult`.**
+  - `to_fixed_num_per_pre()` and `to_fixed_num_per_post()` export to
+    `brainevent.FixedNumPerPre` and `FixedNumPerPost`. A homogeneous weight
+    stays a scalar.
+  - `to_csc()` exports to `brainevent.CSC`.
+  - `to_scipy_csr(data='weight', unit=None)` exports to SciPy for host-side
+    analysis.
+- **`braintools.analysis.graph`** (new subpackage). It works on a
+  `ConnectionResult`, a SciPy sparse matrix or a dense matrix, and never
+  builds an `N x N` array. Results match networkx.
+  - `degree_distribution`, `clustering_coefficient` (directed or undirected,
+    optionally weighted), `characteristic_path_length` (exact, or from sampled
+    sources) and `modularity`.
+  - `motif_counts`: the 16-class triad census, dyad counts and reciprocity.
+  - `spectral_radius`, which keeps the weight unit.
+  - `small_world_index`, compared against Erdős–Rényi graphs of the same size.
+- **`optim`: readout learning and regression.**
+  - `RLS` (recursive least squares, with an optional forgetting factor),
+    `FORCE` (RLS applied to the readout of a recurrent network) and `LMS`.
+    Each updates registered weight States in place from
+    `step(inputs, outputs, targets)` and runs under `jit` and
+    `brainstate.transform.for_loop`.
+  - `linear_regression`, `ridge_regression`, `lasso_regression` and
+    `elastic_net_regression` return a `RegressionResult`. Linear and ridge
+    regression are differentiable; lasso and elastic net are solved with FISTA.
+- **`cogtask`: three tasks.** `MultiSensoryIntegration`, `OneTwoThreeGo` and
+  `EconomicDecisionMaking`, modelled on the NeuroGym tasks of the same names.
+- **Benchmark.** `benchmarks/conn_build.py` measures build time and peak
+  memory for four 1e5-neuron cases, each in its own process (`--quick` runs
+  N = 1e4). Results are in `benchmarks/README.md`.
+- **Docs.** A tutorial on population networks, graph measures and scale,
+  `docs/conn/06_networks_and_scale.ipynb`, plus API sections for the new names.
+
+### Changed
+
+- **All `conn` generators are vectorised and memory-bounded.**
+  - Python loops over neurons, pairs or edges are replaced by array code.
+  - All-pairs work (distances, probabilities) runs in row chunks of at most
+    `2**22` pairs, or uses a k-d tree when a distance cutoff is set.
+  - No generator builds a dense `n_pre x n_post` array, so memory grows with
+    the number of edges. For example, at N = 1e4, `FixedProb(0.001)` takes
+    0.013 s and 335 MB instead of 1.2 s and 1.2 GB.
+- **The random stream changed** for the classes below: the same `seed` gives
+  a different, identically distributed set of connections. Each class has a
+  `versionchanged:: 0.7.0` note in its docstring.
+  - `Random` / `FixedProb`, `ExcitatoryInhibitory`, `ClusteredRandom` and
+    `RadialPatches`.
+  - `DistanceDependent`, `Gaussian` and `Exponential`, only when a distance
+    cutoff (`max_distance`) is set.
+  - `SmallWorld` (`p > 0`), `ScaleFree`, `Regular`, `ModularRandom`,
+    `HierarchicalRandom` and `CorePeripheryRandom`.
+  - `CompartmentSpecific` and the anatomical classes built on it
+    (`SomaToDendrite`, `AxonToSoma`, `DendriteToSoma`, `AxonToDendrite`,
+    `DendriteToDendrite`, `ProximalTargeting`, `DistalTargeting`,
+    `BasalDendriteTargeting`, `ApicalDendriteTargeting`, `BranchSpecific`),
+    `DendriticTree`, `AxonalProjection` and `TopographicProjection` without
+    spatial terms or a map, `DendriticIntegration`, `SynapticClustering`,
+    `AxonalBranching` and `SynapticPlacement`. `AllToAllCompartments` keeps
+    its edges; only random weight and delay initializers draw different
+    values.
+
+  Unchanged for the same seed:
+  - `Ring`, `Grid2d`, `AllToAll` and `OneToOne`;
+  - the distance generators without a cutoff;
+  - all kernels;
+  - `MorphologyDistance`, `AxonalArborization`, and the spatial forms of
+    `AxonalProjection` and `TopographicProjection`.
+- `SmallWorld` rewiring now picks new targets uniformly among nodes that are
+  neither the source nor one of its current targets. Before, the original
+  targets of edges not yet rewired were also excluded.
+- **Input validation.**
+  - `ModularRandom`, `HierarchicalRandom` and `CorePeripheryRandom` raise
+    `ValueError` for probabilities outside `[0, 1]`; such values used to act
+    as 0 or 1.
+  - `ClusteredRandom` raises `ValueError` when the number of positions does
+    not match the population size.
+  - The kernels raise `ValueError` instead of `IndexError` when there are
+    fewer post positions than `post_size`.
+  - `AxonalArborization`, and `AxonalProjection` / `TopographicProjection`
+    with a spatial term, raise `ValueError` when the number of positions
+    differs from the population size. Before, extra positions were used and
+    could produce out-of-range indices.
+- `weight2csr()` and `delay2csr()` cast floating values to the default float
+  type (`brainstate.environ.dftype()`), like the new exporters, instead of
+  handing host float64 arrays to `brainevent`. A missing weight or delay is
+  now a 0-d array instead of a Python float.
+- `ExcitatoryInhibitory` accepts list sizes as well as tuples.
+- The `testing` extra installs networkx, the reference for the graph measures.
+
+### Fixed
+
+- `ScaleFree`'s docstring example crashed (`Uniform(min=, max=)`), and its
+  note claimed that the average degree grows logarithmically; it is about
+  `2 m`.
+- Docstring examples of `AllToAll`, `OneToOne` and `Exponential` were missing
+  imports or outputs. They are now self-contained and doctested.
+
+
 ## Version 0.6.0 (unreleased)
 
 Phase 0.6 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *data and

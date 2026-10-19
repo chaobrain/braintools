@@ -1269,5 +1269,137 @@ class TestBaseRegressions(unittest.TestCase):
         self.assertIsInstance(P().rng, np.random.RandomState)
 
 
+
+def _uniform_out():
+    # 3 pre neurons with 2 targets each, given in scrambled order with per-edge weights
+    pre = np.array([2, 0, 1, 0, 2, 1])
+    post = np.array([3, 1, 0, 2, 1, 3])
+    w = np.array([6., 1., 3., 2., 5., 4.])
+    return ConnectionResult(pre, post, pre_size=3, post_size=4, weights=w,
+                            delays=w * 0.1 * u.ms)
+
+
+class TestBrainEventExporters(unittest.TestCase):
+    """``to_fixed_num_per_pre``/``to_fixed_num_per_post``/``to_csc``/``to_scipy_csr``."""
+
+    def test_fixed_num_per_pre_round_trip(self):
+        res = _uniform_out()
+        m = res.to_fixed_num_per_pre()
+        self.assertEqual(m.shape, (3, 4))
+        self.assertEqual(m.indices.shape, (3, 2))
+        np.testing.assert_array_equal(np.sort(np.asarray(m.indices), axis=1), [[1, 2], [0, 3], [1, 3]])
+        np.testing.assert_allclose(np.asarray(m.todense()), res.weight2dense())
+        d = res.to_fixed_num_per_pre(data='delay')
+        self.assertTrue(u.math.allclose(d.todense(), res.delay2matrix()))
+
+    def test_fixed_num_per_pre_non_uniform_raises(self):
+        res = ConnectionResult(np.array([0, 0, 1]), np.array([0, 1, 1]), 2, 2)
+        with self.assertRaisesRegex(ValueError, r'observed range is \[1, 2\]'):
+            res.to_fixed_num_per_pre()
+        res = ConnectionResult(np.array([0, 0]), np.array([0, 1]), 2, 2)  # pre 1 has none
+        with self.assertRaisesRegex(ValueError, r'\[0, 2\]'):
+            res.to_fixed_num_per_pre()
+
+    def test_fixed_num_per_post_round_trip(self):
+        pre = np.array([0, 2, 1, 2, 0, 1])
+        post = np.array([1, 0, 2, 2, 0, 1])
+        w = np.arange(1.0, 7.0) * u.nS
+        res = ConnectionResult(pre, post, pre_size=3, post_size=(3,), weights=w)
+        m = res.to_fixed_num_per_post()
+        self.assertEqual(m.indices.shape, (3, 2))
+        self.assertEqual(u.get_unit(m.data), u.nS)
+        self.assertTrue(u.math.allclose(m.todense(), res.weight2dense()))
+        with self.assertRaisesRegex(ValueError, 'to_fixed_num_per_post'):
+            ConnectionResult(np.array([0, 1]), np.array([0, 0]), 2, 2).to_fixed_num_per_post()
+
+    def test_scalar_and_missing_weights_stay_scalar(self):
+        res = ConnectionResult(np.array([0, 1]), np.array([1, 0]), 2, 2)
+        m = res.to_fixed_num_per_pre()
+        self.assertEqual(np.shape(m.data), ())
+        self.assertEqual(float(m.data), 1.0)
+        res = ConnectionResult(np.array([0, 1]), np.array([1, 0]), 2, 2, weights=np.array([0.5]))
+        m = res.to_fixed_num_per_post()
+        self.assertEqual(np.shape(m.data), ())
+        np.testing.assert_allclose(np.asarray(m.todense()), [[0, 0.5], [0.5, 0]])
+        res = ConnectionResult(np.array([0, 1]), np.array([1, 0]), 2, 2, weights=2.0 * u.nS)
+        csc = res.to_csc()
+        self.assertEqual(u.math.shape(csc.data), ())
+        self.assertTrue(u.math.allclose(csc.todense(), res.weight2dense()))
+        d = res.to_fixed_num_per_pre(data='delay')  # missing delays -> 0.0
+        np.testing.assert_array_equal(np.asarray(d.todense()), np.zeros((2, 2)))
+
+    def test_single_edge(self):
+        res = ConnectionResult(np.array([0]), np.array([1]), 1, 2, weights=np.array([3.0]))
+        np.testing.assert_allclose(np.asarray(res.to_fixed_num_per_pre().todense()), [[0, 3.0]])
+
+    def test_empty_result(self):
+        res = ConnectionResult(np.array([], dtype=np.int64), np.array([], dtype=np.int64), 3, 4)
+        m = res.to_fixed_num_per_pre()
+        self.assertEqual(m.indices.shape, (3, 0))
+        np.testing.assert_array_equal(np.asarray(m.todense()), np.zeros((3, 4)))
+        p = res.to_fixed_num_per_post()
+        self.assertEqual(p.indices.shape, (4, 0))
+        csc = res.to_csc()
+        np.testing.assert_array_equal(np.asarray(csc.indptr), np.zeros(5))
+        self.assertEqual(res.to_scipy_csr().nnz, 0)
+        res = ConnectionResult(np.array([], dtype=np.int64), np.array([], dtype=np.int64), 3, 4,
+                               weights=np.zeros(0))
+        self.assertEqual(res.to_fixed_num_per_pre().data.shape, (3, 0))
+
+    def test_invalid_data_raises(self):
+        res = _uniform_out()
+        for method in (res.to_fixed_num_per_pre, res.to_fixed_num_per_post, res.to_csc,
+                       res.to_scipy_csr):
+            with self.assertRaisesRegex(ValueError, "'weight' or 'delay'"):
+                method(data='weights')
+
+    def test_to_csc(self):
+        res = _uniform_out()
+        csc = res.to_csc()
+        np.testing.assert_array_equal(np.asarray(csc.indptr), [0, 1, 3, 4, 6])
+        np.testing.assert_allclose(np.asarray(csc.todense()), res.weight2dense())
+        csc_d = res.to_csc(data='delay')
+        self.assertTrue(u.math.allclose(csc_d.todense(), res.delay2matrix()))
+
+    def test_to_scipy_csr(self):
+        import scipy.sparse
+        res = _uniform_out()
+        m = res.to_scipy_csr()
+        self.assertIsInstance(m, scipy.sparse.csr_matrix)
+        self.assertTrue(m.has_sorted_indices)
+        np.testing.assert_allclose(m.toarray(), res.weight2dense())
+        d = res.to_scipy_csr(data='delay', unit=u.second)
+        np.testing.assert_allclose(d.toarray(), u.get_mantissa(res.delay2matrix().to(u.second)))
+        np.testing.assert_allclose(res.to_scipy_csr(data='delay').toarray(),
+                                   u.get_mantissa(res.delay2matrix().to(u.ms)))
+        with self.assertRaises(u.UnitMismatchError):
+            res.to_scipy_csr(data='delay', unit=u.nS)
+        with self.assertRaises(u.UnitMismatchError):
+            res.to_scipy_csr(unit=u.nS)  # dimensionless weights
+
+    def test_to_scipy_csr_scalar_missing_and_duplicates(self):
+        pre, post = np.array([0, 0, 1]), np.array([1, 1, 0])
+        res = ConnectionResult(pre, post, 2, 2, weights=1.5 * u.nS)
+        np.testing.assert_allclose(res.to_scipy_csr().toarray(), [[0, 3.0], [1.5, 0]])  # summed
+        np.testing.assert_allclose(res.to_scipy_csr(unit=u.uS).toarray(), [[0, 3e-3], [1.5e-3, 0]])
+        res = ConnectionResult(pre, post, 2, 2)
+        np.testing.assert_allclose(res.to_scipy_csr().toarray(), [[0, 2.0], [1.0, 0]])
+
+    def test_tuple_sizes(self):
+        res = ConnectionResult(np.array([0, 5]), np.array([3, 0]), (2, 3), (2, 2),
+                               weights=np.array([1., 2.]))
+        self.assertEqual(res.to_csc().shape, (6, 4))
+        self.assertEqual(res.to_scipy_csr().shape, (6, 4))
+        np.testing.assert_allclose(np.asarray(res.to_csc().todense()), res.weight2dense())
+
+
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_to_scipy_csr_keeps_float64_precision():
+    # host-side export: values are not cast to the (float32) default float type
+    from braintools.conn import FixedOutDegree
+    w = np.array([0.1, 0.2, 0.3, 0.4], dtype=np.float64)
+    res = FixedOutDegree(2, weight=w.reshape(2, 2).ravel(), seed=0)(pre_size=2, post_size=3)
+    assert res.to_scipy_csr().dtype == np.float64

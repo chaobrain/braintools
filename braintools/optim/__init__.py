@@ -29,6 +29,8 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
 - **Nevergrad Integration**: Black-box optimization with evolutionary strategies
 - **Multi-Start Minimization**: Many starts of a pure function minimized at once
   (one compiled, vmapped loop) with per-start convergence masks
+- **Readout Learning**: online RLS / FORCE and LMS updates of linear readouts, and
+  closed-form linear, ridge, lasso and elastic-net regression
 - **Learning Rate Schedulers**: Step, exponential, cosine, warmup, and custom schedules
 - **PyTorch-like Interface**: Familiar API for PyTorch users
 - **JAX/Optax Backend**: High-performance optimization with automatic differentiation
@@ -377,6 +379,20 @@ from ._multistart import (
     multistart_init,
 )
 
+# Online readout learning and closed-form regression
+from ._online import (
+    RLS,
+    FORCE,
+    LMS,
+)
+from ._regression import (
+    RegressionResult,
+    linear_regression,
+    ridge_regression,
+    lasso_regression,
+    elastic_net_regression,
+)
+
 # SciPy optimizer
 from ._scipy_optimizer import (
     ScipyOptimizer,
@@ -457,6 +473,16 @@ __all__ = [
     'MultiStartResult',
     'multistart_minimize',
     'multistart_init',
+
+    # Online readout learning and closed-form regression
+    'RLS',
+    'FORCE',
+    'LMS',
+    'RegressionResult',
+    'linear_regression',
+    'ridge_regression',
+    'lasso_regression',
+    'elastic_net_regression',
 
     # SciPy optimizer
     'ScipyOptimizer',

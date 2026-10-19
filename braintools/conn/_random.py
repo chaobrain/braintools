@@ -33,11 +33,17 @@ from typing import Optional, Tuple, Union
 
 import brainunit as u
 import numpy as np
-from scipy.spatial.distance import cdist
-
 from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
-from ._spatial import _same_population
+from ._sampling import MAX_CHUNK_PAIRS, bernoulli_pairs
+from ._spatial import (
+    _concat_pairs,
+    _pairs_within,
+    _position_values,
+    _same_population,
+    _size_num,
+    _sorted_unique,
+)
 
 __all__ = [
     'Random',
@@ -51,6 +57,13 @@ class Random(PointConnectivity):
 
     This is the fundamental random connectivity pattern for point neurons,
     where each potential connection is made with a fixed probability.
+
+    .. versionchanged:: 0.7.0
+       Edges are sampled without a dense ``N_pre x N_post`` mask: the edge
+       count is drawn from ``Binomial(M, prob)`` over the ``M`` allowed pairs
+       and that many distinct pairs are drawn uniformly. This is the same
+       distribution as one Bernoulli draw per pair, but the edges a given
+       ``seed`` produces differ from earlier versions.
 
     Parameters
     ----------
@@ -81,6 +94,16 @@ class Random(PointConnectivity):
     seed : int, optional
         Random seed for reproducible results.
 
+    Notes
+    -----
+    - Self-connections are only removed when ``allow_self_connections=False``
+      and ``pre`` and ``post`` have the same number of neurons.
+    - Time and memory are ``O(number of edges)``: 1e5 x 1e5 neurons at
+      ``prob=0.001`` (1e7 edges) build in about a second.
+    - Edges are returned sorted by ``(pre, post)``.
+    - This is host-side NumPy build-time code; it is not traceable by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     Basic random connectivity:
@@ -99,6 +122,8 @@ class Random(PointConnectivity):
         ...     seed=42
         ... )
         >>> result = conn(pre_size=1000, post_size=1000)
+        >>> result.n_connections
+        99603
         >>>
         >>> # Topology only (no weights or delays)
         >>> topology_only = Random(prob=0.1, seed=42)
@@ -162,22 +187,16 @@ class Random(PointConnectivity):
         **kwargs
     ) -> ConnectionResult:
         """Generate random point neuron connections."""
-        if isinstance(pre_size, (tuple, list)):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
+        pre_num = _size_num(pre_size)
+        post_num = _size_num(post_size)
 
-        if isinstance(post_size, (tuple, list)):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
-        # Vectorized connection generation
-        mask = self.rng.random((pre_num, post_num)) < self.prob
-        # Only drop self-connections when pre and post are the same population
-        if not self.allow_self_connections and pre_num == post_num:
-            np.fill_diagonal(mask, False)
-        pre_indices, post_indices = np.where(mask)
+        # Binomial edge count + distinct uniform pairs: the same distribution as
+        # an independent Bernoulli(prob) draw per pair, without a dense mask.
+        # Self-connections are only dropped when pre and post are the same size.
+        pre_indices, post_indices = bernoulli_pairs(
+            self.rng, pre_num, post_num, self.prob,
+            allow_self_connections=self.allow_self_connections or pre_num != post_num,
+        )
 
         n_connections = len(pre_indices)
         if n_connections == 0:
@@ -216,8 +235,8 @@ class Random(PointConnectivity):
         )
 
         return ConnectionResult(
-            np.array(pre_indices, dtype=np.int64),
-            np.array(post_indices, dtype=np.int64),
+            pre_indices,
+            post_indices,
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,
@@ -237,7 +256,13 @@ class Random(PointConnectivity):
 
 # Convenience aliases for common patterns
 class FixedProb(Random):
-    """Alias for Random connectivity with fixed probability (:class:`Random`)."""
+    """Alias for Random connectivity with fixed probability (:class:`Random`).
+
+    .. versionchanged:: 0.7.0
+       Sampled through a binomial edge count without a dense mask, like
+       :class:`Random`; the edges a given ``seed`` produces differ from
+       earlier versions.
+    """
 
     __module__ = 'braintools.conn'
 
@@ -267,6 +292,15 @@ class ClusteredRandom(PointConnectivity):
     - :math:`p_{\\text{base}}` is the baseline connection probability
     - :math:`r_{\\text{cluster}}` is the cluster radius
     - :math:`f_{\\text{cluster}}` is the cluster enhancement factor
+
+    .. versionchanged:: 0.7.0
+       No dense distance or probability matrix is built. Every pair gets a
+       Bernoulli(``prob``) draw through a binomial edge count; pairs within
+       ``cluster_radius`` (found with a chunked KD-tree search) then get the
+       extra draw that brings their probability to the clipped
+       ``prob * cluster_factor`` (or, if ``cluster_factor < 1``, in-radius
+       edges are thinned). The per-pair probabilities are unchanged, but the
+       edges a given ``seed`` produces differ from earlier versions.
 
     Parameters
     ----------
@@ -325,14 +359,20 @@ class ClusteredRandom(PointConnectivity):
     Raises
     ------
     ValueError
-        If ``pre_positions`` or ``post_positions`` are not provided when generating connections.
+        If ``pre_positions`` or ``post_positions`` are not provided when generating
+        connections, or their lengths differ from ``pre_size`` / ``post_size``.
 
     Notes
     -----
     - This connectivity pattern requires neuron positions via ``pre_positions`` and
       ``post_positions`` arguments when calling the connector
     - Position arrays should have shape ``(n_neurons, n_dimensions)`` with consistent units
-    - The algorithm computes all pairwise distances, which has O(N²) memory complexity
+    - Time and memory scale with the number of edges plus the number of pairs
+      within ``cluster_radius``; no ``N_pre x N_post`` array is built (in-radius
+      pairs are searched in chunks of at most ``2**22`` pairs)
+    - Edges are returned sorted by ``(pre, post)``
+    - This is host-side NumPy/SciPy build-time code; it is not traceable by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``
     - Connection probabilities within cluster radius are: ``min(prob × cluster_factor, 1.0)``
     - The expected number of connections depends on spatial neuron distribution:
 
@@ -537,41 +577,19 @@ class ClusteredRandom(PointConnectivity):
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for clustered random connectivity")
 
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
+        pre_num = _size_num(pre_size)
+        post_num = _size_num(post_size)
 
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
-        # Calculate distances
-        pre_pos_val, pos_unit = u.split_mantissa_unit(pre_positions)
-        post_pos_val = u.Quantity(post_positions).to(pos_unit).mantissa
-        distances = cdist(pre_pos_val, post_pos_val)
-
-        # Get radius value
-        radius_val = u.Quantity(self.cluster_radius).to(pos_unit).mantissa
-
-        # Calculate connection probabilities
-        probs = np.full((pre_num, post_num), self.prob)
-        within_cluster = distances <= radius_val
-        probs[within_cluster] *= self.cluster_factor
-        probs = np.clip(probs, 0, 1)
-
-        # Vectorized connection generation
-        random_vals = self.rng.random((pre_num, post_num))
-        connection_mask = random_vals < probs
+        pre_val, post_val, pos_unit = _position_values(pre_positions, post_positions)
+        radius_val = float(u.Quantity(self.cluster_radius).to(pos_unit).mantissa)
+        pre_indices, post_indices = self._sample(pre_num, post_num, pre_val, post_val, radius_val)
 
         # Drop autapses (self-connections) when pre and post are the same population.
         if not self.allow_self_connections and _same_population(
             pre_positions, post_positions, pre_num, post_num
         ):
-            np.fill_diagonal(connection_mask, False)
-
-        pre_indices, post_indices = np.where(connection_mask)
+            keep = pre_indices != post_indices
+            pre_indices, post_indices = pre_indices[keep], post_indices[keep]
 
         if len(pre_indices) == 0:
             return ConnectionResult(
@@ -624,3 +642,49 @@ class ClusteredRandom(PointConnectivity):
                 'allow_self_connections': self.allow_self_connections,
             }
         )
+
+    def _sample(self, pre_num, post_num, pre_val, post_val, radius):
+        """Draw edges with probability ``prob`` beyond ``radius`` and ``min(prob * cluster_factor, 1)`` within it.
+
+        Every pair first gets an independent Bernoulli(``prob``) draw through a
+        binomial edge count (no dense mask). If the in-radius probability
+        ``p_in`` is larger, the in-radius pairs, found with a chunked KD-tree
+        search, get an extra Bernoulli(``(p_in - prob) / (1 - prob)``) draw and
+        the two edge sets are merged, so ``P(edge) = p_in`` inside the radius.
+        If ``p_in`` is smaller, the in-radius background edges are kept with
+        probability ``p_in / prob``. The result is sorted by ``(pre, post)``.
+        """
+        if len(pre_val) != pre_num or len(post_val) != post_num:
+            raise ValueError(
+                f"Number of positions ({len(pre_val)}, {len(post_val)}) must equal "
+                f"(pre_size, post_size) = ({pre_num}, {post_num})."
+            )
+        p = float(self.prob)
+        p_in = min(p * float(self.cluster_factor), 1.0)
+        pre, post = bernoulli_pairs(self.rng, pre_num, post_num, p)
+        if p_in < p:
+            inside = _edge_distances(pre_val, post_val, pre, post) <= radius
+            keep = np.ones(pre.size, dtype=bool)
+            keep[inside] = self.rng.random(int(inside.sum())) < p_in / p
+            pre, post = pre[keep], post[keep]
+        elif p_in > p:
+            q = (p_in - p) / (1.0 - p)
+            extra_pre, extra_post = [], []
+            for i, j, _ in _pairs_within(pre_val, post_val, radius):
+                hit = self.rng.random(i.size) < q
+                extra_pre.append(i[hit])
+                extra_post.append(j[hit])
+            extra_pre, extra_post = _concat_pairs(extra_pre, extra_post)
+            pair_ids = _sorted_unique(np.concatenate([pre * post_num + post, extra_pre * post_num + extra_post]))
+            pre, post = np.divmod(pair_ids, post_num)
+        return pre.astype(np.int64, copy=False), post.astype(np.int64, copy=False)
+
+
+def _edge_distances(pre_val: np.ndarray, post_val: np.ndarray, pre: np.ndarray, post: np.ndarray) -> np.ndarray:
+    """Euclidean distance of each listed edge, computed in chunks of ``MAX_CHUNK_PAIRS`` edges."""
+    out = np.empty(pre.size, dtype=np.float64)
+    for start in range(0, pre.size, MAX_CHUNK_PAIRS):
+        stop = start + MAX_CHUNK_PAIRS
+        diff = pre_val[pre[start:stop]] - post_val[post[start:stop]]
+        out[start:stop] = np.sqrt(np.einsum('ij,ij->i', diff, diff))
+    return out

@@ -282,3 +282,41 @@ class TestOneToOne(unittest.TestCase):
         conn = OneToOne(circular=False, seed=42)
         result = conn(pre_size=0, post_size=0)
         self.assertEqual(result.n_connections, 0)
+
+
+class TestAllToAllOrder(unittest.TestCase):
+    """0.7: AllToAll is built without meshgrid copies; order and edges are pinned."""
+
+    @staticmethod
+    def _reference(pre_num, post_num, include_self):
+        pre_grid, post_grid = np.meshgrid(np.arange(pre_num), np.arange(post_num), indexing='ij')
+        pre, post = pre_grid.flatten(), post_grid.flatten()
+        if not include_self and pre_num == post_num:
+            keep = pre != post
+            pre, post = pre[keep], post[keep]
+        return pre, post
+
+    def test_matches_meshgrid_reference(self):
+        for pre_num, post_num in [(0, 0), (0, 3), (3, 0), (1, 1), (2, 2), (5, 5), (4, 7), (7, 4)]:
+            for include_self in (True, False):
+                pre, post = self._reference(pre_num, post_num, include_self)
+                result = AllToAll(include_self_connections=include_self)(pre_size=pre_num, post_size=post_num)
+                np.testing.assert_array_equal(result.pre_indices, pre)
+                np.testing.assert_array_equal(result.post_indices, post)
+                self.assertEqual(result.pre_indices.dtype, np.int64)
+                self.assertEqual(result.post_indices.dtype, np.int64)
+
+    def test_tuple_sizes_match_reference(self):
+        pre, post = self._reference(6, 6, False)
+        result = AllToAll()(pre_size=(2, 3), post_size=(3, 2))
+        np.testing.assert_array_equal(result.pre_indices, pre)
+        np.testing.assert_array_equal(result.post_indices, post)
+
+    def test_one_to_one_int64(self):
+        result = OneToOne(circular=True)(pre_size=3, post_size=7)
+        np.testing.assert_array_equal(result.pre_indices, np.arange(7) % 3)
+        np.testing.assert_array_equal(result.post_indices, np.arange(7))
+        self.assertEqual(result.pre_indices.dtype, np.int64)
+        result = OneToOne()(pre_size=4, post_size=6)
+        np.testing.assert_array_equal(result.pre_indices, np.arange(4))
+        np.testing.assert_array_equal(result.post_indices, np.arange(4))
