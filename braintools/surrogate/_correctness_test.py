@@ -27,12 +27,22 @@ These are the checks that catch a wrong ``surrogate_grad``/``surrogate_fun``
 formula -- the failure mode the self-referential suite cannot detect.
 """
 
+import brainstate
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 import braintools.surrogate as surrogate
+
+
+def _surrogate_grad_param_grad(fn, argnums):
+    """Derivative w.r.t. a surrogate parameter of the surrogate gradient d spike / d x.
+
+    The spike itself does not depend on surrogate parameters (its parameter
+    gradient is 0); the parameters act through the gradient with respect to x.
+    """
+    return brainstate.transform.vector_grad(brainstate.transform.vector_grad(fn, argnums=0), argnums=argnums)
 
 
 # ---------------------------------------------------------------------------
@@ -339,8 +349,8 @@ def test_s2nn_grad_finite_at_minus_one():
 def test_s2nn_param_grad_finite_at_minus_one():
     x = jnp.array(-1.0)
     import brainstate.transform
-    g_beta = brainstate.transform.vector_grad(surrogate.s2nn, argnums=2)(x, 4.0, 1.0, 1e-8)
-    g_alpha = brainstate.transform.vector_grad(surrogate.s2nn, argnums=1)(x, 4.0, 1.0, 1e-8)
+    g_beta = _surrogate_grad_param_grad(surrogate.s2nn, 2)(x, 4.0, 1.0, 1e-8)
+    g_alpha = _surrogate_grad_param_grad(surrogate.s2nn, 1)(x, 4.0, 1.0, 1e-8)
     assert jnp.isfinite(g_beta)
     assert jnp.isfinite(g_alpha)
 
@@ -354,7 +364,7 @@ def test_log_tailed_relu_grad_finite_at_zero():
 def test_log_tailed_relu_param_grad_finite_at_zero():
     x = jnp.array(0.0)
     import brainstate.transform
-    g = brainstate.transform.vector_grad(surrogate.log_tailed_relu, argnums=1)(x, 0.1)
+    g = _surrogate_grad_param_grad(surrogate.log_tailed_relu, 1)(x, 0.1)
     assert jnp.isfinite(g)
 
 

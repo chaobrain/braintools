@@ -39,6 +39,18 @@ def _check_positive_length(value: ArrayLike, name: str) -> None:
         raise ValueError(f'`{name}` must be positive, got {value!r}.')
 
 
+def _rate_in_unit(rate, unit) -> float:
+    """Express a steepness ``rate`` per ``unit`` of length.
+
+    A plain number is already "per ``unit``" (the unit of the profile's
+    ``midpoint``); a Quantity with dimension 1/length (e.g. ``0.05 / u.um``) is
+    converted so the profile shape does not depend on the unit ``midpoint`` uses.
+    """
+    if isinstance(rate, u.Quantity):
+        return u.Quantity(rate).to(unit ** -1).mantissa
+    return rate
+
+
 __all__ = [
     # Distance profile classes
     'GaussianProfile',
@@ -348,8 +360,11 @@ class SigmoidProfile(DistanceProfile):
     ----------
     midpoint : Quantity
         Distance at which probability is 0.5.
-    slope : float
-        Steepness of the sigmoid transition (higher values = steeper).
+    slope : float or Quantity
+        Steepness of the sigmoid transition (higher values = steeper). A plain
+        number is read per unit of ``midpoint`` (``slope=0.05`` with a midpoint
+        in um means 0.05 / um); pass a ``1/length`` Quantity such as
+        ``0.05 / u.um`` to make it independent of that unit.
     max_distance : Quantity, optional
         Maximum connection distance (connections beyond this are set to 0).
 
@@ -374,7 +389,7 @@ class SigmoidProfile(DistanceProfile):
     def __init__(
         self,
         midpoint: ArrayLike,
-        slope: float = 0.05,
+        slope: ArrayLike = 0.05,
         max_distance: Optional[ArrayLike] = None
     ):
         _check_positive_length(midpoint, 'midpoint')
@@ -389,7 +404,7 @@ class SigmoidProfile(DistanceProfile):
 
         # expit is the numerically stable logistic sigmoid (no exp overflow for
         # large slope * distance): 1 / (1 + exp(slope * (d - midpoint))).
-        prob = expit(-self.slope * (dist_vals - midpoint))
+        prob = expit(-_rate_in_unit(self.slope, unit) * (dist_vals - midpoint))
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa
@@ -490,8 +505,11 @@ class LogisticProfile(DistanceProfile):
 
     Parameters
     ----------
-    growth_rate : float
-        Growth rate parameter controlling decay speed.
+    growth_rate : float or Quantity
+        Growth rate parameter controlling decay speed. A plain number is read
+        per unit of ``midpoint``; pass a ``1/length`` Quantity such as
+        ``0.05 / u.um`` to make it independent of that unit. ``LogisticProfile``
+        computes the same function as :class:`SigmoidProfile`.
     midpoint : Quantity
         Distance at which decay is at its midpoint.
     max_distance : Quantity, optional
@@ -517,7 +535,7 @@ class LogisticProfile(DistanceProfile):
 
     def __init__(
         self,
-        growth_rate: float,
+        growth_rate: ArrayLike,
         midpoint: ArrayLike,
         max_distance: Optional[ArrayLike] = None
     ):
@@ -532,7 +550,7 @@ class LogisticProfile(DistanceProfile):
         dist_vals = u.Quantity(distances).to(unit).mantissa
 
         # Stable logistic sigmoid: 1 / (1 + exp(growth_rate * (d - midpoint))).
-        prob = expit(-self.growth_rate * (dist_vals - midpoint))
+        prob = expit(-_rate_in_unit(self.growth_rate, unit) * (dist_vals - midpoint))
 
         if self.max_distance is not None:
             max_val = u.Quantity(self.max_distance).to(unit).mantissa

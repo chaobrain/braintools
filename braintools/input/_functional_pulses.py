@@ -27,6 +27,7 @@ import numpy as np
 
 from braintools._misc import set_module_as
 from ._deprecation import create_deprecated_function
+from ._steps import ceil_steps, floor_steps
 
 __all__ = [
     'spike',
@@ -155,13 +156,13 @@ def spike(
         sp_sizes_values.append(u.Quantity(size).to(c_unit).mantissa)
 
     # Create current array
-    n_steps = int(np.ceil(duration_value / dt_value))
+    n_steps = ceil_steps(duration_value, dt_value)
     current = np.zeros(n_steps, dtype=brainstate.environ.dftype())
 
     # Add spikes
     for time, dur, size in zip(sp_times_values, sp_lens_values, sp_sizes_values):
-        start_i = int(time / dt_value)
-        end_i = int((time + dur) / dt_value)
+        start_i = floor_steps(time, dt_value)
+        end_i = floor_steps((time + dur), dt_value)
         if start_i < n_steps:
             end_i = min(end_i, n_steps)
             current[start_i:end_i] = size
@@ -271,7 +272,7 @@ def gaussian_pulse(
     duration_value = u.Quantity(duration).to(time_unit).mantissa
 
     # Generate time array
-    n_steps = int(np.ceil(duration_value / dt_value))
+    n_steps = ceil_steps(duration_value, dt_value)
     times = np.arange(n_steps) * dt_value
 
     # Generate Gaussian pulse
@@ -390,18 +391,18 @@ def exponential_decay(
 
     # Generate time array for decay
     decay_duration = t_end_value - t_start_value
-    n_decay_steps = int(np.ceil(decay_duration / dt_value))
+    n_decay_steps = ceil_steps(decay_duration, dt_value)
     times = np.arange(n_decay_steps) * dt_value
 
     # Generate exponential decay
     exp_decay = amplitude_value * np.exp(-times / tau_value)
 
     # Create full current array
-    n_steps = int(np.ceil(duration_value / dt_value))
+    n_steps = ceil_steps(duration_value, dt_value)
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
 
     # Insert decay at appropriate position
-    start_i = int(t_start_value / dt_value)
+    start_i = floor_steps(t_start_value, dt_value)
     end_i = min(start_i + n_decay_steps, n_steps)
     actual_length = end_i - start_i
     currents[start_i:end_i] = exp_decay[:actual_length]
@@ -525,7 +526,7 @@ def double_exponential(
 
     # Generate time array
     waveform_duration = t_end_value - t_start_value
-    n_waveform_steps = int(np.ceil(waveform_duration / dt_value))
+    n_waveform_steps = ceil_steps(waveform_duration, dt_value)
     times = np.arange(n_waveform_steps) * dt_value
 
     # Calculate normalization factor
@@ -546,11 +547,11 @@ def double_exponential(
     double_exp = np.where(times >= 0, double_exp, 0)
 
     # Create full current array
-    n_steps = int(np.ceil(duration_value / dt_value))
+    n_steps = ceil_steps(duration_value, dt_value)
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
 
     # Insert waveform at appropriate position
-    start_i = int(t_start_value / dt_value)
+    start_i = floor_steps(t_start_value, dt_value)
     end_i = min(start_i + n_waveform_steps, n_steps)
     actual_length = end_i - start_i
     currents[start_i:end_i] = double_exp[:actual_length]
@@ -680,7 +681,7 @@ def burst(
     burst_freq_value = u.Quantity(burst_freq).to(u.Hz).mantissa
 
     # Create current array
-    n_steps = int(np.ceil(duration_value / dt_value))
+    n_steps = ceil_steps(duration_value, dt_value)
     currents = np.zeros(n_steps, dtype=brainstate.environ.dftype())
 
     # Generate each burst
@@ -690,7 +691,7 @@ def burst(
             break
 
         # Generate sinusoidal burst
-        n_burst_steps = int(np.ceil(burst_duration_value / dt_value))
+        n_burst_steps = ceil_steps(burst_duration_value, dt_value)
         times = np.arange(n_burst_steps) * dt_value
 
         # Convert frequency from Hz to angular frequency considering time unit
@@ -706,7 +707,7 @@ def burst(
         burst = burst_amp_value * np.sin(2 * np.pi * freq_factor * times)
 
         # Insert burst into current array
-        start_i = int(burst_start_value / dt_value)
+        start_i = floor_steps(burst_start_value, dt_value)
         end_i = min(start_i + n_burst_steps, n_steps)
         actual_length = end_i - start_i
         currents[start_i:end_i] = burst[:actual_length]

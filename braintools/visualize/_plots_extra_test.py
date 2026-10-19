@@ -334,3 +334,21 @@ class TestAnimate2D(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_animations_start_at_first_frame_and_animate_1d_keeps_animation():
+    import gc
+    import re
+    import braintools
+    vals = np.arange(12.0).reshape(3, 4)
+    anim = braintools.visualize.animate_2D(vals, net_size=(2, 2), dt=1.0, show=False)
+    first = []
+    anim._func(0)
+    first.append(anim._fig.texts[0].get_text())
+    assert first == ['Time: 1.00 ms']
+    assert list(anim.new_frame_seq())[0] == 0
+    fig = braintools.visualize.animate_1D(vals, dt=1.0, show=False)
+    gc.collect()
+    assert list(fig.animation.new_frame_seq())[0] == 0
+    assert len(re.findall(r'frames\[\d+\]', fig.animation.to_jshtml())) == 3  # renders all 3 frames
+    plt.close('all')

@@ -62,8 +62,13 @@ pip install -U BrainX
 Trials are generated lazily via `task.sample(i)` / `task.batch_sample(B)`, both JIT- and `vmap`-friendly, with per-trial keys derived from `seed` so batches are fully reproducible.
 
 ```python
+import brainstate
 import brainunit as u
 from braintools.cogtask import PerceptualDecisionMaking
+
+# Phase durations are expressed in units of the environment timestep, so a
+# timestep must be set before a task is sampled.
+brainstate.environ.set(dt=1.0 * u.ms)
 
 task = PerceptualDecisionMaking(t_stimulus=1500 * u.ms, num_choices=2, seed=0)
 X, Y = task.batch_sample(32)   # X: (T, B, n_in), Y: (T, B) labels

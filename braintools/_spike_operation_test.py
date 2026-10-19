@@ -89,5 +89,55 @@ class TestSpikeBitwiseOps(unittest.TestCase):
         np.testing.assert_array_equal(np.array(out_and), np.array(expected_and))
 
 
+class TestSpikeBitwiseBooleanMasks(unittest.TestCase):
+    """Boolean 0/1 masks are a natural spike representation and must work.
+
+    Regression test: ``bool + bool`` is *logical OR* in numpy/jax and ``bool -
+    bool`` is rejected outright, so the polynomial identities used by these ops
+    were wrong (or raised) for boolean inputs -- ``spike_bitwise_xor`` returned
+    ``-1`` for the ``(True, True)`` entry, and ``spike_bitwise_or`` raised
+    ``TypeError: sub does not accept dtype bool``.
+    """
+
+    def setUp(self):
+        # (x, y) = (False, False), (False, True), (True, False), (True, True)
+        self.xb = jnp.array([False, False, True, True])
+        self.yb = jnp.array([False, True, False, True])
+
+    def test_truth_tables_for_boolean_inputs(self):
+        expected = {
+            'or':   [0, 1, 1, 1],
+            'and':  [0, 0, 0, 1],
+            'iand': [0, 1, 0, 0],
+            'xor':  [0, 1, 1, 0],
+            'ixor': [0, 1, 1, 0],
+        }
+        for op, exp in expected.items():
+            out = braintools.spike_bitwise(self.xb, self.yb, op)
+            # boolean masks in, boolean mask out -- for every op
+            self.assertEqual(out.dtype, jnp.bool_, op)
+            np.testing.assert_array_equal(np.asarray(out), np.array(exp, dtype=bool))
+
+    def test_not_for_boolean_inputs(self):
+        out = braintools.spike_bitwise_not(self.xb)
+        self.assertEqual(out.dtype, jnp.bool_)
+        np.testing.assert_array_equal(np.asarray(out), [True, True, False, False])
+
+    def test_bool_mixed_with_float_takes_float_dtype(self):
+        yf = self.yb.astype(jnp.float32)
+        for op, exp in {'or': [0, 1, 1, 1], 'and': [0, 0, 0, 1], 'iand': [0, 1, 0, 0],
+                        'xor': [0, 1, 1, 0], 'ixor': [0, 1, 1, 0]}.items():
+            out = braintools.spike_bitwise(self.xb, yf, op)
+            self.assertEqual(out.dtype, jnp.float32, op)
+            np.testing.assert_array_equal(np.asarray(out), np.array(exp, dtype=np.float32))
+
+    def test_float_and_int_paths_unchanged(self):
+        xf, yf = self.xb.astype(jnp.float32), self.yb.astype(jnp.float32)
+        np.testing.assert_array_equal(
+            np.asarray(braintools.spike_bitwise_or(xf, yf)), np.array([0.0, 1.0, 1.0, 1.0]))
+        np.testing.assert_array_equal(
+            np.asarray(braintools.spike_bitwise_xor(xf, yf)), np.array([0.0, 1.0, 1.0, 0.0]))
+
+
 if __name__ == '__main__':
     unittest.main()

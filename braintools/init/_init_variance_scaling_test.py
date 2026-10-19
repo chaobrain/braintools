@@ -325,12 +325,36 @@ class TestVarianceScalingFanConventions(unittest.TestCase):
         self.assertAlmostEqual(float(np.var(var_out)), expected_var, delta=expected_var * 0.2)
 
     def test_conv_kernel_fan_uses_receptive_field(self):
-        # 3D+ uses the conv convention: fan_in = in_ch * prod(spatial).
-        # shape (out, in, kh, kw) = (8, 4, 3, 3): fan_in = 4*9 = 36.
+        # 3D+ uses the channels-last conv convention (*spatial, in, out):
+        # shape (kh, kw, in, out) = (3, 3, 4, 8): fan_in = 4*9 = 36.
         init = VarianceScaling(scale=2.0, mode='fan_in', distribution='normal')
-        weights = init((8, 4, 3, 3), rng=self.rng)
+        weights = init((3, 3, 4, 8), rng=self.rng)
         expected_var = 2.0 / 36.0
         self.assertAlmostEqual(float(np.var(weights)), expected_var, delta=expected_var * 0.15)
+
+    def test_compute_fans_default_axes(self):
+        vs = VarianceScaling()
+        self.assertEqual(vs._compute_fans((100, 50)), (100, 50))
+        self.assertEqual(vs._compute_fans((3, 3, 3, 16)), (27, 144))
+        self.assertEqual(vs._compute_fans((5, 4, 8)), (20, 40))
+
+    def test_compute_fans_channels_first(self):
+        # (out, in, kh, kw) kernels select their axes explicitly.
+        vs = VarianceScaling(in_axis=1, out_axis=0)
+        self.assertEqual(vs._compute_fans((16, 3, 3, 3)), (27, 144))
+        k = KaimingNormal(in_axis=1, out_axis=0)
+        self.assertEqual(k._compute_fans((16, 3, 3, 3)), (27, 144))
+
+    def test_matches_brainstate_conv_kernel(self):
+        # brainstate.nn.Conv2d kernels are (kh, kw, in, out); the He variance
+        # must use fan_in = kh * kw * in.
+        import brainstate
+        brainstate.random.seed(0)
+        conv = brainstate.nn.Conv2d((8, 8, 3), 256, kernel_size=3, w_init=KaimingNormal())
+        w = np.asarray(conv.weight.value['weight'])
+        self.assertEqual(w.shape, (3, 3, 3, 256))
+        expected_var = 2.0 / 27.0
+        self.assertAlmostEqual(float(np.var(w)), expected_var, delta=expected_var * 0.1)
 
     def test_repr_contains_config(self):
         r = repr(VarianceScaling(scale=2.0, mode='fan_avg', distribution='uniform'))

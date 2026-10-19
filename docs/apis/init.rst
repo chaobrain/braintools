@@ -120,6 +120,11 @@ All variance scaling methods support three modes:
 - **fan_out**: Scale by number of output units
 - **fan_avg**: Scale by average of input and output units
 
+Fans follow the weight layout of ``brainstate`` layers: ``(in, out)`` for dense weights and
+``(*spatial, in, out)`` for convolution kernels. Other layouts (e.g. channels-first
+``(out, in, kh, kw)``) select their axes with ``in_axis`` / ``out_axis``. ``DeltaOrthogonal``
+uses the same channels-last kernel layout.
+
 The concrete strategies below are thin configurations of the shared ``VarianceScaling`` base class,
 which can also be used directly for custom ``scale``/``mode``/``distribution`` combinations.
 

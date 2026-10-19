@@ -276,6 +276,13 @@ def ode_expeuler_step(
     For a scalar linear ODE ``dy/dt = A y`` the method is exact. If the state
     ``y`` has unit ``[X]``, the drift ``f(y, t)`` must have unit ``[X]/[T]``.
 
+    ``A`` is computed with ``brainstate.transform.vector_grad``, which returns
+    the column sums of the Jacobian. These equal its diagonal only when each
+    component of ``f`` depends on the same component of ``y`` (elementwise
+    dynamics, e.g. a population of uncoupled neurons). For coupled variables,
+    apply the step to each variable separately and pass the others as extra
+    arguments.
+
     Parameters
     ----------
     f : callable

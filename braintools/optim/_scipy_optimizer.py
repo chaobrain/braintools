@@ -358,7 +358,16 @@ class ScipyOptimizer(Optimizer):
       ``'Powell'``, ``'COBYLA'``, ``'COBYQA'``) skip the Jacobian entirely.
     - Everything SciPy operates on (the parameter vector, the Jacobian and the
       bounds) is cast to ``float64`` so that the ``'TNC'`` and ``'SLSQP'``
-      kernels work despite JAX defaulting to ``float32``.
+      kernels work despite JAX defaulting to ``float32``. The loss and gradient
+      themselves are still computed at JAX's precision; SciPy's line searches
+      assume double precision and can stop early ("Linear search failed") on
+      float32 values. Enable ``jax.config.update('jax_enable_x64', True)`` (after
+      importing ``braintools``) for tight fits.
+    - With ``brainunit`` quantities in ``bounds``, ``loss_fun`` receives plain
+      numbers in the unit of each lower bound and ``res.x`` carries no units.
+      Starting points are drawn with NumPy's global random generator.
+    - Constraint functions receive SciPy's flat parameter vector: list bounds
+      concatenated in order, dict bounds in sorted-key order.
     - This is a black-box optimizer: it implements :meth:`minimize` only and does
       **not** honor the State-based :meth:`register_trainable_weights` /
       :meth:`update` contract of the :class:`~braintools.optim.Optimizer` base

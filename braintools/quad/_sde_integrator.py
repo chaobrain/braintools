@@ -40,6 +40,7 @@ import brainunit as u
 import jax.numpy as jnp
 
 from braintools._misc import set_module_as, tree_map, randn_like
+from ._imex_integrator import _newton_solve, _stage_residual
 
 __all__ = [
     'sde_euler_step',
@@ -193,8 +194,15 @@ def sde_milstein_step(
     # diffusion values
     diffusions = dg(y, t, *args, **kwargs)
 
-    # intermediate results
-    y_bars = tree_map(lambda y0, drift, diffusion: y0 + drift * dt + diffusion * dt_sqrt, y, drifts, diffusions)
+    # Support point for the derivative-free estimate of g * dg/dy. In Ito form
+    # the drift term is harmless because the correction multiplies the zero-mean
+    # (dW^2 - dt); in Stratonovich form it multiplies dW^2 (mean dt), and a drift
+    # term in the support point would add a systematic O(dt^1.5) error per step,
+    # reducing the strong order from 1 to 1/2. So it is omitted there.
+    if sde_type == 'ito':
+        y_bars = tree_map(lambda y0, drift, diffusion: y0 + drift * dt + diffusion * dt_sqrt, y, drifts, diffusions)
+    else:
+        y_bars = tree_map(lambda y0, diffusion: y0 + diffusion * dt_sqrt, y, diffusions)
     diffusion_bars = dg(y_bars, t, *args, **kwargs)
 
     # integral results
@@ -222,6 +230,13 @@ def sde_expeuler_step(
     The drift ``f`` is locally linearized and integrated exactly over one step
     via the exponential relative function, while the diffusion term from ``g``
     is added in Euler form with Gaussian noise scaled by ``sqrt(dt)``.
+
+    As in :func:`ode_expeuler_step`, the linearization uses the column sums of
+    the Jacobian of ``f``, which equal its diagonal only for elementwise
+    dynamics. Because the noise is not propagated through the exponential, the
+    stationary variance of a linear (Ornstein–Uhlenbeck) equation is
+    overestimated for large ``dt``: ``g^2 dt / (1 - exp(-2 θ dt))`` instead of
+    ``g^2 / (2 θ)``.
 
     Parameters
     ----------
@@ -429,10 +444,10 @@ def sde_implicit_euler_step(
     max_iter: int = 2,
     **kwargs,
 ):
-    r"""Implicit (drift-implicit) Euler–Maruyama step via fixed-point iteration.
+    r"""Implicit (drift-implicit) Euler–Maruyama step solved with Newton's method.
 
-    Solves ``y_{n+1} = y_n + f(y_{n+1}, t_{n+1}) dt + g(y_n, t_n) dW`` using a
-    few fixed-point iterations starting from an explicit predictor.
+    Solves ``y_{n+1} = y_n + f(y_{n+1}, t_{n+1}) dt + g(y_n, t_n) dW`` for
+    ``y_{n+1}`` with Newton iterations started from ``y_n + g(y_n, t_n) dW``.
 
     Parameters
     ----------
@@ -447,7 +462,8 @@ def sde_implicit_euler_step(
     *args
         Extra arguments forwarded to ``df`` and ``dg``.
     max_iter : int, default 2
-        Number of fixed-point iterations for the implicit corrector.
+        Number of Newton iterations for the implicit drift. One iteration is
+        exact when ``f`` is linear in ``y``.
 
     Returns
     -------
@@ -456,17 +472,14 @@ def sde_implicit_euler_step(
 
     Notes
     -----
-    - The implicit drift stage is solved by a simple Picard (fixed-point)
-      iteration. This iteration converges only when the drift is contractive
-      over the step, i.e. roughly ``|∂f/∂y| dt < 1``. For stiff problems
-      (``|∂f/∂y| dt >= 1``) it *diverges* regardless of ``max_iter``; reduce
-      ``dt`` or supply a true nonlinear solver (e.g. Newton) instead. Increasing
-      ``max_iter`` only refines an already-converging iteration.
+    - The implicit drift equation is solved with Newton's method, as in the
+      IMEX steppers: with a dense Jacobian for states of up to 256 elements
+      and matrix-free GMRES on Jacobian-vector products for larger states.
+      The step is stable for stiff drifts of any ``|∂f/∂y| dt``.
     - Diffusion is treated explicitly with ``g(y_n, t_n) dW``.
     """
     assert callable(df), 'The drift function should be callable.'
     assert callable(dg), 'The diffusion function should be callable.'
-    assert max_iter >= 1
 
     dt = brainstate.environ.get_dt()
     dt_sqrt = u.math.sqrt(dt)
@@ -476,15 +489,11 @@ def sde_implicit_euler_step(
     dW = tree_map(lambda y0: randn_like(y0) * dt_sqrt, y)
     diff_inc = tree_map(lambda b, z: b * z, g0, dW)
 
-    # Predictor (explicit Euler)
-    y_pred = tree_map(lambda y0, a, inc: y0 + a * dt + inc, y, df(y, t, *args, **kwargs), diff_inc)
-
-    # Fixed-point iterations on the drift term at t+dt
-    y_k = y_pred
-    for _ in range(max_iter):
-        y_k = tree_map(lambda y0, inc, fnew: y0 + inc + dt * fnew, y, diff_inc, df(y_k, t + dt, *args, **kwargs))
-
-    return y_k
+    # Newton iterations on Y = y + g dW + dt * f(Y, t + dt), started from
+    # y + g dW (an explicit-Euler predictor is a poor guess for stiff or
+    # superlinear drifts, where it overshoots by orders of magnitude)
+    c = tree_map(lambda y0, inc: y0 + inc, y, diff_inc)
+    return _newton_solve(_stage_residual(c, dt, df, t + dt, args, kwargs), c, max_iter=max_iter)
 
 
 def _brownian_like(y, dt):

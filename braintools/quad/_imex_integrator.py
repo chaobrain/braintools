@@ -22,14 +22,31 @@ components:
     y' = f_exp(y, t, ...) + f_imp(y, t, ...).
 
 All steppers operate on arbitrary JAX PyTrees and use the global time step
-``dt`` from ``brainstate.environ``. Implicit solves are performed by simple
-fixed‑point iterations by default; for difficult problems you can increase the
-number of iterations or substitute a more robust nonlinear solver externally.
+``dt`` from ``brainstate.environ``. The implicit stage equations
+
+.. math::
+
+   Y = c + a\,\Delta t\, f_{\mathrm{imp}}(Y, t^*)
+
+are solved with Newton's method on the flattened state. For states with up to
+256 elements the Jacobian of ``f_imp`` is formed with ``jax.jacfwd`` and the
+linear system is solved directly, so one Newton iteration is exact when
+``f_imp`` is linear in ``y`` and the steppers are stable for arbitrarily stiff
+linear implicit parts. Larger states use matrix-free Newton–Krylov steps
+(GMRES on Jacobian-vector products, restart 20, at most 200 Krylov
+iterations), so the cost grows with the number of Krylov iterations rather
+than with ``n**3``. Elementwise implicit parts (for example a population of
+uncoupled neurons) converge in one Krylov iteration; strongly coupled and
+very stiff implicit parts may need more Newton iterations (``max_iter``).
 """
 
+import math
 from typing import Callable, Any
 
 import brainstate
+import jax
+import jax.numpy as jnp
+from jax.flatten_util import ravel_pytree
 
 from braintools._misc import set_module_as, tree_map
 
@@ -44,11 +61,48 @@ PyTree = brainstate.typing.PyTree
 F = Callable[[PyTree, DT, Any], PyTree]
 
 
-def _fixed_point(update, y0: PyTree, max_iter: int = 2) -> PyTree:
-    y = y0
+# States with at most this many elements use a dense Jacobian and direct solve;
+# larger states use matrix-free GMRES on Jacobian-vector products.
+_DENSE_NEWTON_MAX_SIZE = 256
+
+
+def _newton_solve(residual, y0: PyTree, max_iter: int = 2) -> PyTree:
+    """Solve ``residual(Y) = 0`` by Newton's method, starting from ``y0``.
+
+    The state is flattened to a vector. For small states the Jacobian of the
+    flattened residual is formed with ``jax.jacfwd`` and each update solves the
+    dense system. For larger states each update is computed matrix-free with
+    GMRES on Jacobian-vector products (``jax.jvp``), which costs a few
+    evaluations of the residual per Krylov iteration and never forms the
+    ``n x n`` Jacobian.
+    """
+    if max_iter < 1:
+        raise ValueError(f'max_iter must be at least 1, got {max_iter}.')
+    v, unravel = ravel_pytree(y0)
+
+    def r_flat(x):
+        return ravel_pytree(residual(unravel(x)))[0]
+
+    dense = v.size <= _DENSE_NEWTON_MAX_SIZE
+    tol = float(jnp.finfo(v.dtype).eps) ** 0.75
     for _ in range(max_iter):
-        y = update(y)
-    return y
+        if dense:
+            r = r_flat(v)
+            v = v - jnp.linalg.solve(jax.jacfwd(r_flat)(v), r)
+        else:
+            r, jvp = jax.linearize(r_flat, v)
+            dv, _ = jax.scipy.sparse.linalg.gmres(jvp, r, tol=tol, atol=0.0, restart=20, maxiter=10)
+            v = v - dv
+    return unravel(v)
+
+
+def _stage_residual(c, a_dt, f_imp, t_stage, args, kwargs):
+    """Residual of ``Y = c + a_dt * f_imp(Y, t_stage)``."""
+
+    def residual(Y):
+        return tree_map(lambda Yv, cv, fv: Yv - cv - a_dt * fv, Y, c, f_imp(Y, t_stage, *args, **kwargs))
+
+    return residual
 
 
 @set_module_as('braintools.quad')
@@ -68,7 +122,7 @@ def imex_euler_step(
 
     ``y_{n+1} = y_n + dt * f_exp(y_n, t_n) + dt * f_imp(y_{n+1}, t_{n+1})``
 
-    by fixed-point iteration.
+    for ``y_{n+1}`` with Newton's method.
 
     Parameters
     ----------
@@ -84,7 +138,8 @@ def imex_euler_step(
     *args
         Extra arguments forwarded to ``f_exp`` and ``f_imp``.
     max_iter : int, default 2
-        Fixed‑point iterations for the implicit solve.
+        Newton iterations for the implicit solve. One iteration is exact when
+        ``f_imp`` is linear in ``y``.
 
     Returns
     -------
@@ -93,11 +148,8 @@ def imex_euler_step(
     """
     dt = brainstate.environ.get_dt()
     rhs_exp = f_exp(y, t, *args, **kwargs)
-
-    def G(Y):
-        return tree_map(lambda y0, fe, fi: y0 + dt * (fe + fi), y, rhs_exp, f_imp(Y, t + dt, *args, **kwargs))
-
-    return _fixed_point(G, y, max_iter=max_iter)
+    c = tree_map(lambda y0, fe: y0 + dt * fe, y, rhs_exp)
+    return _newton_solve(_stage_residual(c, dt, f_imp, t + dt, args, kwargs), c, max_iter=max_iter)
 
 
 @set_module_as('braintools.quad')
@@ -111,71 +163,60 @@ def imex_ars222_step(
     **kwargs,
 ) -> PyTree:
     """
-    ARS(2,2,2) IMEX Runge–Kutta step (Ascher–Ruuth–Spiteri).
+    ARS(2,2,2) IMEX Runge–Kutta step (Ascher, Ruuth & Spiteri, 1997).
 
-    Two-stage, second‑order IMEX RK with explicit and implicit tableaus:
+    Second-order, L-stable, stiffly accurate IMEX Runge–Kutta scheme with
+    ``γ = 1 - 1/sqrt(2)`` and ``δ = 1 - 1/(2γ)``:
 
-    Explicit A^E, b^E
-      c_E = [0, 1]
-      A^E = [[0, 0],
-             [1, 0]]
-      b^E = [1 - γ, γ]
+    Explicit tableau (c = [0, γ, 1])::
 
-    Implicit A^I, b^I
-      c_I = [γ, 1]
-      A^I = [[γ,      0],
-             [1-γ,  γ]]
-      b^I = [1 - γ, γ]
+        0 | 0      0      0
+        γ | γ      0      0
+        1 | δ      1-δ    0
+        --+--------------------
+          | δ      1-δ    0
 
-    with ``γ = 1 - 1/sqrt(2)``.
+    Implicit tableau (c = [0, γ, 1])::
 
-    Implementation solves stage equations by fixed‑point iteration.
+        0 | 0      0      0
+        γ | 0      γ      0
+        1 | 0      1-γ    γ
+        --+--------------------
+          | 0      1-γ    γ
+
+    The two implicit stages are solved with Newton's method; the new state is
+    the last stage.
 
     Parameters
     ----------
     f_exp, f_imp, y, t, *args
-        As usual.
+        As in :func:`imex_euler_step`.
     max_iter : int, default 2
-        Fixed‑point iterations for the implicit stage solves.
+        Newton iterations per implicit stage. One iteration is exact when
+        ``f_imp`` is linear in ``y``.
 
     Returns
     -------
     PyTree
         The updated state ``y_{n+1}``.
     """
-    import math
-
     dt = brainstate.environ.get_dt()
     gamma = 1.0 - 1.0 / math.sqrt(2.0)
+    delta = 1.0 - 1.0 / (2.0 * gamma)
 
-    # Stage 1 (implicit only)
-    def G1(Y1):
-        return tree_map(lambda y0, fi: y0 + dt * gamma * fi, y, f_imp(Y1, t + gamma * dt, *args, **kwargs))
+    # Stage 2: Y2 = y + dt*γ*fE(y) + dt*γ*fI(Y2)
+    fE1 = f_exp(y, t, *args, **kwargs)
+    c2 = tree_map(lambda y0, fe1: y0 + dt * gamma * fe1, y, fE1)
+    Y2 = _newton_solve(_stage_residual(c2, gamma * dt, f_imp, t + gamma * dt, args, kwargs), c2, max_iter=max_iter)
 
-    Y1 = _fixed_point(G1, y, max_iter=max_iter)
-
-    # Stage 2 (explicit from stage 1, implicit on itself)
-    fE1 = f_exp(Y1, t, *args, **kwargs)  # c_E1 = 0
-    fI1 = f_imp(Y1, t + gamma * dt, *args, **kwargs)
-
-    def G2(Y2):
-        return tree_map(
-            lambda y0, fe1, fi1, fi2: y0 + dt * (fe1 + (1.0 - gamma) * fi1 + gamma * fi2),
-            y, fE1, fI1, f_imp(Y2, t + dt, *args, **kwargs)
-        )
-
-    Y2 = _fixed_point(G2, y, max_iter=max_iter)
-
-    # Combine stages
-    fE2 = f_exp(Y2, t + dt, *args, **kwargs)
-    fI2 = f_imp(Y2, t + dt, *args, **kwargs)
-
-    y_next = tree_map(
-        lambda y0, fe1, fe2, fi1, fi2: y0 + dt * (
-            (1.0 - gamma) * fe1 + gamma * fe2 + (1.0 - gamma) * fi1 + gamma * fi2),
-        y, fE1, fE2, fI1, fI2
+    # Stage 3: Y3 = y + dt*(δ fE(y) + (1-δ) fE(Y2)) + dt*((1-γ) fI(Y2) + γ fI(Y3))
+    fE2 = f_exp(Y2, t + gamma * dt, *args, **kwargs)
+    fI2 = f_imp(Y2, t + gamma * dt, *args, **kwargs)
+    c3 = tree_map(
+        lambda y0, fe1, fe2, fi2: y0 + dt * (delta * fe1 + (1.0 - delta) * fe2 + (1.0 - gamma) * fi2),
+        y, fE1, fE2, fI2,
     )
-    return y_next
+    return _newton_solve(_stage_residual(c3, gamma * dt, f_imp, t + dt, args, kwargs), Y2, max_iter=max_iter)
 
 
 @set_module_as('braintools.quad')
@@ -198,6 +239,9 @@ def imex_cnab_step(
     ``y_{n+1} = y_n + dt * [ 3/2 f_exp(y_n, t_n) - 1/2 f_exp(y_{n-1}, t_{n-1}) ]
                    + dt/2 * [ f_imp(y_{n+1}, t_{n+1}) + f_imp(y_n, t_n) ]``
 
+    This is a two-step method: start it with a one-step method (for example
+    :func:`imex_ars222_step`) to obtain ``y_prev`` at the first step.
+
     Parameters
     ----------
     f_exp, f_imp : callable
@@ -211,7 +255,8 @@ def imex_cnab_step(
     *args
         Extra arguments forwarded to ``f_exp`` and ``f_imp``.
     max_iter : int, default 2
-        Fixed‑point iterations for the implicit corrector.
+        Newton iterations for the implicit solve. One iteration is exact when
+        ``f_imp`` is linear in ``y``.
 
     Returns
     -------
@@ -220,18 +265,11 @@ def imex_cnab_step(
     """
     dt = brainstate.environ.get_dt()
 
-    # Explicit AB2 predictor
     fE_n = f_exp(y, t, *args, **kwargs)
     fE_nm1 = f_exp(y_prev, t - dt, *args, **kwargs)
     fI_n = f_imp(y, t, *args, **kwargs)
-
-    y_pred = tree_map(
+    c = tree_map(
         lambda y0, fe, fem1, fi: y0 + dt * (1.5 * fe - 0.5 * fem1) + 0.5 * dt * fi,
         y, fE_n, fE_nm1, fI_n
     )
-
-    # Implicit CN corrector: y_{n+1} = y_pred + 0.5 dt * f_imp(y_{n+1})
-    def G(Y):
-        return tree_map(lambda yp, fi: yp + 0.5 * dt * fi, y_pred, f_imp(Y, t + dt, *args, **kwargs))
-
-    return _fixed_point(G, y_pred, max_iter=max_iter)
+    return _newton_solve(_stage_residual(c, 0.5 * dt, f_imp, t + dt, args, kwargs), c, max_iter=max_iter)

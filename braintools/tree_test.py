@@ -204,3 +204,26 @@ def test_as_numpy_types():
     out = as_numpy(t1)
     leaves, _ = jax.tree_util.tree_flatten(out)
     assert all(isinstance(x, np.ndarray) for x in leaves)
+
+
+def test_idx_and_take_accept_sequence_indices():
+    """``idx``/``take`` document ``array_like``, which includes lists and tuples.
+
+    Regression test: passing a plain Python list or tuple raised a low-level
+    TypeError from inside jax ("take requires ndarray or scalar arguments" for
+    ``take``, "non-tuple sequence for multidimensional indexing" for ``idx``)
+    even though both are documented as accepting array_like.
+    """
+    tree, _ = _make_tree_pair()
+    expected_idx = tree_idx(tree, np.array([0, 1]))
+    expected_take = take(tree, np.array([0, 1]), axis=0)
+    _assert_trees_allclose(tree_idx(tree, [0, 1]), expected_idx)
+    for indices in ([0, 1], (0, 1)):
+        _assert_trees_allclose(take(tree, indices, axis=0), expected_take)
+
+
+def test_idx_tuple_is_multi_axis_indexing():
+    """A tuple passed to ``idx`` keeps numpy semantics (one entry per axis)."""
+    tree = {'a': jnp.arange(12).reshape(3, 4)}
+    np.testing.assert_array_equal(tree_idx(tree, (1, 2))['a'], 6)
+    np.testing.assert_array_equal(tree_idx(tree, (slice(None), 0))['a'], [0, 4, 8])

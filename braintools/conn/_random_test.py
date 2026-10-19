@@ -380,6 +380,48 @@ class TestClusteredRandom(unittest.TestCase):
         self.assertTrue(np.all(result.pre_indices < 20))
         self.assertTrue(np.all(result.post_indices < 20))
 
+    def test_self_connections_dropped_by_default(self):
+        """Same-population ClusteredRandom excludes autapses unless allowed."""
+        positions = np.random.RandomState(0).uniform(0, 100, (30, 2)) * u.um
+
+        def make(allow):
+            return ClusteredRandom(
+                prob=1.0, cluster_radius=20 * u.um,
+                allow_self_connections=allow, seed=0,
+            )(pre_size=30, post_size=30, pre_positions=positions, post_positions=positions)
+
+        no_self = make(False)
+        with_self = make(True)
+        self.assertEqual(int(np.sum(no_self.pre_indices == no_self.post_indices)), 0)
+        self.assertEqual(int(np.sum(with_self.pre_indices == with_self.post_indices)), 30)
+        self.assertEqual(no_self.n_connections, 30 * 29)
+        self.assertFalse(no_self.metadata['allow_self_connections'])
+        self.assertTrue(with_self.metadata['allow_self_connections'])
+
+    def test_self_connection_filter_keeps_other_edges(self):
+        """Dropping autapses only removes the diagonal; other edges are unchanged."""
+        positions = np.random.RandomState(1).uniform(0, 100, (40, 2)) * u.um
+        kwargs = dict(prob=0.1, cluster_radius=25 * u.um, cluster_factor=4.0, seed=3)
+        call = dict(pre_size=40, post_size=40, pre_positions=positions, post_positions=positions)
+
+        no_self = ClusteredRandom(**kwargs)(**call)
+        with_self = ClusteredRandom(allow_self_connections=True, **kwargs)(**call)
+        off_diag = with_self.pre_indices != with_self.post_indices
+        np.testing.assert_array_equal(no_self.pre_indices, with_self.pre_indices[off_diag])
+        np.testing.assert_array_equal(no_self.post_indices, with_self.post_indices[off_diag])
+
+    def test_cross_population_keeps_equal_indices(self):
+        """Different populations of equal size keep edges with equal numeric indices."""
+        rs = np.random.RandomState(2)
+        pre_positions = rs.uniform(0, 100, (10, 2)) * u.um
+        post_positions = rs.uniform(0, 100, (10, 2)) * u.um
+
+        result = ClusteredRandom(prob=1.0, cluster_radius=20 * u.um, seed=0)(
+            pre_size=10, post_size=10,
+            pre_positions=pre_positions, post_positions=post_positions,
+        )
+        self.assertEqual(result.n_connections, 100)
+
     def test_no_positions_error(self):
         """Test that missing positions raises ValueError."""
         conn = ClusteredRandom(

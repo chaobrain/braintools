@@ -22,6 +22,10 @@ from matplotlib.colors import Normalize
 
 from braintools._misc import set_module_as
 from braintools.tree import as_numpy
+from ._utils import as_array, flatten_spikes, inter_spike_intervals
+
+# Default color of negative-weight (e.g. inhibitory) edges in network plots
+NEGATIVE_EDGE_COLOR = '#1f77b4'
 
 __all__ = [
     'spike_raster',
@@ -96,25 +100,10 @@ def spike_raster(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    # Convert to numpy arrays
-    spike_times = as_numpy(spike_times)
-    if neuron_ids is not None:
-        neuron_ids = as_numpy(neuron_ids)
-
-    # Handle different input formats
-    if isinstance(spike_times, list):
-        # List of arrays, one per neuron
-        all_times = []
-        all_ids = []
-        for i, times in enumerate(spike_times):
-            times = as_numpy(times)
-            if len(times) > 0:
-                all_times.extend(times)
-                all_ids.extend([i] * len(times))
-        spike_times = np.array(all_times)
-        neuron_ids = np.array(all_ids)
-    elif neuron_ids is None:
+    # A list holds one spike train per neuron; a flat array needs neuron_ids.
+    if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
         raise ValueError("neuron_ids must be provided when spike_times is not a list")
+    spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
 
     # When ``color`` is a per-spike array it must be filtered with the same masks
     # applied to the spikes; otherwise ``scatter`` raises a length-mismatch error
@@ -225,7 +214,7 @@ def population_activity(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    data = as_numpy(data)
+    data = as_array(data)
 
     # Handle 1D data
     if data.ndim == 1:
@@ -233,7 +222,7 @@ def population_activity(
     else:
         # Select specific neurons if specified
         if neuron_ids is not None:
-            neuron_ids = as_numpy(neuron_ids)
+            neuron_ids = as_array(neuron_ids)
             data = data[:, neuron_ids]
 
         # Aggregate across neurons
@@ -257,7 +246,7 @@ def population_activity(
         else:
             time = np.arange(len(activity))
     else:
-        time = as_numpy(time)
+        time = as_array(time)
 
     # Apply smoothing if specified
     if window_size is not None and window_size > 1:
@@ -335,7 +324,7 @@ def connectivity_matrix(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    weights = as_numpy(weights)
+    weights = as_array(weights)
 
     # Set up colormap normalization
     if center_zero:
@@ -426,7 +415,7 @@ def neural_trajectory(
     ax : matplotlib.axes.Axes
         The axes object containing the plot.
     """
-    data = as_numpy(data)
+    data = as_array(data)
 
     if data.ndim != 2:
         raise ValueError(
@@ -554,13 +543,7 @@ def spike_histogram(
         fig, ax = plt.subplots(figsize=figsize)
 
     # Flatten spike times if list of arrays
-    if isinstance(spike_times, list):
-        all_times = []
-        for times in spike_times:
-            all_times.extend(as_numpy(times))
-        spike_times = np.array(all_times)
-    else:
-        spike_times = as_numpy(spike_times)
+    spike_times, _ = flatten_spikes(spike_times)
 
     # Apply time filtering
     if time_range is not None:
@@ -574,9 +557,17 @@ def spike_histogram(
         else:
             bins = np.arange(spike_times.min(), spike_times.max() + bin_size, bin_size)
 
+    # ``time_range`` is documented as the histogram's ``(start, end)``, so it has to
+    # reach ``hist`` as ``range``. Without that, matplotlib derives the edges from the
+    # *data's* min/max instead, so two datasets sharing a ``time_range`` get different
+    # bin edges and their histograms are not comparable. ``range`` may only be combined
+    # with a scalar bin count -- matplotlib rejects it alongside explicit bin edges,
+    # which the ``bin_size`` path above already derives from ``time_range``.
+    hist_kwargs = {'range': time_range} if (time_range is not None and np.ndim(bins) == 0) else {}
+
     # Create histogram
     counts, bin_edges, patches = ax.hist(spike_times, bins=bins, density=density,
-                                         color=color, alpha=alpha, **kwargs)
+                                         color=color, alpha=alpha, **hist_kwargs, **kwargs)
 
     # Labels
     ax.set_xlabel(xlabel)
@@ -640,19 +631,7 @@ def isi_distribution(
         fig, ax = plt.subplots(figsize=figsize)
 
     # Calculate ISIs
-    all_isis = []
-    if isinstance(spike_times, list):
-        for times in spike_times:
-            times = as_numpy(times)
-            if len(times) > 1:
-                isis = np.diff(times)
-                all_isis.extend(isis)
-    else:
-        spike_times = as_numpy(spike_times)
-        if len(spike_times) > 1:
-            all_isis = np.diff(spike_times)
-
-    all_isis = np.array(all_isis)
+    all_isis = inter_spike_intervals(*flatten_spikes(spike_times))
 
     # Filter ISIs
     if max_isi is not None:
@@ -708,9 +687,12 @@ def firing_rate_map(
     rates : np.ndarray
         Firing rates. Can be 2D array or 1D array with positions.
     positions : np.ndarray, optional
-        Positions corresponding to rates (N, 2) for 1D rates.
+        Positions corresponding to rates (N, 2) for 1D rates. Each spatial bin
+        shows the mean of the rates sampled in it; bins that were never
+        visited are left blank (NaN), and the axes are in position units.
     grid_size : tuple, optional
-        Size of the grid for 1D rates with positions.
+        Number of bins ``(nx, ny)`` for 1D rates with positions (default
+        ``(50, 50)``).
     cmap : str
         Colormap for the rate map.
     interpolation : str
@@ -734,14 +716,14 @@ def firing_rate_map(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    rates = as_numpy(rates)
+    rates = as_array(rates)
 
     if rates.ndim == 2:
         # Already a 2D map
         rate_map = rates
     elif positions is not None:
         # Create 2D map from 1D rates and positions
-        positions = as_numpy(positions)
+        positions = as_array(positions)
         if grid_size is None:
             grid_size = (50, 50)
 
@@ -766,9 +748,13 @@ def firing_rate_map(
             rate_map[yi, xi] += rates[i]
             count_map[yi, xi] += 1
 
-        # Average rates in each bin
+        # Average rates in each bin; bins that were never visited have no
+        # data and are left blank (NaN), not shown as 0 Hz.
         mask = count_map > 0
         rate_map[mask] /= count_map[mask]
+        rate_map[~mask] = np.nan
+        # Axes in position units rather than bin indices
+        kwargs.setdefault('extent', (x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]))
     else:
         raise ValueError("For 1D rates, positions must be provided")
 
@@ -838,7 +824,7 @@ def phase_portrait(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    x = as_numpy(x)
+    x = as_array(x)
 
     # Handle input format
     if y is None:
@@ -848,7 +834,7 @@ def phase_portrait(
         else:
             raise ValueError("If y is None, x must be 2D with at least 2 columns")
     else:
-        y = as_numpy(y)
+        y = as_array(y)
 
     # Plot trajectory
     if trajectory:
@@ -861,8 +847,8 @@ def phase_portrait(
 
     # Plot vector field
     if vector_field and dx is not None and dy is not None:
-        dx = as_numpy(dx)
-        dy = as_numpy(dy)
+        dx = as_array(dx)
+        dy = as_array(dy)
         ax.quiver(x, y, dx, dy, alpha=0.6, scale_units='xy', scale=1)
 
     # Labels
@@ -873,6 +859,29 @@ def phase_portrait(
 
     ax.grid(True, alpha=0.3)
     return ax
+
+
+def _edge_attribute(attr, i, j, k, n_nodes, n_edges, name):
+    """Value of a per-edge attribute for edge ``k`` from node ``i`` to node ``j``.
+
+    ``attr`` is a scalar (or a single color), one value per drawn edge, an
+    ``(N, N)`` array, or a flattened ``N*N`` array.
+    """
+    if isinstance(attr, str) or not hasattr(attr, '__len__'):
+        return attr
+    if isinstance(attr, tuple) and len(attr) in (3, 4) and all(np.isscalar(c) for c in attr):
+        return attr  # a single RGB(A) color
+    arr = np.asarray(attr, dtype=object) if not isinstance(attr, np.ndarray) else attr
+    if arr.ndim >= 2 and arr.shape[:2] == (n_nodes, n_nodes):
+        return arr[i, j]
+    if len(arr) == n_edges:
+        return arr[k]
+    if len(arr) == n_nodes * n_nodes:
+        return arr[i * n_nodes + j]
+    raise ValueError(
+        f"{name} must be a scalar, one value per edge ({n_edges}), an ({n_nodes}, {n_nodes}) "
+        f"array or a flattened array of length {n_nodes * n_nodes}; got length {len(arr)}."
+    )
 
 
 @set_module_as('braintools.visualize')
@@ -895,17 +904,23 @@ def network_topology(
     Parameters
     ----------
     adjacency : np.ndarray
-        Adjacency matrix of the network.
+        Adjacency or signed weight matrix of the network; ``adjacency[i, j]``
+        is the edge from node ``i`` to node ``j``. Every non-zero entry is
+        drawn as a line (edge direction is not shown). Without ``edge_colors``,
+        positive edges are gray and negative (e.g. inhibitory) edges blue.
     positions : np.ndarray, optional
         Node positions (N, 2). If None, uses layout algorithm.
     node_colors : array-like, optional
         Colors for nodes.
-    edge_colors : array-like, optional
-        Colors for edges.
+    edge_colors : color or array-like, optional
+        Colors for edges: a single color, one color per drawn edge (in row-major
+        order of the adjacency matrix), or an ``(N, N)`` / flattened ``N*N``
+        array indexed like ``adjacency``.
     node_sizes : array-like, optional
         Sizes for nodes.
-    edge_widths : array-like, optional
-        Widths for edges.
+    edge_widths : float or array-like, optional
+        Widths for edges, in the same formats as ``edge_colors``; an ``(N, N)``
+        weight matrix can be passed directly (its absolute values are used).
     ax : matplotlib.axes.Axes, optional
         Axes to plot on.
     figsize : tuple
@@ -925,7 +940,7 @@ def network_topology(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    adjacency = as_numpy(adjacency)
+    adjacency = as_array(adjacency)
     n_nodes = adjacency.shape[0]
 
     # Generate positions if not provided
@@ -941,7 +956,7 @@ def network_topology(
                             diff = positions[i] - positions[j]
                             dist = np.linalg.norm(diff)
                             if dist > 0:
-                                if adjacency[i, j] > 0:
+                                if adjacency[i, j] != 0:
                                     # Attractive force
                                     forces[i] -= 0.01 * diff
                                 # Repulsive force
@@ -955,37 +970,28 @@ def network_topology(
         else:
             raise ValueError(f"Unknown layout: {layout}")
     else:
-        positions = as_numpy(positions)
+        positions = as_array(positions)
 
     # Set default values
     if node_colors is None:
         node_colors = 'blue'
-    if edge_colors is None:
-        edge_colors = 'gray'
+    signed_default_colors = edge_colors is None
     if node_sizes is None:
         node_sizes = 100
     if edge_widths is None:
         edge_widths = 1.0
 
     # Draw edges
-    for i in range(n_nodes):
-        for j in range(n_nodes):
-            if adjacency[i, j] > 0:
-                x_coords = [positions[i, 0], positions[j, 0]]
-                y_coords = [positions[i, 1], positions[j, 1]]
-
-                # Determine edge properties
-                if hasattr(edge_colors, '__len__') and not isinstance(edge_colors, str):
-                    edge_color = edge_colors[i * n_nodes + j] if len(edge_colors) > i * n_nodes + j else edge_colors[0]
-                else:
-                    edge_color = edge_colors
-
-                if hasattr(edge_widths, '__len__'):
-                    edge_width = edge_widths[i * n_nodes + j] if len(edge_widths) > i * n_nodes + j else edge_widths[0]
-                else:
-                    edge_width = edge_widths
-
-                ax.plot(x_coords, y_coords, color=edge_color, linewidth=edge_width, alpha=0.6)
+    edges = [(i, j) for i in range(n_nodes) for j in range(n_nodes) if adjacency[i, j] != 0]
+    for k, (i, j) in enumerate(edges):
+        x_coords = [positions[i, 0], positions[j, 0]]
+        y_coords = [positions[i, 1], positions[j, 1]]
+        if signed_default_colors:
+            edge_color = NEGATIVE_EDGE_COLOR if adjacency[i, j] < 0 else 'gray'
+        else:
+            edge_color = _edge_attribute(edge_colors, i, j, k, n_nodes, len(edges), 'edge_colors')
+        edge_width = abs(_edge_attribute(edge_widths, i, j, k, n_nodes, len(edges), 'edge_widths'))
+        ax.plot(x_coords, y_coords, color=edge_color, linewidth=edge_width, alpha=0.6)
 
     # Draw nodes
     ax.scatter(positions[:, 0], positions[:, 1], c=node_colors, s=node_sizes,
@@ -1053,22 +1059,31 @@ def tuning_curve(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    stimulus = as_numpy(stimulus)
-    response = as_numpy(response)
+    stimulus = as_array(stimulus)
+    response = as_array(response)
 
     # Create bins
     if isinstance(bins, int):
         bin_edges = np.linspace(stimulus.min(), stimulus.max(), bins + 1)
     else:
-        bin_edges = as_numpy(bins)
+        bin_edges = as_array(bins)
 
     # Calculate binned statistics
     bin_centers = []
     mean_responses = []
     sem_responses = []
 
-    for i in range(len(bin_edges) - 1):
-        mask = (stimulus >= bin_edges[i]) & (stimulus < bin_edges[i + 1])
+    n_bins = len(bin_edges) - 1
+    for i in range(n_bins):
+        # Bins are half-open [lo, hi) except the last, which is closed on the
+        # right. Its right edge equals ``stimulus.max()``, so a half-open final
+        # bin would silently drop every sample equal to the maximum -- negligible
+        # for continuous data but 5-7% of the samples for integer-valued or
+        # clipped stimuli, materially biasing the top bin's mean.
+        if i == n_bins - 1:
+            mask = (stimulus >= bin_edges[i]) & (stimulus <= bin_edges[i + 1])
+        else:
+            mask = (stimulus >= bin_edges[i]) & (stimulus < bin_edges[i + 1])
         if np.any(mask):
             bin_centers.append((bin_edges[i] + bin_edges[i + 1]) / 2)
             responses_in_bin = response[mask]
@@ -1094,7 +1109,14 @@ def tuning_curve(
             return baseline + amp * np.exp(-(x - mu) ** 2 / (2 * sigma ** 2))
 
         try:
-            popt, _ = curve_fit(gaussian, bin_centers, mean_responses)
+            # Start from the data: without an initial guess curve_fit starts at
+            # mu = sigma = 1 and silently converges to a wrong local optimum for
+            # stimuli in degrees or radians.
+            p0 = [mean_responses.max() - mean_responses.min(),
+                  bin_centers[np.argmax(mean_responses)],
+                  (bin_centers.max() - bin_centers.min()) / 4,
+                  mean_responses.min()]
+            popt, _ = curve_fit(gaussian, bin_centers, mean_responses, p0=p0, maxfev=10000)
             x_fit = np.linspace(bin_centers.min(), bin_centers.max(), 100)
             y_fit = gaussian(x_fit, *popt)
             ax.plot(x_fit, y_fit, '--', color='red', alpha=0.8, label='Gaussian fit')

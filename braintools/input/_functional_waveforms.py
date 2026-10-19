@@ -27,6 +27,7 @@ import numpy as np
 
 from braintools._misc import set_module_as
 from ._deprecation import create_deprecated_function
+from ._steps import ceil_steps, floor_steps
 
 __all__ = [
     'sinusoidal',
@@ -184,9 +185,9 @@ def sinusoidal(
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
 
     # Calculate indices
-    n_steps = int(np.ceil(duration_value / dt_value))
-    start_i = int(t_start_value / dt_value)
-    end_i = int(t_end_value / dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
+    start_i = floor_steps(t_start_value, dt_value)
+    end_i = floor_steps(t_end_value, dt_value)
 
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
@@ -387,9 +388,9 @@ def square(
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
 
     # Calculate indices
-    n_steps = int(np.ceil(duration_value / dt_value))
-    start_i = int(t_start_value / dt_value)
-    end_i = int(t_end_value / dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
+    start_i = floor_steps(t_start_value, dt_value)
+    end_i = floor_steps(t_end_value, dt_value)
 
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
@@ -560,9 +561,9 @@ def triangular(
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
 
     # Calculate indices
-    n_steps = int(np.ceil(duration_value / dt_value))
-    start_i = int(t_start_value / dt_value)
-    end_i = int(t_end_value / dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
+    start_i = floor_steps(t_start_value, dt_value)
+    end_i = floor_steps(t_end_value, dt_value)
 
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
@@ -732,9 +733,9 @@ def sawtooth(
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
 
     # Calculate indices
-    n_steps = int(np.ceil(duration_value / dt_value))
-    start_i = int(t_start_value / dt_value)
-    end_i = int(t_end_value / dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
+    start_i = floor_steps(t_start_value, dt_value)
+    end_i = floor_steps(t_end_value, dt_value)
 
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
@@ -931,9 +932,9 @@ def chirp(
     amplitude_value, c_unit = u.split_mantissa_unit(amplitude)
 
     # Calculate indices
-    n_steps = int(np.ceil(duration_value / dt_value))
-    start_i = int(t_start_value / dt_value)
-    end_i = int(t_end_value / dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
+    start_i = floor_steps(t_start_value, dt_value)
+    end_i = floor_steps(t_end_value, dt_value)
 
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
@@ -1134,9 +1135,9 @@ def noisy_sinusoidal(
     rng = np.random if seed is None else np.random.RandomState(seed)
 
     # Calculate indices
-    n_steps = int(np.ceil(duration_value / dt_value))
-    start_i = int(t_start_value / dt_value)
-    end_i = int(t_end_value / dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
+    start_i = floor_steps(t_start_value, dt_value)
+    end_i = floor_steps(t_end_value, dt_value)
 
     # Generate time array for active window
     times = np.arange(end_i - start_i) * dt_value
