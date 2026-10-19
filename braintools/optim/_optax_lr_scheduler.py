@@ -2226,8 +2226,14 @@ class CyclicLR(LRScheduler):
         super().__init__(base_lr, last_epoch)
 
     def get_lr(self):
-        cycle = jnp.floor(1 + self.last_epoch.value / (self.step_size_up + self.step_size_down))
-        x = jnp.abs(self.last_epoch.value / self.step_size_up - 2 * cycle + 1)
+        # Position within the current cycle as a fraction in [0, 1); the first
+        # ``step_size_up / (step_size_up + step_size_down)`` of it rises, the rest
+        # falls, so asymmetric cycles honour ``step_size_down`` (as in PyTorch).
+        total = self.step_size_up + self.step_size_down
+        step_ratio = self.step_size_up / total
+        cycle = jnp.floor(1 + self.last_epoch.value / total)
+        frac = 1.0 + self.last_epoch.value / total - cycle
+        height = jnp.where(frac <= step_ratio, frac / step_ratio, (frac - 1) / (step_ratio - 1))
 
         if self.scale_fn is None:
             if self.mode == 'triangular':
@@ -2247,7 +2253,7 @@ class CyclicLR(LRScheduler):
         lrs = []
         for base_lr, max_lr in zip(self.base_lrs, self.max_lrs):
             base_height = max_lr - base_lr
-            lr = base_lr + base_height * scale * jnp.maximum(0, 1 - x)
+            lr = base_lr + base_height * scale * height
             lrs.append(lr)
 
         return lrs

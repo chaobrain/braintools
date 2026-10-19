@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import os
+import tempfile
 import warnings
 from typing import Any, Dict, List, Optional, Union
 
@@ -34,6 +35,24 @@ __all__ = [
 _HDF5_MAGIC = b'\x89HDF\r\n\x1a\n'
 
 PathLike = Union[str, os.PathLike]
+
+
+def _is_hdf5(filename: PathLike) -> bool:
+    """Return True if ``filename`` is an HDF5 file.
+
+    The HDF5 superblock may sit at byte 0 or, after a user block, at 512, 1024,
+    2048, ... MATLAB v7.3 files use a 512-byte user block holding the text header
+    ``MATLAB 7.3 MAT-file ...``, so their signature is at offset 512, not 0.
+    """
+    size = os.path.getsize(filename)
+    with open(filename, 'rb') as fh:
+        offset = 0
+        while offset + len(_HDF5_MAGIC) <= size:
+            fh.seek(offset)
+            if fh.read(len(_HDF5_MAGIC)) == _HDF5_MAGIC:
+                return True
+            offset = 512 if offset == 0 else offset * 2
+    return False
 
 
 def load_matfile(
@@ -135,13 +154,13 @@ def load_matfile(
 
     # MATLAB v7.3 files are HDF5 and cannot be read by scipy.io.loadmat; detect
     # them up front so users get an actionable error instead of an opaque failure.
-    with open(filename, 'rb') as fh:
-        if fh.read(8) == _HDF5_MAGIC:
-            raise NotImplementedError(
-                f'"{filename}" is a MATLAB v7.3 (HDF5) file, which scipy.io.loadmat '
-                f'cannot read. Use an HDF5-aware reader such as `h5py` or the `mat73` '
-                f'package to load v7.3 files.'
-            )
+    v73_message = (
+        f'"{filename}" is a MATLAB v7.3 (HDF5) file, which scipy.io.loadmat '
+        f'cannot read. Use an HDF5-aware reader such as `h5py` or the `mat73` '
+        f'package to load v7.3 files.'
+    )
+    if _is_hdf5(filename):
+        raise NotImplementedError(v73_message)
 
     if verbose:
         print(f'Loading MATLAB file from {filename}')
@@ -180,6 +199,9 @@ def load_matfile(
             squeeze_me=squeeze_me,
             **kwargs
         )
+    except NotImplementedError as e:
+        # scipy's own v7.3 check (reads the version from the MATLAB header).
+        raise NotImplementedError(v73_message) from e
     except Exception as e:
         raise ValueError(f'Failed to load MATLAB file "{filename}": {e}') from e
     # Parse loaded data and filter headers unless explicitly requested.
@@ -244,7 +266,46 @@ def save_matfile(
     if verbose:
         print(f'Saving MATLAB file to {filename}')
 
+    # Write to a unique temporary file in the destination directory, then
+    # atomically rename it into place. ``savemat`` writes directly to its target,
+    # so a failure part-way through (e.g. an unsavable value such as ``None``)
+    # would otherwise truncate an existing good .mat file in place -- leaving a
+    # file that still loads without error but is silently missing variables.
+    # ``os.replace`` is atomic on both POSIX and Windows, and the temp file lives
+    # in the same directory so the rename never crosses a filesystem.
+    # ``savemat`` appends ``.mat`` to an extensionless name (``appendmat=True`` by
+    # default). The temp file below always ends in ``.mat``, so apply that rule to
+    # the final name here, or ``save_matfile('out', ...)`` would write ``out``.
+    filename = os.fspath(filename)
+    if kwargs.get('appendmat', True) and not filename.endswith('.mat'):
+        filename = filename + '.mat'
+    target_dir = os.path.dirname(os.path.abspath(filename))
     try:
-        savemat(filename, data, **kwargs)
+        fd, tmp_filename = tempfile.mkstemp(suffix='.mat', dir=target_dir)
+        os.close(fd)
+    except OSError as e:
+        raise ValueError(f'Failed to save MATLAB file "{filename}": {e}') from e
+
+    try:
+        savemat(tmp_filename, data, **kwargs)
+        # mkstemp creates the file with 0600; keep the destination's existing
+        # permissions when overwriting, otherwise use the default a plain
+        # ``open(..., 'wb')`` would have given (0666 masked by the umask).
+        try:
+            if os.path.exists(filename):
+                mode = os.stat(filename).st_mode & 0o777
+            else:
+                umask = os.umask(0)
+                os.umask(umask)
+                mode = 0o666 & ~umask
+            os.chmod(tmp_filename, mode)
+        except OSError:
+            pass
+        os.replace(tmp_filename, filename)
     except Exception as e:
+        if os.path.exists(tmp_filename):
+            try:
+                os.remove(tmp_filename)
+            except OSError:
+                pass
         raise ValueError(f'Failed to save MATLAB file "{filename}": {e}') from e

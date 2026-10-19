@@ -32,7 +32,6 @@ from braintools.surrogate._base import (
     _heaviside_abstract,
     _heaviside_imp,
     _heaviside_batching,
-    _heaviside_transpose,
 )
 
 
@@ -214,25 +213,33 @@ class TestHeavisideBatching:
         assert jnp.allclose(result[0], jnp.array([0.0, 1.0, 1.0]))
 
 
-class TestHeavisideTranspose:
-    """Directly exercise the (unregistered) transpose rule for completeness."""
+class TestHeavisideDerivatives:
+    """Derivative semantics of the surrogate spike."""
 
-    def test_transpose_with_defined_dx(self):
-        ct = (jnp.array([1.0, 2.0, 3.0]),)
-        x = jnp.array([0.1, 0.2, 0.3])
-        dx = jnp.array([0.5, 0.5, 0.5])
-        cot_tx, cot_tdx = _heaviside_transpose(ct, x, dx)
-        assert jnp.allclose(cot_tx, dx * ct[0])
-        assert jnp.allclose(cot_tdx, ct[0])
+    def test_grad_wrt_input_is_surrogate_grad(self):
+        sg = surrogate.Sigmoid(alpha=3.0)
+        xs = jnp.linspace(-2, 2, 9)
+        g = jax.vmap(jax.grad(lambda x: sg(x)))(xs)
+        assert jnp.allclose(g, sg.surrogate_grad(xs))
 
-    def test_transpose_with_undefined_dx(self):
-        ct = (jnp.array([1.0, 2.0]),)
-        x = jnp.array([0.1, 0.2])
-        # An UndefinedPrimal residual -> the dx*ct branch returns a Zero.
-        undefined_dx = ad.UndefinedPrimal(jax.ShapeDtypeStruct((2,), jnp.float32))
-        cot_tx, cot_tdx = _heaviside_transpose(ct, x, undefined_dx)
-        assert isinstance(cot_tx, ad.Zero)
-        assert jnp.allclose(cot_tdx, ct[0])
+    def test_grad_wrt_surrogate_parameter_is_zero(self):
+        # the output H(x) does not depend on alpha
+        g = jax.grad(lambda a: surrogate.Sigmoid(alpha=a)(jnp.array(0.3)))(2.0)
+        assert float(g) == 0.0
+
+    def test_second_derivative_wrt_input(self):
+        # d/dx of the surrogate gradient is the derivative of surrogate_grad
+        sg = surrogate.Sigmoid(alpha=3.0)
+        xs = jnp.linspace(-2, 2, 9)
+        h = jax.vmap(jax.grad(jax.grad(lambda x: sg(x))))(xs)
+        expected = jax.vmap(jax.grad(sg.surrogate_grad))(xs)
+        assert jnp.allclose(h, expected, atol=1e-6)
+
+    def test_gradient_of_gradient_wrt_parameter(self):
+        # the surrogate gradient itself depends on alpha
+        dgrad = jax.grad(lambda a: jax.grad(lambda x: surrogate.Sigmoid(alpha=a)(x))(0.0))(2.0)
+        # sigmoid surrogate gradient at 0 is alpha / 4
+        assert np.allclose(float(dgrad), 0.25)
 
 
 class TestSurrogateDunders:
@@ -297,3 +304,42 @@ class TestSurrogateFunConsistency:
         sg = _TanhSurrogate(alpha=1.0)
         # tanh(0)*0.5 + 0.5 == 0.5
         assert np.allclose(float(sg.surrogate_fun(jnp.array(0.0))), 0.5)
+
+
+@pytest.mark.parametrize('value', [0.1, -1, True])
+def test_python_scalar_and_integer_inputs(value):
+    out = surrogate.Sigmoid()(value)
+    assert jnp.issubdtype(out.dtype, jnp.floating)
+    assert float(out) == float(value >= 0)
+
+
+def test_forward_mode_with_python_float_primal():
+    sg = surrogate.Sigmoid(alpha=4.0)
+    out, tangent = jax.jvp(lambda x: sg(x), (0.1,), (1.0,))
+    assert float(out) == 1.0
+    assert np.allclose(float(tangent), float(sg.surrogate_grad(jnp.array(0.1))))
+
+
+class TestSurrogateEquality:
+    def test_equal_parameters_compare_equal(self):
+        assert surrogate.Sigmoid(alpha=4.0) == surrogate.Sigmoid(alpha=4.0)
+        assert surrogate.Sigmoid(alpha=4.0) != surrogate.Sigmoid(alpha=2.0)
+        assert surrogate.Sigmoid(alpha=1.0) != surrogate.ERF(alpha=1.0)
+        assert surrogate.MultiGaussianGrad() == surrogate.MultiGaussianGrad()
+
+    def test_custom_subclass_hashable_and_equal(self):
+        a, b = _TanhSurrogate(alpha=1.5), _TanhSurrogate(alpha=1.5)
+        assert a == b and hash(a) == hash(b)
+        assert {a: 1}[b] == 1
+
+    def test_array_parameters_compare_by_identity(self):
+        p = jnp.array([1.0, 2.0])
+        a, b = _TanhSurrogate(alpha=p), _TanhSurrogate(alpha=p)
+        assert a == b and hash(a) == hash(b)
+        assert _TanhSurrogate(alpha=jnp.array([1.0, 2.0])) != a
+
+    def test_static_argument_reuses_compilation(self):
+        f = jax.jit(lambda x, sg: jax.grad(sg)(x), static_argnums=1)
+        for _ in range(3):
+            f(jnp.array(0.1), surrogate.Sigmoid(alpha=4.0))
+        assert f._cache_size() == 1

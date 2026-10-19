@@ -1,17 +1,15 @@
 # Input Current
 
-Explore how to generate, compose, and customize stimulation protocols with
-`braintools.input`. The tutorials below progress from core concepts to advanced
-pipelines, each accompanied by runnable notebooks.
+`braintools.input` builds the time series that drive a simulation: injected currents, stimulation protocols, and noise. Every generator reads the time step from `brainstate.environ` and returns one sample per simulation step.
 
-- **Introduction to braintools.input** - orientation to the module, environment
-  setup, and comparison of the functional vs. composable APIs.
-- **Functional API tutorial** - hands-on recipes for section/step/ramp currents,
-  pulse generators, and stochastic helpers with unit-aware workflows.
-- **Composable API tutorial** - algebraic composition, sequential protocols,
-  modulation, and caching behaviour using the object-oriented interface.
-- **Custom transformations & pipelines** - extending `Input`, wrapping helpers,
-  and building reusable stimulation pipelines for experiments.
+## What you'll find here
+
+- **Introduction**: the functional and composable APIs side by side, the time step and array length, units, and feeding an input into a leaky integrate-and-fire neuron.
+- **Functional API**: every generator (piecewise, periodic, pulse, and stochastic), what each parameter means, and numerical checks of the output; `ou_process` (where `sigma` is the stationary standard deviation), `wiener_process` (white-noise increments), and `poisson` statistics.
+- **Composable API**: `Input` objects and caching, arithmetic, `&` and `|`, `shift`, `smooth`, `repeat`, `clip`, `apply`, multi-channel inputs, and a family of protocols for an F-I curve.
+- **Custom inputs and pipelines**: subclassing `Input`, wrapping functions with `apply`, and a reproducible batch of trials with independent noise run through a model.
+
+For the full list of functions and classes, see the {doc}`API reference <../apis/input>`.
 
 ```{toctree}
 :maxdepth: 1

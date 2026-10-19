@@ -120,6 +120,36 @@ class TestStatisticalExtra(unittest.TestCase):
         with self.assertRaises(ValueError):
             braintools.visualize.qq_plot(self.data[:, 0], distribution='bad')
 
+    def test_qq_plot_reference_line_is_the_fitted_line(self):
+        """The reference line must fit the plotted points, not be ``y = x``.
+
+        Regression test: the sample quantiles are the *raw* data values, so the
+        ideal line is ``y = mean + std * x``. The identity line is only correct
+        for standardized data; drawing it here makes a genuinely normal sample
+        look systematically off.
+        """
+        rng = np.random.RandomState(0)
+        for loc, scale in ((0.0, 1.0), (1.0, 2.0), (50.0, 5.0)):
+            data = rng.randn(150) * scale + loc
+            fig, ax = plt.subplots()
+            braintools.visualize.qq_plot(data, distribution='norm', ax=ax)
+
+            points = np.asarray(ax.collections[0].get_offsets())
+            line = [ln for ln in ax.lines
+                    if len(np.asarray(ln.get_xdata())) == 2][0]
+            xd = np.asarray(line.get_xdata(), dtype=float)
+            yd = np.asarray(line.get_ydata(), dtype=float)
+            drawn_slope = (yd[1] - yd[0]) / (xd[1] - xd[0])
+            drawn_icpt = yd[0] - drawn_slope * xd[0]
+
+            fit_slope, fit_icpt = np.polyfit(points[:, 0], points[:, 1], 1)
+            self.assertAlmostEqual(drawn_slope, fit_slope, places=9)
+            self.assertAlmostEqual(drawn_icpt, fit_icpt, places=9)
+            # and it is emphatically not the identity line for shifted/scaled data
+            if loc != 0.0 or scale != 1.0:
+                self.assertGreater(abs(drawn_slope - 1.0) + abs(drawn_icpt), 1e-6)
+            plt.close('all')
+
     # ------------------------------------------------------------------
     # box_plot
     # ------------------------------------------------------------------
@@ -336,3 +366,37 @@ class TestStatisticalExtra(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_precision_recall_average_precision_is_stepwise():
+    # AP = sum_k (R_k - R_{k-1}) P_k over descending thresholds: for scores
+    # [0.9, 0.8, 0.7, 0.6] with labels [1, 0, 1, 0] the operating points are
+    # (R, P) = (0.5, 1), (0.5, 0.5), (1, 2/3), (1, 0.5), so AP = 0.5 + 0.5 * 2/3
+    y_true = np.array([1, 0, 1, 0])
+    y_scores = np.array([0.9, 0.8, 0.7, 0.6])
+    ax = braintools.visualize.precision_recall_curve(y_true, y_scores)
+    label = ax.get_legend().get_texts()[0].get_text()
+    assert label == f'AP = {0.5 + 0.5 * 2 / 3:.3f}'
+    plt.close('all')
+
+
+def test_qq_plot_uses_standard_plotting_positions():
+    data = np.random.default_rng(0).normal(0, 1, 1000)
+    ax = braintools.visualize.qq_plot(data)
+    x = ax.collections[0].get_offsets()[:, 0]
+    from scipy import stats
+    assert np.allclose(x, stats.norm.ppf((np.arange(1, 1001) - 0.5) / 1000))
+    plt.close('all')
+
+
+def test_group_plots_accept_2d_array_as_columns():
+    X = np.random.default_rng(0).normal(size=(100, 3)) + np.array([0.0, 2.0, 4.0])
+    ax = braintools.visualize.box_plot(X)
+    assert len(ax.patches) == 3  # one box per column
+    plt.close('all')
+    ax = braintools.visualize.violin_plot(X)
+    assert len([c for c in ax.collections if c.__class__.__name__ in ('PolyCollection', 'FillBetweenPolyCollection')]) == 3
+    plt.close('all')
+    ax = braintools.visualize.distribution_plot(X, labels=['a', 'b', 'c'])
+    assert [t.get_text() for t in ax.get_legend().get_texts()] == ['a', 'b', 'c']
+    plt.close('all')

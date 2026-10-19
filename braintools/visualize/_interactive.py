@@ -18,7 +18,9 @@ from typing import Optional, Union, Tuple, List
 import numpy as np
 
 from braintools._misc import set_module_as
+from ._neural import _edge_attribute, NEGATIVE_EDGE_COLOR
 from ..tree import as_numpy
+from ._utils import as_array, flatten_spikes, inter_spike_intervals
 
 # Try to import plotly
 try:
@@ -94,25 +96,10 @@ def interactive_spike_raster(
     """
     _check_plotly()
 
-    # Convert to numpy arrays
-    spike_times = as_numpy(spike_times)
-    if neuron_ids is not None:
-        neuron_ids = as_numpy(neuron_ids)
-
-    # Handle different input formats
-    if isinstance(spike_times, list):
-        # List of arrays, one per neuron
-        all_times = []
-        all_ids = []
-        for i, times in enumerate(spike_times):
-            times = as_numpy(times)
-            if len(times) > 0:
-                all_times.extend(times)
-                all_ids.extend([i] * len(times))
-        spike_times = np.array(all_times)
-        neuron_ids = np.array(all_ids)
-    elif neuron_ids is None:
+    # A list holds one spike train per neuron; a flat array needs neuron_ids.
+    if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
         raise ValueError("neuron_ids must be provided when spike_times is not a list")
+    spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
 
     # Apply filtering
     if time_range is not None:
@@ -206,7 +193,7 @@ def interactive_line_plot(
     """
     _check_plotly()
 
-    x = as_numpy(x)
+    x = as_array(x)
 
     # Ensure y is a list
     if not isinstance(y, list):
@@ -281,7 +268,7 @@ def interactive_heatmap(
     """
     _check_plotly()
 
-    data = as_numpy(data)
+    data = as_array(data)
 
     # Create figure
     fig = go.Figure(data=go.Heatmap(
@@ -343,14 +330,14 @@ def interactive_3d_scatter(
     """
     _check_plotly()
 
-    x = as_numpy(x)
-    y = as_numpy(y)
-    z = as_numpy(z)
+    x = as_array(x)
+    y = as_array(y)
+    z = as_array(z)
 
     if color is not None:
-        color = as_numpy(color)
+        color = as_array(color)
     if size is not None:
-        size = as_numpy(size)
+        size = as_array(size)
 
     # Create figure
     fig = go.Figure(data=go.Scatter3d(
@@ -402,7 +389,8 @@ def interactive_network(
     Parameters
     ----------
     adjacency : np.ndarray
-        Adjacency matrix.
+        Adjacency or signed weight matrix; every non-zero entry is drawn as an
+        edge, positive ones gray and negative ones blue.
     positions : np.ndarray, optional
         Node positions (N, 2).
     node_labels : list, optional
@@ -410,7 +398,10 @@ def interactive_network(
     node_colors : np.ndarray, optional
         Node colors.
     edge_weights : np.ndarray, optional
-        Edge weights for thickness.
+        Edge weights, drawn as line widths proportional to ``|weight|`` (up to
+        6 px) and shown on hover: an ``(N, N)`` array indexed like
+        ``adjacency``, a flattened ``N*N`` array, or one value per edge in
+        row-major order. Without it, all edges have width 1.
     title : str
         Plot title.
     width, height : int
@@ -425,7 +416,7 @@ def interactive_network(
     """
     _check_plotly()
 
-    adjacency = as_numpy(adjacency)
+    adjacency = as_array(adjacency)
     n_nodes = adjacency.shape[0]
 
     # Generate positions if not provided
@@ -434,33 +425,45 @@ def interactive_network(
         angles = np.linspace(0, 2 * np.pi, n_nodes, endpoint=False)
         positions = np.column_stack([np.cos(angles), np.sin(angles)])
     else:
-        positions = as_numpy(positions)
+        positions = as_array(positions)
 
     # Create figure
     fig = go.Figure()
 
     # Add edges
-    edge_x = []
-    edge_y = []
-    edge_info = []
-
-    for i in range(n_nodes):
-        for j in range(n_nodes):
-            if adjacency[i, j] > 0:
-                x0, y0 = positions[i]
-                x1, y1 = positions[j]
-                edge_x.extend([x0, x1, None])
-                edge_y.extend([y0, y1, None])
-                edge_info.append(f"Edge: {i} -> {j}<br>Weight: {adjacency[i, j]:.3f}")
-
-    # Add edges trace
-    fig.add_trace(go.Scatter(
-        x=edge_x, y=edge_y,
-        line=dict(width=1, color='gray'),
-        hoverinfo='none',
-        mode='lines',
-        showlegend=False
-    ))
+    edges = [(i, j) for i in range(n_nodes) for j in range(n_nodes) if adjacency[i, j] != 0]
+    edge_color = lambda i, j: NEGATIVE_EDGE_COLOR if adjacency[i, j] < 0 else 'gray'
+    if edge_weights is None:
+        # one trace per sign
+        for negative in (False, True):
+            edge_x, edge_y = [], []
+            for i, j in edges:
+                if (adjacency[i, j] < 0) == negative:
+                    edge_x.extend([positions[i, 0], positions[j, 0], None])
+                    edge_y.extend([positions[i, 1], positions[j, 1], None])
+            if edge_x or not negative:
+                fig.add_trace(go.Scatter(
+                    x=edge_x, y=edge_y,
+                    line=dict(width=1, color=NEGATIVE_EDGE_COLOR if negative else 'gray'),
+                    hoverinfo='none',
+                    mode='lines',
+                    showlegend=False
+                ))
+    else:
+        # One trace per edge: Plotly cannot vary the width within a trace.
+        weights = [float(_edge_attribute(edge_weights, i, j, k, n_nodes, len(edges), 'edge_weights'))
+                   for k, (i, j) in enumerate(edges)]
+        w_max = max((abs(w) for w in weights), default=0.0) or 1.0
+        for (i, j), w in zip(edges, weights):
+            fig.add_trace(go.Scatter(
+                x=[positions[i, 0], positions[j, 0]],
+                y=[positions[i, 1], positions[j, 1]],
+                line=dict(width=0.5 + 5.5 * abs(w) / w_max, color=edge_color(i, j)),
+                mode='lines',
+                hovertext=f"Edge: {i} -> {j}<br>Weight: {w:.3f}",
+                hoverinfo='text',
+                showlegend=False
+            ))
 
     # Add nodes
     node_text = node_labels if node_labels else [f'Node {i}' for i in range(n_nodes)]
@@ -518,7 +521,8 @@ def interactive_histogram(
     labels : list, optional
         Labels for each dataset.
     bins : int
-        Number of bins.
+        Number of bins, shared by all datasets (common bin edges over the
+        pooled data).
     opacity : float
         Histogram opacity.
     title : str
@@ -542,11 +546,16 @@ def interactive_histogram(
         data = [data]
 
     # Convert to numpy arrays
-    data = [as_numpy(d) for d in data]
+    data = [np.ravel(as_array(d)) for d in data]
 
     # Set up labels
     if labels is None:
         labels = [f'Dataset {i + 1}' for i in range(len(data))]
+
+    # Common bins for all datasets: Plotly's ``nbinsx`` is only an upper bound
+    # chosen per trace, so overlaid histograms would get different bin widths.
+    edges = np.histogram_bin_edges(np.concatenate(data), bins=bins)
+    xbins = dict(start=float(edges[0]), end=float(edges[-1]), size=float(edges[1] - edges[0]))
 
     # Create figure
     fig = go.Figure()
@@ -555,9 +564,8 @@ def interactive_histogram(
         fig.add_trace(go.Histogram(
             x=d,
             name=label,
-            nbinsx=bins,
+            **{'xbins': xbins, **kwargs},
             opacity=opacity,
-            **kwargs
         ))
 
     # Update layout
@@ -609,12 +617,12 @@ def interactive_surface(
     """
     _check_plotly()
 
-    z = as_numpy(z)
+    z = as_array(z)
 
     if x is not None:
-        x = as_numpy(x)
+        x = as_array(x)
     if y is not None:
-        y = as_numpy(y)
+        y = as_array(y)
 
     # Create figure
     fig = go.Figure(data=go.Surface(
@@ -675,7 +683,7 @@ def interactive_correlation_matrix(
     """
     _check_plotly()
 
-    data = as_numpy(data)
+    data = as_array(data)
     if data.ndim == 1:
         data = data.reshape(-1, 1)
 
@@ -771,19 +779,7 @@ def dashboard_neural_activity(
     )
 
     # Process spike data
-    if isinstance(spike_times, list):
-        all_times = []
-        all_ids = []
-        for i, times in enumerate(spike_times):
-            times = as_numpy(times)
-            if len(times) > 0:
-                all_times.extend(times)
-                all_ids.extend([i] * len(times))
-        spike_times_flat = np.array(all_times)
-        neuron_ids_flat = np.array(all_ids)
-    else:
-        spike_times_flat = as_numpy(spike_times)
-        neuron_ids_flat = as_numpy(neuron_ids) if neuron_ids is not None else np.zeros_like(spike_times_flat)
+    spike_times_flat, neuron_ids_flat = flatten_spikes(spike_times, neuron_ids)
 
     # 1. Spike Raster
     fig.add_trace(
@@ -799,14 +795,8 @@ def dashboard_neural_activity(
 
     # 2. ISI Distribution
     if len(spike_times_flat) > 1:
-        if isinstance(spike_times, list):
-            all_isis = []
-            for times in spike_times:
-                times = as_numpy(times)
-                if len(times) > 1:
-                    all_isis.extend(np.diff(times))
-        else:
-            all_isis = np.diff(spike_times_flat)
+        # ISIs within each neuron, never across neurons
+        all_isis = inter_spike_intervals(spike_times_flat, neuron_ids_flat)
 
         if len(all_isis) > 0:
             fig.add_trace(
@@ -816,11 +806,11 @@ def dashboard_neural_activity(
 
     # 3. Population Activity
     if population_activity is not None:
-        population_activity = as_numpy(population_activity)
+        population_activity = as_array(population_activity)
         if time is None:
             time = np.arange(len(population_activity))
         else:
-            time = as_numpy(time)
+            time = as_array(time)
 
         fig.add_trace(
             go.Scatter(
@@ -832,17 +822,14 @@ def dashboard_neural_activity(
             row=2, col=1
         )
 
-    # 4. Firing Rate Histogram
+    # 4. Firing Rate Histogram. Every neuron's rate is its spike count divided
+    # by the span of the whole recording (first to last spike of any neuron);
+    # dividing by the neuron's own first-to-last interval inflates the rates of
+    # sparsely firing neurons (two spikes 10 ms apart would read as 200 Hz).
     unique_neurons = np.unique(neuron_ids_flat)
-    firing_rates = []
-    for neuron in unique_neurons:
-        neuron_spikes = spike_times_flat[neuron_ids_flat == neuron]
-        if len(neuron_spikes) > 1:
-            time_span = np.max(neuron_spikes) - np.min(neuron_spikes)
-            rate = len(neuron_spikes) / time_span if time_span > 0 else 0
-        else:
-            rate = 0
-        firing_rates.append(rate)
+    recording_span = (np.max(spike_times_flat) - np.min(spike_times_flat)) if len(spike_times_flat) else 0.0
+    firing_rates = [np.sum(neuron_ids_flat == neuron) / recording_span if recording_span > 0 else 0.0
+                    for neuron in unique_neurons]
 
     fig.add_trace(
         go.Histogram(x=firing_rates, name='Firing Rates', nbinsx=20),

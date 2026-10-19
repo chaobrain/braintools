@@ -331,6 +331,17 @@ def test_readysetgo_production_label_transitions_one_to_two():
     assert (window == 1).any() and (window == 2).any()
 
 
+def test_readysetgo_is_independent_of_dt_unit():
+    """``dt`` written as ``1 ms`` or ``0.001 s`` must give the same trial; the
+    ms-valued intervals used to be divided by the raw dt mantissa."""
+    out = []
+    for dt in (1.0 * u.ms, 0.001 * u.second):
+        _, Y, info = ct.ReadySetGo(seed=3, dt=dt).sample_trial(0)
+        out.append((np.asarray(Y), int(np.asarray(info['mask']).sum())))
+    np.testing.assert_array_equal(out[0][0], out[1][0])
+    assert out[0][1] == out[1][1]
+
+
 def test_readysetgo_produce_interval_equals_gain_times_measure():
     task = ct.ReadySetGo(seed=0, gain=2.0)
     _, _, info = task.sample_trial(0)

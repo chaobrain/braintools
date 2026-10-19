@@ -335,3 +335,38 @@ class TestStochasticInputs(TestCase):
             combined = ou + wiener
             show(combined, duration, 'Combined OU + Wiener Process')
             self.assertEqual(combined.shape[0], 4000)
+
+
+class TestNoiseScaleSemantics(TestCase):
+    """``ou_process.sigma`` is the stationary std; ``wiener_process`` returns increments."""
+
+    def test_ou_sigma_is_stationary_std(self):
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            x = ou_process(0. * u.nA, 2.0 * u.nA, 5. * u.ms, 20000. * u.ms, seed=0)
+        x = np.asarray(x.to_decimal(u.nA))[1000:]  # skip the start-at-mean transient
+        self.assertAlmostEqual(float(x.std()), 2.0, delta=0.1)
+        self.assertAlmostEqual(float(x.mean()), 0.0, delta=0.15)
+
+    def test_ou_independent_of_time_unit(self):
+        # The same physical dt and tau written in ms or in seconds give the same process.
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            a = ou_process(1. * u.nA, 0.5 * u.nA, 20. * u.ms, 200. * u.ms, seed=3)
+        with brainstate.environ.context(dt=1e-4 * u.second):
+            b = ou_process(1. * u.nA, 0.5 * u.nA, 0.02 * u.second, 0.2 * u.second, seed=3)
+        np.testing.assert_allclose(a.to_decimal(u.nA), b.to_decimal(u.nA), rtol=1e-4, atol=1e-5)
+
+    def test_ou_autocorrelation_time(self):
+        tau_steps = 50  # tau = 5 ms at dt = 0.1 ms
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            x = np.asarray(ou_process(0., 1.0, 5. * u.ms, 50000. * u.ms, seed=1))
+        x = x - x.mean()
+        rho = np.mean(x[:-tau_steps] * x[tau_steps:]) / np.var(x)
+        self.assertAlmostEqual(float(rho), np.exp(-1), delta=0.03)
+
+    def test_wiener_returns_increments(self):
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            dw = np.asarray(wiener_process(10000. * u.ms, sigma=2.0, seed=0))
+        # Each sample is an increment with std sigma * sqrt(dt) (dt in its own unit).
+        self.assertAlmostEqual(float(dw.std()), 2.0 * np.sqrt(0.1), delta=0.01)
+        # Independent increments: no lag-1 correlation (a path would be ~1).
+        self.assertLess(abs(float(np.corrcoef(dw[:-1], dw[1:])[0, 1])), 0.03)

@@ -418,6 +418,13 @@ def idx(
     PyTree
         PyTree with leaves indexed by `idx`.
     """
+    # ``idx`` is documented as array_like, which includes Python lists; indexing a
+    # jax array with a list raises a confusing TypeError, so normalise it to an
+    # array first. Tuples are deliberately left alone: ``x[(i, j)]`` is
+    # multi-axis indexing (and may contain slices/``None``/``Ellipsis``), so
+    # turning a tuple into an index array would change its meaning.
+    if isinstance(idx, list):
+        idx = np.asarray(idx)
     return jax.tree.map(lambda x: x[idx], tree, is_leaf=is_leaf)
 
 
@@ -481,6 +488,10 @@ def take(
             slices = [slice(None)] * x.ndim
             slices[axis] = idx
             return x[tuple(slices)]
+        # ``idx`` is documented as array_like, which includes Python lists and
+        # tuples; ``u.math.take`` only accepts arrays or scalars, so normalise first.
+        if isinstance(indices, (list, tuple)):
+            indices = np.asarray(indices)
         return u.math.take(x, indices, axis)
 
     return jax.tree.map(take_, tree, is_leaf=is_leaf)

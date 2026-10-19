@@ -174,6 +174,78 @@ class TestVanRossumDistance(unittest.TestCase):
         self.assertGreater(distance2, 0.0)
 
 
+class TestVanRossumClosedForm(unittest.TestCase):
+    """Pin the analytic value of the van Rossum distance.
+
+    The integral is evaluated in closed form, so these must match exactly rather
+    than approximately. These are regression tests for the former left-endpoint
+    rectangle rule on a grid of step ``tau / 20``, which biased *every* result
+    ~2.5% high (e.g. 0.724841 instead of ``sqrt(0.5) = 0.707107`` for a single
+    spike against an empty train at ``tau = 1``).
+    """
+
+    def test_single_spike_vs_empty_is_sqrt_half_over_tau(self):
+        # One spike convolved with (1/tau)exp(-t/tau) squares to 1/(2 tau).
+        for tau in (0.5, 1.0, 2.0, 4.0):
+            distance = braintools.metric.van_rossum_distance(
+                jnp.array([0.0]), jnp.array([]), tau=tau, t_max=200.0
+            )
+            self.assertAlmostEqual(
+                float(distance), math.sqrt(1.0 / (2.0 * tau)), places=5
+            )
+
+    def test_two_spikes_closed_form(self):
+        # sqrt((1/tau) * (1 - exp(-gap/tau)))
+        for gap in (0.5, 1.0, 2.0, 5.0):
+            distance = braintools.metric.van_rossum_distance(
+                jnp.array([0.0]), jnp.array([gap]), tau=1.0, t_max=200.0
+            )
+            self.assertAlmostEqual(
+                float(distance), math.sqrt(1.0 - math.exp(-gap)), places=5
+            )
+
+    def test_multi_spike_matches_independent_closed_form(self):
+        spikes1, spikes2, tau = [0.1, 0.5, 0.9], [0.2, 0.6], 1.0
+
+        def pair_sum(times_a, times_b):
+            if not len(times_a) or not len(times_b):
+                return 0.0
+            a = np.asarray(times_a, dtype=float)[:, None]
+            b = np.asarray(times_b, dtype=float)[None, :]
+            return float(np.sum(np.exp(-np.abs(a - b) / tau)))
+
+        expected = math.sqrt(max(
+            0.0,
+            (pair_sum(spikes1, spikes1) + pair_sum(spikes2, spikes2)
+             - 2.0 * pair_sum(spikes1, spikes2)) / (2.0 * tau)
+        ))
+        distance = braintools.metric.van_rossum_distance(
+            jnp.array(spikes1), jnp.array(spikes2), tau=tau, t_max=500.0
+        )
+        self.assertAlmostEqual(float(distance), expected, places=5)
+
+    def test_t_max_truncates_the_integral_exactly(self):
+        # sqrt((1 - exp(-2 T / tau)) / (2 tau)) for one spike against an empty train.
+        tau = 1.0
+        for t_max in (2.0, 5.0, 20.0):
+            distance = braintools.metric.van_rossum_distance(
+                jnp.array([0.0]), jnp.array([]), tau=tau, t_max=t_max
+            )
+            expected = math.sqrt((1.0 - math.exp(-2.0 * t_max / tau)) / (2.0 * tau))
+            self.assertAlmostEqual(float(distance), expected, places=5)
+
+    def test_default_window_leaves_only_the_five_tau_tail(self):
+        # The default t_max = max(spike) + 5*tau drops less than exp(-10) of the kernel,
+        # so it must sit very close to the (essentially exact) large-window value.
+        default = braintools.metric.van_rossum_distance(
+            jnp.array([0.0]), jnp.array([]), tau=1.0
+        )
+        large = braintools.metric.van_rossum_distance(
+            jnp.array([0.0]), jnp.array([]), tau=1.0, t_max=1000.0
+        )
+        self.assertLess(abs(default - large) / large, 1e-4)
+
+
 class TestSpikeTrainSynchrony(unittest.TestCase):
     def test_perfect_synchrony(self):
         """Test with perfectly synchronized spikes."""
@@ -454,3 +526,49 @@ class TestCorrelationIndex(unittest.TestCase):
         spikes = spikes.at[jnp.arange(0, 1000, 30), 1].set(1.0)
         ci = braintools.metric.correlation_index(spikes, window_size=50.0, dt=1.0)
         self.assertEqual(float(ci), 0.0)
+
+
+class TestTimeUnitHandling(unittest.TestCase):
+    """Times given as Quantities in any unit, or as documented plain floats, agree."""
+
+    def setUp(self):
+        rng = np.random.default_rng(0)
+        self.rate_spikes = (rng.random((20000, 30)) < 0.002).astype(float)  # ~20 Hz at dt = 0.1 ms
+        s = np.zeros((10000, 2))
+        ev = rng.choice(9900, 40, replace=False)
+        s[ev, 0] = 1
+        s[np.clip(ev + rng.integers(-3, 4, 40), 0, 9999), 1] = 1
+        self.paired = s
+
+    def test_firing_rate_mixed_units(self):
+        ref = np.asarray(braintools.metric.firing_rate(self.rate_spikes, 10 * u.ms, 0.1 * u.ms))
+        for width, dt in [(0.01 * u.second, 0.1 * u.ms), (0.01, 0.0001), (10 * u.ms, 0.0001)]:
+            np.testing.assert_allclose(braintools.metric.firing_rate(self.rate_spikes, width, dt), ref, rtol=1e-5)
+        self.assertAlmostEqual(float(ref.mean()), 20.0, delta=1.0)
+
+    def test_sttc_default_tau_is_5ms(self):
+        # The old default (0.005) was a zero-sample window for dt in ms.
+        for kw in [dict(dt=1 * u.ms), dict(dt=1.0), dict(dt=0.001 * u.second, tau=5 * u.ms),
+                   dict(dt=1 * u.ms, tau=0.005 * u.second)]:
+            m = np.asarray(braintools.metric.spike_time_tiling_coefficient(self.paired, **kw))
+            self.assertAlmostEqual(float(m[0, 1]), 1.0, places=5, msg=str(kw))
+
+    def test_window_functions_convert_units(self):
+        f = braintools.metric
+        for fn in (f.spike_train_synchrony, f.correlation_index):
+            ref = fn(self.paired, window_size=10., dt=1.)
+            self.assertAlmostEqual(float(fn(self.paired, window_size=10 * u.ms, dt=0.001 * u.second)), float(ref), places=6)
+            self.assertAlmostEqual(float(fn(self.paired, window_size=0.01 * u.second, dt=1 * u.ms)), float(ref), places=6)
+        ref = f.burst_synchrony_index(self.paired, max_isi=50., dt=1.)
+        self.assertAlmostEqual(float(f.burst_synchrony_index(self.paired, max_isi=0.05 * u.second, dt=1 * u.ms)), float(ref), places=6)
+
+
+class TestCrossCorrelationUnits(unittest.TestCase):
+    def test_float_bin_with_environment_dt(self):
+        rng = np.random.default_rng(0)
+        s = (rng.random((20000, 10)) < 0.002).astype(float)
+        ref = float(braintools.metric.cross_correlation(s, 5., 0.1))
+        for b, d in [(5 * u.ms, 0.1 * u.ms), (0.005 * u.second, 0.1 * u.ms), (5 * u.ms, 0.1)]:
+            self.assertAlmostEqual(float(braintools.metric.cross_correlation(s, b, d)), ref, places=6)
+        with brainstate.environ.context(dt=0.1 * u.ms):
+            self.assertAlmostEqual(float(braintools.metric.cross_correlation(s, 5.)), ref, places=6)

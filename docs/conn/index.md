@@ -4,10 +4,13 @@ Comprehensive tools for generating neural connectivity patterns across different
 
 ## What you'll find here
 
-- The **fundamental API** and data structures of `braintools.conn`, including `ConnectionResult`, composable operators, and unit handling
-- Recipes for **point-neuron connectivity** such as random, distance-dependent, kernel-based, and degree-constrained patterns
-- Guidance on wiring **multi-compartment and population abstractions**, using spatial metadata, and layering complex networks
-- Best practices for interoperability with simulation backends (BrainState/BrainUnit) and exporting connectivity metadata
+- A **basic connectivity** tutorial covering `Random` / `FixedProb`, `AllToAll`, and `OneToOne`, the `ConnectionResult` fields, result caching and `recompute=True`, weight and delay initializers with `brainunit` units, and dense/sparse conversion with `weight2dense()`, `delay2matrix()`, and `weight2csr()`.
+- A **spatial connectivity** tutorial covering position arrays, distance profiles (`GaussianProfile`, `ExponentialProfile`, `MexicanHatProfile`), the `Gaussian` / `Exponential` / `DistanceDependent` connectors, precomputed distances, `Ring` and `Grid2d` topologies, `ClusteredRandom` and `RadialPatches`, and `result.get_distances()`.
+- A **network topologies** tutorial covering `SmallWorld`, `ScaleFree`, `Regular`, `ModularRandom`, `ModularGeneral`, `HierarchicalRandom`, and `CorePeripheryRandom`, with degree, block-density, clustering, path-length, and resilience analyses.
+- An **advanced patterns** tutorial covering `ExcitatoryInhibitory` networks, spatial kernels (`GaussianKernel`, `GaborKernel`, `DoGKernel`, `MexicanHat`), convolution kernels (`Conv2dKernel`, `SobelKernel`, `LaplacianKernel`), `CustomKernel`, and composing spatial E/I projections into a single `ConnectionResult`.
+- A **composition and multi-compartment** tutorial covering the connector operators (`+` union, `*` intersection, `-` difference, weight/delay scaling) and how they combine weights and delays, plus multi-compartment connectivity: compartment constants, `CompartmentSpecific` and the anatomical shortcuts, `MorphologyDistance`, `DendriticTree`, `AxonalProjection`, `SynapticPlacement`, `AxonalBranching`, `AxonalArborization`, `CustomCompartment`, and per-compartment analysis.
+
+For the full list of connectors and their parameters, see the {doc}`API reference <../apis/conn>`.
 
 ```{toctree}
 :maxdepth: 1
@@ -16,4 +19,5 @@ Comprehensive tools for generating neural connectivity patterns across different
 02_spatial_connectivity.ipynb
 03_network_topologies.ipynb
 04_advanced_patterns.ipynb
+05_composition_and_compartments.ipynb
 ```

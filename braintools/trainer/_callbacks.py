@@ -1129,15 +1129,22 @@ class Timer(Callback):
     def time_elapsed(self) -> Optional[float]:
         """Time elapsed since training started (seconds)."""
         import time
-        if self._start_time:
+        # Compare against None rather than testing truthiness: an elapsed time of
+        # exactly 0.0 seconds is a perfectly valid value right after
+        # ``on_fit_start`` (``time.time()`` has coarse granularity on Windows), and
+        # a falsy test would wrongly report "not started".
+        if self._start_time is not None:
             return time.time() - self._start_time
         return None
 
     @property
     def time_remaining(self) -> Optional[float]:
         """Estimated time remaining (seconds)."""
-        if self._max_seconds and self.time_elapsed:
-            return max(0, self._max_seconds - self.time_elapsed)
+        # Same reasoning: ``self.time_elapsed`` is 0.0 for a timer that was just
+        # started, which is not the same as "no timer running" (None).
+        elapsed = self.time_elapsed
+        if self._max_seconds is not None and elapsed is not None:
+            return max(0.0, self._max_seconds - elapsed)
         return None
 
 

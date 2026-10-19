@@ -579,7 +579,7 @@ class Ramp(Input):
     .. code-block:: python
 
         >>> up_ramp = Ramp(0, 1, 100 * u.ms)
-        >>> plateau = Constant([(1, 50)])
+        >>> plateau = Constant([(1, 50 * u.ms)])
         >>> down_ramp = Ramp(1, 0, 100 * u.ms)
         >>> protocol = up_ramp & plateau & down_ramp
     """

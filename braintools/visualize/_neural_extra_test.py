@@ -19,6 +19,7 @@ from unittest import mock
 
 import matplotlib
 import numpy as np
+import pytest
 
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
@@ -203,6 +204,43 @@ class TestSpikeHistogramExtra(unittest.TestCase):
         out = spike_histogram(spikes, bins=15)
         self.assertIsNotNone(out)
 
+    def test_int_bins_use_time_range_as_the_extent(self):
+        """A scalar ``bins`` combined with ``time_range`` must bin over
+        ``time_range``, not over the data's min/max.
+
+        Regression test: ``ax.hist`` was called without ``range=``, so the edges
+        silently came from the filtered data instead, which made two datasets
+        sharing a ``time_range`` produce non-comparable histograms.
+        """
+        for time_range in ((0, 10), (2, 8), (4, 6)):
+            fig, ax = plt.subplots()
+            spike_histogram(self.spikes, bins=10, time_range=time_range, ax=ax)
+            edges = np.array([p.get_x() for p in ax.patches])
+            widths = np.array([p.get_width() for p in ax.patches])
+            counts = np.array([p.get_height() for p in ax.patches])
+            np.testing.assert_allclose(
+                np.r_[edges, edges[-1] + widths[-1]],
+                np.linspace(time_range[0], time_range[1], 11),
+            )
+            expected, _ = np.histogram(self.spikes, bins=10, range=time_range)
+            np.testing.assert_array_equal(counts, expected)
+            plt.close('all')
+
+    def test_two_datasets_share_edges_for_the_same_time_range(self):
+        """Histograms from different data must be comparable under one time_range."""
+        other = np.sort(np.random.uniform(8, 10, 100))
+
+        def edges_of(data):
+            fig, ax = plt.subplots()
+            spike_histogram(data, bins=10, time_range=(0, 10), ax=ax)
+            left = np.array([p.get_x() for p in ax.patches])
+            w = np.array([p.get_width() for p in ax.patches])
+            result = np.r_[left, left[-1] + w[-1]]
+            plt.close('all')
+            return result
+
+        np.testing.assert_allclose(edges_of(self.spikes), edges_of(other))
+
 
 class TestISIDistributionExtra(unittest.TestCase):
 
@@ -350,6 +388,51 @@ class TestTuningCurveExtra(unittest.TestCase):
                            ax=ax, title='tune')
         self.assertIs(out, ax)
 
+    def test_last_bin_includes_the_maximum_stimulus(self):
+        """No sample may be dropped: the final bin is closed on the right.
+
+        Regression test: every bin was half-open ``[lo, hi)`` while the last right
+        edge equals ``stimulus.max()``, so all samples sitting exactly at the
+        maximum were silently discarded -- negligible for continuous stimuli but
+        ~7% for integer-valued or clipped ones, which biased the top bin's mean.
+        """
+        n_bins = 10
+        stim = np.repeat(np.arange(0.0, 11.0), 8)   # integer-valued: many == max
+        resp = 2.0 * stim
+        fig, ax = plt.subplots()
+        tuning_curve(stim, resp, bins=n_bins, error_bars=False, ax=ax)
+        plotted = np.asarray(ax.lines[0].get_ydata(), float)
+
+        edges = np.linspace(stim.min(), stim.max(), n_bins + 1)
+        expected, total = [], 0
+        for i in range(n_bins):
+            hi = (stim <= edges[i + 1]) if i == n_bins - 1 else (stim < edges[i + 1])
+            in_bin = (stim >= edges[i]) & hi
+            total += int(in_bin.sum())
+            if in_bin.any():
+                expected.append(resp[in_bin].mean())
+
+        self.assertEqual(total, len(stim), 'the maximum stimulus samples were dropped')
+        np.testing.assert_allclose(plotted, np.array(expected))
+
+    def test_last_bin_keeps_clipped_samples(self):
+        """Clipped stimuli pile up at the maximum; the top bin must still see them."""
+        n_bins = 10
+        stim = np.clip(np.random.RandomState(0).randn(200) * 3 + 5, 0, 10)
+        resp = stim.copy()
+        pile_up = int((stim == stim.max()).sum())
+        self.assertGreater(pile_up, 5)          # the clipped pile-up exists
+
+        fig, ax = plt.subplots()
+        tuning_curve(stim, resp, bins=n_bins, error_bars=False, ax=ax)
+        plotted = np.asarray(ax.lines[0].get_ydata(), float)
+
+        edges = np.linspace(stim.min(), stim.max(), n_bins + 1)
+        top_bin = (stim >= edges[-2]) & (stim <= edges[-1])
+        # the closed top bin contains the whole pile-up, not just the samples below it
+        self.assertGreaterEqual(int(top_bin.sum()), pile_up)
+        self.assertAlmostEqual(float(plotted[-1]), float(resp[top_bin].mean()), places=9)
+
     def test_gaussian_fit(self):
         out = tuning_curve(self.stim, self.resp, bins=20, fit_curve='gaussian')
         self.assertIsNotNone(out)
@@ -388,3 +471,57 @@ class TestTuningCurveExtra(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+@pytest.mark.parametrize('pref, width, hi', [(90.0, 20.0, 180.0), (1.5, 0.35, np.pi)])
+def test_tuning_curve_gaussian_fit_finds_peak_in_degrees_and_radians(pref, width, hi):
+    # curve_fit used to start at mu = sigma = 1 and silently converge to a wrong
+    # optimum for stimuli outside [0, 1]
+    rng = np.random.default_rng(0)
+    s = rng.uniform(0, hi, 2000)
+    r = 2 + 20 * np.exp(-(s - pref) ** 2 / (2 * width ** 2)) + rng.normal(0, 2, s.size)
+    ax = tuning_curve(s, r, bins=18, fit_curve='gaussian')
+    x, y = [l for l in ax.get_lines() if l.get_label() == 'Gaussian fit'][0].get_data()
+    assert abs(x[np.argmax(y)] - pref) < 0.05 * hi
+    assert abs(y.max() - 22.0) < 2.0
+    plt.close('all')
+
+
+@pytest.mark.parametrize('widths', ['matrix', 'flat', 'per_edge'])
+def test_network_topology_edge_widths_formats(widths):
+    A = np.array([[0, 2., 0], [0, 0, 5.], [1., 0, 0]])
+    w = {'matrix': A, 'flat': A.ravel(), 'per_edge': np.array([2., 5., 1.])}[widths]
+    ax = network_topology(A > 0, layout='circular', edge_widths=w)
+    assert [l.get_linewidth() for l in ax.get_lines()] == [2.0, 5.0, 1.0]
+    plt.close('all')
+
+
+def test_network_topology_rejects_mismatched_edge_attribute():
+    A = np.array([[0, 2., 0], [0, 0, 5.], [1., 0, 0]])
+    with pytest.raises(ValueError):
+        network_topology(A > 0, layout='circular', edge_widths=[1.0, 2.0])
+    plt.close('all')
+
+
+def test_firing_rate_map_unvisited_bins_are_blank_and_axes_in_position_units():
+    positions = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 2.0], [0.1, 0.1]])
+    rates = np.array([5.0, 0.0, 3.0, 7.0])
+    ax = firing_rate_map(rates, positions=positions, grid_size=(2, 2), show_colorbar=False)
+    img = ax.get_images()[0]
+    data = np.ma.filled(img.get_array().astype(float), np.nan)
+    assert data[0, 0] == 6.0          # mean of 5 and 7
+    assert data[0, 1] == 0.0          # visited, silent
+    assert data[1, 0] == 3.0
+    assert np.isnan(data[1, 1])       # never visited
+    assert tuple(img.get_extent()) == (0.0, 1.0, 0.0, 2.0)
+    plt.close('all')
+
+
+def test_network_topology_draws_negative_edges_in_blue():
+    W = np.array([[0.0, 1.0], [-2.0, 0.0]])
+    ax = network_topology(W, layout='circular')
+    colors = sorted(str(l.get_color()) for l in ax.get_lines())
+    assert colors == sorted(['gray', '#1f77b4'])
+    ax = network_topology(W, layout='circular', edge_widths=W)
+    assert sorted(l.get_linewidth() for l in ax.get_lines()) == [1.0, 2.0]
+    plt.close('all')

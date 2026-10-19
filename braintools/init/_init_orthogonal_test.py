@@ -116,75 +116,64 @@ class TestOrthogonal(unittest.TestCase):
 
 
 class TestDeltaOrthogonal(unittest.TestCase):
-    """Test DeltaOrthogonal initialization."""
+    """Test DeltaOrthogonal initialization (channels-last ``(*spatial, in, out)``)."""
 
     def setUp(self):
         self.rng = np.random.default_rng(42)
 
     def test_conv_kernel_shape(self):
-        # Test with typical conv kernel shape: (out_channels, in_channels, height, width)
+        # brainstate conv kernels are (height, width, in_channels, out_channels)
         init = DeltaOrthogonal()
-        weights = init((64, 32, 3, 3), rng=self.rng)
-        self.assertEqual(weights.shape, (64, 32, 3, 3))
+        weights = init((3, 3, 32, 64), rng=self.rng)
+        self.assertEqual(weights.shape, (3, 3, 32, 64))
 
     def test_center_is_orthogonal(self):
         init = DeltaOrthogonal()
-        weights = init((64, 32, 3, 3), rng=self.rng)
+        weights = init((3, 3, 32, 64), rng=self.rng)
+        # in <= out: orthonormal rows, so y = x @ W preserves norms
+        center = _f64(weights[1, 1])
+        np.testing.assert_allclose(center @ center.T, np.eye(32), atol=1e-6)
 
-        # Extract center values (at index [1, 1] for 3x3 kernel)
-        center = _f64(weights[:, :, 1, 1])
-
-        # Check orthogonality
-        if center.shape[0] >= center.shape[1]:
-            product = center.T @ center
-            identity = np.eye(32)
-        else:
-            product = center @ center.T
-            identity = np.eye(64)
-
-        np.testing.assert_allclose(product, identity, atol=1e-6)
+    def test_center_is_orthogonal_contracting(self):
+        init = DeltaOrthogonal()
+        weights = init((3, 3, 64, 32), rng=self.rng)
+        center = _f64(weights[1, 1])
+        np.testing.assert_allclose(center.T @ center, np.eye(32), atol=1e-6)
 
     def test_non_center_is_zero(self):
         init = DeltaOrthogonal()
-        weights = init((64, 32, 3, 3), rng=self.rng)
+        weights = init((3, 3, 32, 64), rng=self.rng)
 
         # All values except center should be zero
         for i in range(3):
             for j in range(3):
                 if i == 1 and j == 1:
                     continue  # Skip center
-                np.testing.assert_allclose(weights[:, :, i, j], 0.0, atol=1e-10)
+                np.testing.assert_allclose(weights[i, j], 0.0, atol=1e-10)
 
     def test_1d_conv(self):
-        # Test with 1D conv kernel
+        # 1D conv kernel (width, in, out); center at index 2
         init = DeltaOrthogonal()
-        weights = init((64, 32, 5), rng=self.rng)
-        self.assertEqual(weights.shape, (64, 32, 5))
-
-        # Center should be at index 2
-        center = _f64(weights[:, :, 2])
-        if center.shape[0] >= center.shape[1]:
-            product = center.T @ center
-            identity = np.eye(32)
-        else:
-            product = center @ center.T
-            identity = np.eye(64)
-        np.testing.assert_allclose(product, identity, atol=1e-6)
+        weights = init((5, 32, 64), rng=self.rng)
+        self.assertEqual(weights.shape, (5, 32, 64))
+        center = _f64(weights[2])
+        np.testing.assert_allclose(center @ center.T, np.eye(32), atol=1e-6)
+        np.testing.assert_allclose(_f64(weights)[[0, 1, 3, 4]], 0.0, atol=1e-10)
 
     def test_gain(self):
         gain = 2.0
         init = DeltaOrthogonal(scale=gain)
-        weights = init((64, 32, 3, 3), rng=self.rng)
+        weights = init((3, 3, 32, 64), rng=self.rng)
+        center = _f64(weights[1, 1])
+        np.testing.assert_allclose(center @ center.T, np.eye(32) * gain ** 2, atol=1e-5)
 
-        center = _f64(weights[:, :, 1, 1])
-        # Check scale scaling
-        if center.shape[0] >= center.shape[1]:
-            product = center.T @ center
-            identity = np.eye(32) * (gain ** 2)
-        else:
-            product = center @ center.T
-            identity = np.eye(64) * (gain ** 2)
-        np.testing.assert_allclose(product, identity, atol=1e-5)
+    def test_matches_brainstate_conv_kernel(self):
+        # The kernel shape brainstate.nn.Conv2d asks its w_init for.
+        import brainstate
+        conv = brainstate.nn.Conv2d((8, 8, 4), 16, kernel_size=3, w_init=DeltaOrthogonal())
+        w = _f64(conv.weight.value['weight'])
+        self.assertEqual(w.shape, (3, 3, 4, 16))
+        np.testing.assert_allclose(w[1, 1] @ w[1, 1].T, np.eye(4), atol=1e-6)
 
     def test_invalid_shape(self):
         init = DeltaOrthogonal()

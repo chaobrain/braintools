@@ -46,17 +46,18 @@ NEURAL_COLORS = {
     'axon': '#98D8C8'
 }
 
+# Okabe & Ito (2008), "Color Universal Design": distinguishable under the
+# common forms of color-vision deficiency (protanopia, deuteranopia,
+# tritanopia).
 COLORBLIND_PALETTE = [
-    '#1f77b4',  # blue
-    '#ff7f0e',  # orange
-    '#2ca02c',  # green
-    '#d62728',  # red
-    '#9467bd',  # purple
-    '#8c564b',  # brown
-    '#e377c2',  # pink
-    '#7f7f7f',  # gray
-    '#bcbd22',  # olive
-    '#17becf'  # cyan
+    '#E69F00',  # orange
+    '#56B4E9',  # sky blue
+    '#009E73',  # bluish green
+    '#F0E442',  # yellow
+    '#0072B2',  # blue
+    '#D55E00',  # vermillion
+    '#CC79A7',  # reddish purple
+    '#000000',  # black
 ]
 
 
@@ -193,7 +194,7 @@ def dark_style(
     grid_color : str
         Grid color.
     accent_color : str
-        Accent color for highlights.
+        Accent color: the first color of the line/marker color cycle.
     """
     params = {
         'figure.facecolor': background_color,
@@ -213,9 +214,9 @@ def dark_style(
     }
     rcParams.update(params)
 
-    # Set dark-friendly color cycle
-    dark_colors = ['#00D4AA', '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFEAA7', '#DDA0DD']
-    plt.rcParams['axes.prop_cycle'] = plt.cycler('color', dark_colors)
+    # Set dark-friendly color cycle, led by the accent color
+    dark_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFEAA7', '#DDA0DD']
+    plt.rcParams['axes.prop_cycle'] = plt.cycler('color', [accent_color] + dark_colors)
 
 
 @set_module_as('braintools.visualize')

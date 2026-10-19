@@ -19,6 +19,7 @@ import unittest
 from unittest import mock
 
 import numpy as np
+import pytest
 
 from braintools.visualize import (
     interactive_spike_raster,
@@ -241,3 +242,32 @@ class TestDashboardNeuralActivity(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_interactive_network_edge_weights_set_line_widths():
+    pytest.importorskip('plotly')
+    import braintools
+    A = np.array([[0, 2., 0], [0, 0, 5.], [1., 0, 0]])
+    fig = braintools.visualize.interactive_network(A > 0, edge_weights=A)
+    widths = [t.line.width for t in fig.data if t.mode == 'lines']
+    assert np.allclose(widths, [0.5 + 5.5 * w / 5.0 for w in [2.0, 5.0, 1.0]])
+
+
+def test_interactive_network_draws_negative_edges():
+    pytest.importorskip('plotly')
+    import braintools
+    W = np.array([[0.0, 1.0], [-2.0, 0.0]])
+    fig = braintools.visualize.interactive_network(W)
+    line_colors = sorted(t.line.color for t in fig.data if t.mode == 'lines')
+    assert line_colors == sorted(['gray', '#1f77b4'])
+    fig = braintools.visualize.interactive_network(W, edge_weights=W)
+    assert sorted(t.line.width for t in fig.data if t.mode == 'lines') == [0.5 + 5.5 * 0.5, 6.0]
+
+
+def test_interactive_histogram_overlays_share_bins():
+    pytest.importorskip('plotly')
+    import braintools
+    rng = np.random.default_rng(0)
+    fig = braintools.visualize.interactive_histogram([rng.normal(0, 1, 500), rng.normal(3, 0.2, 50)], bins=20)
+    bins = [(t.xbins.start, t.xbins.size) for t in fig.data]
+    assert bins[0] == bins[1]

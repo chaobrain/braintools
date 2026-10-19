@@ -330,6 +330,35 @@ class TestQuantityAndState(unittest.TestCase):
             self.assertEqual(loaded["x"].unit, u.mV)
             self.assertTrue(u.math.allclose(loaded["x"], data["x"]))
 
+    def test_quantity_keeps_unit_display_name(self):
+        # The unit rebuilt from (dim, scale, base, factor) is equal but unnamed;
+        # loading against a target must give back the named unit.
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, "q_name.msg")
+            data = {"tau": 10.0 * u.ms, "R": 100.0 * u.Mohm}
+            M.msgpack_save(fn, data, verbose=False)
+            loaded = M.msgpack_load(fn, target=data, verbose=False)
+            self.assertEqual(str(loaded["tau"].unit), str(u.ms))
+            self.assertEqual(str(loaded["R"].unit), str(u.Mohm))
+            self.assertEqual(str(loaded["tau"]), str(data["tau"]))
+
+    def test_prng_key_round_trip_resumes_random_stream(self):
+        # Typed PRNG keys (brainstate.random states) used to fail with
+        # "JAX array with PRNGKey dtype cannot be converted to a NumPy array".
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, "rng.msg")
+            brainstate.random.seed(7)
+            M.msgpack_save(fn, {"rng": brainstate.random.DEFAULT, "key": jax.random.key(3)})
+            expected = brainstate.random.rand(4)
+            brainstate.random.seed(123)  # scramble the global stream
+            out = M.msgpack_load(fn, target={"rng": brainstate.random.DEFAULT, "key": jax.random.key(0)})
+            np.testing.assert_allclose(brainstate.random.rand(4), expected)
+            self.assertTrue(jax.dtypes.issubdtype(out["key"].dtype, jax.dtypes.prng_key))
+            np.testing.assert_array_equal(jax.random.key_data(out["key"]),
+                                          jax.random.key_data(jax.random.key(3)))
+            raw = M.msgpack_load(fn)
+            self.assertEqual(raw["key"]["__prng_key_impl__"], "threefry2x32")
+
     def test_quantity_no_target_returns_raw_state_dict(self):
         with tempfile.TemporaryDirectory() as d:
             fn = os.path.join(d, "q2.msg")

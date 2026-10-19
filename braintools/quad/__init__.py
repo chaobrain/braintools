@@ -175,14 +175,14 @@ making them ideal for simulation loops with minimal boilerplate.
     # Milstein (strong order 1.0)
     V = sde_milstein_step(drift, diffusion, V, t, I_mean=0.5 * u.nA)
 
-    # Heun's method (strong order 0.5, better weak order)
+    # Heun's method (Ito: strong order 0.5; sde_type='stra': strong order 1.0)
     V = sde_heun_step(drift, diffusion, V, t, I_mean=0.5 * u.nA)
 
-    # Stochastic Runge-Kutta methods
+    # Stochastic Runge-Kutta methods (Stratonovich, strong order 1.0)
     V = sde_srk2_step(drift, diffusion, V, t, I_mean=0.5 * u.nA)
     V = sde_srk3_step(drift, diffusion, V, t, I_mean=0.5 * u.nA)
 
-    # Tamed Euler (for stiff SDEs)
+    # Tamed Euler (for superlinearly growing drifts)
     V = sde_tamed_euler_step(drift, diffusion, V, t, I_mean=0.5 * u.nA)
 
     # Exponential Euler (drift is linearized internally; signature is

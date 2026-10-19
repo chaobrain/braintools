@@ -50,7 +50,7 @@ class TestColormapsExtra(unittest.TestCase):
     def test_colorblind_friendly_style(self):
         braintools.visualize.colorblind_friendly_style()
         cycle_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-        self.assertIn('#1f77b4', cycle_colors)
+        self.assertIn('#E69F00', cycle_colors)  # Okabe-Ito orange
 
     # ------------------------------------------------------------------
     # create_neural_colormap
@@ -94,7 +94,7 @@ class TestColormapsExtra(unittest.TestCase):
     def test_apply_style_colorblind(self):
         braintools.visualize.apply_style('colorblind')
         cycle_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-        self.assertIn('#1f77b4', cycle_colors)
+        self.assertIn('#E69F00', cycle_colors)  # Okabe-Ito orange
 
     def test_apply_style_invalid(self):
         with self.assertRaises(ValueError):
@@ -137,3 +137,14 @@ class TestColormapsExtra(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_colorblind_palette_is_okabe_ito():
+    import braintools
+    assert braintools.visualize.get_color_palette('colorblind')[:3] == ['#E69F00', '#56B4E9', '#009E73']
+
+
+def test_dark_style_uses_accent_color():
+    import braintools
+    with braintools.visualize.apply_style('dark', accent_color='#123456'):
+        assert plt.rcParams['axes.prop_cycle'].by_key()['color'][0] == '#123456'
