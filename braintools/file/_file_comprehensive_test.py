@@ -92,6 +92,14 @@ class TestSaveMatfile(unittest.TestCase):
             save_matfile(fn, {"x": np.arange(2)}, verbose=True)
             self.assertTrue(os.path.exists(fn))
 
+    def test_save_matfile_appends_mat_extension(self):
+        # Matches ``scipy.io.savemat``'s ``appendmat=True`` default.
+        with tempfile.TemporaryDirectory() as d:
+            save_matfile(os.path.join(d, "noext"), {"x": np.arange(2)})
+            self.assertEqual(os.listdir(d), ["noext.mat"])
+            save_matfile(os.path.join(d, "raw"), {"x": np.arange(2)}, appendmat=False)
+            self.assertIn("raw", os.listdir(d))
+
     def test_save_matfile_bad_filename_type(self):
         with self.assertRaises(TypeError) as cm:
             save_matfile(123, {"x": np.arange(2)})
@@ -121,6 +129,19 @@ class TestLoadMatfileV73AndDeprecation(unittest.TestCase):
             with self.assertRaises(NotImplementedError) as cm:
                 load_matfile(fn, verbose=False)
             self.assertIn("v7.3", str(cm.exception))
+
+    def test_v73_matlab_layout_detection(self):
+        # Files written by MATLAB put a 128-byte text header in a 512-byte HDF5
+        # user block, so the HDF5 signature is at offset 512, not 0.
+        header = b"MATLAB 7.3 MAT-file, Platform: GLNXA64, HDF5 schema 1.00 ."
+        header = header.ljust(116, b" ") + b"\x00" * 8 + b"\x00\x02IM"
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, "v73.mat")
+            with open(fn, "wb") as f:
+                f.write(header.ljust(512, b"\x00") + MF._HDF5_MAGIC + b"\x00" * 64)
+            with self.assertRaises(NotImplementedError) as cm:
+                load_matfile(fn)
+            self.assertIn("h5py", str(cm.exception))
 
     def test_deprecated_header_info_true_excludes(self):
         with tempfile.TemporaryDirectory() as d:

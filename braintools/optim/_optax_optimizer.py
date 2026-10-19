@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import inspect
 import warnings
 from typing import Dict, Optional, Union, Callable, Any, List, Tuple, NamedTuple
 
@@ -99,19 +100,6 @@ class OptaxOptimizer(Optimizer):
         Base learning rate (read-only property).
     lr : float
         Current learning rate (can be modified by schedulers).
-
-    Methods
-    -------
-    register_trainable_weights(param_states)
-        Register parameters to be optimized.
-    add_param_group(params, **kwargs)
-        Add a new parameter group with custom hyperparameters.
-    step(grads, closure=None)
-        Perform a single optimization step.
-    state_dict()
-        Get optimizer state for checkpointing.
-    load_state_dict(state_dict)
-        Load optimizer state from checkpoint.
 
     Notes
     -----
@@ -968,7 +956,7 @@ class MomentumNesterov(OptaxOptimizer):
     r"""
     Nesterov Momentum optimizer.
 
-    Implements Nesterov's accelerated gradient method, which looks ahead by extrapolating
+    Implements Nesterov's accelerated gradient method [1]_, which looks ahead by extrapolating
     the momentum term before computing the gradient. This often leads to faster convergence
     compared to standard momentum.
 
@@ -1109,7 +1097,7 @@ class Adam(OptaxOptimizer):
     Adam (Adaptive Moment Estimation) optimizer.
 
     Adam is an adaptive learning rate optimization algorithm that combines the advantages
-    of AdaGrad and RMSProp. It computes adaptive learning rates for each parameter by
+    of AdaGrad and RMSProp [1]_. It computes adaptive learning rates for each parameter by
     maintaining first and second moment estimates of the gradients.
 
     Parameters
@@ -1283,7 +1271,7 @@ class AdamW(OptaxOptimizer):
     AdamW optimizer with decoupled weight decay regularization.
 
     AdamW modifies the standard Adam algorithm by decoupling the weight decay from the
-    gradient-based update, which has been shown to improve generalization performance.
+    gradient-based update, which has been shown to improve generalization performance [1]_.
 
     Parameters
     ----------
@@ -1393,7 +1381,7 @@ class Adagrad(OptaxOptimizer):
     Adagrad optimizer with adaptive learning rates.
 
     Adagrad adapts the learning rate for each parameter based on the historical
-    gradient information. Parameters with larger gradients have smaller learning rates,
+    gradient information [1]_. Parameters with larger gradients have smaller learning rates,
     and vice versa. This makes it well-suited for sparse data.
 
     Parameters
@@ -1529,7 +1517,7 @@ class Adadelta(OptaxOptimizer):
     r"""
     Adadelta optimizer - an extension of Adagrad.
 
-    Adadelta is an extension of Adagrad that seeks to reduce its aggressive,
+    Adadelta [1]_ is an extension of Adagrad that seeks to reduce its aggressive,
     monotonically decreasing learning rate. Instead of accumulating all past
     squared gradients, Adadelta restricts the window of accumulated past
     gradients to some fixed size.
@@ -1655,7 +1643,7 @@ class RMSprop(OptaxOptimizer):
     r"""
     RMSprop (Root Mean Square Propagation) optimizer.
 
-    RMSprop divides the learning rate by an exponentially decaying average of squared
+    RMSprop [1]_ divides the learning rate by an exponentially decaying average of squared
     gradients. This helps the optimizer navigate ravines, where the surface curves
     much more steeply in one dimension than in another.
 
@@ -1809,7 +1797,7 @@ class Adamax(OptaxOptimizer):
     r"""
     Adamax optimizer - variant of Adam based on infinity norm.
 
-    Adamax is a variant of Adam based on the infinity norm, making it more robust
+    Adamax is a variant of Adam based on the infinity norm [1]_, making it more robust
     to large gradients. It can sometimes achieve better performance than Adam.
 
     Parameters
@@ -1971,7 +1959,7 @@ class Nadam(OptaxOptimizer):
     Nadam optimizer - Adam with Nesterov accelerated gradient.
 
     Nadam (Nesterov-accelerated Adaptive Moment Estimation) combines Adam with
-    Nesterov momentum. It provides the benefits of both adaptive learning rates
+    Nesterov momentum [1]_. It provides the benefits of both adaptive learning rates
     and Nesterov's accelerated gradient method, often leading to faster convergence
     and better performance than standard Adam.
 
@@ -2142,7 +2130,7 @@ class RAdam(OptaxOptimizer):
     r"""RAdam optimizer (Rectified Adam).
 
     RAdam addresses the bad convergence problem of Adam by rectifying the variance
-    of the adaptive learning rate. It provides a dynamic warmup schedule that
+    of the adaptive learning rate [1]_. It provides a dynamic warmup schedule that
     automatically adapts to the current optimization state.
 
     Parameters
@@ -2323,7 +2311,7 @@ class RAdam(OptaxOptimizer):
 class Lamb(OptaxOptimizer):
     r"""LAMB optimizer (Layer-wise Adaptive Moments).
 
-    LAMB is designed for large batch training, adapting the learning rate based on
+    LAMB [1]_ is designed for large batch training, adapting the learning rate based on
     the ratio of weight norm to gradient norm for each layer. It enables training
     with very large batch sizes while maintaining performance comparable to small
     batch training.
@@ -2540,7 +2528,7 @@ class Lamb(OptaxOptimizer):
 class Lars(OptaxOptimizer):
     r"""LARS optimizer (Layer-wise Adaptive Rate Scaling).
 
-    LARS adapts the learning rate for each layer based on the ratio between
+    LARS [1]_ adapts the learning rate for each layer based on the ratio between
     the norm of weights and the norm of gradients. This allows for stable
     training with very large batch sizes by preventing layers from having
     their weights change too rapidly.
@@ -2597,7 +2585,7 @@ class Lars(OptaxOptimizer):
     Key properties of LARS:
 
     - Enables linear scaling of batch size with learning rate
-    - Particularly effective for training ResNets and other CNNs
+    - Particularly effective for training ResNets and other CNNs on ImageNet [2]_
     - Maintains different learning rates for different layers
     - Prevents rapid weight changes in any single layer
 
@@ -2847,7 +2835,7 @@ def _lookahead_transform(
 class Lookahead(OptaxOptimizer):
     r"""Lookahead optimizer wrapper.
 
-    Lookahead is a meta-optimizer that wraps any standard optimizer and maintains
+    Lookahead [1]_ is a meta-optimizer that wraps any standard optimizer and maintains
     two sets of weights: "fast weights" updated by the base optimizer, and "slow
     weights" that are periodically synchronized with the fast weights. This approach
     reduces variance and improves training stability.
@@ -3082,7 +3070,7 @@ class Lookahead(OptaxOptimizer):
 class Yogi(OptaxOptimizer):
     r"""Yogi optimizer (improvement over Adam).
 
-    Yogi is an adaptive learning rate optimizer that addresses some of the
+    Yogi [1]_ is an adaptive learning rate optimizer that addresses some of the
     limitations of Adam by controlling the increase of the effective learning
     rate. It uses additive updates instead of multiplicative updates for the
     second moment estimate, which prevents the effective learning rate from
@@ -3295,7 +3283,7 @@ class LBFGS(OptaxOptimizer):
     r"""L-BFGS optimizer (Limited-memory Broyden-Fletcher-Goldfarb-Shanno).
 
     L-BFGS is a quasi-Newton optimization method that approximates the inverse Hessian
-    matrix using a limited amount of memory. It provides superlinear convergence for
+    matrix using a limited amount of memory [1]_. It provides superlinear convergence for
     smooth, unconstrained optimization problems and is widely used in scientific
     computing, machine learning, and numerical optimization.
 
@@ -3331,7 +3319,7 @@ class LBFGS(OptaxOptimizer):
     **Mathematical Formulation:**
 
     L-BFGS approximates the inverse Hessian matrix :math:`H_k^{-1}` using the
-    limited-memory BFGS update formula. The parameter update is:
+    limited-memory BFGS update formula [2]_. The parameter update is:
 
     .. math::
         \theta_{k+1} = \theta_k - \alpha_k H_k^{-1} \nabla f(\theta_k)
@@ -3360,6 +3348,7 @@ class LBFGS(OptaxOptimizer):
 
     This implementation includes automatic zoom line search finding step size
     :math:`\alpha_k` satisfying the strong Wolfe conditions for robust convergence.
+    The bound-constrained variant L-BFGS-B is described in [3]_ and [4]_.
 
     **Key Characteristics:**
 
@@ -3389,18 +3378,24 @@ class LBFGS(OptaxOptimizer):
         >>> optimizer.update(grads)
 
     With a line search (``linesearch='zoom'`` or ``'backtracking'``), the line
-    search needs the current objective value and a callable to re-evaluate it, so
-    pass ``value`` and ``value_fn`` to :meth:`update`:
+    search needs the current objective value and a function that evaluates the
+    objective at trial points. That function must be **pure**: it receives the
+    parameter values as a dict keyed like the weights given to
+    :meth:`register_trainable_weights` and returns a scalar.
 
     .. code-block:: python
 
-        >>> @brainstate.transform.grad(
-        ...     grad_states=model.states(brainstate.ParamState), return_value=True
-        ... )
-        ... def loss_fn():
-        ...     return objective(model)
-        >>> grads, value = loss_fn()
-        >>> optimizer.update(grads, value=value, value_fn=loss_fn)
+        >>> params = {'w': brainstate.ParamState(jnp.array([-1.5, 2.0]))}
+        >>> optimizer = braintools.optim.LBFGS(linesearch='zoom')
+        >>> optimizer.register_trainable_weights(params)
+        >>> def objective(values):  # pure function of the parameter values
+        ...     w = values['w']
+        ...     return (1 - w[0]) ** 2 + 100 * (w[1] - w[0] ** 2) ** 2
+        >>> for _ in range(40):
+        ...     grads = brainstate.transform.grad(
+        ...         lambda: objective({'w': params['w'].value}), grad_states=params)()
+        ...     optimizer.update(grads, value=objective({'w': params['w'].value}),
+        ...                      value_fn=objective)
 
     References
     ----------
@@ -3598,7 +3593,12 @@ class LBFGS(OptaxOptimizer):
             linesearch = optax.identity()
         elif isinstance(linesearch, str):
             if linesearch == 'zoom':
-                linesearch = optax.scale_by_zoom_linesearch(max_linesearch_steps=100)
+                # ``initial_guess_strategy='one'`` starts every line search at the
+                # full quasi-Newton step, as ``optax.lbfgs`` does by default; the
+                # standalone default ('keep') reuses the previous step size and
+                # can stall L-BFGS far from the minimum.
+                linesearch = optax.scale_by_zoom_linesearch(
+                    max_linesearch_steps=100, initial_guess_strategy='one')
             elif linesearch == 'backtracking':
                 linesearch = optax.scale_by_backtracking_linesearch(max_backtracking_steps=100)
             else:
@@ -3652,7 +3652,8 @@ class LBFGS(OptaxOptimizer):
         value : float, optional
             Current value of the objective function. Required for linesearch.
         value_fn : callable, optional
-            Function to compute objective value. Required for linesearch.
+            Pure function ``value_fn(params) -> value`` of the parameter values (a
+            dict keyed like the registered weights). Required for linesearch.
         **kwargs
             Additional arguments passed to the optimizer update.
 
@@ -3663,34 +3664,50 @@ class LBFGS(OptaxOptimizer):
         - grad: gradients (automatically passed)
         - value_fn: callable to evaluate objective function
 
-        For best performance, use with optax.value_and_grad_from_state:
-
-        .. code-block:: python
-
-            >>> value_and_grad = optax.value_and_grad_from_state(loss_fn)
-            >>> value, grad = value_and_grad(params, state=opt_state)
-            >>> updates, opt_state = optimizer.update(
-            ...     grad, opt_state, params,
-            ...     value=value, grad=grad, value_fn=loss_fn
-            ... )
+        ``value`` may also be the ``(grads, value)`` pair returned by
+        ``brainstate.transform.grad(..., return_value=True)``.
         """
         # Pass extra arguments needed for LBFGS with linesearch
         extra_args = {}
         if value is not None:
+            if isinstance(value, tuple):  # a (grads, value) pair from grad(return_value=True)
+                value = value[-1]
             extra_args['value'] = value
         if value_fn is not None:
-            extra_args['value_fn'] = value_fn
+            extra_args['value_fn'] = self._as_params_value_fn(value_fn)
         # grad is automatically included from grads parameter
         extra_args['grad'] = grads
 
         # Call parent update with extra arguments
         return super().update(grads, **extra_args, **kwargs)
 
+    @staticmethod
+    def _as_params_value_fn(value_fn):
+        """Check that ``value_fn`` has the ``value_fn(params) -> value`` form.
+
+        The line search evaluates the objective at trial points inside a JAX loop,
+        so it needs a pure function of the parameter values (a dict keyed like the
+        registered weights); it cannot re-run a zero-argument function that reads
+        ``brainstate`` states.
+        """
+        try:
+            params = inspect.signature(value_fn).parameters.values()
+        except (TypeError, ValueError):
+            return value_fn
+        if not any(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.VAR_POSITIONAL) for p in params):
+            raise TypeError(
+                '`value_fn` must take the parameter values and return the objective, '
+                'i.e. `value_fn(params)` where `params` is a dict keyed like the weights '
+                'passed to `register_trainable_weights`; a zero-argument function that '
+                'reads model states cannot be evaluated at the line-search trial points.'
+            )
+        return value_fn
+
 
 class Rprop(OptaxOptimizer):
     r"""Rprop optimizer (Resilient Backpropagation).
 
-    Rprop is a gradient-based optimization algorithm that adapts the step size
+    Rprop [1]_ is a gradient-based optimization algorithm that adapts the step size
     individually for each parameter based only on the sign of the gradient,
     not its magnitude. This makes it particularly robust to varying gradient
     scales and well-suited for batch learning.
@@ -3717,7 +3734,7 @@ class Rprop(OptaxOptimizer):
     Notes
     -----
     Rprop adapts the step size for each weight based on the sign pattern of gradients.
-    The update rule is:
+    Improved variants of the algorithm are discussed in [2]_. The update rule is:
 
     .. math::
         \Delta_t^{(i)} = \begin{cases}
@@ -3928,7 +3945,7 @@ class Rprop(OptaxOptimizer):
 class Adafactor(OptaxOptimizer):
     r"""Adafactor optimizer (memory-efficient variant of Adam).
 
-    Adafactor is designed to reduce memory usage during training large models
+    Adafactor [1]_ is designed to reduce memory usage during training large models
     by using factored second moment estimation. Instead of storing a full
     second moment matrix, it maintains row and column statistics, significantly
     reducing memory requirements especially for models with large embedding tables.
@@ -4168,7 +4185,7 @@ class Adafactor(OptaxOptimizer):
 class AdaBelief(OptaxOptimizer):
     r"""AdaBelief optimizer - Adapts step size according to belief in gradient direction.
 
-    AdaBelief is an adaptive learning rate optimizer that adapts the step size
+    AdaBelief [1]_ is an adaptive learning rate optimizer that adapts the step size
     according to the "belief" in the gradient direction. Unlike Adam which adapts
     based on gradient magnitudes, AdaBelief adapts based on the variance of the
     prediction error (gradient - momentum).
@@ -4393,7 +4410,7 @@ class AdaBelief(OptaxOptimizer):
 class Lion(OptaxOptimizer):
     r"""Lion (EvoLved Sign Momentum) optimizer - Discovered through program search.
 
-    Lion is a novel optimizer discovered through large-scale evolutionary program search.
+    Lion is a novel optimizer discovered through large-scale evolutionary program search [1]_.
     It uses sign-based updates for both momentum and parameter updates, making it
     extremely memory-efficient and computationally simple. Despite its simplicity,
     Lion achieves competitive or superior performance compared to Adam while using
@@ -4623,7 +4640,7 @@ class Lion(OptaxOptimizer):
 class SM3(OptaxOptimizer):
     r"""SM3 (Square-root of Minima of Sums of Maxima of Squared-gradients) optimizer.
 
-    SM3 is a memory-efficient adaptive optimizer designed for training models with
+    SM3 [1]_ is a memory-efficient adaptive optimizer designed for training models with
     large embedding tables and sparse gradients. It achieves significant memory
     savings by using a clever factorization of the second moment matrix, storing
     only one value per dimension instead of one value per parameter.
@@ -4868,7 +4885,7 @@ class SM3(OptaxOptimizer):
 class Novograd(OptaxOptimizer):
     r"""Novograd (Normalized Gradient) optimizer - Layer-wise gradient normalization with momentum.
 
-    Novograd is an adaptive learning rate optimizer that combines layer-wise gradient
+    Novograd [1]_ is an adaptive learning rate optimizer that combines layer-wise gradient
     normalization with Adam-like second moment estimation. It was designed specifically
     for training speech recognition models but has been shown to work well across
     various deep learning tasks including computer vision and NLP.
@@ -5123,7 +5140,8 @@ class Fromage(OptaxOptimizer):
 
     The key innovation of Fromage is computing the step size from the ratio of
     consecutive gradient norms, which approximates the local curvature of the loss
-    function. This provides an automatic adaptation mechanism without requiring
+    function. For related work on sign-based updates and on adaptive step sizes
+    via line search, see [1]_ and [2]_. This provides an automatic adaptation mechanism without requiring
     explicit learning rate scheduling or tuning.
 
     Parameters

@@ -15,6 +15,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from brainstate._compatible_import import Primitive
 from brainstate.util import PrettyObject
 from jax.interpreters import batching, ad, mlir
@@ -54,52 +55,23 @@ def _heaviside_batching(args, axes):
 
 
 def _heaviside_jvp(primals, tangents):
+    # The forward output H(x) does not depend on ``dx`` (the surrogate gradient
+    # value); ``dx`` only defines the derivative with respect to ``x``. So the
+    # tangent of the output is ``dx * tx`` and the tangent of ``dx`` is ignored:
+    # derivatives with respect to surrogate hyperparameters (e.g. ``alpha``) are
+    # exactly 0, as for the true step function. Because ``dx`` is an ordinary
+    # traced value, differentiating the gradient again (Hessians, gradients
+    # through unrolled training steps) includes the derivative of ``dx``.
     x, dx = primals
-    tx, tdx = tangents
-    # Call the implementation directly instead of bind to avoid recursion
+    tx, _ = tangents
     primal_outs = _heaviside_imp(x, dx)
-    # Handle gradients w.r.t. both x and dx
-    # ∂output/∂x via surrogate gradient dx, plus ∂output/∂dx contribution
-    # Need to handle JAX's Zero type for optimization
     if type(tx) is ad.Zero:
-        tangent_x = tx  # Keep as Zero
+        # The output has the shape and dtype of ``x``, so the incoming symbolic
+        # zero is also the output's zero tangent (no version-specific API needed).
+        tangent_out = tx
     else:
-        tangent_x = dx * tx
-
-    if type(tdx) is ad.Zero:
-        tangent_dx = tdx  # Keep as Zero
-    else:
-        tangent_dx = tdx
-
-    # Combine tangents using add_tangents which handles Zero properly
-    tangent_outs = [ad.add_tangents(tangent_x, tangent_dx)]
-    return primal_outs, tangent_outs
-
-
-def _heaviside_transpose(ct, x, dx):
-    """
-    Transpose rule for reverse-mode autodiff.
-
-    This computes cotangents for the tangents (tx, tdx) given the output cotangent.
-
-    From JVP: output_tangent = dx * tx + tdx
-    Transpose: cotangent_tx = dx * ct_out, cotangent_tdx = ct_out
-    """
-    # ct is a tuple/list containing the cotangent for each output
-    ct_out = ct[0]
-
-    # Cotangent for tx (from dx * tx term)
-    # In JAX transpose, dx is a residual and might be UndefinedPrimal if it's symbolic
-    if type(dx) is ad.UndefinedPrimal:
-        # Can't use dx if it's undefined - return zero
-        cotangent_tx = ad.Zero(dx.aval)
-    else:
-        cotangent_tx = dx * ct_out
-
-    # Cotangent for tdx (from tdx term)
-    cotangent_tdx = ct_out
-
-    return (cotangent_tx, cotangent_tdx)
+        tangent_out = dx * tx
+    return primal_outs, [tangent_out]
 
 
 heaviside_p = Primitive('heaviside_surrogate_gradient')
@@ -108,8 +80,7 @@ heaviside_p.def_abstract_eval(_heaviside_abstract)
 heaviside_p.def_impl(_heaviside_imp)
 batching.primitive_batchers[heaviside_p] = _heaviside_batching
 ad.primitive_jvps[heaviside_p] = _heaviside_jvp
-# Let JAX automatically derive transpose from JVP
-# ad.primitive_transposes[heaviside_p] = _heaviside_transpose
+# JAX derives the transpose from the JVP, which is linear in ``tx``.
 mlir.register_lowering(heaviside_p, mlir.lower_fun(_heaviside_imp, multiple_results=True))
 
 
@@ -177,19 +148,51 @@ class Surrogate(PrettyObject):
     unitful ``brainunit.Quantity`` is not supported by the underlying primitive.
 
     Differentiating the output with respect to the **input** ``x`` yields the
-    surrogate gradient, as intended. Differentiating with respect to a
-    **surrogate parameter** (e.g. ``alpha``) returns the derivative of the
-    surrogate-gradient function w.r.t. that parameter (a side effect of the
-    custom JVP rule), *not* the mathematically-true ``0`` of the Heaviside
-    output -- so surrogate parameters cannot be trained as ordinary
-    ``ParamState`` weights through this output.
+    surrogate gradient ``surrogate_grad(x)``, as intended. The output does not
+    depend on surrogate parameters such as ``alpha``, so its derivative with
+    respect to them is ``0``. Surrogate parameters still influence training
+    through the gradients they shape; to tune them, compare validation results
+    or differentiate a loss *after* unrolled training steps with respect to
+    them (second-order derivatives through ``surrogate_grad`` are supported).
 
     """
     __module__ = 'braintools.surrogate'
 
     def __call__(self, x):
-        dx = self.surrogate_grad(jax.lax.stop_gradient(x))
+        # Python scalars and integer/bool arrays have no floating dtype for the
+        # primitive (and no gradient); promote them to the default float type.
+        x = jnp.asarray(x)
+        if not jnp.issubdtype(x.dtype, jnp.floating):
+            x = x.astype(jnp.result_type(float))
+        dx = self.surrogate_grad(x)
         return heaviside_p.bind(x, dx)[0]
+
+    def __eq__(self, other):
+        # Surrogates are compared by value (same class and equal parameters), so
+        # that equal surrogates passed as static arguments to ``jax.jit`` reuse
+        # the compiled function. Array-valued parameters compare by identity.
+        if type(self) is not type(other):
+            return NotImplemented
+        mine, theirs = vars(self), vars(other)
+        if mine.keys() != theirs.keys():
+            return False
+        for key, a in mine.items():
+            b = theirs[key]
+            if a is b:
+                continue
+            try:
+                same = a == b
+            except Exception:
+                return False
+            if not isinstance(same, (bool, np.bool_)) or not same:
+                return False
+        return True
+
+    def __hash__(self):
+        try:
+            return hash((type(self), tuple(sorted(vars(self).items()))))
+        except TypeError:  # unhashable (e.g. array) parameters
+            return hash((type(self), tuple(sorted(vars(self)))))
 
     def surrogate_fun(self, x) -> jax.Array:
         """The surrogate function."""

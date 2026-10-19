@@ -432,6 +432,10 @@ def _restore_quantity(x: u.Quantity, state_dict: Dict, mismatch: MismatchMode = 
     )
     msg = f'Unit mismatch: expected {x.unit}, got {unit} at path {current_path()}'
     _handle_mismatch(x.unit != unit, msg, mismatch)
+    # The rebuilt unit carries no display name (``ms`` would print as
+    # ``10.0^-3 * s``); when it equals the target's unit, reuse the named one.
+    if x.unit == unit:
+        unit = x.unit
     # For 'ignore' and 'warn', use the loaded unit
     return u.Quantity(state_dict['mantissa'], unit=unit)
 
@@ -482,8 +486,26 @@ msgpack_register_serialization(
 )
 
 
+_PRNG_KEY_MARKER = '__prng_key_impl__'
+
+
+def _is_prng_key(x) -> bool:
+    """Whether ``x`` is a typed JAX PRNG key array (e.g. from ``jax.random.key``)."""
+    return isinstance(x, jax.Array) and jax.dtypes.issubdtype(x.dtype, jax.dtypes.prng_key)
+
+
 def _identity_state_dict(x):
-    """State-dict for array leaves: the array is itself the serialized leaf."""
+    """State-dict for array leaves: the array is itself the serialized leaf.
+
+    Typed PRNG key arrays (used by ``brainstate.random`` states) cannot be
+    converted to NumPy; they are stored as their implementation name plus the
+    raw ``uint32`` key data and rebuilt by :func:`_restore_array`.
+    """
+    if _is_prng_key(x):
+        return {
+            _PRNG_KEY_MARKER: str(jax.random.key_impl(x)),
+            'key_data': np.asarray(jax.random.key_data(x)),
+        }
     return x
 
 
@@ -496,6 +518,10 @@ def _restore_array(x, state, mismatch: MismatchMode = 'error'):
     returned as-is. Dtype is intentionally not enforced, so loading into a
     template of a different dtype (a common coercion) is allowed.
     """
+    if isinstance(state, dict) and _PRNG_KEY_MARKER in state:
+        state = jax.random.wrap_key_data(
+            jax.numpy.asarray(state['key_data']), impl=state[_PRNG_KEY_MARKER]
+        )
     if hasattr(x, 'shape') and hasattr(state, 'shape'):
         _handle_mismatch(
             tuple(x.shape) != tuple(state.shape),

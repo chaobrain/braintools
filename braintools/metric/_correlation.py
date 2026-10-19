@@ -67,10 +67,12 @@ def cross_correlation(
     spikes : brainstate.typing.ArrayLike
         Spike history matrix with shape ``(num_time, num_neurons)``.
         Binary values indicating spike occurrences.
-    bin : Union[int, float]
-        Time bin size for binning spike trains.
-    dt : Union[int, float], optional
-        Time precision. If None, uses ``brainstate.environ.get_dt()``.
+    bin : float or brainunit.Quantity
+        Time bin size for binning spike trains. A plain number is in
+        milliseconds; a Quantity is converted.
+    dt : float or brainunit.Quantity, optional
+        Time step of ``spikes``. If None, uses ``brainstate.environ.get_dt()``.
+        A plain number is in milliseconds; a Quantity is converted.
     method : str, default='loop'
         Method for computing cross-correlations:
         
@@ -88,7 +90,7 @@ def cross_correlation(
     To JIT compile this function, make ``bin``, ``dt``, and ``method`` static.
     For example: ``partial(cross_correlation, bin=10, method='loop')``.
 
-    This is the coincidence-based coherence of Wang & Buzsáki (1996), not a
+    This is the coincidence-based coherence of Wang & Buzsáki (1996) [1]_, not a
     Pearson correlation coefficient.
 
     Examples
@@ -115,7 +117,11 @@ def cross_correlation(
            Neuroscience 16.20 (1996): 6402-6413.
     """
     dt = brainstate.environ.get_dt() if dt is None else dt
-    bin_size = int(round(bin / dt))
+    # Quantities are converted; a plain number is taken to be in milliseconds
+    # (the brainstate convention), so a float ``bin`` works with the default
+    # Quantity ``dt``.
+    to_ms = lambda x: float(x.to_decimal(u.ms)) if isinstance(x, u.Quantity) else float(x)
+    bin_size = int(round(to_ms(bin) / to_ms(dt)))
     if bin_size < 1:
         raise ValueError(f'`bin` ({bin}) must be at least as large as `dt` ({dt}); '
                          f'got a bin width of {bin_size} samples.')
@@ -173,11 +179,11 @@ def voltage_fluctuation(
 ):
     r"""Calculate neuronal synchronization via voltage variance analysis.
 
-    This method quantifies synchronization by comparing the variance of the
+    This method [1]_, [2]_ quantifies synchronization by comparing the variance of the
     population-averaged membrane potential to the average variance of individual
     neurons' membrane potentials.
 
-    The synchronization measure is computed as:
+    The synchronization measure [3]_ is computed as:
 
     .. math::
 

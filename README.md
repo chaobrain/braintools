@@ -7,9 +7,6 @@
 <p align="center">
   <a href="https://pypi.org/project/braintools/"><img alt="Supported Python Version" src="https://img.shields.io/pypi/pyversions/braintools"></a>
   <a href="https://github.com/chaobrain/braintools/blob/main/LICENSE"><img alt="LICENSE" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
-  <a href='https://brainx.chaobrain.com/braintools/'>
-    <img src='https://readthedocs.org/projects/braintools/badge/?version=latest' alt='Documentation Status' />
-  </a>
   <a href="https://badge.fury.io/py/braintools"><img alt="PyPI version" src="https://badge.fury.io/py/braintools.svg"></a>
   <a href="https://github.com/chaobrain/braintools/actions/workflows/CI.yml"><img alt="Continuous Integration" src="https://github.com/chaobrain/braintools/actions/workflows/CI.yml/badge.svg"></a>
   <a href="https://codecov.io/gh/chaobrain/braintools"><img alt="Test Coverage" src="https://codecov.io/gh/chaobrain/braintools/graph/badge.svg"></a>
@@ -62,8 +59,13 @@ pip install -U BrainX
 Trials are generated lazily via `task.sample(i)` / `task.batch_sample(B)`, both JIT- and `vmap`-friendly, with per-trial keys derived from `seed` so batches are fully reproducible.
 
 ```python
+import brainstate
 import brainunit as u
 from braintools.cogtask import PerceptualDecisionMaking
+
+# Phase durations are expressed in units of the environment timestep, so a
+# timestep must be set before a task is sampled.
+brainstate.environ.set(dt=1.0 * u.ms)
 
 task = PerceptualDecisionMaking(t_stimulus=1500 * u.ms, num_choices=2, seed=0)
 X, Y = task.batch_sample(32)   # X: (T, B, n_in), Y: (T, B) labels

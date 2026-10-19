@@ -70,6 +70,21 @@ class VarianceScaling(Initialization):
         - 'fan_avg': scale by average of input and output units
     distribution : {'uniform', 'normal', 'truncated_normal'}
         Distribution to sample from.
+    in_axis : int, optional
+        Axis of the weight shape holding the input units (default: -2).
+    out_axis : int, optional
+        Axis of the weight shape holding the output units (default: -1).
+        Every other axis is a receptive-field axis.
+
+    Notes
+    -----
+    Fans follow the JAX/Flax convention used by ``brainstate`` layers: a dense
+    weight is ``(in, out)`` and a convolution kernel is ``(*spatial, in, out)``,
+    so ``fan_in = shape[in_axis] * receptive_field`` and
+    ``fan_out = shape[out_axis] * receptive_field`` with
+    ``receptive_field = prod(shape) / (shape[in_axis] * shape[out_axis])``.
+    A 1-D shape ``(n,)`` uses ``fan_in = fan_out = n`` and a 0-D shape uses 1.
+    For channels-first kernels ``(out, in, *spatial)`` pass ``in_axis=1, out_axis=0``.
     """
     __module__ = 'braintools.init'
 
@@ -79,6 +94,8 @@ class VarianceScaling(Initialization):
         mode: Literal['fan_in', 'fan_out', 'fan_avg'] = 'fan_in',
         distribution: Literal['uniform', 'normal', 'truncated_normal'] = 'normal',
         unit: u.Unit = None,
+        in_axis: int = -2,
+        out_axis: int = -1,
     ):
         if mode not in ('fan_in', 'fan_out', 'fan_avg'):
             raise ValueError(
@@ -93,36 +110,23 @@ class VarianceScaling(Initialization):
         self.mode = mode
         self.distribution = distribution
         self.unit = u.UNITLESS if unit is None else unit
+        self.in_axis = in_axis
+        self.out_axis = out_axis
 
     def _compute_fans(self, shape):
-        """Compute number of input and output units from shape.
+        """Compute the number of input and output units of a weight ``shape``.
 
-        Notes
-        -----
-        The fan convention is dimensionality-dependent:
-
-        - 1D ``(n,)``: ``fan_in == fan_out == n``.
-        - 2D ``(in, out)``: ``fan_in = shape[0]``, ``fan_out = shape[1]``
-          (the dense-layer convention where weights map inputs to outputs).
-        - 3D+ ``(out, in, *spatial)``: ``fan_in = shape[1] * prod(spatial)`` and
-          ``fan_out = shape[0] * prod(spatial)`` (the convolution-kernel
-          convention, matching PyTorch). Note the leading-axis meaning differs
-          between the 2D and 3D+ cases, so reshaping a conv kernel to 2D changes
-          the computed fans.
+        See the class Notes for the convention (``(*spatial, in, out)`` by default).
         """
+        shape = tuple(shape)
         if len(shape) < 1:
-            fan_in = fan_out = 1
-        elif len(shape) == 1:
-            fan_in = fan_out = shape[0]
-        elif len(shape) == 2:
-            fan_in = shape[0]
-            fan_out = shape[1]
-        else:
-            # For higher dimensional tensors (e.g., conv kernels)
-            receptive_field_size = np.prod(shape[2:])
-            fan_in = shape[1] * receptive_field_size
-            fan_out = shape[0] * receptive_field_size
-        return fan_in, fan_out
+            return 1, 1
+        if len(shape) == 1:
+            return shape[0], shape[0]
+        n_in = shape[self.in_axis]
+        n_out = shape[self.out_axis]
+        receptive_field_size = int(np.prod(shape)) // max(1, n_in * n_out)
+        return n_in * receptive_field_size, n_out * receptive_field_size
 
     def _get_fan(self, shape):
         """Get the fan value based on mode."""
@@ -197,6 +201,9 @@ class KaimingUniform(VarianceScaling):
         For leaky_relu, the scale is computed based on the negative slope.
     negative_slope : float, optional
         Negative slope for leaky_relu (default: 0.01).
+    in_axis, out_axis : int, optional
+        Axes holding the input / output units (default: -2 / -1, i.e. the
+        ``(in, out)`` / ``(*spatial, in, out)`` convention of ``brainstate``).
 
     Examples
     --------
@@ -218,6 +225,8 @@ class KaimingUniform(VarianceScaling):
         nonlinearity: Literal['relu', 'leaky_relu'] = 'relu',
         negative_slope: float = 0.01,
         unit: u.Unit = None,
+        in_axis: int = -2,
+        out_axis: int = -1,
     ):
         # Compute scale based on nonlinearity. VarianceScaling treats `scale` as a
         # variance multiplier (variance = scale / fan), so the He variance of
@@ -231,7 +240,8 @@ class KaimingUniform(VarianceScaling):
             else:
                 raise ValueError(f"Unsupported nonlinearity: {nonlinearity}")
 
-        super().__init__(scale=scale, mode=mode, distribution='uniform', unit=unit)
+        super().__init__(scale=scale, mode=mode, distribution='uniform', unit=unit,
+                         in_axis=in_axis, out_axis=out_axis)
         self.nonlinearity = nonlinearity
         self.negative_slope = negative_slope
 
@@ -263,6 +273,9 @@ class KaimingNormal(VarianceScaling):
         For leaky_relu, the scale is computed based on the negative slope.
     negative_slope : float, optional
         Negative slope for leaky_relu (default: 0.01).
+    in_axis, out_axis : int, optional
+        Axes holding the input / output units (default: -2 / -1, i.e. the
+        ``(in, out)`` / ``(*spatial, in, out)`` convention of ``brainstate``).
 
     Examples
     --------
@@ -284,6 +297,8 @@ class KaimingNormal(VarianceScaling):
         nonlinearity: Literal['relu', 'leaky_relu'] = 'relu',
         negative_slope: float = 0.01,
         unit: u.Unit = None,
+        in_axis: int = -2,
+        out_axis: int = -1,
     ):
         # Compute scale based on nonlinearity. VarianceScaling treats `scale` as a
         # variance multiplier (variance = scale / fan), so the He variance of
@@ -297,7 +312,8 @@ class KaimingNormal(VarianceScaling):
             else:
                 raise ValueError(f"Unsupported nonlinearity: {nonlinearity}")
 
-        super().__init__(scale=scale, mode=mode, distribution='normal', unit=unit)
+        super().__init__(scale=scale, mode=mode, distribution='normal', unit=unit,
+                         in_axis=in_axis, out_axis=out_axis)
         self.nonlinearity = nonlinearity
         self.negative_slope = negative_slope
 
@@ -319,6 +335,9 @@ class XavierUniform(VarianceScaling):
     ----------
     scale : float, optional
         Scaling factor (default: 1.0).
+    in_axis, out_axis : int, optional
+        Axes holding the input / output units (default: -2 / -1, i.e. the
+        ``(in, out)`` / ``(*spatial, in, out)`` convention of ``brainstate``).
 
     Examples
     --------
@@ -333,8 +352,9 @@ class XavierUniform(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None):
-        super().__init__(scale=scale, mode='fan_avg', distribution='uniform', unit=unit)
+    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None, in_axis: int = -2, out_axis: int = -1):
+        super().__init__(scale=scale, mode='fan_avg', distribution='uniform', unit=unit,
+                         in_axis=in_axis, out_axis=out_axis)
 
     def __repr__(self):
         return f'XavierUniform(scale={self.scale}, unit={self.unit})'
@@ -354,6 +374,9 @@ class XavierNormal(VarianceScaling):
     ----------
     scale : float, optional
         Scaling factor (default: 1.0).
+    in_axis, out_axis : int, optional
+        Axes holding the input / output units (default: -2 / -1, i.e. the
+        ``(in, out)`` / ``(*spatial, in, out)`` convention of ``brainstate``).
 
     Examples
     --------
@@ -368,8 +391,9 @@ class XavierNormal(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None):
-        super().__init__(scale=scale, mode='fan_avg', distribution='normal', unit=unit)
+    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None, in_axis: int = -2, out_axis: int = -1):
+        super().__init__(scale=scale, mode='fan_avg', distribution='normal', unit=unit,
+                         in_axis=in_axis, out_axis=out_axis)
 
     def __repr__(self):
         return f'XavierNormal(scale={self.scale}, unit={self.unit})'
@@ -389,6 +413,9 @@ class LecunUniform(VarianceScaling):
     ----------
     scale : float, optional
         Scaling factor (default: 1.0).
+    in_axis, out_axis : int, optional
+        Axes holding the input / output units (default: -2 / -1, i.e. the
+        ``(in, out)`` / ``(*spatial, in, out)`` convention of ``brainstate``).
 
     Examples
     --------
@@ -403,8 +430,9 @@ class LecunUniform(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None):
-        super().__init__(scale=scale, mode='fan_in', distribution='uniform', unit=unit)
+    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None, in_axis: int = -2, out_axis: int = -1):
+        super().__init__(scale=scale, mode='fan_in', distribution='uniform', unit=unit,
+                         in_axis=in_axis, out_axis=out_axis)
 
     def __repr__(self):
         return f'LecunUniform(scale={self.scale}, unit={self.unit})'
@@ -424,6 +452,9 @@ class LecunNormal(VarianceScaling):
     ----------
     scale : float, optional
         Scaling factor (default: 1.0).
+    in_axis, out_axis : int, optional
+        Axes holding the input / output units (default: -2 / -1, i.e. the
+        ``(in, out)`` / ``(*spatial, in, out)`` convention of ``brainstate``).
 
     Examples
     --------
@@ -438,8 +469,9 @@ class LecunNormal(VarianceScaling):
     """
     __module__ = 'braintools.init'
 
-    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None):
-        super().__init__(scale=scale, mode='fan_in', distribution='normal', unit=unit)
+    def __init__(self, scale: ArrayLike = 1.0, unit: u.Unit = None, in_axis: int = -2, out_axis: int = -1):
+        super().__init__(scale=scale, mode='fan_in', distribution='normal', unit=unit,
+                         in_axis=in_axis, out_axis=out_axis)
 
     def __repr__(self):
         return f'LecunNormal(scale={self.scale}, unit={self.unit})'

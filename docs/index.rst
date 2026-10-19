@@ -72,7 +72,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobr
     quad/index.md
     surrogate/index.md
     visualize/index.md
-    misc/spike_encoding.md
+    misc/index.md
 
 
 .. toctree::
@@ -92,4 +92,5 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobr
     apis/quad.rst
     apis/surrogate.rst
     apis/trainer.rst
+    apis/tree.rst
     apis/visualize.rst

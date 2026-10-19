@@ -27,6 +27,7 @@ from ..label import match_label, comparison_label
 from ..phase import (concat, Phase, Fixation, Stimulus, Delay, Response, Sample, Test,
                      Cue, DeclarativePhase, VariableDuration)
 from ..task import Task
+from ..phase import _dt_in_ms, _duration_in_ms
 from .._typing import Duration, Data
 from ..utils import choice
 
@@ -1347,9 +1348,8 @@ class ReadySetGo(Task):
         DeclarativePhase writes into ``ctx.outputs`` directly.
         """
         duration = ctx.phase_end - ctx.phase_start
-        dt = ctx.dt
-        dt_val = float(dt.mantissa) if hasattr(dt, 'mantissa') else float(dt)
-        go_time = ctx['produce_interval'] / dt_val
+        # ``produce_interval`` is in ms (see ``trial_init``), so dt must be too.
+        go_time = _duration_in_ms(ctx['produce_interval']) / _dt_in_ms(ctx.dt)
         t = jnp.arange(duration)
         return jnp.where(t < go_time, 1, 2).astype(jnp.int32)
 
@@ -1460,6 +1460,7 @@ class DelayDirectionReproduction(Task):
     - a stimulus representation encoding the sample direction.
 
     Output consists of:
+
     - fixation_out: a scalar indicating whether fixation / withholding
       should be maintained,
     - direction: a 2D continuous report of the remembered sample direction
@@ -1644,6 +1645,7 @@ class ImmediateDirectionReproduction(Task):
     - a stimulus representation encoding the current direction.
 
     Output consists of:
+
     - fixation_out: a scalar indicating whether fixation / withholding
       should be maintained,
     - direction: a 2D continuous report of the current stimulus direction

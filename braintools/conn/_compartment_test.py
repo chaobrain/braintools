@@ -757,10 +757,7 @@ class TestAxonalPatterns(unittest.TestCase):
         )
 
         # Basic axonal projection
-        axon_proj = AxonalProjection(
-            projection_type='local',
-            connection_prob=0.1
-        )
+        axon_proj = AxonalProjection(connection_prob=0.1)
 
         # Topographic projection with custom mapping
         def retinotopic_map(source_pos, target_pos):
@@ -783,7 +780,6 @@ class TestAxonalPatterns(unittest.TestCase):
 
     def test_axonal_projection_local(self):
         conn = AxonalProjection(
-            projection_type='local',
             connection_prob=0.15,
             seed=42
         )
@@ -797,7 +793,8 @@ class TestAxonalPatterns(unittest.TestCase):
         valid_post = np.isin(result.post_compartments, [BASAL_DENDRITE, APICAL_DENDRITE])
         self.assertTrue(np.all(valid_post))
         self.assertEqual(result.metadata['pattern'], 'axonal_projection')
-        self.assertEqual(result.metadata['projection_type'], 'local')
+        self.assertFalse(result.metadata['topographic'])
+        self.assertIsNone(result.metadata['arborization_sigma'])
 
     def test_axonal_projection_with_positions(self):
         pre_positions = np.random.RandomState(42).uniform(0, 100, (10, 2)) * u.um
@@ -807,7 +804,6 @@ class TestAxonalPatterns(unittest.TestCase):
             return 0.1  # Constant probability
 
         conn = AxonalProjection(
-            projection_type='topographic',
             topographic_map=simple_topo_map,
             seed=42
         )
@@ -820,28 +816,49 @@ class TestAxonalPatterns(unittest.TestCase):
 
         self.assertGreater(result.n_connections, 0)
 
-    def test_axonal_projection_clustered_arborization(self):
-        pre_positions = np.array([[0, 0], [10, 10]]) * u.um
-        post_positions = np.array([[0, 0], [50, 50]]) * u.um
-
-        # allow_self_connections so the zero-distance diagonal (i==j) is kept;
-        # on this far-apart toy data the off-diagonal clustered prob is ~0.
+    def test_axonal_projection_arborization_sigma(self):
+        # Pairs far beyond arborization_sigma never connect; near pairs keep
+        # (almost) the full connection_prob.
+        pre_positions = np.array([[0., 0.], [1000., 1000.]]) * u.um
+        post_positions = np.array([[0., 0.], [1000., 1000.]]) * u.um
         conn = AxonalProjection(
-            projection_type='local',
-            arborization_pattern='clustered',
-            connection_prob=0.5,
+            connection_prob=1.0,
+            arborization_sigma=10 * u.um,
             allow_self_connections=True,
             seed=42
         )
-
         result = conn(
             pre_size=2, post_size=2,
             pre_positions=pre_positions,
             post_positions=post_positions
         )
+        self.assertEqual(sorted(zip(result.pre_indices.tolist(), result.post_indices.tolist())),
+                         [(0, 0), (1, 1)])
 
-        # Closer neurons should have higher connection probability
-        self.assertGreater(result.n_connections, 0)
+    def test_axonal_projection_arborization_sigma_statistics(self):
+        # The realized fraction of pairs matches connection_prob * exp(-d^2 / 2 sigma^2).
+        rs = np.random.RandomState(0)
+        pre = rs.uniform(0, 400, (200, 2)) * u.um
+        post = rs.uniform(0, 400, (200, 2)) * u.um
+        res = AxonalProjection(connection_prob=0.5, arborization_sigma=0.05 * u.mm, seed=1)(
+            pre_size=200, post_size=200, pre_positions=pre, post_positions=post)
+        from scipy.spatial.distance import cdist
+        d = cdist(pre.mantissa, post.mantissa)
+        expected = (0.5 * np.exp(-d ** 2 / (2 * 50.0 ** 2)))
+        np.fill_diagonal(expected, 0.0)  # equal sizes: autapse index pairs dropped
+        self.assertAlmostEqual(res.n_connections / expected.sum(), 1.0, delta=0.06)
+
+    def test_axonal_projection_spatial_terms_require_positions(self):
+        with self.assertRaises(ValueError):
+            AxonalProjection(arborization_sigma=50 * u.um, seed=0)(pre_size=5, post_size=5)
+        with self.assertRaises(ValueError):
+            AxonalProjection(topographic_map=lambda a, b: 0.1, seed=0)(pre_size=5, post_size=5)
+
+    def test_axonal_projection_removed_parameters_rejected(self):
+        for kwargs in [dict(projection_type='local'), dict(arborization_pattern='clustered'),
+                       dict(spatial_scale=100.0)]:
+            with self.assertRaises(TypeError):
+                AxonalProjection(**kwargs)
 
     def test_axonal_branching(self):
         conn = AxonalBranching(
@@ -862,6 +879,44 @@ class TestAxonalPatterns(unittest.TestCase):
 
         # Each presynaptic neuron should connect to multiple targets on average
         self.assertGreater(result.n_connections, 10)  # Should be more than just one per pre neuron
+
+    def test_axonal_branching_spread_keeps_branches_local(self):
+        rs = np.random.RandomState(0)
+        positions = rs.uniform(0, 1000, (150, 2)) * u.um
+        call = dict(pre_size=150, post_size=150, pre_positions=positions, post_positions=positions)
+        uniform = AxonalBranching(branches_per_axon=6, seed=1)(**call)
+        local = AxonalBranching(branches_per_axon=6, branch_spread=40 * u.um, seed=1)(**call)
+        d_uniform = np.asarray(u.get_mantissa(uniform.get_distances())).mean()
+        d_local = np.asarray(u.get_mantissa(local.get_distances())).mean()
+        self.assertLess(d_local, 100.0)
+        self.assertGreater(d_uniform, 300.0)
+        # Autapses are excluded from the candidates, not dropped afterwards, so the
+        # mean out-degree still matches branches_per_axon.
+        for result in (uniform, local):
+            self.assertEqual(int(np.sum(result.pre_indices == result.post_indices)), 0)
+            self.assertAlmostEqual(result.n_connections / 150, 6.0, delta=0.5)
+        self.assertEqual(local.metadata['branch_spread'], 40 * u.um)
+        # a plain number is in the positions' unit
+        plain = AxonalBranching(branches_per_axon=6, branch_spread=40.0, seed=1)(**call)
+        np.testing.assert_array_equal(plain.post_indices, local.post_indices)
+
+    def test_axonal_branching_spread_requires_positions(self):
+        with self.assertRaises(ValueError):
+            AxonalBranching(branch_spread=50 * u.um, seed=0)(pre_size=5, post_size=5)
+
+    def test_plain_length_uses_position_unit(self):
+        # A plain-number radius/sigma used to crash on Quantity positions.
+        positions = np.random.RandomState(0).uniform(0, 300, (40, 2)) * u.um
+        call = dict(pre_size=40, post_size=40, pre_positions=positions, post_positions=positions)
+        for make in [
+            lambda r: AxonalArborization(arborization_radius=r, density=0.5, seed=0),
+            lambda r: MorphologyDistance(sigma=r, seed=0),
+        ]:
+            plain = make(60.0)(**call)
+            quantity = make(60.0 * u.um)(**call)
+            self.assertGreater(plain.n_connections, 0)
+            np.testing.assert_array_equal(plain.pre_indices, quantity.pre_indices)
+            np.testing.assert_array_equal(plain.post_indices, quantity.post_indices)
 
     def test_axonal_arborization_no_positions(self):
         # CMP-2: spatial arborization is undefined without positions.
@@ -952,7 +1007,7 @@ class TestSynapticPatterns(unittest.TestCase):
 
         # Synaptic placement with preferences
         placement = SynapticPlacement(
-            placement_rule='uniform',
+            connection_prob=0.2,
             compartment_preferences={
                 BASAL_DENDRITE: 0.6,
                 APICAL_DENDRITE: 0.4
@@ -979,7 +1034,6 @@ class TestSynapticPatterns(unittest.TestCase):
 
     def test_synaptic_placement(self):
         conn = SynapticPlacement(
-            placement_rule='uniform',
             compartment_preferences={
                 BASAL_DENDRITE: 0.7,
                 APICAL_DENDRITE: 0.3
@@ -1000,15 +1054,38 @@ class TestSynapticPatterns(unittest.TestCase):
         if basal_count > 0 and apical_count > 0:
             self.assertGreater(basal_count, apical_count)
 
-    def test_synaptic_placement_different_rules(self):
-        for rule in ['uniform', 'proximal', 'distal', 'distance_weighted']:
-            conn = SynapticPlacement(
-                placement_rule=rule,
-                seed=42
-            )
+    def test_synaptic_placement_rates(self):
+        # connection_prob sets how many pairs connect; preferences set where.
+        result = SynapticPlacement(
+            connection_prob=0.1,
+            compartment_preferences={SOMA: 1.0, APICAL_DENDRITE: 3.0},
+            seed=0,
+        )(pre_size=200, post_size=200)
+        n_pairs = 200 * 199
+        self.assertAlmostEqual(result.n_connections / n_pairs, 0.1, delta=0.005)
+        # one synapse per connected pair
+        pairs = list(zip(result.pre_indices.tolist(), result.post_indices.tolist()))
+        self.assertEqual(len(pairs), len(set(pairs)))
+        self.assertEqual(int(np.sum(result.pre_indices == result.post_indices)), 0)
+        frac_apical = np.mean(result.post_compartments == APICAL_DENDRITE)
+        self.assertAlmostEqual(frac_apical, 0.75, delta=0.02)
+        self.assertTrue(set(result.post_compartments.tolist()) <= {SOMA, APICAL_DENDRITE})
+        self.assertEqual(result.metadata['pattern'], 'synaptic_placement')
 
-            result = conn(pre_size=10, post_size=10)
-            self.assertEqual(result.model_type, 'multi_compartment')
+    def test_synaptic_placement_single_target(self):
+        result = SynapticPlacement(compartment_preferences={BASAL_DENDRITE: 1.0}, seed=0)(
+            pre_size=30, post_size=30)
+        self.assertTrue(np.all(result.post_compartments == BASAL_DENDRITE))
+
+    def test_synaptic_placement_validation(self):
+        with self.assertRaises(TypeError):
+            SynapticPlacement(placement_rule='uniform')
+        with self.assertRaises(ValueError):
+            SynapticPlacement(connection_prob=1.5)
+        with self.assertRaises(ValueError):
+            SynapticPlacement(compartment_preferences={BASAL_DENDRITE: 0.0})
+        with self.assertRaises(ValueError):
+            SynapticPlacement(compartment_preferences={7: 1.0})
 
     def test_synaptic_clustering(self):
         conn = SynapticClustering(
@@ -1371,7 +1448,7 @@ class TestConnFixesRegression(unittest.TestCase):
 
     def test_axonal_projection_targets_basal_and_apical(self):
         # CMP-3: previously hardcoded to BASAL_DENDRITE only.
-        conn = AxonalProjection(projection_type='local', connection_prob=0.3, seed=42)
+        conn = AxonalProjection(connection_prob=0.3, seed=42)
         result = conn(pre_size=40, post_size=40)
         post = set(result.post_compartments.tolist())
         self.assertIn(BASAL_DENDRITE, post)

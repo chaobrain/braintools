@@ -66,6 +66,15 @@ Two equivalent ways to define a task are supported:
   pre-built tasks follow this pattern. See
   :doc:`../cogtask/02_building_custom_tasks` for worked examples of both.
 
+:func:`create_task` is a thin functional wrapper around the instance-based
+form; it takes the same arguments and returns a :class:`Task`.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   create_task
+
 
 Phases and Composition
 ----------------------

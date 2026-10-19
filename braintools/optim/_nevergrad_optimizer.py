@@ -79,24 +79,30 @@ class NevergradOptimizer(Optimizer):
     batched_loss_fun : callable
         Callable evaluating a batch of candidate parameters and returning one
         scalar loss per candidate. Its signature depends on ``bounds``:
-          - If ``bounds`` is a sequence/tuple, the callable is invoked as
-            ``batched_loss_fun(*params)`` where each element of ``params`` is a
-            JAX array stacked over the candidate dimension, e.g., shape
-            ``(n_sample, ...)`` per argument.
-          - If ``bounds`` is a dict, the callable is invoked as
-            ``batched_loss_fun(**params)`` where each value is a stacked JAX
-            array of shape ``(n_sample, ...)``.
+
+        - If ``bounds`` is a sequence/tuple, the callable is invoked as
+          ``batched_loss_fun(*params)`` where each element of ``params`` is a
+          JAX array stacked over the candidate dimension, e.g., shape
+          ``(n_sample, ...)`` per argument.
+        - If ``bounds`` is a dict, the callable is invoked as
+          ``batched_loss_fun(**params)`` where each value is a stacked JAX
+          array of shape ``(n_sample, ...)``.
 
         The return value must be a 1D array-like of length ``n_sample`` with
-        the loss per candidate.
+        the loss per candidate. Arguments are plain numbers: when ``bounds``
+        carry ``brainunit`` units, the values are expressed in the unit of each
+        lower bound and passed without units.
     bounds : dict or sequence of tuple
         Search space bounds. Each bound is a pair ``(min, max)``. Values can be
         scalars or arrays (broadcasting not applied), optionally wrapped as
-        ``brainunit.Quantity`` to specify units. All leaves within a pair must
+        ``brainunit.Quantity`` to specify units (converted to the unit of the
+        lower bound; the loss sees plain numbers in that unit, and the returned
+        best parameters carry the unit again). All leaves within a pair must
         have identical shapes. Two forms are supported:
-          - dict: ``{"name": (min, max), ...}`` producing named parameters;
-          - sequence/tuple: ``[(min, max), ...]`` producing positional
-            parameters passed to ``batched_loss_fun`` in the given order.
+
+        - dict: ``{"name": (min, max), ...}`` producing named parameters;
+        - sequence/tuple: ``[(min, max), ...]`` producing positional
+          parameters passed to ``batched_loss_fun`` in the given order.
     n_sample : int
         Number of candidates to evaluate per iteration.
     method : str, default: 'DE'
@@ -325,11 +331,11 @@ class NevergradOptimizer(Optimizer):
         mapped_parameters = concat_parameters(*parameters)
 
         # evaluate parameters
+        # Units are stripped: the loss receives plain numbers expressed in the
+        # unit of each lower bound (as in ``ScipyOptimizer``).
         if isinstance(self.parametrization, ng.p.Tuple):
-            mapped_parameters = self._add_unit(mapped_parameters)
             errors = self.vmap_loss_fun(*mapped_parameters)
         elif isinstance(self.parametrization, ng.p.Dict):
-            mapped_parameters = self._add_unit(mapped_parameters)
             errors = self.vmap_loss_fun(**mapped_parameters)
         else:
             raise ValueError(f"Unknown type of 'parametrization': {type(self.parametrization)}")

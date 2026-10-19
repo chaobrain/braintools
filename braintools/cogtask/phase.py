@@ -548,8 +548,10 @@ def execute_phase(phase: Phase, ctx: Context) -> None:
         The trial context.
     """
     duration = phase.get_duration(ctx)
-    ctx.phase_start = ctx.current_step
-    ctx.phase_end = ctx.current_step + duration
+    own_start = ctx.current_step
+    own_end = own_start + duration
+    ctx.phase_start = own_start
+    ctx.phase_end = own_end
     ctx.current_phase = phase.name
 
     phase.on_enter(ctx)
@@ -563,7 +565,33 @@ def execute_phase(phase: Phase, ctx: Context) -> None:
 
     phase.on_exit(ctx)
 
-    ctx.phase_history.append((phase.name, ctx.phase_start, ctx.phase_end))
+    # Record this phase's *own* span, not whatever ``ctx`` holds now.
+    # ``ctx.phase_start``/``phase_end`` are shared mutable attributes and a
+    # compound phase's children set them for themselves as they run; unlike
+    # ``Parallel.execute``, ``Sequence.execute`` does not restore the parent
+    # scope afterwards, so reading them back here recorded the span of the last
+    # descendant -- a fixed-length task's top-level ``Sequence`` reported only
+    # its final Response phase, and nested compounds inherited the same error.
+    ctx.phase_history.append((phase.name, own_start, own_end))
+
+
+def _dt_in_ms(dt: Any) -> float:
+    """``dt`` in milliseconds; a plain number is taken to be in ms already."""
+    if isinstance(dt, u.Quantity):
+        return float(dt.to_decimal(u.ms))
+    return float(dt)
+
+
+def _duration_in_ms(value: Any) -> Any:
+    """A trial-state duration in milliseconds (plain numbers are already ms).
+
+    Durations sampled in ``trial_init`` are divided by ``_dt_in_ms(ctx.dt)`` to
+    get step counts, so both sides must be in the same unit. Works on traced
+    values.
+    """
+    if isinstance(value, u.Quantity):
+        return value.to_decimal(u.ms)
+    return value
 
 
 def phase_tree_is_variable(phase: Phase) -> bool:
@@ -941,6 +969,12 @@ class DeclarativePhase(Phase):
         # ----- categorical mode -----
         if ctx.outputs.ndim == 1:
             label_spec = self._output_specs.get('label', 0)
+            if isinstance(label_spec, str):
+                raise ValueError(
+                    f"Phase '{self.name}': categorical label spec is the bare "
+                    f"string {label_spec!r}, which is not a context lookup. "
+                    f"Use label({label_spec!r}) to read ctx[{label_spec!r}]."
+                )
             label_value = self._resolve_value(label_spec, ctx, None)
             arr = jnp.asarray(label_value, dtype=jnp.int32)
             if arr.ndim == 0:
@@ -1050,19 +1084,19 @@ class Blank(DeclarativePhase):
 class VariableDuration(DeclarativePhase):
     """Declarative phase whose actual length is decided per trial.
 
-    The phase reserves a buffer slot of ``ceil(max_duration / dt)``
+    The phase reserves a buffer slot of ``floor(max_duration / dt)``
     timesteps and writes its content into the first
-    ``ceil(ctx[ctx_key] / dt)`` of them. Anything past the trial's actual
-    length is automatically zeroed by the packed runtime and masked out in
-    the trial mask. Compatible with ``brainstate.transform.jit`` and
-    ``brainstate.transform.vmap2``.
+    ``floor(ctx[ctx_key] / dt)`` of them, clipped to ``[1, slot size]``.
+    Anything past the trial's actual length is automatically zeroed by the
+    packed runtime and masked out in the trial mask. Compatible with
+    ``brainstate.transform.jit`` and ``brainstate.transform.vmap2``.
 
     ``ctx_key`` names the trial state entry holding the sampled duration.
-    The value can be a scalar number of milliseconds or a Quantity; in
-    either case the runtime divides by ``ctx.dt`` to obtain a timestep
-    count. ``min_duration`` and ``max_duration`` must be Quantities with
-    matching units; ``min_duration`` is the static lower bound used to
-    floor the step count (always >= 1 timestep).
+    The value can be a plain number of **milliseconds** or a Quantity (any
+    time unit; it is converted). ``min_duration`` and ``max_duration`` must be
+    Quantities. ``min_duration`` documents the sampler's lower bound but is
+    not enforced: ``trial_init`` is responsible for sampling inside
+    ``[min_duration, max_duration]``.
 
     Examples
     --------
@@ -1110,21 +1144,17 @@ class VariableDuration(DeclarativePhase):
         self._ctx_key = ctx_key
 
     def _dt_mantissa(self, ctx: Context) -> float:
-        dt = ctx.dt
-        return float(dt.mantissa) if hasattr(dt, 'mantissa') else float(dt)
+        return _dt_in_ms(ctx.dt)
 
     def _duration_unit_mantissa(self, value: Any) -> Any:
-        """Return the duration in the same unit-base as dt.
+        """Return the duration in milliseconds, the unit ``_dt_mantissa`` uses.
 
-        Trial-init code often stores ``ctx[ctx_key]`` as a Python float
-        already expressed in the same unit as dt (the existing tasks do
-        this). When a Quantity is provided we strip the unit; otherwise we
-        pass it through as a JAX scalar.
+        Trial-init code usually stores ``ctx[ctx_key]`` as a plain float in
+        milliseconds (the built-in tasks do this); that is passed through. A
+        Quantity is converted to milliseconds first -- taking its raw mantissa
+        would read ``0.5 * u.second`` as 0.5 ms.
         """
-        if hasattr(value, 'to') and hasattr(value, 'mantissa'):
-            # brainunit Quantity — convert to the dt unit before stripping.
-            return value.mantissa
-        return value
+        return _duration_in_ms(value)
 
     def max_steps(self, ctx: Context) -> int:
         return max(1, int(self._max_duration / ctx.dt))

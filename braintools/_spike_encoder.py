@@ -14,6 +14,7 @@
 # ==============================================================================
 
 
+import warnings
 from typing import Optional
 
 import brainstate
@@ -36,52 +37,77 @@ __all__ = [
 ]
 
 
+def _in_ms(t) -> float:
+    """A time in milliseconds: Quantities are converted, plain numbers are ms."""
+    if isinstance(t, u.Quantity):
+        return float(t.to_decimal(u.ms))
+    return float(t)
+
+
+def _dt_seconds() -> float:
+    """The current ``brainstate.environ`` time step in seconds."""
+    return _in_ms(brainstate.environ.get_dt()) / 1000.0
+
+
 class LatencyEncoder:
     r"""
-    Encode the rate input as the spike train using the latency encoding.
+    Encode input intensities as the time of a single spike (latency coding).
 
-    Use input features to determine time-to-first spike.
+    Each input feature fires exactly once; a larger value fires earlier.
+    Inputs are expected in ``[0, 1]``; with ``min_val`` and ``max_val`` they are
+    first rescaled as :math:`x = (x - \text{min_val}) / (\text{max_val} - \text{min_val})`.
 
-    Expected inputs should be between 0 and 1. If not, the latency encoder will encode ``x``
-    (normalized into ``[0, 1]`` according to
-    :math:`x_{\text{normalize}} = \frac{x-\text{min_val}}{\text{max_val} - \text{min_val}}`)
-    to spikes whose firing time is :math:`0 \le t_f \le \text{num_period}-1`.
-    A larger ``x`` will cause the earlier firing time.
+    The output has ``n_time`` time steps (the window). Spike times are computed
+    as follows, with :math:`t_0` = ``first_spk_time``:
 
+    - ``method='linear'``: :math:`t(x) = t_0 + T\,(1 - x)`.
+    - ``method='log'`` (RC charging time of a leaky integrator driven by
+      :math:`x`): :math:`t(x) = t_0 + T \log\frac{x}{x - \theta}`, where
+      :math:`\theta` is ``threshold``; inputs at or below :math:`\theta` are
+      raised to :math:`\theta + \epsilon`.
+
+    With ``normalize=True`` the scale :math:`T` is chosen so the slowest input
+    (``x = 0`` for ``'linear'``, ``x = threshold`` for ``'log'``) fires at the
+    last step of the window. For ``'linear'``, ``x = 1`` then fires at
+    :math:`t_0`; for ``'log'`` the code is strongly compressed toward
+    :math:`t_0` for all inputs well above ``threshold``. With
+    ``normalize=False``, :math:`T` is the physical time constant ``tau``, and
+    spikes that would fall after the window are dropped.
 
     Example::
 
-      >>> import jax
-      >>> a = jax.numpy.array([0.02, 0.5, 1])
+      >>> import brainstate, brainunit as u, jax.numpy as jnp
+      >>> brainstate.environ.set(dt=1. * u.ms)
       >>> encoder = LatencyEncoder(method='linear', normalize=True)
-      >>> encoder(a, n_time=5)
+      >>> encoder(jnp.array([0.0, 0.5, 1.0]), n_time=5)
       Array([[0., 0., 1.],
              [0., 0., 0.],
              [0., 1., 0.],
              [0., 0., 0.],
-             [1., 0., 0.]])
+             [1., 0., 0.]], dtype=float32)
 
-
-    Args:
-      min_val: float. The minimal value in the given data `x`, used to the data normalization.
-      max_val: float. The maximum value in the given data `x`, used to the data normalization.
-      method: str. How to convert intensity to firing time. Currently, we support `linear` or `log`.
-        - If ``method='linear'``, the firing rate is calculated as
-          :math:`t_f(x) = (\text{num_period} - 1)(1 - x)`.
-        - If ``method='log'``, the firing rate is calculated as
-          :math:`t_f(x) = (\text{num_period} - 1) - ln(\alpha * x + 1)`,
-          where :math:`\alpha` satisfies :math:`t_f(1) = \text{num_period} - 1`.
-      threshold: float. Input features below the threhold will fire at the
-        final time step unless ``clip=True`` in which case they will not
-        fire at all, defaults to ``0.01``.
-      clip: bool. Option to remove spikes from features that fall
-          below the threshold, defaults to ``False``.
-      tau: float. RC Time constant for LIF model used to calculate
-        firing time, defaults to ``1``.
-      normalize: bool. Option to normalize the latency code such that
-        the final spike(s) occur within num_steps, defaults to ``False``.
-      epsilon: float. A tiny positive value to avoid rounding errors when
-        using torch.arange, defaults to ``1e-7``.
+    Parameters
+    ----------
+    min_val : float, optional
+        The minimal value of the data, used for rescaling.
+    max_val : float, optional
+        The maximal value of the data, used for rescaling.
+    method : str, default='log'
+        ``'linear'`` or ``'log'`` (see above).
+    threshold : float, default=0.01
+        Value in ``[0, 1]``. Inputs below it fire at the last step
+        (``normalize=True``) or not at all when ``clip=True``.
+    clip : bool, default=False
+        Whether features below ``threshold`` should not fire.
+    tau : Quantity or float, default=1 ms
+        Time scale of the code (in ms) when ``normalize=False``, and the
+        default window when ``n_time`` is None.
+    normalize : bool, default=False
+        Whether to scale the codes to the window (see above).
+    first_spk_time : Quantity or float, default=0 ms
+        Time of the earliest possible spike (in ms).
+    epsilon : float, default=1e-7
+        Small value that keeps the ``'log'`` code finite.
     """
     __module__ = 'braintools'
 
@@ -98,7 +124,6 @@ class LatencyEncoder:
         epsilon: float = 1e-7,
     ):
         super().__init__()
-
         if method not in ['linear', 'log']:
             raise ValueError('The conversion method can only be "linear" and "log".')
         self.method = method
@@ -111,7 +136,6 @@ class LatencyEncoder:
         self.tau = tau
         self.normalize = normalize
         self.first_spk_time = first_spk_time
-        self.first_spk_step = int(u.get_mantissa(first_spk_time) / u.get_mantissa(brainstate.environ.get_dt()))
         self.epsilon = epsilon
 
     def __call__(
@@ -119,47 +143,53 @@ class LatencyEncoder:
         data: brainstate.typing.ArrayLike,
         n_time: Optional[brainstate.typing.ArrayLike] = None,
     ) -> jax.Array:
-        """Generate latency spikes according to the given input data.
-
-        Ensuring x in [0., 1.].
+        """Generate latency spikes for ``data``.
 
         Args:
-          data: The rate-based input.
-          n_time: float. The total time to generate data. If None, use ``tau`` instead.
+          data: The intensities to encode, nominally in ``[0, 1]``.
+          n_time: int or Quantity. Length of the window: a number of time steps,
+            or a duration (Quantity) that is converted to steps with the
+            current ``dt``. Defaults to the duration ``tau``.
 
         Returns:
-          out: array. The output spiking trains.
+          Spike trains with shape ``(n_steps, *data.shape)``; every feature has
+          at most one spike.
         """
-        with jax.ensure_compile_time_eval():
-            if n_time is None:
-                n_time = self.tau
-            tau = n_time if self.normalize else self.tau
-            x = data
-            if self.min_val is not None and self.max_val is not None:
-                x = (x - self.min_val) / (self.max_val - self.min_val)
+        dt_ms = _in_ms(brainstate.environ.get_dt())
+        if n_time is None:
+            n_steps = int(np.ceil(_in_ms(self.tau) / dt_ms - 1e-9))
+        elif isinstance(n_time, u.Quantity):
+            n_steps = int(np.ceil(_in_ms(n_time) / dt_ms - 1e-9))
+        else:
+            n_steps = int(n_time)
+        if n_steps < 1:
+            raise ValueError(f'The window must contain at least one time step, got {n_steps}.')
+        first_step = int(round(_in_ms(self.first_spk_time) / dt_ms))
+        last_step = n_steps - 1
 
-            # Calculate the spike time
-            dt = brainstate.environ.get_dt()
-            dt_val = u.get_mantissa(dt)
-            tau_val = u.get_mantissa(tau) if hasattr(tau, 'mantissa') else tau
-            first_spk_val = u.get_mantissa(self.first_spk_time)
+        x = jnp.asarray(data)
+        if self.min_val is not None and self.max_val is not None:
+            x = (x - self.min_val) / (self.max_val - self.min_val)
 
-            if self.method == 'linear':
-                spike_time = (tau_val - first_spk_val - dt_val) * (1 - x) + first_spk_val
+        if self.method == 'linear':
+            code = 1.0 - x  # 0 for x = 1, 1 for x = 0
+            code_max = 1.0
+        else:
+            x_safe = jnp.maximum(x, self.threshold + self.epsilon)
+            code = jnp.log(x_safe / (x_safe - self.threshold))
+            code_max = float(np.log((self.threshold + self.epsilon) / self.epsilon))
 
-            elif self.method == 'log':
-                x = u.math.maximum(x, self.threshold + self.epsilon)  # saturates all values below threshold.
-                spike_time = (tau_val - first_spk_val - dt_val) * u.math.log(
-                    x / (x - self.threshold)) + first_spk_val
-
-            else:
-                raise ValueError(f'Unsupported method: {self.method}. Only support "log" and "linear".')
-
-            # Clip the spike time
-            if self.clip:
-                spike_time = u.math.where(data < self.threshold, jnp.inf, spike_time)
-            spike_steps = u.math.round(spike_time / dt_val).astype(int)
-            return brainstate.functional.one_hot(spike_steps, num_classes=int(tau_val / dt_val), axis=0, dtype=x.dtype)
+        if self.normalize:
+            steps = first_step + (last_step - first_step) * code / code_max
+        else:
+            steps = first_step + code * _in_ms(self.tau) / dt_ms
+        steps = jnp.round(steps).astype(int)
+        fire = (steps >= 0) & (steps <= last_step)
+        if self.clip:
+            fire = fire & (x >= self.threshold)
+        # An index of ``n_steps`` is out of range for one_hot and yields no spike.
+        steps = jnp.where(fire, steps, n_steps)
+        return jax.nn.one_hot(steps, n_steps, axis=0, dtype=jnp.result_type(float))
 
 
 class RateEncoder:
@@ -234,10 +264,8 @@ class RateEncoder:
         else:
             raise ValueError(f'Unsupported method: {self.method}.')
 
-        # Convert rates to probabilities per time step
-        dt = brainstate.environ.get_dt()
-        dt_val = u.get_mantissa(dt) if hasattr(dt, 'mantissa') else dt
-        probs = rates * dt_val / 1000.0  # Convert Hz to probability per ms
+        # Convert rates (Hz) to probabilities per time step
+        probs = rates * _dt_seconds()
         probs = u.math.clip(probs, 0, 1)
 
         # Generate spikes using Bernoulli process
@@ -260,7 +288,7 @@ class PoissonEncoder:
       >>> # Mean spike counts should be ~[10, 50, 100]
     
     Args:
-      time_window: float. Time window in ms for rate calculation.
+      time_window: Deprecated and unused; passing it emits a ``DeprecationWarning``.
       normalize: bool. Whether to treat inputs as rates (False) or normalize to rates (True).
       max_rate: float. Maximum rate when normalizing.
     """
@@ -268,10 +296,17 @@ class PoissonEncoder:
 
     def __init__(
         self,
-        time_window: float = 1000.0,  # ms
+        time_window: Optional[float] = None,
         normalize: bool = False,
         max_rate: float = 100.0,
     ):
+        if time_window is not None:
+            warnings.warn(
+                '`PoissonEncoder(time_window=...)` has no effect and will be removed; '
+                'the rate is set by the input (Hz) and the brainstate time step.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.time_window = time_window
         self.normalize = normalize
         self.max_rate = max_rate
@@ -291,10 +326,8 @@ class PoissonEncoder:
         if self.normalize:
             rates = data * self.max_rate
 
-        dt = brainstate.environ.get_dt()  # ms
-        dt_val = u.get_mantissa(dt) if hasattr(dt, 'mantissa') else dt
-        # Rate parameter for each time step
-        lam = rates * dt_val / 1000.0  # Convert Hz to expected spikes per time step
+        # Expected number of spikes per time step (rates in Hz)
+        lam = rates * _dt_seconds()
 
         # Generate Poisson spikes
         spikes = brainstate.random.poisson(lam, size=(n_time,) + data.shape)
@@ -361,9 +394,7 @@ class PopulationEncoder:
         rates = activations * self.max_rate
 
         # Convert to spike probabilities
-        dt = brainstate.environ.get_dt()
-        dt_val = u.get_mantissa(dt) if hasattr(dt, 'mantissa') else dt
-        probs = rates * dt_val / 1000.0
+        probs = rates * _dt_seconds()
         probs = u.math.clip(probs, 0, 1)
 
         # Generate spikes
@@ -441,23 +472,29 @@ class BernoulliEncoder:
 
 class DeltaEncoder:
     r"""
-    Encode temporal differences (delta changes) in input signals.
-    
-    Generates spikes when the input signal changes significantly between
-    time steps. Useful for encoding dynamic signals and temporal patterns.
-    
+    Encode a time series by send-on-delta (level-crossing) modulation.
+
+    The encoder keeps a reference level per feature, starting at the first
+    sample. Whenever the signal has moved at least ``threshold`` away from the
+    reference, a spike is emitted and the reference is reset to the current
+    value. Slow drifts are therefore encoded as well as sudden jumps: a ramp of
+    total height :math:`h` produces about :math:`h / \text{threshold}` spikes.
+
     Example::
-    
-      >>> # Encode a changing signal
-      >>> time_series = jnp.array([0, 0.1, 0.8, 0.7, 0.2])
-      >>> encoder = DeltaEncoder(threshold=0.1)
-      >>> spikes = encoder(time_series)  # Spikes at significant changes
-    
+
+      >>> import jax.numpy as jnp
+      >>> encoder = DeltaEncoder(threshold=0.25, normalize=False)
+      >>> encoder(jnp.array([0.0, 0.1, 0.2, 0.3, 0.3, 0.0]))
+      Array([ 0.,  0.,  0.,  1.,  0., -1.], dtype=float32)
+
     Args:
-      threshold: float. Minimum change required to generate a spike.
-      positive_only: bool. Whether to encode only positive changes.
-      absolute: bool. Whether to use absolute value of changes.
-      normalize: bool. Whether to normalize the input signal.
+      threshold: float. Change relative to the reference that triggers a spike.
+      positive_only: bool. Emit spikes only for increases (output 0/1). The
+        reference still follows decreases.
+      absolute: bool. If False (default), increases give ``+1`` and decreases
+        ``-1`` (ON/OFF events). If True, every crossing gives ``1``.
+      normalize: bool. Rescale each feature to ``[0, 1]`` over time first, so
+        ``threshold`` is a fraction of the feature's range.
     """
     __module__ = 'braintools'
 
@@ -475,33 +512,39 @@ class DeltaEncoder:
 
     def __call__(self, data: brainstate.typing.ArrayLike) -> jax.Array:
         """Generate delta-encoded spikes.
-        
-        Args:
-          data: Time series data with shape (n_time, *features).
-        
-        Returns:
-          Delta spike trains with same shape as input.
-        """
-        if data.ndim == 1:
-            data = data[..., None]  # Add feature dimension
 
-        x = data
+        Args:
+          data: Time series with shape ``(n_time, *features)``.
+
+        Returns:
+          Spike trains with the same shape as ``data``: ``+1``/``-1`` events, or
+          ``0``/``1`` with ``absolute=True`` or ``positive_only=True``. The first
+          time step never spikes.
+        """
+        data = jnp.asarray(data)
+        squeeze = data.ndim == 1
+        x = data[:, None] if squeeze else data
+        x = x.astype(jnp.result_type(float))
         if self.normalize:
-            x_min, x_max = u.math.min(x, axis=0, keepdims=True), u.math.max(x, axis=0, keepdims=True)
+            x_min = jnp.min(x, axis=0, keepdims=True)
+            x_max = jnp.max(x, axis=0, keepdims=True)
             x = (x - x_min) / (x_max - x_min + 1e-8)
 
-        # Calculate differences
-        diffs = u.math.diff(x, axis=0, prepend=x[0:1])
+        threshold = self.threshold
 
-        if self.absolute:
-            diffs = u.math.abs(diffs)
-        elif self.positive_only:
-            diffs = u.math.maximum(diffs, 0)
+        def step(ref, xt):
+            d = xt - ref
+            crossed = jnp.abs(d) >= threshold
+            ref = jnp.where(crossed, xt, ref)
+            return ref, jnp.where(crossed, jnp.sign(d), 0.0)
 
-        # Generate spikes where changes exceed threshold
-        spikes = (u.math.abs(diffs) >= self.threshold).astype(data.dtype)
-
-        return spikes.squeeze() if data.shape[-1] == 1 else spikes
+        _, events = jax.lax.scan(step, x[0], x[1:])
+        events = jnp.concatenate([jnp.zeros_like(x[:1]), events], axis=0)
+        if self.positive_only:
+            events = (events > 0).astype(events.dtype)
+        elif self.absolute:
+            events = jnp.abs(events)
+        return events[:, 0] if squeeze else events
 
 
 class StepCurrentEncoder:
@@ -610,7 +653,8 @@ class SpikeCountEncoder:
         if self.normalize:
             x = u.math.clip(x, 0, 1)
 
-        spike_counts = (x * self.max_spikes).astype(int)
+        # At most one spike per time step, so a window holds at most n_time spikes.
+        spike_counts = u.math.clip((x * self.max_spikes).astype(int), 0, n_time)
         spikes = u.math.zeros((n_time,) + data.shape, dtype=data.dtype)
 
         if self.distribution == 'uniform':

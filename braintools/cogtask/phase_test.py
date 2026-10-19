@@ -199,6 +199,80 @@ def test_parallel_phase_history_records_each_child():
     assert 'a_phase' in names and 'b_phase' in names
 
 
+def test_compound_phase_history_records_its_own_span():
+    """A compound node's entry must be its own span, not its last child's.
+
+    Regression test: ``execute_phase`` read ``ctx.phase_start``/``phase_end`` back
+    *after* running a compound's children, but those are shared mutable attributes
+    that each child overwrites. ``Sequence.execute`` -- unlike
+    ``Parallel.execute`` -- never restores the parent scope, so a top-level
+    ``Sequence`` was recorded with the span of its final child (a fixed-length
+    task reported e.g. ``('Sequence', 1500, 2000)`` rather than ``(0, 2000)``).
+    """
+    fix = ct.Feature(1, 'fixation')
+    out = ct.Feature(1, 'out')
+    seq = concat([
+        Fixation(5 * u.ms, name='first', inputs={'fixation': 1.0}, outputs={'label': 0}),
+        Fixation(7 * u.ms, name='second', inputs={'fixation': 1.0}, outputs={'label': 0}),
+        Fixation(3 * u.ms, name='third', inputs={'fixation': 1.0}, outputs={'label': 0}),
+    ])
+    task = ct.Task(phases=seq, input_features=FeatureSet(fix),
+                   output_features=fix + out, seed=0)
+    _, _, info = task.sample_trial(0)
+    spans = {name: (int(s), int(e)) for name, s, e in info['phase_history']}
+    assert spans['Sequence'] == (0, 15), spans
+    assert spans['first'] == (0, 5), spans
+    assert spans['second'] == (5, 12), spans
+    assert spans['third'] == (12, 15), spans
+
+
+def test_nested_compound_history_spans_are_correct_at_every_level():
+    """The same error used to propagate through nesting, so check both levels."""
+    fix = ct.Feature(1, 'fixation')
+    out = ct.Feature(1, 'out')
+    inner = Sequence(
+        Fixation(4 * u.ms, name='in_a', inputs={'fixation': 1.0}, outputs={'label': 0}),
+        Fixation(6 * u.ms, name='in_b', inputs={'fixation': 1.0}, outputs={'label': 0}),
+        name='inner',
+    )
+    outer = concat([
+        Fixation(5 * u.ms, name='head', inputs={'fixation': 1.0}, outputs={'label': 0}),
+        inner,
+        Fixation(2 * u.ms, name='tail', inputs={'fixation': 1.0}, outputs={'label': 0}),
+    ])
+    task = ct.Task(phases=outer, input_features=FeatureSet(fix),
+                   output_features=fix + out, seed=0)
+    _, _, info = task.sample_trial(0)
+    spans = {name: (int(s), int(e)) for name, s, e in info['phase_history']}
+    assert spans['Sequence'] == (0, 17), spans
+    assert spans['head'] == (0, 5), spans
+    assert spans['inner'] == (5, 15), spans
+    assert spans['in_a'] == (5, 9), spans
+    assert spans['in_b'] == (9, 15), spans
+    assert spans['tail'] == (15, 17), spans
+
+
+def test_compound_span_matches_the_masked_trial_length():
+    """A variable-length task: the outer span must equal the valid (masked) length.
+
+    This ties the history metadata to the mask rather than to the padded buffer,
+    which is the invariant a consumer of ``phase_history`` actually relies on.
+    """
+    fix = ct.Feature(1, 'fixation')
+    out = ct.Feature(1, 'out')
+    seq = concat([
+        Fixation(10 * u.ms, name='fix', inputs={'fixation': 1.0}, outputs={'label': 0}),
+        Stimulus(6 * u.ms, name='stim', inputs={'fixation': 1.0}, outputs={'label': 0}),
+    ])
+    task = ct.Task(phases=seq, input_features=FeatureSet(fix),
+                   output_features=fix + out, seed=0)
+    _, _, info = task.sample_trial(0)
+    spans = {name: (int(s), int(e)) for name, s, e in info['phase_history']}
+    assert spans['Sequence'] == (0, 16), spans
+    assert spans['fix'] == (0, 10), spans
+    assert spans['stim'] == (10, 16), spans
+
+
 def test_repeat_index_visible_inside_body_and_pops_on_exit():
     # Use a custom Phase subclass that captures ctx['repeat_index'] each iteration.
     seen = []
@@ -264,6 +338,18 @@ def test_categorical_output_rejects_2d_label():
     p = Stimulus(5 * u.ms, inputs={'fixation': 1.0}, outputs={'label': bad})
     task = ct.Task(phases=p, input_features=FeatureSet(fix), output_features=fix + out, seed=0)
     with pytest.raises(ValueError, match="categorical label"):
+        task.sample_trial(0)
+
+
+def test_categorical_output_rejects_bare_string_label():
+    fix = ct.Feature(1, 'fixation')
+    out = ct.Feature(1, 'out')
+    p = Stimulus(5 * u.ms, inputs={'fixation': 1.0}, outputs={'label': 'ground_truth'})
+    task = ct.Task(
+        phases=p, input_features=FeatureSet(fix), output_features=fix + out,
+        trial_init=lambda ctx: ctx.update(ground_truth=1), seed=0,
+    )
+    with pytest.raises(ValueError, match=r"label\('ground_truth'\)"):
         task.sample_trial(0)
 
 

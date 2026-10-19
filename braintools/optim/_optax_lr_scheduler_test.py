@@ -1529,9 +1529,11 @@ class TestCyclicLR:
         # Peak should be at epoch 5 (index 4)
         assert np.isclose(lrs[4], 1.0, atol=0.01)
 
-        # Should go down in 10 steps (epochs 6-15), reaching base_lr at epoch 14
+        # Should go down over 10 steps (epochs 6-15), reaching base_lr at epoch 15
         assert lrs[13] < lrs[4], f"lrs[13]={lrs[13]}, lrs[4]={lrs[4]}"
-        assert np.isclose(lrs[13], 0.1, atol=0.05)
+        assert np.isclose(lrs[9], 0.55, atol=1e-5)  # halfway down at epoch 10
+        assert np.isclose(lrs[13], 0.19, atol=1e-5)  # one step before the end
+        assert np.isclose(lrs[14], 0.1, atol=1e-5)
 
     def test_cyclic_lr_jit_with_optimizer(self):
         """Test CyclicLR with JIT compilation in a training loop"""

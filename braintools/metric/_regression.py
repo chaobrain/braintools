@@ -201,8 +201,8 @@ def squared_error(
         \text{L2 loss} = \frac{1}{2} \times \text{squared error}
         
     The factor of 0.5 is conventional in some textbooks (e.g., Bishop's "Pattern
-    Recognition and Machine Learning") but not others (e.g., "The Elements of
-    Statistical Learning" by Hastie, Tibshirani, and Friedman).
+    Recognition and Machine Learning" [1]_) but not others (e.g., "The Elements of
+    Statistical Learning" by Hastie, Tibshirani, and Friedman [2]_).
 
     Mean Squared Error (MSE) is computed as ``squared_error(pred, target, reduction='mean')``.
 
@@ -283,7 +283,7 @@ def absolute_error(
 
     Calculates the absolute differences between predicted and target values,
     forming the basis for Mean Absolute Error (MAE) and L1 loss. This metric
-    is more robust to outliers than squared error and provides intuitive
+    is more robust to outliers than squared error [1]_ and provides intuitive
     error measurements in the same units as the original data.
 
     The absolute error is defined as:
@@ -581,7 +581,7 @@ def l2_loss(
 
     Notes
     -----
-    The ``0.5`` factor is standard in "Pattern Recognition and Machine Learning"
+    The ``0.5`` factor is standard in "Pattern Recognition and Machine Learning" [1]_
     by Bishop, but not in "The Elements of Statistical Learning" by Tibshirani.
 
     For ``brainunit.Quantity`` inputs the result carries **squared** units
@@ -662,7 +662,7 @@ def huber_loss(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute Huber loss combining L1 and L2 properties for robust regression.
 
-    The Huber loss provides a compromise between L1 and L2 losses, being quadratic
+    The Huber loss [1]_ provides a compromise between L1 and L2 losses, being quadratic
     for small errors (like L2) and linear for large errors (like L1). This makes
     it robust to outliers while maintaining smooth gradients near zero, combining
     the best properties of both loss functions.
@@ -722,7 +722,7 @@ def huber_loss(
     - Large ``delta``: Less robust, approaches L2 loss
     - ``delta = 1.0``: Common default providing good balance
 
-    This loss is particularly effective for regression with outliers and in
+    This loss is particularly effective for regression with outliers [2]_ and in
     reinforcement learning for value function approximation.
 
     **Units:** comparisons are performed with ``brainunit.math`` so that a
@@ -790,7 +790,7 @@ def log_cosh(
 
     ``log(cosh(x))`` is approximately ``(x ** 2) / 2`` for small ``x`` and
     ``abs(x) - log(2)`` for large ``x``. It is a twice differentiable
-    alternative to the Huber loss.
+    alternative to the Huber loss [1]_.
 
     Parameters
     ----------
@@ -859,10 +859,10 @@ def cosine_similarity(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute cosine similarity between predicted and target vectors.
 
-    Calculates the cosine of the angle between vectors, providing a measure of
+    Calculates the cosine of the angle between vectors [1]_, providing a measure of
     similarity that is independent of vector magnitude. This metric is particularly
     useful for comparing direction or orientation of high-dimensional vectors,
-    commonly used in natural language processing, computer vision, and
+    commonly used in natural language processing [2]_, computer vision, and
     recommendation systems.
 
     The cosine similarity is defined as:
@@ -986,7 +986,7 @@ def cosine_distance(
     r"""Compute the cosine distance between targets and predictions.
 
     The cosine **distance**, implemented here, measures the **dissimilarity**
-    of two vectors as the opposite of cosine **similarity**: :math:`1 - \cos(\theta)`.
+    of two vectors as the opposite of cosine **similarity**: :math:`1 - \cos(\theta)` [1]_.
 
     Parameters
     ----------

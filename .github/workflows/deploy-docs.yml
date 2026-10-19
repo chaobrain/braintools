@@ -47,7 +47,7 @@ jobs:
         env:
           BRAINX_HEADER_TTL: "0"
         run: |
-          sphinx-build -b html docs docs/_build/html
+          sphinx-build -W --keep-going -b html docs docs/_build/html
           test -f docs/_build/html/index.html
 
       - name: Upload documentation artifact

@@ -90,7 +90,11 @@ def animator(
     if not num_steps:
         num_steps = data.shape[0]
     camera = Camera(fig)
-    plt.axis("off")
+    # Hide the axes that were handed in. ``plt.axis`` acts on the *current* axes
+    # (``plt.gca()``), so passing an ``ax`` that is not current -- e.g. the caller
+    # made another figure in between -- would hide an unrelated axes and leave the
+    # target one showing its ticks and spines.
+    ax.axis("off")
     # iterate over time and take a snapshot with celluloid
     for step in range(
         num_steps

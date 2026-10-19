@@ -27,6 +27,7 @@ import numpy as np
 
 from braintools._misc import set_module_as
 from ._deprecation import create_deprecated_function
+from ._steps import ceil_steps, floor_steps
 
 __all__ = [
     'wiener_process',
@@ -44,18 +45,31 @@ def wiener_process(
     t_end: Optional[brainstate.typing.ArrayLike] = None,
     seed: Optional[int] = None
 ):
-    """Generate Wiener process (Brownian motion) input.
+    r"""Generate Wiener-process increments (Gaussian white noise).
 
-    Creates a stochastic input following a Wiener process, where increments
-    are drawn from a normal distribution N(0, σ²dt). Useful for modeling
-    synaptic noise or random fluctuations in neural systems.
+    Returns the per-step **increments** :math:`dW` of a scaled Wiener process,
+
+    .. math::
+        dW \sim \mathcal{N}(0, \sigma^2\, dt),
+
+    drawn independently at every time step. The result is white noise, **not**
+    the cumulative Brownian path :math:`W(t)`; take ``cumsum`` along the time
+    axis if you need the path.
+
+    ``dt`` enters as the numeric value of ``brainstate.environ.get_dt()`` in the
+    unit it was set with, so ``sigma`` has units of current per square root of
+    that time unit. The library does not convert time units here: use one
+    consistent time unit for ``dt`` (and any other time constants) when
+    choosing ``sigma``. The same physical step written as ``0.1 * u.ms`` or
+    ``1e-4 * u.second`` therefore gives increments of different size.
 
     Parameters
     ----------
     duration : float or Quantity
         Total duration of the input signal. Supports time units.
     sigma : float or Quantity, optional
-        Standard deviation of the noise. Supports current units.
+        Noise intensity. Each increment has standard deviation
+        ``sigma * sqrt(dt)`` with ``dt`` in its own unit. Supports current units.
         Default is 1.0.
     n : int, optional
         Number of independent Wiener processes to generate.
@@ -73,7 +87,7 @@ def wiener_process(
     Returns
     -------
     current : ndarray or Quantity
-        The Wiener process input. Shape is (n_timesteps,) if n=1,
+        The increments dW. Shape is (n_timesteps,) if n=1,
         or (n_timesteps, n) if n>1.
 
     Examples
@@ -127,9 +141,9 @@ def wiener_process(
     
     Notes
     -----
-    - The variance scales with dt: Var(dW) = σ²dt
-    - The process has zero mean: E[W(t)] = 0
-    - Increments are independent and normally distributed
+    - Each sample is an increment: Var(dW) = σ²·dt, E[dW] = 0.
+    - Increments are independent, so the output is white noise; the
+      Brownian path is ``cumsum(dW)``.
     """
     dt = brainstate.environ.get_dt()
     dt_value, time_unit = u.split_mantissa_unit(dt)
@@ -149,9 +163,9 @@ def wiener_process(
     rng = np.random if seed is None else np.random.RandomState(seed)
 
     # Calculate indices
-    i_start = int(t_start_value / dt_value)
-    i_end = int(t_end_value / dt_value)
-    n_steps = int(np.ceil(duration_value / dt_value))
+    i_start = floor_steps(t_start_value, dt_value)
+    i_end = floor_steps(t_end_value, dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
 
     # Generate noise
     dt_sqrt = np.sqrt(dt_value)
@@ -183,19 +197,32 @@ def ou_process(
     which models a particle undergoing Brownian motion with friction.
     The process tends to revert to a mean value over time.
 
-    The dynamics follow:
-    
+    The dynamics follow
+
     .. math::
-        dX = \frac{\mu - X}{\tau} dt + \sigma dW
+        dX = \frac{\mu - X}{\tau} dt + \sigma \sqrt{\frac{2}{\tau}}\, dW,
+
+    so ``sigma`` is the **stationary standard deviation** of :math:`X`. The
+    process is advanced with the exact update
+
+    .. math::
+        X_{t+dt} = \mu + (X_t - \mu) e^{-dt/\tau}
+                   + \sigma \sqrt{1 - e^{-2 dt/\tau}}\, \xi_t,
+        \qquad \xi_t \sim \mathcal{N}(0, 1),
+
+    which keeps the stationary standard deviation exactly ``sigma`` for any
+    ``dt``. Only the ratio ``dt / tau`` enters, so the result does not depend
+    on the time unit used for ``dt`` and ``tau``.
 
     Parameters
     ----------
     mean : float or Quantity
         Mean value (drift) of the OU process. Supports current units.
     sigma : float or Quantity
-        Standard deviation of the noise. Supports current units.
+        Stationary standard deviation of the process. Supports current units.
     tau : float or Quantity
-        Time constant of the process. Larger values = slower fluctuations.
+        Correlation time constant of the process. Larger values = slower
+        fluctuations.
         Supports time units.
     duration : float or Quantity
         Total duration of the input signal. Supports time units.
@@ -287,9 +314,9 @@ def ou_process(
     
     Notes
     -----
-    - The process has mean-reverting behavior controlled by tau
-    - Variance at steady state: σ²/(2/τ)
-    - Autocorrelation decays exponentially with time constant tau
+    - The process starts at ``mean`` and reverts to it with time constant tau
+    - Stationary variance: σ²
+    - Autocorrelation decays as :math:`\exp(-|\text{lag}| / \tau)`
     - Useful for modeling synaptic background activity
     """
     dt = brainstate.environ.get_dt()
@@ -312,22 +339,22 @@ def ou_process(
     rng = np.random if seed is None else np.random.RandomState(seed)
 
     # Calculate indices
-    i_start = int(t_start_value / dt_value)
-    i_end = int(t_end_value / dt_value)
-    n_steps = int(np.ceil(duration_value / dt_value))
+    i_start = floor_steps(t_start_value, dt_value)
+    i_end = floor_steps(t_end_value, dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
 
-    # Generate OU process
-    dt_sqrt = np.sqrt(dt_value)
-    dt_over_tau = dt_value / tau_value
+    # Exact OU update: only the dimensionless ratio dt / tau enters, and the
+    # stationary standard deviation is exactly sigma for any dt.
+    decay = np.exp(-dt_value / tau_value)
+    noise_scale = sigma_value * np.sqrt(1.0 - decay ** 2)
 
     # Initialize process at mean
     x = np.full(n, mean_value, dtype=brainstate.environ.dftype())
     process_values = []
 
     for _ in range(i_end - i_start):
-        # OU dynamics: dx = (mean - x) * dt/tau + sigma * sqrt(dt) * dW
         noise = rng.standard_normal(n if n > 1 else ())
-        x = x + (mean_value - x) * dt_over_tau + sigma_value * dt_sqrt * noise
+        x = mean_value + (x - mean_value) * decay + noise_scale * noise
         process_values.append(x.copy() if n > 1 else x)
 
     # Stack the process values
@@ -486,9 +513,9 @@ def poisson(
     rng = np.random if seed is None else np.random.RandomState(seed)
 
     # Calculate indices
-    i_start = int(t_start_value / dt_value)
-    i_end = int(t_end_value / dt_value)
-    n_steps = int(np.ceil(duration_value / dt_value))
+    i_start = floor_steps(t_start_value, dt_value)
+    i_end = floor_steps(t_end_value, dt_value)
+    n_steps = ceil_steps(duration_value, dt_value)
 
     # Convert rate to probability per timestep
     # Need to account for time unit conversion

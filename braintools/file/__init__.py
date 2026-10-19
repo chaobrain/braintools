@@ -64,18 +64,18 @@ specifically designed for neuroscience and machine learning workflows.
 
 .. code-block:: python
 
-    import brainstate as bst
+    import brainstate
     from braintools.file import msgpack_save, msgpack_load, AsyncManager
 
     # Simple synchronous save
-    msgpack_save('checkpoint.msgpack', model.state_dict())
+    msgpack_save('checkpoint.msgpack', model.states())
 
     # Load checkpoint with mismatch handling
-    state = msgpack_load('checkpoint.msgpack', target=model.state_dict(), mismatch='warn')
+    state = msgpack_load('checkpoint.msgpack', target=model.states(), mismatch='warn')  # restores in place
 
     # Async saving for large models (non-blocking)
     with AsyncManager() as manager:
-        msgpack_save('checkpoint.msgpack', model.state_dict(), async_manager=manager)
+        msgpack_save('checkpoint.msgpack', model.states(), async_manager=manager)
         # Continue training while save happens in background
 
     # Custom serialization for user-defined types

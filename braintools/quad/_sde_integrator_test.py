@@ -18,6 +18,7 @@ import brainstate
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import braintools
 
@@ -205,3 +206,29 @@ def test_sde_euler_pytree_structure():
     assert set(y1.keys()) == {'a', 'b'}
     assert y1['a'].shape == (2,)
     assert y1['b']['c'].shape == (2, 2)
+
+
+@pytest.mark.parametrize('n', [8, 4096])
+def test_sde_implicit_euler_solves_stiff_drift(n):
+    # dy = -k y dt + dW with zero noise amplitude: the drift-implicit step must
+    # give y / (1 + k dt) even for k dt >> 1, for both the dense (n=8) and the
+    # matrix-free (n=4096) Newton paths
+    k, dt = 1000.0, 0.01
+    y0 = jnp.linspace(1.0, 2.0, n)
+    with brainstate.environ.context(dt=dt):
+        y1 = braintools.quad.sde_implicit_euler_step(
+            lambda y, t: -k * y, lambda y, t: jnp.zeros_like(y), y0, 0.0)
+    np.testing.assert_allclose(y1, y0 / (1 + k * dt), rtol=1e-5)
+
+
+def test_sde_implicit_euler_superlinear_drift_stays_finite():
+    brainstate.random.seed(0)
+    dt = 0.4
+    with brainstate.environ.context(dt=dt):
+        def body(y, i):
+            return braintools.quad.sde_implicit_euler_step(
+                lambda y, t: y - y ** 3, lambda y, t: 2.0 * jnp.ones_like(y), y, i * dt), None
+
+        y, _ = brainstate.transform.scan(body, jnp.zeros(500), jnp.arange(50))
+    assert np.all(np.isfinite(np.asarray(y)))
+    assert np.max(np.abs(np.asarray(y))) < 10

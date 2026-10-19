@@ -758,6 +758,7 @@ class Burst(Input):
         ...     duration=500 * u.ms
         ... )
         >>> array = bursts()
+
     Oscillatory bursts (theta-burst stimulation):
     
     .. code-block:: python
@@ -770,6 +771,7 @@ class Burst(Input):
         ...     inter_burst_interval=200 * u.ms,  # 5Hz burst rate
         ...     duration=2000 * u.ms
         ... )
+
     Bursts with ramped amplitude:
     
     .. code-block:: python
@@ -778,6 +780,7 @@ class Burst(Input):
         >>> burst = Burst(5, 1.0, 50 * u.Hz, 30 * u.ms, 100 * u.ms, 500 * u.ms)
         >>> ramp = Ramp(0.5, 1.5, 500 * u.ms)
         >>> modulated_burst = burst * ramp
+
     Burst pattern with noise:
     
     .. code-block:: python
@@ -786,6 +789,7 @@ class Burst(Input):
         >>> bursts = Burst(4, 1.5, 30 * u.Hz, 50 * u.ms, 150 * u.ms, 600 * u.ms)
         >>> noise = WienerProcess(600 * u.ms, sigma=0.1)
         >>> noisy_bursts = bursts + noise
+
     Gamma bursts in theta rhythm:
     
     .. code-block:: python
@@ -799,6 +803,7 @@ class Burst(Input):
         ...     inter_burst_interval=200 * u.ms,  # Theta rhythm (5Hz)
         ...     duration=3000 * u.ms
         ... )
+
     Paired bursts protocol:
     
     .. code-block:: python
@@ -808,6 +813,7 @@ class Burst(Input):
         >>> burst2 = Burst(1, 1.2, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms).shift(30 * u.ms)
         >>> paired = burst1 + burst2
         >>> protocol = paired.repeat(5)  # Repeat paired bursts
+
     Burst with exponential decay envelope:
     
     .. code-block:: python

@@ -51,6 +51,21 @@ class TestAnimator(unittest.TestCase):
         # num_steps frames captured
         self.assertEqual(len(anim._framedata), 3)
 
+    def test_hides_the_axes_passed_in_not_the_current_one(self):
+        """``animator`` must turn off *its* ``ax``, not ``plt.gca()``.
+
+        Regression test: it called ``plt.axis("off")``, which acts on whichever
+        axes happens to be current -- so handing it an ``ax`` that is not current
+        (e.g. the caller made another figure in between) hid an unrelated axes and
+        left the target one showing its ticks and spines.
+        """
+        target_fig, target_ax = plt.subplots()
+        plt.subplots()  # a decoy that becomes the current axes
+        anim = braintools.visualize.animator(self.data, target_fig, target_ax)
+        self.assertIsInstance(anim, ArtistAnimation)
+        self.assertFalse(target_ax.axison, 'the axes passed to animator was not hidden')
+        self.assertTrue(plt.gca().axison, 'an unrelated axes was hidden instead')
+
 
 class TestCamera(unittest.TestCase):
     """Direct coverage tests for the Camera helper class."""

@@ -28,7 +28,7 @@ simulations, supporting both composable object-oriented API and functional API.
 - **Basic Inputs**: Constant, step, ramp, section-based currents
 - **Pulse Patterns**: Spikes, Gaussian pulses, exponential shapes, bursts
 - **Waveforms**: Sinusoidal, square, triangular, sawtooth, chirp
-- **Stochastic Processes**: Wiener process, Ornstein-Uhlenbeck process, Poisson
+- **Stochastic Processes**: Wiener-process increments (white noise), Ornstein-Uhlenbeck process, Poisson
 - **Unit-Aware**: Full integration with BrainUnit for physical quantities
 
 **Quick Start - Composable API (Recommended):**
@@ -45,7 +45,7 @@ simulations, supporting both composable object-oriented API and functional API.
     # Create basic inputs
     ramp = Ramp(0, 1, 500 * u.ms)
     sine = Sinusoidal(0.5, 10 * u.Hz, 500 * u.ms)
-    baseline = Constant(0.2, 500 * u.ms)
+    baseline = Constant([(0.2, 500 * u.ms)])  # list of (value, duration) pairs
 
     # Combine using operators
     combined = baseline + ramp + sine * 0.5
@@ -71,7 +71,7 @@ simulations, supporting both composable object-oriented API and functional API.
     # Generate inputs
     ramp_signal = ramp(0, 1, 500 * u.ms)
     sine_signal = sinusoidal(0.5, 10 * u.Hz, 500 * u.ms)
-    baseline_signal = constant(0.2, 500 * u.ms)
+    baseline_signal, _ = constant([(0.2, 500 * u.ms)])  # returns (array, total duration)
 
     # Combine using array operations
     combined = baseline_signal + ramp_signal + sine_signal * 0.5
@@ -93,17 +93,17 @@ simulations, supporting both composable object-oriented API and functional API.
     )
 
     # Constant current
-    const = Constant(1.5 * u.nA, 500 * u.ms)
+    const = Constant([(1.5 * u.nA, 500 * u.ms)])
 
-    # Step function
+    # Step function: each amplitude holds from its start time to the next one
     step = Step(
-        values=[0, 1, 0.5],
-        times=[0, 100, 400],
+        amplitudes=[0, 1, 0.5] * u.nA,
+        step_times=[0, 100, 400] * u.ms,
         duration=500 * u.ms
     )
 
     # Linear ramp
-    ramp = Ramp(0, 2 * u.nA, 500 * u.ms)
+    ramp = Ramp(0 * u.nA, 2 * u.nA, 500 * u.ms)
 
 **Pulse Patterns:**
 
@@ -151,13 +151,13 @@ simulations, supporting both composable object-oriented API and functional API.
         duration=500 * u.ms
     )
 
-    # Burst of activity
+    # Five 20 ms windows of 100 Hz oscillation, 80 ms apart
     burst = Burst(
-        amplitude=1 * u.nA,
-        n_pulses=5,
-        pulse_duration=10 * u.ms,
-        interval=50 * u.ms,
-        t_start=100 * u.ms,
+        n_bursts=5,
+        burst_amp=1 * u.nA,
+        burst_freq=100 * u.Hz,
+        burst_duration=20 * u.ms,
+        inter_burst_interval=80 * u.ms,
         duration=500 * u.ms
     )
 
@@ -229,14 +229,14 @@ simulations, supporting both composable object-oriented API and functional API.
 
     brainstate.environ.set(dt=0.1 * u.ms)
 
-    # Wiener process (Brownian motion)
+    # Wiener-process increments dW ~ N(0, sigma^2 dt): white noise, not the path W(t)
     wiener = WienerProcess(
         duration=1000 * u.ms,
         sigma=0.1 * u.nA,
         seed=42
     )
 
-    # Ornstein-Uhlenbeck process
+    # Ornstein-Uhlenbeck process; sigma is its stationary standard deviation
     ou = OUProcess(
         duration=1000 * u.ms,
         mean=0.5 * u.nA,
@@ -264,7 +264,7 @@ simulations, supporting both composable object-oriented API and functional API.
     brainstate.environ.set(dt=0.1 * u.ms)
 
     # Build complex stimulation protocols
-    baseline = Constant(0.5 * u.nA, 1000 * u.ms)
+    baseline = Constant([(0.5 * u.nA, 1000 * u.ms)])
     modulation = Sinusoidal(0.3 * u.nA, 5 * u.Hz, 1000 * u.ms)
     noise = WienerProcess(1000 * u.ms, sigma=0.05 * u.nA)
 

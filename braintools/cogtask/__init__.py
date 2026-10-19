@@ -25,8 +25,11 @@ Quick Start
 
 Using pre-built tasks:
 
+>>> import brainstate
+>>> import brainunit as u
 >>> from braintools.cogtask import PerceptualDecisionMaking
->>> task = PerceptualDecisionMaking(t_stimulus=2000)
+>>> brainstate.environ.set(dt=1.0 * u.ms)   # timestep for phase durations
+>>> task = PerceptualDecisionMaking(t_stimulus=1500 * u.ms)
 >>> X, Y = task.batch_sample(32)
 >>> # train_step(X, Y)
 

@@ -41,18 +41,22 @@ __all__ = [
 
 
 class WienerProcess(Input):
-    r"""Generate Wiener process (Brownian motion) input.
+    r"""Generate Wiener-process increments (Gaussian white noise).
 
-    A Wiener process (also known as Brownian motion) is a continuous-time
-    stochastic process with independent Gaussian increments. It's widely used
-    to model synaptic noise and random fluctuations in neural systems.
-
-    The process follows:
+    Produces the per-step **increments** of a scaled Wiener process,
 
     .. math::
-        dW(t) \sim \mathcal{N}(0, \sigma^2 dt)
+        dW \sim \mathcal{N}(0, \sigma^2\, dt),
 
-    where increments are independent and normally distributed.
+    drawn independently at every time step. The output is white noise, **not**
+    the cumulative Brownian path :math:`W(t)`; take ``cumsum`` along the time
+    axis if you need the path.
+
+    ``dt`` enters as the numeric value of ``brainstate.environ.get_dt()`` in the
+    unit it was set with; the library does not convert time units. Use one
+    consistent time unit for ``dt`` when choosing ``sigma`` (the same physical
+    step written as ``0.1 * u.ms`` or ``1e-4 * u.second`` gives increments of
+    different size).
 
     Parameters
     ----------
@@ -68,7 +72,8 @@ class WienerProcess(Input):
         End time of the process. After this, output is 0.
         Default is duration.
     sigma : float, optional
-        Standard deviation of the noise. Default is 1.0.
+        Noise intensity; each increment has standard deviation
+        ``sigma * sqrt(dt)``. Default is 1.0.
     seed : int, optional
         Random seed for reproducibility.
         Default is None (uses global random state).
@@ -82,7 +87,7 @@ class WienerProcess(Input):
     t_end : float or Quantity
         End time of the process
     sigma : float
-        Standard deviation of the noise
+        Noise intensity
     seed : int or None
         Random seed for reproducibility
 
@@ -150,12 +155,11 @@ class WienerProcess(Input):
 
     Notes
     -----
-    - The variance of increments scales with dt: Var(dW) = σ²dt
-    - The process has zero mean: E[W(t)] = 0
-    - Increments are independent and normally distributed
-    - The process is non-differentiable but continuous
+    - Each sample is an increment: Var(dW) = σ²·dt, E[dW] = 0
+    - Increments are independent, so the output is white noise; the
+      Brownian path is ``cumsum(dW)``
     - Useful for modeling synaptic background noise
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -207,25 +211,25 @@ class OUProcess(Input):
     mean-reverting behavior, making it useful for modeling fluctuations
     around a steady state in neural systems.
 
-    The process follows the stochastic differential equation:
+    The process follows the stochastic differential equation
 
     .. math::
-        dX_t = \frac{\mu - X_t}{\tau} dt + \sigma dW_t
+        dX_t = \frac{\mu - X_t}{\tau} dt + \sigma \sqrt{\frac{2}{\tau}}\, dW_t
 
-    where:
-    - μ is the mean (drift target)
-    - τ is the time constant
-    - σ is the noise amplitude
-    - W_t is a Wiener process
+    where μ is the mean, τ the correlation time, and σ the **stationary
+    standard deviation** of :math:`X`. It is advanced with the exact update
+    :math:`X_{t+dt} = \mu + (X_t - \mu) e^{-dt/\tau} + \sigma\sqrt{1 - e^{-2dt/\tau}}\,\xi_t`,
+    so the stationary standard deviation is exactly σ for any ``dt`` and the
+    result does not depend on the time unit used.
 
     Parameters
     ----------
     mean : float
         Mean value (drift target) of the OU process.
     sigma : float
-        Standard deviation of the noise.
+        Stationary standard deviation of the process.
     tau : float or Quantity
-        Time constant of the process. Larger values = slower fluctuations.
+        Correlation time constant. Larger values = slower fluctuations.
         Supports time units.
     duration : float or Quantity
         Total duration of the input signal. Supports time units.
@@ -247,9 +251,9 @@ class OUProcess(Input):
     mean : float
         Mean value (drift target)
     sigma : float
-        Noise amplitude
+        Stationary standard deviation
     tau : float or Quantity
-        Time constant
+        Correlation time constant
     n : int
         Number of independent processes
     t_start : float or Quantity
@@ -356,13 +360,12 @@ class OUProcess(Input):
 
     Notes
     -----
-    - The process has mean-reverting behavior controlled by tau
-    - Steady-state variance: σ²/(2/τ)
-    - Autocorrelation decays exponentially with time constant tau
-    - For tau → ∞, approaches a Wiener process
-    - For tau → 0, approaches white noise
+    - The process starts at ``mean`` and reverts to it with time constant tau
+    - Stationary variance: σ²
+    - Autocorrelation decays as :math:`\exp(-|\text{lag}| / \tau)`
+    - For tau much shorter than dt, consecutive samples are nearly independent
     - Useful for modeling synaptic background activity
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -568,7 +571,7 @@ class Poisson(Input):
     - For small dt, probability of multiple spikes per bin is negligible
     - Can be combined with continuous inputs for rate modulation
     - Useful for modeling synaptic background noise
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------

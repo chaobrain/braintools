@@ -37,7 +37,7 @@ def make_fenchel_young_loss(
 ):
     r"""Create a Fenchel-Young loss function from a max function.
 
-    Fenchel-Young losses provide a framework for building differentiable loss
+    Fenchel-Young losses [1]_ provide a framework for building differentiable loss
     functions from convex regularizers. They are particularly useful in machine
     learning for structured prediction tasks and provide a principled way to
     construct losses that encourage sparsity or specific structure in predictions.

@@ -366,3 +366,35 @@ def test_dde_pc_accepts_list_of_delays(name):
     with brainstate.environ.context(dt=0.1):
         y_list = method(f, 1.0, 0.0, history_fn, [0.5, 1.0], max_iter=3)
     assert np.isfinite(float(y_list))
+
+
+def _milstein_strong_errors(sde_type, monkeypatch):
+    """Strong errors on geometric Brownian motion with a shared Brownian path."""
+    from braintools.quad import _sde_integrator as S
+    mu, sig, T, M, n_fine = 1.5, 1.0, 1.0, 2000, 2 ** 8
+    rng = np.random.default_rng(0)
+    dW_fine = rng.normal(size=(n_fine, M)) * np.sqrt(T / n_fine)
+    W = dW_fine.sum(0)
+    drift_exp = mu - 0.5 * sig ** 2 if sde_type == 'ito' else mu
+    exact = np.exp(drift_exp * T + sig * W)
+    errors = []
+    for k in [16, 8, 4]:
+        dt = T * k / n_fine
+        normals = iter(dW_fine.reshape(-1, k, M).sum(1) / np.sqrt(dt))
+        monkeypatch.setattr(S, 'randn_like', lambda y: jnp.asarray(next(normals)))
+        y = jnp.ones(M)
+        with brainstate.environ.context(dt=dt):
+            for j in range(n_fine // k):
+                y = braintools.quad.sde_milstein_step(lambda y, t: mu * y, lambda y, t: sig * y, y, j * dt,
+                                                      sde_type=sde_type)
+        errors.append(np.mean(np.abs(np.asarray(y) - exact)))
+    return errors
+
+
+@pytest.mark.parametrize('sde_type', ['ito', 'stra'])
+def test_milstein_strong_order_one(sde_type, monkeypatch):
+    # Halving dt must roughly halve the strong error (order 1). The Stratonovich
+    # branch used to keep the drift in its support point and converged at 1/2.
+    errors = _milstein_strong_errors(sde_type, monkeypatch)
+    orders = [np.log2(errors[i] / errors[i + 1]) for i in range(len(errors) - 1)]
+    assert min(orders) > 0.8, orders

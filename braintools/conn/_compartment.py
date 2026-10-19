@@ -95,29 +95,6 @@ COMPARTMENT_NAMES = {
 }
 
 
-def _normalize_positions(positions, unit=None):
-    """Normalize position arrays to numpy arrays with consistent units.
-
-    Parameters
-    ----------
-    positions : array-like or Quantity
-        Position data to normalize.
-    unit : Unit, optional
-        Target unit for conversion. If None, maintains original unit.
-
-    Returns
-    -------
-    tuple
-        (normalized_array, unit) where normalized_array is a numpy array
-        and unit is the associated brainunit Unit or None.
-    """
-    if positions is None:
-        return None, None
-    if unit is not None:
-        positions = u.Quantity(positions).to(unit).mantissa
-    return positions, unit
-
-
 def _validate_prob(prob, name='connection_prob'):
     """Validate that a probability is numeric and in [0, 1]."""
     if not isinstance(prob, (int, float, np.number)):
@@ -144,6 +121,30 @@ def _as_2d_positions(positions):
     if positions.ndim == 1:
         positions = positions.reshape(-1, 1)
     return positions
+
+
+def _length_and_positions(length, pre_positions, post_positions):
+    """Express a length scale and both position arrays as plain numbers in one unit.
+
+    A Quantity ``length`` sets the unit and the positions are converted to it. A
+    plain-number ``length`` is taken to be in the unit of ``pre_positions`` (the
+    convention of the kernel connectors), so ``150.0`` with micrometre positions
+    means 150 um. Returns ``(length_value, pre_values, post_values)`` with the
+    positions reshaped to 2-D for ``cdist``.
+    """
+    if isinstance(length, u.Quantity):
+        length_val, unit = u.split_mantissa_unit(length)
+        pre_val = u.Quantity(pre_positions).to(unit).mantissa
+        post_val = u.Quantity(post_positions).to(unit).mantissa
+    else:
+        length_val = length
+        pre_val, unit = u.split_mantissa_unit(pre_positions)
+        post_val = u.Quantity(post_positions).to(unit).mantissa
+    return (
+        float(length_val),
+        _as_2d_positions(pre_val),
+        _as_2d_positions(post_val),
+    )
 
 
 class CompartmentSpecific(MultiCompartmentConnectivity):
@@ -617,7 +618,8 @@ class MorphologyDistance(MultiCompartmentConnectivity):
     Parameters
     ----------
     sigma : float or Quantity
-        Characteristic distance scale for connectivity.
+        Characteristic distance scale for connectivity. A plain number is
+        interpreted in the unit of ``pre_positions``.
     decay_function : str
         Distance decay function ('gaussian', 'exponential', 'linear').
     compartment_mapping : dict
@@ -686,15 +688,10 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         else:
             post_num = post_size
 
-        # Normalize positions using helper
-        if isinstance(self.sigma, u.Quantity):
-            sigma_val, sigma_unit = u.split_mantissa_unit(self.sigma)
-            pre_pos_val, _ = _normalize_positions(pre_positions, sigma_unit)
-            post_pos_val, _ = _normalize_positions(post_positions, sigma_unit)
-        else:
-            sigma_val = self.sigma
-            pre_pos_val, _ = _normalize_positions(pre_positions)
-            post_pos_val, _ = _normalize_positions(post_positions)
+        # sigma and positions as plain numbers in a common unit
+        sigma_val, pre_pos_val, post_pos_val = _length_and_positions(
+            self.sigma, pre_positions, post_positions
+        )
 
         # Check position sizes and adjust before distance calculation
         if len(pre_pos_val) != pre_num:
@@ -978,24 +975,34 @@ class DendriticTree(MultiCompartmentConnectivity):
 
 
 class AxonalProjection(MultiCompartmentConnectivity):
-    """Axonal projection patterns with topographic organization.
+    """Axonal projection onto dendritic compartments.
 
-    This models long-range axonal projections with topographic mapping
-    and realistic axonal arborization patterns.
+    Every presynaptic axon contacts every postsynaptic neuron independently with
+    a pair-specific probability, and each resulting synapse is placed on one
+    dendritic compartment drawn uniformly from ``target_compartments``.
+
+    The pair probability is built from up to two spatial terms (positions are
+    needed for either):
+
+    - ``topographic_map(pre_xy, post_xy)``, if given, replaces the uniform
+      ``connection_prob``;
+    - ``arborization_sigma``, if given, multiplies the probability by a Gaussian
+      fall-off ``exp(-d**2 / (2 * arborization_sigma**2))`` of the distance ``d``
+      between the two neurons, confining the axon's arbor to a local field.
+
+    Without positions every pair uses ``connection_prob``.
 
     Parameters
     ----------
-    projection_type : str
-        Type of projection ('local', 'long_range', 'topographic').
     topographic_map : callable, optional
-        Function defining topographic mapping (pre_pos, post_pos) -> probability.
-    arborization_pattern : str
-        Pattern of axonal arborization ('diffuse', 'clustered', 'columnar').
+        Function ``(pre_xy, post_xy) -> probability``. It receives one row of each
+        position array as plain numbers in the unit of ``pre_positions`` and must
+        return a value in ``[0, 1]``.
     connection_prob : float
-        Base connection probability.
-    spatial_scale : float
-        Spatial scale for clustered arborization pattern (default 10000.0).
-        Controls how distance affects clustering: smaller values = tighter clustering.
+        Probability for every pair when no ``topographic_map`` is given.
+    arborization_sigma : float or Quantity, optional
+        Width of the Gaussian arborization field. A plain number is interpreted in
+        the unit of ``pre_positions``. ``None`` (default) applies no fall-off.
     target_compartments : list of int, optional
         Postsynaptic dendritic compartments to target. Each connection is randomly
         assigned one of these. Default ``[BASAL_DENDRITE, APICAL_DENDRITE]``.
@@ -1010,25 +1017,20 @@ class AxonalProjection(MultiCompartmentConnectivity):
     --------
     .. code-block:: python
 
+        >>> import brainunit as u
         >>> def retinotopic_map(source_pos, target_pos):
-        ...     # Custom topographic mapping
-        ...     return np.exp(-np.linalg.norm(source_pos - target_pos)**2 / 1000)
+        ...     return 0.5 * np.exp(-np.sum((source_pos - target_pos) ** 2) / (2 * 50.0 ** 2))
         >>>
-        >>> axon_proj = AxonalProjection(
-        ...     projection_type='topographic',
-        ...     topographic_map=retinotopic_map,
-        ...     arborization_pattern='clustered'
-        ... )
+        >>> topographic = AxonalProjection(topographic_map=retinotopic_map)
+        >>> local_arbor = AxonalProjection(connection_prob=0.3, arborization_sigma=80 * u.um)
     """
     __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        projection_type: str = 'local',
         topographic_map: Optional[Callable] = None,
-        arborization_pattern: str = 'diffuse',
         connection_prob: float = 0.05,
-        spatial_scale: float = 10000.0,
+        arborization_sigma: Optional[Union[float, u.Quantity]] = None,
         target_compartments: Optional[List[int]] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -1037,11 +1039,11 @@ class AxonalProjection(MultiCompartmentConnectivity):
     ):
         super().__init__(**kwargs)
         _validate_prob(connection_prob)
-        self.projection_type = projection_type
+        if topographic_map is not None and not callable(topographic_map):
+            raise TypeError(f"topographic_map must be callable, got {type(topographic_map)}")
         self.topographic_map = topographic_map
-        self.arborization_pattern = arborization_pattern
         self.connection_prob = connection_prob
-        self.spatial_scale = spatial_scale
+        self.arborization_sigma = arborization_sigma
         self.target_compartments = target_compartments or [BASAL_DENDRITE, APICAL_DENDRITE]
         self.weight_init = weight
         self.delay_init = delay
@@ -1066,31 +1068,28 @@ class AxonalProjection(MultiCompartmentConnectivity):
         else:
             post_num = post_size
 
-        if pre_positions is not None and post_positions is not None:
+        has_positions = pre_positions is not None and post_positions is not None
+        if not has_positions and (self.topographic_map is not None or self.arborization_sigma is not None):
+            raise ValueError(
+                "AxonalProjection with a topographic_map or arborization_sigma requires "
+                "both pre_positions and post_positions."
+            )
 
-            # Normalize positions
-            pre_pos_vals, pos_unit = u.split_mantissa_unit(pre_positions)
-            post_pos_vals = u.Quantity(post_positions).to(pos_unit).mantissa
+        probs = np.full((pre_num, post_num), self.connection_prob, dtype=float)
+        if has_positions:
+            sigma_val, pre_pos_vals, post_pos_vals = _length_and_positions(
+                1.0 if self.arborization_sigma is None else self.arborization_sigma,
+                pre_positions, post_positions,
+            )
 
-            # Calculate connection probabilities
             if self.topographic_map is not None:
-                # Use custom topographic mapping
-                probs = np.zeros((pre_num, post_num))
                 for i in range(pre_num):
                     for j in range(post_num):
                         probs[i, j] = self.topographic_map(pre_pos_vals[i], post_pos_vals[j])
-            else:
-                # Use uniform probability
-                probs = np.full((pre_num, post_num), self.connection_prob)
 
-            # Modify based on arborization pattern
-            if self.arborization_pattern == 'clustered':
-                distances = cdist(_as_2d_positions(pre_pos_vals), _as_2d_positions(post_pos_vals))
-                spatial_factor = np.exp(-distances ** 2 / self.spatial_scale)
-                probs = probs * spatial_factor
-        else:
-            # Use uniform probability
-            probs = np.full((pre_num, post_num), self.connection_prob)
+            if self.arborization_sigma is not None:
+                distances = cdist(pre_pos_vals, post_pos_vals)
+                probs = probs * np.exp(-distances ** 2 / (2 * sigma_val ** 2))
 
         # Generate connections
         random_matrix = self.rng.random((pre_num, post_num))
@@ -1142,8 +1141,9 @@ class AxonalProjection(MultiCompartmentConnectivity):
             post_compartments=post_compartments,
             metadata={
                 'pattern': 'axonal_projection',
-                'projection_type': self.projection_type,
-                'arborization_pattern': self.arborization_pattern
+                'topographic': self.topographic_map is not None,
+                'connection_prob': self.connection_prob,
+                'arborization_sigma': self.arborization_sigma,
             }
         )
 
@@ -1423,9 +1423,13 @@ class AxonalBranching(MultiCompartmentConnectivity):
     Parameters
     ----------
     branches_per_axon : int
-        Average number of branches per axon.
-    branch_spread : float
-        Spatial spread of branches (relevant if positions provided).
+        Average number of branches per axon (Poisson-distributed per axon).
+    branch_spread : float or Quantity, optional
+        Spatial spread of the branches. When given, positions are required and
+        each axon picks its targets with probability proportional to
+        ``exp(-d**2 / (2 * branch_spread**2))`` of the distance ``d``, so branches
+        stay near the source neuron. A plain number is interpreted in the unit of
+        ``pre_positions``. ``None`` (default) picks targets uniformly.
     weight : Initializer, optional
         Weight initialization.
     delay : Initializer, optional
@@ -1436,7 +1440,7 @@ class AxonalBranching(MultiCompartmentConnectivity):
     def __init__(
         self,
         branches_per_axon: int = 5,
-        branch_spread: float = 100.0,
+        branch_spread: Optional[Union[float, u.Quantity]] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         allow_self_connections: bool = False,
@@ -1469,16 +1473,40 @@ class AxonalBranching(MultiCompartmentConnectivity):
         else:
             post_num = post_size
 
+        # Target-selection weights: uniform, or a Gaussian of distance when spread
+        target_weights = None
+        if self.branch_spread is not None:
+            if pre_positions is None or post_positions is None:
+                raise ValueError(
+                    "AxonalBranching with branch_spread requires both pre_positions "
+                    "and post_positions."
+                )
+            spread_val, pre_pos_val, post_pos_val = _length_and_positions(
+                self.branch_spread, pre_positions, post_positions
+            )
+            distances = cdist(pre_pos_val, post_pos_val)
+            target_weights = np.exp(-distances ** 2 / (2 * spread_val ** 2))
+
         all_pre_indices = []
         all_post_indices = []
+
+        # A neuron is not a candidate target of its own axon when autapses are
+        # excluded; choosing it and dropping it afterwards would shrink the branch
+        # count below ``branches_per_axon`` (badly so with ``branch_spread``,
+        # where the source itself, at distance 0, is the most likely target).
+        exclude_self = not self.allow_self_connections and pre_num == post_num
 
         # Each presynaptic neuron branches to multiple postsynaptic targets
         for pre_idx in range(pre_num):
             n_branches = self.rng.poisson(self.branches_per_axon)
-            n_branches = min(n_branches, post_num)
+            w = np.ones(post_num) if target_weights is None else target_weights[pre_idx].copy()
+            if exclude_self:
+                w[pre_idx] = 0.0
+            n_branches = min(n_branches, int(np.count_nonzero(w)))
+            p = w / w.sum() if n_branches > 0 else None
 
             if n_branches > 0:
-                post_targets = self.rng.choice(post_num, size=n_branches, replace=False)
+                post_targets = self.rng.choice(post_num, size=n_branches, replace=False, p=p)
                 all_pre_indices.append(np.full(n_branches, pre_idx, dtype=np.int64))
                 all_post_indices.append(post_targets)
 
@@ -1541,7 +1569,8 @@ class AxonalBranching(MultiCompartmentConnectivity):
             post_compartments=post_compartments,
             metadata={
                 'pattern': 'axonal_branching',
-                'branches_per_axon': self.branches_per_axon
+                'branches_per_axon': self.branches_per_axon,
+                'branch_spread': self.branch_spread,
             }
         )
 
@@ -1555,7 +1584,9 @@ class AxonalArborization(MultiCompartmentConnectivity):
     Parameters
     ----------
     arborization_radius : float or Quantity
-        Radius of axonal arborization field.
+        Radius of axonal arborization field. A plain number is interpreted in
+        the unit of ``pre_positions`` (so the default ``150.0`` means 150 um
+        for micrometre positions).
     density : float
         Synaptic density within arborization field. Must be in [0, 1].
     weight : Initializer, optional
@@ -1599,18 +1630,13 @@ class AxonalArborization(MultiCompartmentConnectivity):
                 "(spatial arborization cannot be computed without them)."
             )
 
-        # Normalize positions using helper
-        if isinstance(self.arborization_radius, u.Quantity):
-            radius_val, radius_unit = u.split_mantissa_unit(self.arborization_radius)
-            pre_pos_val, _ = _normalize_positions(pre_positions, radius_unit)
-            post_pos_val, _ = _normalize_positions(post_positions, radius_unit)
-        else:
-            radius_val = self.arborization_radius
-            pre_pos_val, _ = _normalize_positions(pre_positions)
-            post_pos_val, _ = _normalize_positions(post_positions)
+        # Radius and positions as plain numbers in a common unit
+        radius_val, pre_pos_val, post_pos_val = _length_and_positions(
+            self.arborization_radius, pre_positions, post_positions
+        )
 
         # Calculate distances
-        distances = cdist(_as_2d_positions(pre_pos_val), _as_2d_positions(post_pos_val))
+        distances = cdist(pre_pos_val, post_pos_val)
 
         # Within arborization radius
         within_radius = distances <= radius_val
@@ -1674,7 +1700,7 @@ class AxonalArborization(MultiCompartmentConnectivity):
 class TopographicProjection(MultiCompartmentConnectivity):
     """Topographic projection patterns.
 
-    Alias for AxonalProjection with topographic mapping enabled.
+    Shorthand for ``AxonalProjection(topographic_map=...)``; positions are required.
 
     Parameters
     ----------
@@ -1709,7 +1735,6 @@ class TopographicProjection(MultiCompartmentConnectivity):
     ) -> ConnectionResult:
         """Generate topographic projection connections."""
         return AxonalProjection(
-            projection_type='topographic',
             topographic_map=self.topographic_map,
             weight=self.weight_init,
             delay=self.delay_init,
@@ -1718,45 +1743,75 @@ class TopographicProjection(MultiCompartmentConnectivity):
 
 
 class SynapticPlacement(MultiCompartmentConnectivity):
-    """Synaptic placement rules.
+    """Synapse placement by compartment preference.
 
-    Controls where synapses are placed on compartments based on rules
-    like distance from soma, compartment type preferences, etc.
+    Separates *whether* two neurons connect from *where* the synapse lands. Every
+    presynaptic axon contacts every postsynaptic neuron independently with
+    probability ``connection_prob`` (one synapse per connected pair), and each
+    synapse is then placed on a postsynaptic compartment drawn with probability
+    proportional to ``compartment_preferences``.
+
+    Preferences express placement rules directly, for example
+    ``{BASAL_DENDRITE: 1.0}`` for proximal-only input,
+    ``{APICAL_DENDRITE: 1.0}`` for distal-only input, or
+    ``{SOMA: 0.2, BASAL_DENDRITE: 0.5, APICAL_DENDRITE: 0.3}`` for a mixture.
 
     Parameters
     ----------
-    placement_rule : str
-        Placement rule ('uniform', 'proximal', 'distal', 'distance_weighted').
-    compartment_preferences : dict
-        Preference weights for different compartments.
+    connection_prob : float
+        Probability that a presynaptic neuron makes a synapse onto a given
+        postsynaptic neuron. Default 0.2.
+    compartment_preferences : dict, optional
+        Mapping from target compartment (``SOMA``, ``BASAL_DENDRITE``,
+        ``APICAL_DENDRITE``, ``AXON``) to a non-negative relative preference.
+        Preferences are normalized to sum to one. Default
+        ``{BASAL_DENDRITE: 0.6, APICAL_DENDRITE: 0.4}``.
     weight : Initializer, optional
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+    allow_self_connections : bool, optional
+        Whether a neuron may connect to itself. Default ``False``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> distal_input = SynapticPlacement(
+        ...     connection_prob=0.1,
+        ...     compartment_preferences={APICAL_DENDRITE: 0.8, BASAL_DENDRITE: 0.2},
+        ... )
+        >>> result = distal_input(pre_size=100, post_size=100)
     """
     __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        placement_rule: str = 'uniform',
+        connection_prob: float = 0.2,
         compartment_preferences: Optional[Dict[int, float]] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
+        allow_self_connections: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.placement_rule = placement_rule
+        _validate_prob(connection_prob)
+        self.connection_prob = connection_prob
         self.compartment_preferences = compartment_preferences or {
             BASAL_DENDRITE: 0.6,
             APICAL_DENDRITE: 0.4
         }
         for comp, pref in self.compartment_preferences.items():
+            CompartmentSpecific._validate_compartment_index(comp, "compartment_preferences")
             if not isinstance(pref, (int, float, np.number)):
                 raise TypeError(f"compartment preference must be numeric, got {type(pref)} for {comp}")
             if pref < 0:
                 raise ValueError(f"compartment preference must be non-negative, got {pref} for {comp}")
+        if sum(self.compartment_preferences.values()) <= 0:
+            raise ValueError("compartment_preferences must contain at least one positive preference")
         self.weight_init = weight
         self.delay_init = delay
+        self.allow_self_connections = allow_self_connections
 
     def generate(
         self,
@@ -1767,23 +1822,62 @@ class SynapticPlacement(MultiCompartmentConnectivity):
         **kwargs
     ) -> ConnectionResult:
         """Generate synapse placements."""
-        compartments = list(self.compartment_preferences.keys())
-        probs = list(self.compartment_preferences.values())
-        probs = np.array(probs) / np.sum(probs)
+        if isinstance(pre_size, tuple):
+            pre_num = int(np.prod(pre_size))
+        else:
+            pre_num = pre_size
 
-        compartment_mapping = {AXON: compartments}
+        if isinstance(post_size, tuple):
+            post_num = int(np.prod(post_size))
+        else:
+            post_num = post_size
 
-        connection_prob = {}
-        for comp, prob in zip(compartments, probs):
-            connection_prob[(AXON, comp)] = prob * 0.2
+        connection_mask = self.rng.random((pre_num, post_num)) < self.connection_prob
+        if not self.allow_self_connections and pre_num == post_num:
+            np.fill_diagonal(connection_mask, False)
+        pre_indices, post_indices = np.where(connection_mask)
 
-        return CompartmentSpecific(
-            compartment_mapping=compartment_mapping,
-            connection_prob=connection_prob,
-            weight=self.weight_init,
-            delay=self.delay_init,
-            seed=self.seed
-        ).generate(pre_size, post_size, pre_positions, post_positions, **kwargs)
+        if len(pre_indices) == 0:
+            return ConnectionResult(
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                model_type='multi_compartment',
+                pre_size=pre_size,
+                post_size=post_size,
+                pre_positions=pre_positions,
+                post_positions=post_positions,
+            )
+
+        n_connections = len(pre_indices)
+        compartments = np.array(list(self.compartment_preferences.keys()), dtype=np.int64)
+        prefs = np.array(list(self.compartment_preferences.values()), dtype=float)
+        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        post_compartments = self.rng.choice(compartments, size=n_connections, p=prefs / prefs.sum())
+
+        weights = param(self.weight_init, n_connections, rng=self.rng)
+        delays = param(self.delay_init, n_connections, rng=self.rng)
+
+        if delays is not None and not isinstance(delays, u.Quantity):
+            delays = np.asarray(delays) * u.ms
+
+        return ConnectionResult(
+            pre_indices,
+            post_indices,
+            weights=weights,
+            delays=delays,
+            model_type='multi_compartment',
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            pre_compartments=pre_compartments,
+            post_compartments=post_compartments.astype(np.int64),
+            metadata={
+                'pattern': 'synaptic_placement',
+                'connection_prob': self.connection_prob,
+                'compartment_preferences': dict(self.compartment_preferences),
+            }
+        )
 
 
 class SynapticClustering(MultiCompartmentConnectivity):

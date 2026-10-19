@@ -57,8 +57,8 @@ class DistanceProfile(ABC):
     Supported Operations
     --------------------
 
-    - Arithmetic: +, -, *, / (element-wise operations with other profiles, scalars, or quantities)
-    - Composition: | (pipe operator for chaining transformations)
+    - Arithmetic: ``+``, ``-``, ``*``, ``/`` (element-wise operations with other profiles, scalars, or quantities)
+    - Composition: ``|`` (pipe operator for chaining transformations)
     - Transformations: .clip(), .apply()
 
     Examples

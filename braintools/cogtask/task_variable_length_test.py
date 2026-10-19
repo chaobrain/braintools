@@ -25,6 +25,7 @@ import brainstate
 import brainunit as u
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 import braintools.cogtask as ct
@@ -276,6 +277,35 @@ def test_on_enter_sees_slot_position_in_packed_mode():
     assert seen['start'] == 50
     # phase_end reflects the phase's own actual (clipped) length, not 0/stale.
     assert seen['end'] > seen['start']
+
+
+@pytest.mark.parametrize('value, dt', [
+    (500.0, 1.0 * u.ms),             # plain float is milliseconds
+    (500 * u.ms, 1.0 * u.ms),
+    (0.5 * u.second, 1.0 * u.ms),    # was read as 0.5 ms -> 1 step
+    (500 * u.ms, 0.001 * u.second),  # was 500 / 0.001 -> clipped to the slot
+    (500.0, 0.001 * u.second),
+])
+def test_variable_duration_converts_units(value, dt):
+    task = Task(
+        phases=VariableDuration(
+            min_duration=100 * u.ms,
+            max_duration=1000 * u.ms,
+            ctx_key='d',
+            inputs={'x': 1.0},
+            outputs={'label': 0},
+        ),
+        input_features=Feature(1, 'x'),
+        output_features=Feature(1, 'y'),
+        trial_init=lambda ctx: ctx.update(d=value),
+        seed=0,
+        num_classes=1,
+        dt=dt,
+    )
+    _, _, info = task.sample_trial(0)
+    assert int(np.asarray(info['mask']).sum()) == 500
+    _, _, mask = task.batch_sample(2, return_mask=True)
+    assert np.asarray(mask.sum(axis=0)).tolist() == [500, 500]
 
 
 def test_variable_duration_samplers_have_bounds():
