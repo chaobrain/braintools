@@ -16,14 +16,18 @@
 import warnings
 from typing import Optional, Union, Tuple, List
 
+import brainunit as u
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Normalize
 
 from braintools._misc import set_module_as
+from braintools.analysis.spike._isi import cv as _cv, isi as _isi
+from braintools.spike import SpikeTrains
 from braintools.tree import as_numpy
 from ._utils import (
-    as_array, flatten_spikes, in_time_unit, inter_spike_intervals, is_spike_trains, spike_trains_events,
+    as_array, flatten_spikes, in_time_unit, is_spike_trains, spike_trains_events,
 )
 
 # Default color of negative-weight (e.g. inhibitory) edges in network plots
@@ -600,6 +604,48 @@ def spike_histogram(
     return ax
 
 
+def _pooled_isis(times, ids):
+    """Intervals within each neuron, pooled over neurons, on the host in O(#spikes).
+
+    Spikes are sorted by ``(id, time)`` and consecutive differences are kept
+    where the neuron does not change, which is the same as concatenating
+    ``np.diff(np.sort(times[ids == i]))`` over the neurons ``i`` in order.
+    """
+    times = np.asarray(times, dtype=np.float64).ravel()
+    ids = np.asarray(ids).ravel()
+    order = np.lexsort((times, ids))
+    times, ids = times[order], ids[order]
+    return np.diff(times)[ids[1:] == ids[:-1]]
+
+
+def _spike_trains_isis(trains):
+    """Pooled intervals of a ``SpikeTrains`` via ``analysis.spike.isi`` (float64), and their unit."""
+    with jax.enable_x64(True):
+        upcast = jax.tree.map(
+            lambda x: x.astype(np.float64) if np.issubdtype(x.dtype, np.floating) else x, trains
+        )
+        intervals = _isi(upcast)
+    unit = None
+    if isinstance(intervals, u.Quantity):
+        unit, intervals = intervals.unit, intervals.mantissa
+    intervals = np.asarray(intervals)
+    return intervals[np.isfinite(intervals)], unit
+
+
+def _pooled_cv(intervals):
+    """CV (``std / mean``, ``ddof=0``) of pooled intervals via ``analysis.spike.cv``.
+
+    The pooled intervals are laid end to end as one spike train, whose
+    intervals are exactly ``intervals``. Fewer than two intervals or a zero
+    mean give 0, as the plot has always shown.
+    """
+    with jax.enable_x64(True):
+        times = np.concatenate([[0.], np.cumsum(np.asarray(intervals, dtype=np.float64))])
+        train = SpikeTrains(times[None], [times.size], 0., times[-1])
+        value = float(_cv(train)[0])
+    return value if np.isfinite(value) else 0.
+
+
 @set_module_as('braintools.visualize')
 def isi_distribution(
     spike_times: Union[np.ndarray, List],
@@ -626,8 +672,9 @@ def isi_distribution(
         each neuron, in its unit).
     bins : int or array-like
         Number of bins or bin edges.
-    max_isi : float, optional
-        Maximum ISI to include.
+    max_isi : float or Quantity, optional
+        Maximum ISI to include. With a ``SpikeTrains``, a Quantity is
+        converted to the unit of its times.
     log_scale : bool
         Whether to use log scale for y-axis.
     ax : matplotlib.axes.Axes, optional
@@ -647,16 +694,34 @@ def isi_distribution(
     -------
     ax : matplotlib.axes.Axes
         The axes object containing the plot.
+
+    See Also
+    --------
+    braintools.analysis.spike.isi : The intervals that are plotted.
+    braintools.analysis.spike.cv : The coefficient of variation shown in the box.
+
+    Notes
+    -----
+    The intervals are computed within each neuron and pooled over neurons;
+    for a ``SpikeTrains`` with :func:`braintools.analysis.spike.isi`, for the
+    other inputs directly from the flat spike times (memory proportional to
+    the number of spikes). The box
+    shows their mean and their coefficient of variation (population standard
+    deviation over mean, computed with :func:`braintools.analysis.spike.cv`
+    on the pooled intervals); the CV is shown as 0 for fewer than two
+    intervals.
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    # Calculate ISIs
+    # Intervals within each neuron: ``braintools.analysis.spike.isi`` for a
+    # SpikeTrains (in float64, so the values match a NumPy computation); other
+    # inputs stay on the host in O(#spikes), without a padded (N, K) layout.
     if is_spike_trains(spike_times):
-        times, ids, _ = spike_trains_events(spike_times)
-        all_isis = inter_spike_intervals(times, ids)
+        all_isis, unit = _spike_trains_isis(spike_times)
+        max_isi = in_time_unit(max_isi, unit)
     else:
-        all_isis = inter_spike_intervals(*flatten_spikes(spike_times))
+        all_isis = _pooled_isis(*flatten_spikes(spike_times))
 
     # Filter ISIs
     if max_isi is not None:
@@ -682,7 +747,7 @@ def isi_distribution(
 
     # Add statistics
     mean_isi = np.mean(all_isis)
-    cv_isi = np.std(all_isis) / mean_isi if mean_isi > 0 else 0
+    cv_isi = _pooled_cv(all_isis)
     stats_text = f'Mean ISI: {mean_isi:.3f}\nCV: {cv_isi:.3f}'
     ax.text(0.7, 0.8, stats_text, transform=ax.transAxes,
             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))

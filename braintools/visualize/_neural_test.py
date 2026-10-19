@@ -847,3 +847,80 @@ class TestSpikeTrainsQuantityTimeRange(unittest.TestCase):
         ax = spike_histogram(self.st, time_range=(0 * u.ms, 5 * u.ms), bin_size=1 * u.ms)
         plain = spike_histogram(self.st, time_range=(0., 5.), bin_size=1.)
         self.assertEqual([p.get_height() for p in ax.patches], [p.get_height() for p in plain.patches])
+
+
+class TestISIDistributionUsesAnalysis(unittest.TestCase):
+    """``isi_distribution`` gets its intervals and CV from ``analysis.spike`` (A5)
+    and keeps the output of the former inline NumPy computation."""
+
+    def tearDown(self):
+        plt.close('all')
+
+    @staticmethod
+    def _legacy(trains):
+        # the former inline computation: per-neuron sorted diffs, pooled
+        isis = np.concatenate([np.diff(np.sort(t)) for t in trains])
+        mean = np.mean(isis)
+        cv = np.std(isis) / mean if mean > 0 else 0
+        return isis, f'Mean ISI: {mean:.3f}\nCV: {cv:.3f}'
+
+    def test_matches_legacy_numpy(self):
+        rng = np.random.default_rng(0)
+        trains = [rng.uniform(0, 100, n) for n in (30, 2, 0, 45)]  # unsorted input
+        isis, text = self._legacy(trains)
+        ax = isi_distribution(trains, bins=12)
+        heights = [p.get_height() for p in ax.patches]
+        ref, edges = np.histogram(isis, bins=12)
+        np.testing.assert_array_equal(heights, ref)
+        np.testing.assert_allclose([p.get_x() for p in ax.patches], edges[:-1])
+        self.assertEqual(ax.texts[0].get_text(), text)
+
+    def test_flat_array_is_one_train(self):
+        times = np.array([5., 1., 2., 9.])
+        ax = isi_distribution(times, bins=3)
+        self.assertEqual(ax.texts[0].get_text(), self._legacy([times])[1])
+
+    def test_single_interval_cv_is_zero(self):
+        ax = isi_distribution([np.array([1., 4.]), np.array([2.])])
+        self.assertEqual(ax.texts[0].get_text(), 'Mean ISI: 3.000\nCV: 0.000')
+
+    def test_zero_intervals_cv_is_zero(self):
+        ax = isi_distribution([np.array([1., 1., 1.])], bins=1)
+        self.assertEqual(ax.texts[0].get_text(), 'Mean ISI: 0.000\nCV: 0.000')
+
+    def test_spike_trains_matches_list_and_quantity_max_isi(self):
+        import brainunit as u
+        from braintools.spike import SpikeTrains
+        trains = [np.array([0., 1., 3., 7.]), np.array([2., 2.5])]
+        st = SpikeTrains.from_list([t * u.ms for t in trains], t_start=0. * u.ms, t_stop=10. * u.ms)
+        ax_st = isi_distribution(st, bins=4, max_isi=3. * u.ms)
+        ax_list = isi_distribution(trains, bins=4, max_isi=3.)
+        self.assertEqual([p.get_height() for p in ax_st.patches],
+                         [p.get_height() for p in ax_list.patches])
+        self.assertEqual(ax_st.texts[0].get_text(), ax_list.texts[0].get_text())
+        # 3000 us is converted, not stripped
+        ax_us = isi_distribution(st, bins=4, max_isi=3000. * u.us)
+        self.assertEqual(ax_us.texts[0].get_text(), ax_list.texts[0].get_text())
+
+    def test_x64_flag_restored(self):
+        import jax
+        before = jax.config.jax_enable_x64
+        isi_distribution([np.array([0., 1., 3.])])
+        self.assertEqual(jax.config.jax_enable_x64, before)
+
+
+class TestISIDistributionHostMemory(unittest.TestCase):
+    """Regression: list / flat input used to build a dense padded SpikeTrains of
+    shape (n_neurons, max spike count); it must stay O(#spikes) on the host."""
+
+    def tearDown(self):
+        plt.close('all')
+
+    def test_list_input_does_not_build_padded_trains(self):
+        from braintools.spike import SpikeTrains
+        trains = [np.arange(0., 50., 0.5)] + [np.array([1., 2.])] * 20
+        isis = np.concatenate([np.diff(t) for t in trains])
+        with mock.patch.object(SpikeTrains, 'from_events', side_effect=AssertionError('padded build')):
+            ax = isi_distribution(trains, bins=5)
+        self.assertEqual(sum(p.get_height() for p in ax.patches), isis.size)
+        self.assertEqual(ax.texts[0].get_text(), TestISIDistributionUsesAnalysis._legacy(trains)[1])

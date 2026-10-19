@@ -19,15 +19,19 @@
 simulated neural activity. Functions live in five subpackages and are always
 accessed through them (they are not re-exported at this level):
 
-=========================================  =====================================================
+=========================================  ==========================================================================
 Subpackage                                 Contents
-=========================================  =====================================================
-:mod:`braintools.analysis.spike`           firing rates, spike-train distances, spike synchrony
-:mod:`braintools.analysis.spectral`        power spectra, coherence, cross-frequency coupling
+=========================================  ==========================================================================
+:mod:`braintools.analysis.spike`           ISI statistics (CV, CV2, LV, Fano), PSTH, correlograms, spike-triggered
+                                           average, firing rates, spike-train distances, synchrony
+:mod:`braintools.analysis.spectral`        Welch and multitaper spectra, spectrograms, Morlet wavelets, band-pass
+                                           filtering, band power, PLV/PLI/wPLI, coherence, cross-frequency coupling
 :mod:`braintools.analysis.field`           LFP forward model, current source density
-:mod:`braintools.analysis.population`      voltage synchrony, functional connectivity (dynamics)
-:mod:`braintools.analysis.stats`           matrix correlation, weighted correlation
-=========================================  =====================================================
+:mod:`braintools.analysis.population`      PCA, CCA, RSA, decoding, mutual information, Kuramoto order, Granger
+                                           causality, avalanches, branching ratio, functional connectivity
+:mod:`braintools.analysis.stats`           correlation helpers, spike jitter, ISI shuffling, phase randomisation,
+                                           bootstrap confidence intervals
+=========================================  ==========================================================================
 
 These functions were previously part of :mod:`braintools.metric`. The old names
 (for example ``braintools.metric.firing_rate``) still work in 0.4 but emit a
@@ -56,7 +60,7 @@ Spike-train analysis on a spike matrix of shape ``(n_time, n_neurons)``:
     >>> rate.shape
     (200,)
     >>> sync = spike.spike_train_synchrony(spikes, window_size=5 * u.ms, dt=1 * u.ms)
-    >>> round(sync, 3)
+    >>> round(float(sync), 3)
     1.0
 
 Spectral analysis of an LFP sampled every millisecond:

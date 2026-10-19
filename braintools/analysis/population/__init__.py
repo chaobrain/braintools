@@ -22,6 +22,11 @@ potentials, firing rates or regional signals.
 - :func:`functional_connectivity`: pairwise Pearson correlation matrix.
 - :func:`functional_connectivity_dynamics`: correlation between
   sliding-window connectivity matrices.
+- **Dimensionality and alignment**: :func:`pca`, :func:`participation_ratio`,
+  :func:`cca`, :func:`rdm`, :func:`rsa`.
+- **Decoding and information**: :func:`decode`, :func:`mutual_information`.
+- **Collective dynamics**: :func:`kuramoto_order_parameter`,
+  :func:`granger_causality`, :func:`avalanches`, :func:`branching_ratio`.
 
 Examples
 --------
@@ -43,9 +48,41 @@ from ._correlation import (
     functional_connectivity,
     functional_connectivity_dynamics,
 )
+from ._decoding import decode
+from ._dimensionality import (
+    PCAResult,
+    CCAResult,
+    pca,
+    participation_ratio,
+    cca,
+    rdm,
+    rsa,
+)
+from ._dynamics import (
+    AvalancheResult,
+    kuramoto_order_parameter,
+    granger_causality,
+    avalanches,
+    branching_ratio,
+)
+from ._information import mutual_information
 
 __all__ = [
     'voltage_fluctuation',
     'functional_connectivity',
     'functional_connectivity_dynamics',
+    'PCAResult',
+    'CCAResult',
+    'pca',
+    'participation_ratio',
+    'cca',
+    'rdm',
+    'rsa',
+    'decode',
+    'mutual_information',
+    'AvalancheResult',
+    'kuramoto_order_parameter',
+    'granger_causality',
+    'avalanches',
+    'branching_ratio',
 ]

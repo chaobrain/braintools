@@ -101,8 +101,10 @@ def _assert_identical(a, b):
 def test_case_table_covers_every_moved_function():
     assert len(CASES) == 22
     for sub in ('spike', 'spectral', 'field', 'population', 'stats'):
+        # Every moved function is exported from its new subpackage (which may
+        # also hold functions added after the move).
         exported = set(getattr(braintools.analysis, sub).__all__)
-        assert exported == {n for n, s in MOVED.items() if s == sub}, sub
+        assert {n for n, s in MOVED.items() if s == sub} <= exported, sub
     # The spec table moves 22 functions; with ``raster_plot`` that is 23 aliases.
     assert set(_deprecated.__all__) == set(MOVED) | {'raster_plot'}
     assert len(_deprecated.__all__) == 23

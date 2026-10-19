@@ -19,9 +19,12 @@ All functions take the sampling interval ``dt`` (a plain number is in
 **seconds**; a :class:`brainunit.Quantity` is converted) and return
 frequencies in Hz.
 
-- **Spectra**: :func:`power_spectral_density` (Welch), :func:`spectral_entropy`.
-- **Coupling between signals**: :func:`coherence_analysis`,
-  :func:`lfp_phase_coherence`.
+- **Spectra**: :func:`power_spectral_density` (Welch), :func:`multitaper_psd`,
+  :func:`spectrogram`, :func:`band_power`, :func:`spectral_entropy`.
+- **Time-frequency and filtering**: :func:`morlet_transform`, :func:`bandpass`,
+  :func:`analytic_signal`.
+- **Coupling between signals**: :func:`plv`, :func:`pli`, :func:`wpli`,
+  :func:`coherence_analysis`, :func:`lfp_phase_coherence`.
 - **Cross-frequency coupling**: :func:`phase_amplitude_coupling`,
   :func:`theta_gamma_coupling`.
 
@@ -47,6 +50,17 @@ from ._lfp import (
     spectral_entropy,
     lfp_phase_coherence,
 )
+from ._spectral import (
+    spectrogram,
+    multitaper_psd,
+    morlet_transform,
+    bandpass,
+    analytic_signal,
+    band_power,
+    plv,
+    pli,
+    wpli,
+)
 
 __all__ = [
     'power_spectral_density',
@@ -55,4 +69,13 @@ __all__ = [
     'theta_gamma_coupling',
     'spectral_entropy',
     'lfp_phase_coherence',
+    'spectrogram',
+    'multitaper_psd',
+    'morlet_transform',
+    'bandpass',
+    'analytic_signal',
+    'band_power',
+    'plv',
+    'pli',
+    'wpli',
 ]

@@ -1,6 +1,74 @@
 # Release Notes
 
 
+## Version 0.5.0 (unreleased)
+
+Phase 0.5 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *analysis depth*.
+`braintools.analysis` grows from the functions moved in 0.4 into a broad
+toolbox for spike-train, spectral and population analysis, plus resampling
+tools for significance testing.
+
+All new functions are JAX-native:
+- they run under `jax.jit` and `jax.vmap` with static shapes;
+- most are differentiable;
+- they accept `brainunit` Quantities.
+
+Every function is checked against a reference implementation (scipy, sklearn,
+mne, statsmodels, or golden values from Elephant 1.2.1 and PySpike 0.9.0). The
+design is in `docs/specs/2026-10-19-v0.5-analysis-depth.md`.
+
+### Added
+
+- **`analysis.spike`**. These functions take a `braintools.spike.SpikeTrains`:
+  - `isi`, `cv`, `cv2`, `lv` and `fano_factor`: interval and count statistics.
+  - `psth`: trial-aligned peri-stimulus time histogram.
+  - `cross_correlogram` and `auto_correlogram`.
+  - `spike_triggered_average`.
+  - `isi_distance` and `spike_distance`: Kreuz ISI- and SPIKE-distances, using
+    PySpike's edge conventions.
+- **`analysis.spectral`**:
+  - `spectrogram`;
+  - `multitaper_psd`, with DPSS tapers;
+  - `morlet_transform`, matching mne;
+  - `bandpass`, a zero-phase Butterworth filter matching `scipy.signal.sosfiltfilt`;
+  - `analytic_signal`;
+  - `band_power`;
+  - `plv`, `pli` and `wpli`: phase synchrony between continuous signals.
+- **`analysis.population`**:
+  - `pca`, `participation_ratio`, `cca`, `rdm` and `rsa`;
+  - `decode`: cross-validated LDA or ridge decoding;
+  - `mutual_information`;
+  - `kuramoto_order_parameter`;
+  - `granger_causality`: conditional VAR-Granger;
+  - `avalanches` and `branching_ratio`.
+- **`analysis.stats`**:
+  - `jitter_spikes`, `shuffle_isi` and `phase_randomize`: resampling for
+    significance tests;
+  - `bootstrap_ci`: percentile and basic bootstrap confidence intervals.
+
+### Changed
+
+- `analysis.spike.victor_purpura_distance`, `van_rossum_distance` and
+  `spike_train_synchrony` are now jittable:
+  - Victor–Purpura runs its dynamic programme as a `scan`.
+  - Van Rossum masks `+inf` padding. It requires `t_max` under `jit`.
+  - Synchrony is vectorised over neuron pairs.
+
+  They now return 0-d arrays instead of Python floats, so `float(d)` still
+  works. The values match the previous implementations: exactly for
+  Victor–Purpura, and to float64 round-off for the others.
+- `burst_synchrony_index`, `spike_time_tiling_coefficient` and
+  `correlation_index` no longer use Python loops over neurons or pairs. Their
+  results are unchanged.
+- `visualize.isi_distribution` computes the ISIs through `analysis.spike.isi`.
+  Its output is unchanged.
+
+### Fixed
+
+- `spike_time_tiling_coefficient` with a negative `tau` used to wrap around at
+  the start of the recording. A negative window now covers nothing.
+
+
 ## Version 0.4.0 (unreleased)
 
 Phase 0.4 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *consolidate and
