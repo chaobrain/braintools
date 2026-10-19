@@ -66,7 +66,9 @@ def _heaviside_jvp(primals, tangents):
     tx, _ = tangents
     primal_outs = _heaviside_imp(x, dx)
     if type(tx) is ad.Zero:
-        tangent_out = ad.Zero.from_primal_value(primal_outs[0])
+        # The output has the shape and dtype of ``x``, so the incoming symbolic
+        # zero is also the output's zero tangent (no version-specific API needed).
+        tangent_out = tx
     else:
         tangent_out = dx * tx
     return primal_outs, [tangent_out]
