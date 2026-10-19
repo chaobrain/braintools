@@ -1460,6 +1460,7 @@ class DelayDirectionReproduction(Task):
     - a stimulus representation encoding the sample direction.
 
     Output consists of:
+
     - fixation_out: a scalar indicating whether fixation / withholding
       should be maintained,
     - direction: a 2D continuous report of the remembered sample direction
@@ -1644,6 +1645,7 @@ class ImmediateDirectionReproduction(Task):
     - a stimulus representation encoding the current direction.
 
     Output consists of:
+
     - fixation_out: a scalar indicating whether fixation / withholding
       should be maintained,
     - direction: a 2D continuous report of the current stimulus direction

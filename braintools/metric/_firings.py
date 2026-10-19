@@ -148,7 +148,8 @@ def firing_rate(
     r"""Calculate the smoothed population firing rate from spike data.
 
     Computes the time-varying population firing rate by averaging spike counts
-    across neurons and applying temporal smoothing with a rectangular window.
+    across neurons and applying temporal smoothing with a rectangular window, as in
+    Brian 2 [1]_.
     This provides a measure of the overall activity level of the neural population
     over time.
 
@@ -280,7 +281,7 @@ def victor_purpura_distance(
 ):
     r"""Calculate Victor-Purpura distance between two spike trains.
     
-    The Victor-Purpura distance quantifies the dissimilarity between two spike trains
+    The Victor-Purpura distance [1]_ quantifies the dissimilarity between two spike trains
     by computing the minimum cost to transform one spike train into another through
     spike insertions, deletions, and temporal shifts.
     
@@ -378,7 +379,7 @@ def van_rossum_distance(
 ):
     r"""Calculate van Rossum distance between two spike trains.
     
-    The van Rossum distance measures dissimilarity between spike trains by
+    The van Rossum distance [1]_ measures dissimilarity between spike trains by
     convolving each with an exponential kernel and computing the Euclidean
     distance between the resulting continuous functions.
     
@@ -503,7 +504,7 @@ def spike_train_synchrony(
 ):
     r"""Calculate spike train synchrony using the SPIKE-synchronization measure.
     
-    This measure quantifies the degree of synchronization between multiple spike trains
+    This measure [1]_ quantifies the degree of synchronization between multiple spike trains
     by counting coincident events within sliding time windows and normalizing by the
     total number of possible coincidences.
     
@@ -754,7 +755,7 @@ def phase_locking_value(
     This computes the **vector strength** (Rayleigh resultant length) of each
     neuron's spikes relative to an *external* reference oscillation of frequency
     ``reference_freq``. It is therefore a spike–field locking measure, **not** the
-    Lachaux et al. (1999) pairwise PLV between two continuous signals.
+    Lachaux et al. (1999) [1]_ pairwise PLV between two continuous signals.
 
     Vector strength is biased upward for small spike counts: a neuron with a single
     spike trivially yields ``PLV = 1``, and a handful of spikes can give a large
@@ -870,7 +871,7 @@ def spike_time_tiling_coefficient(
     -----
     The time-coverage terms :math:`T_A`, :math:`T_B` use the **union** of the
     per-spike :math:`[\,s - \tau,\ s + \tau\,]` windows, so overlapping windows are
-    not double-counted (the defining quantity in Cutts & Eglen, 2014). Each STTC
+    not double-counted (the defining quantity in Cutts & Eglen, 2014 [1]_). Each STTC
     term is guarded independently against a zero denominator.
 
     This function runs on host (concrete) arrays (Python loops, ``len``,
@@ -952,7 +953,7 @@ def correlation_index(
     r"""Calculate correlation index for spike train synchrony.
     
     The correlation index measures the strength of pairwise correlations in spike
-    trains by computing the average Pearson correlation coefficient between binned
+    trains by computing the average Pearson correlation coefficient [1]_ between binned
     spike counts.
 
     The index is computed as:

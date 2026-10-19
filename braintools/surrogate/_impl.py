@@ -201,7 +201,8 @@ class PiecewiseQuadratic(Surrogate):
 
     This class implements a surrogate gradient method using a piecewise quadratic
     function for training spiking neural networks. It provides smooth gradients
-    within a defined range around zero.
+    within a defined range around zero. This surrogate has been used in
+    [1]_, [2]_, [3]_, [4]_, [5]_.
 
     Parameters
     ----------
@@ -355,7 +356,7 @@ class PiecewiseExp(Surrogate):
 
     This class implements a surrogate gradient method for spiking neural networks
     using a piecewise exponential function. It provides a differentiable approximation
-    of the step function used in the forward pass of spiking neurons.
+    of the step function used in the forward pass of spiking neurons [1]_.
 
     Parameters
     ----------
@@ -857,6 +858,8 @@ def nonzero_sign_log(
 class ERF(Surrogate):
     r"""Judge spiking state with an error function (erf).
 
+    This surrogate has been used in [1]_, [2]_, [3]_.
+
     The forward function:
 
     .. math::
@@ -964,6 +967,9 @@ def erf(
 
 class PiecewiseLeakyRelu(Surrogate):
     r"""Judge spiking state with a piecewise leaky relu function.
+
+    This surrogate has been used in [1]_, [2]_, [3]_, [4]_, [5]_, [6]_,
+    [7]_, [8]_.
 
     The forward function:
 
@@ -1219,12 +1225,13 @@ def squarewave_fourier_series(
 
 
 class S2NN(Surrogate):
-    r"""Judge spiking state with the S2NN surrogate spiking function [1]_.
+    r"""Judge spiking state with the S2NN surrogate spiking function.
 
     The S2NN (Single-Step Neural Network) surrogate gradient is designed for
     training energy-efficient single-step neural networks. It provides asymmetric
     gradients for positive and negative inputs, enabling better gradient flow
     during training.
+    This surrogate was introduced in [1]_.
 
     The forward function:
 
@@ -1382,12 +1389,13 @@ def s2nn(
 
 
 class QPseudoSpike(Surrogate):
-    r"""Judge spiking state with the q-PseudoSpike surrogate function [1]_.
+    r"""Judge spiking state with the q-PseudoSpike surrogate function.
 
     The q-PseudoSpike surrogate gradient provides a flexible framework for
     controlling the tail behavior of the gradient function. The parameter q
     (represented as alpha in the implementation) controls the tail fatness,
     allowing for various gradient profiles from heavy-tailed to compact support.
+    This surrogate was introduced in [1]_.
 
     The forward function:
 
@@ -1701,13 +1709,14 @@ def leaky_relu(
 
 
 class LogTailedRelu(Surrogate):
-    r"""Judge spiking state with the Log-tailed ReLU function [1]_.
+    r"""Judge spiking state with the Log-tailed ReLU function.
 
     The Log-tailed ReLU surrogate gradient combines linear behavior for small
     positive inputs with logarithmic scaling for large inputs. This provides
     bounded gradients for large activations while maintaining responsiveness
     for smaller values, useful for handling wide dynamic ranges in spiking
     neural networks.
+    This surrogate was introduced in [1]_.
 
     The forward function:
 
@@ -1879,12 +1888,13 @@ def log_tailed_relu(
 
 
 class ReluGrad(Surrogate):
-    r"""Judge spiking state with the ReLU gradient function [1]_.
+    r"""Judge spiking state with the ReLU gradient function.
 
     The ReLU gradient surrogate provides a triangular-shaped gradient function
     with finite support. It creates a linear decrease from the center to the
     edges, providing a simple and computationally efficient gradient that is
     non-zero only within a specified width around zero.
+    This surrogate is described in [1]_.
 
     The forward function:
 
@@ -1906,7 +1916,7 @@ class ReluGrad(Surrogate):
 
     - Peak value: α × width at x=0
     - Linear decrease to 0 at x=±width
-    - Zero gradient for |x| > width
+    - Zero gradient for :math:`|x| > \text{width}`
 
     .. plot::
        :include-source: True
@@ -1955,7 +1965,7 @@ class ReluGrad(Surrogate):
         The peak gradient value is alpha × width.
     width : float, optional
         Parameter to control the width of the gradient support. Default is 1.0.
-        Gradient is non-zero only for |x| < width.
+        Gradient is non-zero only for :math:`|x| < \text{width}`.
 
     Examples
     --------
@@ -2022,13 +2032,14 @@ def relu_grad(
 
 
 class GaussianGrad(Surrogate):
-    r"""Judge spiking state with the Gaussian gradient function [1]_.
+    r"""Judge spiking state with the Gaussian gradient function.
 
     The Gaussian gradient surrogate provides a smooth, bell-shaped gradient
     function based on the Gaussian (normal) distribution. This creates a
     differentiable approximation to the Heaviside step function with
     continuous derivatives of all orders, making it particularly suitable
     for gradient-based optimization in spiking neural networks.
+    This surrogate was introduced in [1]_.
 
     The forward function:
 
@@ -2166,12 +2177,13 @@ def gaussian_grad(
 
 
 class MultiGaussianGrad(Surrogate):
-    r"""Judge spiking state with the multi-Gaussian gradient function [1]_.
+    r"""Judge spiking state with the multi-Gaussian gradient function.
 
     The Multi-Gaussian gradient surrogate combines three Gaussian components
     to create a more complex gradient profile. It uses a positive central
     Gaussian and two negative side Gaussians, allowing for enhanced gradient
     flow and potentially better training dynamics in spiking neural networks.
+    This surrogate was introduced in [1]_.
 
     The forward function:
 
@@ -2359,7 +2371,7 @@ class InvSquareGrad(Surrogate):
     This creates a gradient with:
 
     - Peak value of 1 at x=0
-    - Power-law decay proportional to 1/x² for large |x|
+    - Power-law decay proportional to :math:`1/x^2` for large :math:`|x|`
     - Width controlled by 1/α
 
     .. plot::
@@ -2474,13 +2486,14 @@ def inv_square_grad(
 
 
 class SlayerGrad(Surrogate):
-    r"""Judge spiking state with the slayer surrogate gradient function [1]_.
+    r"""Judge spiking state with the slayer surrogate gradient function.
 
     The SLAYER (Spike LAYer Error Reassignment) gradient provides an
     exponential decay surrogate that enables error backpropagation in
     spiking neural networks. It uses a Laplace-like distribution for
     the gradient, offering a good balance between gradient magnitude
     near the threshold and computational efficiency.
+    This surrogate was introduced in [1]_.
 
     The forward function:
 

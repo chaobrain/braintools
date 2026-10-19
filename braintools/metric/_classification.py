@@ -66,7 +66,7 @@ def sigmoid_binary_cross_entropy(
     r"""Compute element-wise sigmoid cross entropy given logits and labels.
 
     This function can be used for binary or multiclass classification where each
-    class is an independent binary prediction and different classes are not
+    class is an independent binary prediction [1]_ and different classes are not
     mutually exclusive (e.g. predicting that an image contains both a cat
     and a dog).
 
@@ -165,7 +165,7 @@ def perceptron_loss(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute the binary perceptron loss.
 
-    The perceptron loss is used in the original perceptron algorithm for
+    The perceptron loss is used in the original perceptron algorithm [1]_ for
     binary classification. It penalizes misclassified examples by the
     magnitude of the prediction error.
 
@@ -214,7 +214,7 @@ def softmax_cross_entropy(
     r"""Compute the softmax cross entropy between logits and labels.
 
     Measures the probability error in discrete classification tasks where
-    the classes are mutually exclusive (each entry is in exactly one class).
+    the classes are mutually exclusive (each entry is in exactly one class) [1]_.
     For example, each CIFAR-10 image is labeled with one and only one label:
     an image can be a dog or a truck, but not both.
 
@@ -263,7 +263,7 @@ def softmax_cross_entropy_with_integer_labels(
     This is a more efficient version of softmax cross entropy when labels
     are provided as integer class indices rather than one-hot encoded vectors.
     Measures the probability error in discrete classification tasks where
-    the classes are mutually exclusive.
+    the classes are mutually exclusive [1]_.
 
     Parameters
     ----------
@@ -327,7 +327,7 @@ def multiclass_hinge_loss(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute multiclass hinge loss for classification.
 
-    The multiclass hinge loss is an extension of the binary hinge loss to
+    The multiclass hinge loss [1]_ is an extension of the binary hinge loss to
     multiple classes. It encourages the correct class score to be at least
     1 unit higher than the highest scoring incorrect class.
 
@@ -387,7 +387,7 @@ def multiclass_perceptron_loss(
 
     The multiclass perceptron loss measures the difference between the
     highest scoring class and the correct class score. It is used in
-    structured perceptron learning for multiclass classification.
+    structured perceptron learning [1]_ for multiclass classification.
 
     The loss is defined as:
     
@@ -442,7 +442,7 @@ def poly_loss_cross_entropy(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute PolyLoss cross entropy between logits and labels.
 
-    PolyLoss is a polynomial expansion of commonly used classification loss
+    PolyLoss [1]_ is a polynomial expansion of commonly used classification loss
     functions. It decomposes loss functions into weighted polynomial bases
     inspired by the Taylor expansion of cross-entropy and focal loss.
 
@@ -516,7 +516,7 @@ def kl_divergence(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute the Kullback-Leibler divergence (relative entropy) loss.
 
-    KL divergence measures the information lost when approximating the target
+    KL divergence [1]_ measures the information lost when approximating the target
     distribution with the predicted distribution. It quantifies how much one
     probability distribution differs from another.
 
@@ -647,7 +647,7 @@ def convex_kl_divergence(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute a convex version of the Kullback-Leibler divergence loss.
 
-    This function computes a modified KL divergence that is jointly convex
+    This function computes a modified KL divergence [1]_ that is jointly convex
     in both the target probabilities and the predicted log probabilities.
     The standard KL divergence is convex only in the predicted distribution.
 
@@ -708,7 +708,7 @@ def ctc_loss_with_forward_probs(
 ) -> tuple[brainstate.typing.ArrayLike, brainstate.typing.ArrayLike, brainstate.typing.ArrayLike]:
     r"""Compute CTC loss and forward probabilities for sequence alignment.
 
-    Connectionist Temporal Classification (CTC) loss enables training of
+    Connectionist Temporal Classification (CTC) loss [1]_ enables training of
     sequence models without requiring frame-level alignment between input
     and output sequences. It uses dynamic programming to compute the
     probability of all valid alignments.
@@ -873,7 +873,7 @@ def ctc_loss(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute Connectionist Temporal Classification (CTC) loss.
 
-    A simplified interface to CTC loss computation that returns only the
+    A simplified interface to CTC loss [1]_ computation that returns only the
     loss values without forward probabilities. This is the most commonly
     used function for training sequence models with CTC.
 
@@ -956,7 +956,7 @@ def sigmoid_focal_loss(
 ) -> brainstate.typing.ArrayLike:
     r"""Compute sigmoid focal loss for addressing class imbalance.
 
-    Focal loss is designed to address class imbalance in dense object detection
+    Focal loss [1]_ is designed to address class imbalance in dense object detection
     by down-weighting easy examples and focusing training on hard negatives.
     It applies a modulating factor to the cross entropy loss to reduce the
     loss contribution from easy examples.

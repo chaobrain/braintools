@@ -56,8 +56,8 @@ class Initialization(ABC):
     composition, enabling the creation of complex initialization strategies from simple ones.
 
     Supported Operations:
-        - Arithmetic: +, -, *, / (element-wise operations)
-        - Composition: | (pipe operator for chaining transformations)
+        - Arithmetic: ``+``, ``-``, ``*``, ``/`` (element-wise operations)
+        - Composition: ``|`` (pipe operator for chaining transformations)
         - Transformations: .clip(), .add(), .multiply(), .apply()
 
     Examples

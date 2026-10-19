@@ -159,7 +159,7 @@ class WienerProcess(Input):
     - Increments are independent, so the output is white noise; the
       Brownian path is ``cumsum(dW)``
     - Useful for modeling synaptic background noise
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -362,10 +362,10 @@ class OUProcess(Input):
     -----
     - The process starts at ``mean`` and reverts to it with time constant tau
     - Stationary variance: σ²
-    - Autocorrelation decays as exp(-|lag| / tau)
+    - Autocorrelation decays as :math:`\exp(-|\text{lag}| / \tau)`
     - For tau much shorter than dt, consecutive samples are nearly independent
     - Useful for modeling synaptic background activity
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -571,7 +571,7 @@ class Poisson(Input):
     - For small dt, probability of multiple spikes per bin is negligible
     - Can be combined with continuous inputs for rate modulation
     - Useful for modeling synaptic background noise
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------

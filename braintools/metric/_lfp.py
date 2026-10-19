@@ -87,7 +87,7 @@ def unitary_LFP(
     r"""Calculate unitary local field potentials (uLFP) from spike train data.
 
     Computes the contribution of spiking neurons to local field potentials using
-    a kernel-based method. This approach models the spatial distribution of neurons,
+    a kernel-based method [1]_. This approach models the spatial distribution of neurons,
     axonal conduction delays, and layer-specific amplitude scaling to estimate
     the LFP signal recorded at an electrode positioned at the center of the
     neural population.
@@ -167,7 +167,7 @@ def unitary_LFP(
     -----
     This implementation focuses on spike-triggered LFP contributions and does
     not account for subthreshold synaptic currents, dendritic active channels,
-    volume conduction from distant sources, or frequency-dependent propagation.
+    volume conduction from distant sources, or frequency-dependent propagation [2]_.
 
     The per-neuron peak delay is :math:`\delta_i = 10.4\,\text{ms} + d_i / v_a`,
     where :math:`d_i` is the neuron-electrode distance (mm) and :math:`v_a` the

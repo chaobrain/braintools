@@ -32,8 +32,8 @@ def smooth_labels(
 ) -> jax.Array:
     r"""Apply label smoothing regularization to one-hot encoded labels.
 
-    Label smoothing is a regularization technique that prevents neural networks
-    from becoming overconfident in their predictions by introducing controlled
+    Label smoothing [2]_ is a regularization technique that prevents neural networks
+    from becoming overconfident in their predictions [3]_ by introducing controlled
     uncertainty in the training labels. This technique replaces hard targets
     with a weighted mixture of the original one-hot labels and a uniform
     distribution over all classes.
@@ -95,7 +95,7 @@ def smooth_labels(
 
     Label smoothing provides several benefits:
     
-    - **Improved calibration**: Reduces overconfident predictions
+    - **Improved calibration**: Reduces overconfident predictions [1]_
     - **Better generalization**: Acts as regularization to prevent overfitting
     - **Robustness**: Less sensitive to label noise and annotation errors
     - **Gradient stability**: Provides more stable training dynamics

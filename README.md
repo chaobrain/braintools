@@ -7,9 +7,6 @@
 <p align="center">
   <a href="https://pypi.org/project/braintools/"><img alt="Supported Python Version" src="https://img.shields.io/pypi/pyversions/braintools"></a>
   <a href="https://github.com/chaobrain/braintools/blob/main/LICENSE"><img alt="LICENSE" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
-  <a href='https://brainx.chaobrain.com/braintools/'>
-    <img src='https://readthedocs.org/projects/braintools/badge/?version=latest' alt='Documentation Status' />
-  </a>
   <a href="https://badge.fury.io/py/braintools"><img alt="PyPI version" src="https://badge.fury.io/py/braintools.svg"></a>
   <a href="https://github.com/chaobrain/braintools/actions/workflows/CI.yml"><img alt="Continuous Integration" src="https://github.com/chaobrain/braintools/actions/workflows/CI.yml/badge.svg"></a>
   <a href="https://codecov.io/gh/chaobrain/braintools"><img alt="Test Coverage" src="https://codecov.io/gh/chaobrain/braintools/graph/badge.svg"></a>

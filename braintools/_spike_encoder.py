@@ -86,18 +86,28 @@ class LatencyEncoder:
              [0., 0., 0.],
              [1., 0., 0.]], dtype=float32)
 
-    Args:
-      min_val: float. The minimal value of the data, used for rescaling.
-      max_val: float. The maximal value of the data, used for rescaling.
-      method: str. ``'linear'`` or ``'log'`` (see above).
-      threshold: float in ``[0, 1]``. Inputs below it fire at the last step
-        (``normalize=True``) or not at all when ``clip=True``. Defaults to 0.01.
-      clip: bool. Whether features below ``threshold`` should not fire.
-      tau: Quantity or float (ms). Time scale of the code when
-        ``normalize=False``, and the default window when ``n_time`` is None.
-      normalize: bool. Whether to scale the codes to the window (see above).
-      first_spk_time: Quantity or float (ms). Time of the earliest possible spike.
-      epsilon: float. Small value that keeps the ``'log'`` code finite.
+    Parameters
+    ----------
+    min_val : float, optional
+        The minimal value of the data, used for rescaling.
+    max_val : float, optional
+        The maximal value of the data, used for rescaling.
+    method : str, default='log'
+        ``'linear'`` or ``'log'`` (see above).
+    threshold : float, default=0.01
+        Value in ``[0, 1]``. Inputs below it fire at the last step
+        (``normalize=True``) or not at all when ``clip=True``.
+    clip : bool, default=False
+        Whether features below ``threshold`` should not fire.
+    tau : Quantity or float, default=1 ms
+        Time scale of the code (in ms) when ``normalize=False``, and the
+        default window when ``n_time`` is None.
+    normalize : bool, default=False
+        Whether to scale the codes to the window (see above).
+    first_spk_time : Quantity or float, default=0 ms
+        Time of the earliest possible spike (in ms).
+    epsilon : float, default=1e-7
+        Small value that keeps the ``'log'`` code finite.
     """
     __module__ = 'braintools'
 

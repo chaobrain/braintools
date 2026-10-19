@@ -189,7 +189,7 @@ def ranking_softmax_loss(
 
     Calculates a differentiable ranking loss that measures the cost of a ranking
     induced by item scores compared to ground truth relevance labels. This loss
-    is particularly effective for information retrieval, recommendation systems,
+    is particularly effective for information retrieval [1]_, recommendation systems,
     and other ranking tasks where the goal is to prioritize relevant items.
 
     The loss is the negative sum of the per-item ``log_softmax`` over the
@@ -204,7 +204,7 @@ def ranking_softmax_loss(
     and :math:`n` is the number of items in the list. Note that the labels
     :math:`y_i` enter as plain multiplicative coefficients on
     :math:`\log\mathrm{softmax}(s)_i`; they are **not** normalized into a
-    probability distribution (this is the softmax-loss convention, not ListNet,
+    probability distribution (this is the softmax-loss convention, not ListNet [2]_,
     which would first apply a softmax over the labels).
 
     Parameters

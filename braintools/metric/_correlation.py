@@ -90,7 +90,7 @@ def cross_correlation(
     To JIT compile this function, make ``bin``, ``dt``, and ``method`` static.
     For example: ``partial(cross_correlation, bin=10, method='loop')``.
 
-    This is the coincidence-based coherence of Wang & Buzsáki (1996), not a
+    This is the coincidence-based coherence of Wang & Buzsáki (1996) [1]_, not a
     Pearson correlation coefficient.
 
     Examples
@@ -179,11 +179,11 @@ def voltage_fluctuation(
 ):
     r"""Calculate neuronal synchronization via voltage variance analysis.
 
-    This method quantifies synchronization by comparing the variance of the
+    This method [1]_, [2]_ quantifies synchronization by comparing the variance of the
     population-averaged membrane potential to the average variance of individual
     neurons' membrane potentials.
 
-    The synchronization measure is computed as:
+    The synchronization measure [3]_ is computed as:
 
     .. math::
 
