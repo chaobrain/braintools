@@ -362,7 +362,7 @@ class OUProcess(Input):
     -----
     - The process starts at ``mean`` and reverts to it with time constant tau
     - Stationary variance: σ²
-    - Autocorrelation decays as exp(-|lag| / tau)
+    - Autocorrelation decays as :math:`\exp(-|\text{lag}| / \tau)`
     - For tau much shorter than dt, consecutive samples are nearly independent
     - Useful for modeling synaptic background activity
     - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
