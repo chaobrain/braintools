@@ -28,6 +28,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import jax.numpy as jnp
 
+from braintools._deprecation import register_deprecation, warn_deprecated
+from ._progress import RichProgressBarWrapper, TQDMProgressBarWrapper
+
 __all__ = [
     # Base class
     'Callback',
@@ -43,6 +46,26 @@ __all__ = [
     'LambdaCallback',
     'PrintCallback',
 ]
+
+
+_GRADIENT_CLIP_CALLBACK_DEPRECATION = register_deprecation(
+    'braintools.trainer.GradientClipCallback',
+    'Trainer(gradient_clip_val=...)',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='feature',
+)
+
+
+def _epoch_total(trainer: Any) -> Optional[int]:
+    """Number of training batches per epoch, or ``None`` when unknown."""
+    loader = getattr(trainer, 'train_dataloader', None)
+    if loader is None:
+        return None
+    try:
+        return len(loader)
+    except TypeError:
+        return None
 
 
 def _format_metrics(metrics: Dict[str, Any]) -> str:
@@ -961,6 +984,11 @@ class GradientClipCallback(Callback):
     """
     Placeholder callback for gradient clipping configuration.
 
+    .. deprecated:: 0.4.0
+       ``GradientClipCallback`` has never clipped gradients and will be removed
+       in 1.0.0. Use ``Trainer(gradient_clip_val=...)`` instead. Constructing
+       it emits a :class:`~braintools._deprecation.BraintoolsDeprecationWarning`.
+
     .. warning::
 
        This callback does **not** itself clip gradients or log gradient norms.
@@ -984,6 +1012,16 @@ class GradientClipCallback(Callback):
     log_grad_norm : bool, default=False
         Reserved for gradient-norm logging, which is not yet implemented.
 
+    Raises
+    ------
+    ValueError
+        If ``clip_algorithm`` is not ``'norm'`` or ``'value'``.
+
+    Warns
+    -----
+    BraintoolsDeprecationWarning
+        Always, because the callback is deprecated.
+
     See Also
     --------
     Trainer : Set ``gradient_clip_val`` / ``gradient_clip_algorithm`` there to
@@ -1002,6 +1040,7 @@ class GradientClipCallback(Callback):
         clip_algorithm: str = 'norm',
         log_grad_norm: bool = False,
     ):
+        warn_deprecated(_GRADIENT_CLIP_CALLBACK_DEPRECATION)
         super().__init__()
         self.clip_val = clip_val
         self.clip_algorithm = clip_algorithm
@@ -1152,14 +1191,18 @@ class RichProgressBar(Callback):
     """
     Rich progress bar for training visualization.
 
-    Requires the 'rich' package to be installed.
+    Rendering is delegated to :class:`RichProgressBarWrapper`, the same
+    progress bar the :class:`Trainer` uses. If the 'rich' package is not
+    installed, a warning is emitted and the wrapper falls back to
+    :class:`SimpleProgressBar`.
 
     Parameters
     ----------
     refresh_rate : int, default=1
         Number of batches between progress bar updates.
     leave : bool, default=False
-        Whether to leave the progress bar after completion.
+        Whether to leave the progress bar after completion. ``False`` makes the
+        rich bar transient, so it is removed when the epoch ends.
 
     Examples
     --------
@@ -1172,28 +1215,16 @@ class RichProgressBar(Callback):
         super().__init__()
         self.refresh_rate = refresh_rate
         self.leave = leave
-        self._progress = None
-        self._task_id = None
+        self._progress: Optional[RichProgressBarWrapper] = None
 
     def on_train_epoch_start(self, trainer: Any, module: Any):
         """Create progress bar for epoch."""
         try:
-            from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
-            self._progress = Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeElapsedColumn(),
-            )
-            self._progress.start()
-
-            total = len(trainer.train_dataloader) if hasattr(trainer, 'train_dataloader') else None
-            self._task_id = self._progress.add_task(
-                f"Epoch {module.current_epoch}", total=total
-            )
+            import rich  # noqa: F401
         except ImportError:
             warnings.warn("rich package not installed. Using simple progress.")
+        self._progress = RichProgressBarWrapper(transient=not self.leave)
+        self._progress.start(total=_epoch_total(trainer), desc=f"Epoch {module.current_epoch}")
 
     def on_train_batch_end(
         self,
@@ -1204,23 +1235,23 @@ class RichProgressBar(Callback):
         batch_idx: int,
     ):
         """Update progress bar."""
-        if self._progress and self._task_id is not None:
-            if batch_idx % self.refresh_rate == 0:
-                self._progress.update(self._task_id, advance=self.refresh_rate)
+        if self._progress is not None and batch_idx % self.refresh_rate == 0:
+            self._progress.update(self.refresh_rate)
 
     def on_train_epoch_end(self, trainer: Any, module: Any):
         """Complete progress bar."""
-        if self._progress:
-            self._progress.stop()
+        if self._progress is not None:
+            self._progress.close()
             self._progress = None
-            self._task_id = None
 
 
 class TQDMProgressBar(Callback):
     """
     TQDM progress bar for training visualization.
 
-    Requires the 'tqdm' package to be installed.
+    Rendering is delegated to :class:`TQDMProgressBarWrapper`, the same
+    progress bar the :class:`Trainer` uses. Requires the 'tqdm' package; if it
+    is not installed, a warning is emitted and no bar is shown.
 
     Parameters
     ----------
@@ -1248,21 +1279,17 @@ class TQDMProgressBar(Callback):
         self.refresh_rate = refresh_rate
         self.process_position = process_position
         self.leave = leave
-        self._pbar = None
+        self._pbar: Optional[TQDMProgressBarWrapper] = None
 
     def on_train_epoch_start(self, trainer: Any, module: Any):
         """Create progress bar for epoch."""
         try:
-            from tqdm import tqdm
-            total = len(trainer.train_dataloader) if hasattr(trainer, 'train_dataloader') else None
-            self._pbar = tqdm(
-                total=total,
-                desc=f"Epoch {module.current_epoch}",
-                position=self.process_position,
-                leave=self.leave,
-            )
+            import tqdm  # noqa: F401
         except ImportError:
             warnings.warn("tqdm package not installed. Progress bar disabled.")
+            return
+        self._pbar = TQDMProgressBarWrapper(position=self.process_position, leave=self.leave)
+        self._pbar.start(total=_epoch_total(trainer), desc=f"Epoch {module.current_epoch}")
 
     def on_train_batch_end(
         self,
@@ -1273,17 +1300,16 @@ class TQDMProgressBar(Callback):
         batch_idx: int,
     ):
         """Update progress bar."""
-        if self._pbar:
-            if batch_idx % self.refresh_rate == 0:
-                # Update postfix with metrics
-                metrics = module._get_prog_bar_metrics()
-                if metrics:
-                    self._pbar.set_postfix(metrics)
-                self._pbar.update(self.refresh_rate)
+        if self._pbar is not None and batch_idx % self.refresh_rate == 0:
+            # Update postfix with metrics
+            metrics = module._get_prog_bar_metrics()
+            if metrics:
+                self._pbar.set_postfix(metrics)
+            self._pbar.update(self.refresh_rate)
 
     def on_train_epoch_end(self, trainer: Any, module: Any):
         """Close progress bar."""
-        if self._pbar:
+        if self._pbar is not None:
             self._pbar.close()
             self._pbar = None
 

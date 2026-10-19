@@ -6,9 +6,13 @@ import unittest
 import brainstate
 import jax
 import jax.numpy as jnp
+import numpy as np
+import optax
+import pytest
 from brainstate import ParamState
 
 import braintools
+import braintools.optim as O
 
 
 class SimpleModelV1(brainstate.nn.Module):
@@ -3549,3 +3553,626 @@ class test_basic(unittest.TestCase):
         for optimizer in optimizers:
             optimizer.register_trainable_weights(model.states(brainstate.ParamState))
             assert optimizer.weight_decay == 0.01
+
+
+# ==============================================================================
+# Regression tests for the 2026-06-18 ``braintools.optim`` audit fixes.
+# Each test maps to an issue ID from docs/braintools-optim-issues-found-20260618.md
+# and asserts the *corrected* behavior (i.e. it fails against the pre-fix code).
+# ==============================================================================
+
+
+# --------------------------------------------------------------------------- #
+# Optimizer algorithm fixes
+# --------------------------------------------------------------------------- #
+
+def _descend(optimizer, ref_tx, steps=3, p0=(1.0, 2.0), grad=(0.5, -0.3)):
+    """Run ``optimizer`` and an optax reference ``ref_tx`` on the same problem."""
+    w = brainstate.ParamState(jnp.array(p0))
+    optimizer.register_trainable_weights({'w': w})
+    g = jnp.array(grad)
+    for _ in range(steps):
+        optimizer.step({'w': g})
+    p = jnp.array(p0)
+    st = ref_tx.init(p)
+    for _ in range(steps):
+        u, st = ref_tx.update(g, st, p)
+        p = optax.apply_updates(p, u)
+    return w.value, p
+
+
+class TestOptimizerAlgorithms:
+    def test_O1_adagrad_is_rss_not_rms(self):
+        # O-1: Adagrad must match optax.adagrad (root-sum-of-squares accumulator).
+        ours, ref = _descend(O.Adagrad(lr=0.1, initial_accumulator_value=0.1, eps=1e-7),
+                             optax.adagrad(0.1))
+        assert jnp.allclose(ours, ref, atol=1e-6)
+
+    def test_O12_adagrad_lr_decay(self):
+        # O-12: lr_decay must actually decay the step (clr = lr / (1 + t*lr_decay)).
+        no_decay = _descend(O.Adagrad(lr=0.1, lr_decay=0.0, initial_accumulator_value=0.1, eps=1e-7),
+                            optax.adagrad(0.1))[0]
+        with_decay_w = brainstate.ParamState(jnp.array([1.0, 2.0]))
+        opt = O.Adagrad(lr=0.1, lr_decay=0.5, initial_accumulator_value=0.1, eps=1e-7)
+        opt.register_trainable_weights({'w': with_decay_w})
+        for _ in range(3):
+            opt.step({'w': jnp.array([0.5, -0.3])})
+        # With decay the parameters move less (smaller effective LR over time).
+        assert jnp.all(jnp.abs(with_decay_w.value - 1.0) <= jnp.abs(no_decay - 1.0) + 1e-9)
+        assert not jnp.allclose(with_decay_w.value, no_decay)
+
+    def test_O5_rprop_matches_optax(self):
+        ours, ref = _descend(O.Rprop(lr=0.1), optax.rprop(0.1))
+        assert jnp.allclose(ours, ref, atol=1e-6)
+
+    def test_O8_fromage_matches_optax(self):
+        ours, ref = _descend(O.Fromage(lr=0.1), optax.fromage(0.1))
+        assert jnp.allclose(ours, ref, atol=1e-6)
+
+    def test_O7_lamb_matches_optax(self):
+        ours, ref = _descend(O.Lamb(lr=0.1, weight_decay=0.01),
+                             optax.lamb(0.1, weight_decay=0.01))
+        assert jnp.allclose(ours, ref, atol=1e-6)
+
+    def test_O11_novograd_folds_weight_decay(self):
+        ours, ref = _descend(O.Novograd(lr=0.1, weight_decay=0.01),
+                             optax.novograd(0.1, weight_decay=0.01))
+        assert jnp.allclose(ours, ref, atol=1e-5)
+
+    def test_O6_adafactor_decay_rate_positive_default(self):
+        # O-6: the default decay_rate must be positive (0.8), not -0.8.
+        assert O.Adafactor().decay_rate == pytest.approx(0.8)
+
+    def test_O18_adafactor_zero_lr_not_silently_replaced(self):
+        # O-18: lr=0.0 must not be silently turned into 1e-3 by ``lr or 1e-3``.
+        opt = O.Adafactor(lr=0.0)
+        assert float(opt.base_lr) == 0.0
+
+
+class TestWeightDecayCoupling:
+    def test_O2_adam_differs_from_adamw(self):
+        # O-2: with weight decay, coupled Adam must differ from decoupled AdamW.
+        a, _ = _descend(O.Adam(lr=0.1, weight_decay=0.1), optax.identity(), steps=3)
+        aw, _ = _descend(O.AdamW(lr=0.1, weight_decay=0.1), optax.identity(), steps=3)
+        assert not jnp.allclose(a, aw)
+
+    def test_O2_adam_coupled_matches_reference(self):
+        # Coupled L2 Adam == chain(add_decayed_weights, scale_by_adam, scale(-lr)).
+        ref = optax.chain(optax.add_decayed_weights(0.1), optax.scale_by_adam(), optax.scale(-0.1))
+        ours, refp = _descend(O.Adam(lr=0.1, weight_decay=0.1), ref)
+        assert jnp.allclose(ours, refp, atol=1e-6)
+
+    def test_O2_adamw_decoupled_matches_optax(self):
+        ours, ref = _descend(O.AdamW(lr=0.1, weight_decay=0.1), optax.adamw(0.1, weight_decay=0.1))
+        assert jnp.allclose(ours, ref, atol=1e-6)
+
+    def test_O2_sgd_coupled_weight_decay(self):
+        # Coupled SGD: update = -lr * (grad + wd * param). First step from p0 with g.
+        w = brainstate.ParamState(jnp.array([2.0]))
+        opt = O.SGD(lr=0.1, momentum=0.0, weight_decay=0.5)
+        opt.register_trainable_weights({'w': w})
+        opt.step({'w': jnp.array([1.0])})
+        # expected: 2.0 - 0.1 * (1.0 + 0.5 * 2.0) = 2.0 - 0.2 = 1.8
+        assert float(w.value[0]) == pytest.approx(1.8, abs=1e-6)
+
+
+class TestOptimizerInfra:
+    def test_O3_lookahead_runs_without_crash(self):
+        # O-3: Lookahead must not crash (previously double-applied base + LookaheadParams).
+        w = brainstate.ParamState(jnp.array([1.0, 2.0]))
+        opt = O.Lookahead(base_optimizer=optax.sgd(0.1), sync_period=3, alpha=0.5)
+        opt.register_trainable_weights({'w': w})
+        for _ in range(7):
+            opt.step({'w': jnp.array([0.5, -0.3])})
+        assert jnp.all(jnp.isfinite(w.value))
+
+    def test_O4_add_param_group_updates_all_groups(self):
+        a = brainstate.ParamState(jnp.array([1.0]))
+        b = brainstate.ParamState(jnp.array([1.0]))
+        opt = O.Adam(lr=0.1)
+        opt.register_trainable_weights({'a': a})
+        opt.add_param_group({'b': b}, lr=0.5)
+        opt.step({'a': jnp.array([1.0]), 'b': jnp.array([1.0])})
+        assert float(a.value[0]) < 1.0       # default group updated
+        assert float(b.value[0]) < 1.0       # added group updated
+        # higher-lr group must move more
+        assert (1.0 - float(b.value[0])) > (1.0 - float(a.value[0]))
+
+    def test_O4_add_param_group_before_register_raises(self):
+        b = brainstate.ParamState(jnp.array([1.0]))
+        opt = O.Adam(lr=0.1)
+        with pytest.raises(ValueError):
+            opt.add_param_group({'b': b})
+
+    def test_O9_manual_current_lr_affects_applied_update(self):
+        # O-9: setting current_lr must change the LR actually applied during step.
+        w = brainstate.ParamState(jnp.zeros(1))
+        opt = O.SGD(lr=0.1, momentum=0.0)
+        opt.register_trainable_weights({'w': w})
+        opt.current_lr = 0.5
+        opt.step({'w': jnp.ones(1)})
+        assert float(w.value[0]) == pytest.approx(-0.5, abs=1e-5)
+
+    def test_O13_checkpoint_resume_equivalent(self):
+        g = {'a': jnp.array([1.0]), 'b': jnp.array([1.0])}
+
+        def make():
+            a = brainstate.ParamState(jnp.array([1.0]))
+            b = brainstate.ParamState(jnp.array([1.0]))
+            o = O.Adam(lr=0.1)
+            o.register_trainable_weights({'a': a})
+            o.add_param_group({'b': b}, lr=0.3)
+            return o, a, b
+
+        ref, ra, rb = make()
+        for _ in range(3):
+            ref.step(g)
+
+        ck, ca, cb = make()
+        ck.step(g)
+        sd = ck.state_dict()
+        a2 = brainstate.ParamState(ca.value)
+        b2 = brainstate.ParamState(cb.value)
+        opt2 = O.Adam(lr=0.1)
+        opt2.register_trainable_weights({'a': a2})
+        opt2.add_param_group({'b': b2}, lr=0.3)
+        opt2.load_state_dict(sd)
+        for _ in range(2):
+            opt2.step(g)
+        assert jnp.allclose(ra.value, a2.value, atol=1e-6)
+        assert jnp.allclose(rb.value, b2.value, atol=1e-6)
+
+    def test_O10_lbfgs_basic_step(self):
+        w = brainstate.ParamState(jnp.array([1.0, 2.0]))
+        opt = O.LBFGS(lr=1.0)
+        opt.register_trainable_weights({'w': w})
+        opt.step({'w': jnp.array([0.5, -0.3])})
+        assert jnp.all(jnp.isfinite(w.value))
+
+
+# --------------------------------------------------------------------------- #
+# UniqueStateManager / nested-parameter fixes
+# --------------------------------------------------------------------------- #
+
+class TestNestedParameters:
+    def test_U1_nested_dict_register_and_step(self):
+        # U-1: nested dict of params must register and update (previously crashed in
+        # the write-back loop with "'dict' object has no attribute 'value'").
+        a = brainstate.ParamState(jnp.array([1.0]))
+        b = brainstate.ParamState(jnp.array([2.0]))
+        opt = O.SGD(lr=0.1, momentum=0.0)
+        opt.register_trainable_weights({'layer1': {'w': a}, 'layer2': {'w': b}})
+        opt.step({'layer1': {'w': jnp.array([1.0])}, 'layer2': {'w': jnp.array([1.0])}})
+        assert float(a.value[0]) == pytest.approx(0.9, abs=1e-6)
+        assert float(b.value[0]) == pytest.approx(1.9, abs=1e-6)
+
+    def test_U1_deeply_nested(self):
+        c = brainstate.ParamState(jnp.array([1.0]))
+        opt = O.Adam(lr=0.1)
+        opt.register_trainable_weights({'enc': {'block0': {'w': c}}})
+        opt.step({'enc': {'block0': {'w': jnp.array([1.0])}}})
+        assert jnp.isfinite(c.value[0]) and float(c.value[0]) < 1.0
+
+    def test_U1_state_value_is_pytree(self):
+        # A State whose value is itself a dict (like brainstate ParamState holding
+        # {'weight','bias'}) must round-trip through a step without misalignment.
+        s = brainstate.ParamState({'weight': jnp.ones((2, 2)), 'bias': jnp.zeros((2,))})
+        opt = O.SGD(lr=0.1, momentum=0.0)
+        opt.register_trainable_weights({'dense': s})
+        opt.step({'dense': {'weight': jnp.ones((2, 2)), 'bias': jnp.ones((2,))}})
+        assert isinstance(s.value, dict)
+        assert jnp.allclose(s.value['weight'], 0.9)
+        assert jnp.allclose(s.value['bias'], -0.1)
+
+    def test_U1_nested_with_brainstate_model(self):
+        model = brainstate.nn.Linear(4, 3)
+        opt = O.Adam(lr=0.01)
+        opt.register_trainable_weights(model.states(brainstate.ParamState))
+
+        def loss():
+            return jnp.sum(model(jnp.ones((2, 4))) ** 2)
+
+        grads = brainstate.transform.grad(loss, model.states(brainstate.ParamState))()
+        before = list(model.states(brainstate.ParamState).values())[0].value['weight'].copy()
+        opt.step(grads)
+        after = list(model.states(brainstate.ParamState).values())[0].value['weight']
+        assert not jnp.allclose(before, after)
+
+
+# --------------------------------------------------------------------------- #
+# Every optimizer takes a real .step() (audit "missing feature #1")
+# --------------------------------------------------------------------------- #
+
+class TestStepAllOptimizers:
+    """Construct, register and ``.step()`` every optimizer end-to-end.
+
+    The audit noted CI "almost never calls ``.step()`` for the exotic optimizers",
+    hiding a class of ``default_tx``/step bugs. This descends a 2-D parameter with
+    a fixed gradient for a few steps and asserts updates stay finite and move.
+    """
+
+    # Each factory accepts ``**k`` so the same registry can be exercised with and
+    # without gradient clipping (every ``default_tx`` has a clip branch).
+    OPTIMIZERS = [
+        ('SGD', lambda **k: O.SGD(lr=0.05, momentum=0.9, **k)),
+        ('SGD_nesterov', lambda **k: O.SGD(lr=0.05, momentum=0.9, nesterov=True, **k)),
+        ('SGD_wd', lambda **k: O.SGD(lr=0.05, weight_decay=0.01, **k)),
+        ('Momentum', lambda **k: O.Momentum(lr=0.05, momentum=0.9, **k)),
+        ('MomentumNesterov', lambda **k: O.MomentumNesterov(lr=0.05, momentum=0.9, **k)),
+        ('Adam', lambda **k: O.Adam(lr=0.05, **k)),
+        ('Adam_wd', lambda **k: O.Adam(lr=0.05, weight_decay=0.01, **k)),
+        ('Adam_amsgrad', lambda **k: O.Adam(lr=0.05, amsgrad=True, **k)),
+        ('AdamW', lambda **k: O.AdamW(lr=0.05, weight_decay=0.01, **k)),
+        ('Adagrad', lambda **k: O.Adagrad(lr=0.05, weight_decay=0.01, **k)),
+        ('Adadelta', lambda **k: O.Adadelta(lr=0.5, **k)),
+        ('RMSprop', lambda **k: O.RMSprop(lr=0.05, **k)),
+        ('RMSprop_centered', lambda **k: O.RMSprop(lr=0.05, momentum=0.9, centered=True, **k)),
+        ('Adamax', lambda **k: O.Adamax(lr=0.05, **k)),
+        ('Nadam', lambda **k: O.Nadam(lr=0.05, **k)),
+        ('RAdam', lambda **k: O.RAdam(lr=0.05, **k)),
+        ('Lamb', lambda **k: O.Lamb(lr=0.05, weight_decay=0.01, **k)),
+        ('Lars', lambda **k: O.Lars(lr=0.05, weight_decay=0.01, **k)),
+        ('Yogi', lambda **k: O.Yogi(lr=0.05, **k)),
+        ('Rprop', lambda **k: O.Rprop(lr=0.05, **k)),
+        ('Adafactor', lambda **k: O.Adafactor(lr=0.05, **k)),
+        ('AdaBelief', lambda **k: O.AdaBelief(lr=0.05, **k)),
+        ('Lion', lambda **k: O.Lion(lr=0.05, **k)),
+        ('SM3', lambda **k: O.SM3(lr=0.05, **k)),
+        ('Novograd', lambda **k: O.Novograd(lr=0.05, weight_decay=0.01, **k)),
+        ('Fromage', lambda **k: O.Fromage(lr=0.05, **k)),
+        ('LBFGS', lambda **k: O.LBFGS(lr=1.0, **k)),
+        ('Lookahead', lambda **k: O.Lookahead(optax.adam(0.05), sync_period=2, **k)),
+    ]
+
+    @pytest.mark.parametrize('name,factory', OPTIMIZERS, ids=[n for n, _ in OPTIMIZERS])
+    def test_step_updates_and_finite(self, name, factory):
+        w = brainstate.ParamState(jnp.array([[1.0, -2.0], [0.5, 3.0]]))
+        opt = factory()
+        opt.register_trainable_weights({'w': w})
+        before = w.value.copy()
+        g = {'w': jnp.array([[0.3, -0.4], [0.2, -0.1]])}
+        for _ in range(3):
+            opt.step(g)
+        assert jnp.all(jnp.isfinite(w.value)), f'{name} produced non-finite params'
+        assert not jnp.allclose(w.value, before), f'{name} did not update params'
+
+    @pytest.mark.parametrize('name,factory', OPTIMIZERS, ids=[n for n, _ in OPTIMIZERS])
+    def test_step_with_grad_clipping(self, name, factory):
+        # Exercise the grad_clip_norm / grad_clip_value branches in every default_tx.
+        w = brainstate.ParamState(jnp.array([[1.0, -2.0], [0.5, 3.0]]))
+        opt = factory(grad_clip_norm=1.0, grad_clip_value=0.5)
+        opt.register_trainable_weights({'w': w})
+        before = w.value.copy()
+        g = {'w': jnp.array([[30.0, -40.0], [20.0, -10.0]])}  # large → triggers clipping
+        for _ in range(3):
+            opt.step(g)
+        assert jnp.all(jnp.isfinite(w.value)), f'{name} non-finite under clipping'
+        assert not jnp.allclose(w.value, before), f'{name} did not update under clipping'
+
+    @pytest.mark.parametrize('name,factory', OPTIMIZERS, ids=[n for n, _ in OPTIMIZERS])
+    def test_state_dict_roundtrip(self, name, factory):
+        # state_dict/load_state_dict must restore the optimizer's internal buffers
+        # (momentum/variance/step count) so checkpoint→resume is exact (O-13).
+        w = brainstate.ParamState(jnp.array([[1.0, -2.0], [0.5, 3.0]]))
+        opt = factory()
+        opt.register_trainable_weights({'w': w})
+        g = {'w': jnp.array([[0.3, -0.4], [0.2, -0.1]])}
+        opt.step(g)
+        opt.step(g)
+        sd = opt.state_dict()
+
+        # Fresh optimizer with the param set to the SAME current value: only the
+        # optimizer state distinguishes them, so a matching next step proves the
+        # round-trip restored that state.
+        w2 = brainstate.ParamState(w.value.copy())
+        opt2 = factory()
+        opt2.register_trainable_weights({'w': w2})
+        opt2.load_state_dict(sd)
+
+        opt.step(g)
+        opt2.step(g)
+        assert jnp.allclose(w.value, w2.value, atol=1e-5), name
+
+
+# --------------------------------------------------------------------------- #
+# Multi-group step: params outside any added group still update (lines 541-552)
+# --------------------------------------------------------------------------- #
+
+class TestMultiGroupStep:
+    def test_default_params_update_alongside_added_group(self):
+        w1 = brainstate.ParamState(jnp.array([1.0, 2.0]))
+        w2 = brainstate.ParamState(jnp.array([3.0, 4.0]))
+        opt = O.Adam(lr=0.1)
+        opt.register_trainable_weights({'w1': w1})
+        opt.add_param_group({'w2': w2}, lr=0.3)
+        b1, b2 = w1.value.copy(), w2.value.copy()
+        opt.step({'w1': jnp.ones(2), 'w2': jnp.ones(2)})
+        # w1 belongs to no explicit added group → flows through the main tx;
+        # w2 is in the added group with a larger LR → moves further.
+        assert not jnp.allclose(w1.value, b1)
+        assert not jnp.allclose(w2.value, b2)
+        assert jnp.all(jnp.isfinite(w1.value)) and jnp.all(jnp.isfinite(w2.value))
+
+
+# --------------------------------------------------------------------------- #
+# LBFGS line-search construction + update(value=, value_fn=) path (O-17)
+# --------------------------------------------------------------------------- #
+
+class TestLBFGSLinesearchDescent:
+    @staticmethod
+    def _quadratic(params):
+        # value_fn receives the params pytree {'w': array}; minimise sum(w**2).
+        return sum(jnp.sum(v ** 2) for v in params.values())
+
+    @pytest.mark.parametrize('linesearch', ['zoom', 'backtracking'])
+    def test_linesearch_descends(self, linesearch):
+        # String linesearch names resolve to optax transforms and the
+        # value/value_fn update path drives the loss down on a convex problem.
+        w = brainstate.ParamState(jnp.array([2.0, -3.0, 1.5]))
+        opt = O.LBFGS(lr=1.0, linesearch=linesearch)
+        opt.register_trainable_weights({'w': w})
+
+        def loss_fn(params):
+            return self._quadratic(params)
+
+        first = last = None
+        for _ in range(8):
+            value = float(self._quadratic({'w': w.value}))
+            grads = {'w': 2.0 * w.value}
+            opt.update(grads, value=value, value_fn=loss_fn)
+            last = float(self._quadratic({'w': w.value}))
+            if first is None:
+                first = value
+        assert jnp.all(jnp.isfinite(w.value))
+        assert last < first, f'{linesearch} line-search did not reduce the loss'
+
+    def test_linesearch_accepts_optax_transform(self):
+        # A pre-built optax GradientTransformationExtraArgs is accepted as-is.
+        ls = optax.scale_by_zoom_linesearch(max_linesearch_steps=20)
+        w = brainstate.ParamState(jnp.array([1.0, -1.0]))
+        opt = O.LBFGS(lr=1.0, linesearch=ls)
+        opt.register_trainable_weights({'w': w})
+
+        def loss_fn(params):
+            return self._quadratic(params)
+
+        value = float(self._quadratic({'w': w.value}))
+        opt.update({'w': 2.0 * w.value}, value=value, value_fn=loss_fn)
+        assert jnp.all(jnp.isfinite(w.value))
+
+    def test_invalid_linesearch_string_raises(self):
+        with pytest.raises(ValueError, match='Unknown linesearch'):
+            O.LBFGS(linesearch='nope')
+
+    def test_invalid_linesearch_type_raises(self):
+        with pytest.raises(ValueError, match='Unknown linesearch'):
+            O.LBFGS(linesearch=12345)
+
+
+# --------------------------------------------------------------------------- #
+# Misc real (non-defensive) branches: Adam beta1/beta2 deprecation, Lookahead WD
+# --------------------------------------------------------------------------- #
+
+class TestMiscBranches:
+    def test_adam_beta1_beta2_deprecated_override(self):
+        # The legacy beta1/beta2 kwargs must warn and override the betas tuple.
+        with pytest.warns(DeprecationWarning, match='beta1'):
+            opt = O.Adam(lr=0.05, beta1=0.8)
+        assert opt.betas[0] == 0.8
+        with pytest.warns(DeprecationWarning, match='beta2'):
+            opt = O.Adam(lr=0.05, beta2=0.99)
+        assert opt.betas[1] == 0.99
+        # Both override and the optimizer still steps cleanly.
+        w = brainstate.ParamState(jnp.array([1.0, -2.0]))
+        opt.register_trainable_weights({'w': w})
+        opt.step({'w': jnp.array([0.5, -0.5])})
+        assert jnp.all(jnp.isfinite(w.value))
+
+    def test_lookahead_weight_decay_folds_into_fast(self):
+        # weight_decay > 0 chains add_decayed_weights into the fast optimizer.
+        w = brainstate.ParamState(jnp.array([1.0, -2.0, 3.0]))
+        opt = O.Lookahead(optax.sgd(0.1), sync_period=2, alpha=0.5, weight_decay=0.01)
+        opt.register_trainable_weights({'w': w})
+        before = w.value.copy()
+        for _ in range(4):
+            opt.step({'w': jnp.array([0.2, -0.3, 0.1])})
+        assert jnp.all(jnp.isfinite(w.value))
+        assert not jnp.allclose(w.value, before)
+
+
+class TestLBFGSLinesearch:
+    """L-BFGS with a line search converges like ``optax.lbfgs`` and checks ``value_fn``."""
+
+    @staticmethod
+    def _rosen(values):
+        w = values['w']
+        return (1 - w[0]) ** 2 + 100 * (w[1] - w[0] ** 2) ** 2
+
+    @pytest.mark.parametrize('linesearch', ['zoom', 'backtracking'])
+    def test_rosenbrock(self, linesearch):
+        params = {'w': brainstate.ParamState(jnp.array([-1.5, 2.0]))}
+        opt = O.LBFGS(linesearch=linesearch)
+        opt.register_trainable_weights(params)
+        for _ in range(60):
+            grads = brainstate.transform.grad(lambda: self._rosen({'w': params['w'].value}), grad_states=params)()
+            opt.update(grads, value=self._rosen({'w': params['w'].value}), value_fn=self._rosen)
+        np.testing.assert_allclose(params['w'].value, [1.0, 1.0], atol=1e-3)
+
+    def test_zero_argument_value_fn_rejected(self):
+        params = {'w': brainstate.ParamState(jnp.zeros(2))}
+        opt = O.LBFGS(linesearch='zoom')
+        opt.register_trainable_weights(params)
+        with pytest.raises(TypeError, match='value_fn'):
+            opt.update({'w': jnp.ones(2)}, value=1.0, value_fn=lambda: 1.0)
+
+
+# ==============================================================================
+# Regression tests for the 2026-06-18 ``braintools.optim`` *re-audit* fixes
+# (issue IDs R-1 .. R-17 in docs/braintools-optim-issues-found-20260618.md).
+# ==============================================================================
+
+
+# --------------------------------------------------------------------------- #
+# R-1: SM3 must apply momentum exactly once (match optax.sm3)
+# --------------------------------------------------------------------------- #
+
+class TestSM3Momentum:
+    def test_R1_sm3_matches_optax(self):
+        ours, ref = _descend(O.SM3(lr=0.1, momentum=0.9, eps=1e-8), optax.sm3(0.1, 0.9))
+        assert jnp.allclose(ours, ref, atol=1e-6)
+
+    def test_R1_momentum_zero_disables_smoothing(self):
+        # Previously momentum=0 still applied the internal scale_by_sm3 b1=0.9.
+        w0, _ = _descend(O.SM3(lr=0.1, momentum=0.0), optax.identity())
+        w9, _ = _descend(O.SM3(lr=0.1, momentum=0.9), optax.identity())
+        assert not jnp.allclose(w0, w9)
+        # momentum=0 ⇒ matches optax.sm3 with momentum=0
+        ours, ref = _descend(O.SM3(lr=0.1, momentum=0.0, eps=1e-8), optax.sm3(0.1, 0.0))
+        assert jnp.allclose(ours, ref, atol=1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# R-2: RMSprop(centered=True) must use the variance estimate (scale_by_stddev)
+# --------------------------------------------------------------------------- #
+
+class TestRMSpropCentered:
+    def test_R2_centered_matches_optax(self):
+        ours, ref = _descend(O.RMSprop(lr=0.1, alpha=0.9, eps=1e-8, centered=True),
+                             optax.rmsprop(0.1, decay=0.9, eps=1e-8, centered=True))
+        assert jnp.allclose(ours, ref, atol=1e-6)
+
+    def test_R2_centered_differs_from_uncentered(self):
+        wt, _ = _descend(O.RMSprop(lr=0.1, alpha=0.9, centered=True), optax.identity())
+        wf, _ = _descend(O.RMSprop(lr=0.1, alpha=0.9, centered=False), optax.identity())
+        assert not jnp.allclose(wt, wf)
+
+
+# --------------------------------------------------------------------------- #
+# R-3: Nadam.momentum_decay must drive PyTorch-style scheduled momentum
+# --------------------------------------------------------------------------- #
+
+class TestNadamScheduledMomentum:
+    def test_R3_matches_torch_nadam(self):
+        torch = pytest.importorskip('torch')
+        lr, b1, b2, eps, psi = 0.01, 0.9, 0.999, 1e-8, 4e-3
+        grads = [np.array([0.5, -0.3, 0.2], np.float32),
+                 np.array([0.1, 0.4, -0.6], np.float32),
+                 np.array([-0.2, 0.05, 0.3], np.float32),
+                 np.array([0.3, -0.1, 0.15], np.float32)]
+        p0 = np.array([1.0, 2.0, -1.0], np.float32)
+
+        w = brainstate.ParamState(jnp.array(p0))
+        opt = O.Nadam(lr=lr, betas=(b1, b2), eps=eps, momentum_decay=psi)
+        opt.register_trainable_weights({'w': w})
+        for g in grads:
+            opt.step({'w': jnp.array(g)})
+        ours = np.asarray(w.value)
+
+        tp = torch.tensor(p0.copy(), requires_grad=True)
+        topt = torch.optim.NAdam([tp], lr=lr, betas=(b1, b2), eps=eps,
+                                 momentum_decay=psi, weight_decay=0.0)
+        for g in grads:
+            topt.zero_grad()
+            tp.grad = torch.tensor(g.copy())
+            topt.step()
+        ref = tp.detach().numpy()
+        assert np.allclose(ours, ref, atol=1e-5), (ours, ref)
+
+    def test_R3_momentum_decay_actually_changes_result(self):
+        # Two different momentum_decay values must yield different trajectories
+        # (the parameter was previously inert).
+        a, _ = _descend(O.Nadam(lr=0.05, momentum_decay=4e-3), optax.identity(), steps=5)
+        b, _ = _descend(O.Nadam(lr=0.05, momentum_decay=2e-1), optax.identity(), steps=5)
+        assert not jnp.allclose(a, b)
+
+
+# --------------------------------------------------------------------------- #
+# R-4: LBFGS docstring parameter name (scale_init_precond) is the real one
+# --------------------------------------------------------------------------- #
+
+class TestLBFGSDocParam:
+    @pytest.mark.parametrize('flag', [True, False])
+    def test_R4_scale_init_precond_constructs(self, flag):
+        opt = O.LBFGS(lr=1.0, scale_init_precond=flag)
+        assert opt.scale_init_precond is flag
+
+    def test_R4_scale_init_hess_rejected(self):
+        with pytest.raises(TypeError):
+            O.LBFGS(lr=1.0, scale_init_hess=True)
+
+
+# --------------------------------------------------------------------------- #
+# R-5: LBFGS honors an LRScheduler (no longer frozen at construction)
+# --------------------------------------------------------------------------- #
+
+class TestLBFGSSchedule:
+    @staticmethod
+    def _run(make_lr, steps=4):
+        w = brainstate.ParamState(jnp.array([2.0, -3.0, 1.5]))
+        opt = O.LBFGS(lr=make_lr())
+        opt.register_trainable_weights({'w': w})
+        sch = opt.lr_scheduler
+        traj = []
+        for _ in range(steps):
+            opt.step({'w': 2.0 * w.value})
+            traj.append(np.asarray(w.value).copy())
+            sch.step()
+        return traj
+
+    def test_R5_scheduler_changes_trajectory(self):
+        base = self._run(lambda: 1.0)  # float -> constant lr 1.0
+        decay = self._run(lambda: O.StepLR(base_lr=1.0, step_size=1, gamma=0.1))
+        # epoch-0 LR is identical (gamma**0 == 1), so the first step matches ...
+        assert np.allclose(base[0], decay[0], atol=1e-6)
+        # ... but once the schedule decays, the trajectories diverge.
+        assert not np.allclose(base[3], decay[3])
+
+
+# --------------------------------------------------------------------------- #
+# R-8: optimizer hyperparameter validation
+# --------------------------------------------------------------------------- #
+
+class TestHyperparamValidation:
+    def test_R8_negative_lr(self):
+        with pytest.raises(ValueError, match='learning rate'):
+            O.SGD(lr=-1.0)
+
+    def test_R8_negative_weight_decay(self):
+        with pytest.raises(ValueError, match='weight_decay'):
+            O.Adam(lr=0.1, weight_decay=-0.1)
+
+    def test_R8_nonpositive_grad_clip_norm(self):
+        with pytest.raises(ValueError, match='grad_clip_norm'):
+            O.Adam(lr=0.1, grad_clip_norm=0.0)
+
+    def test_R8_negative_grad_clip_value(self):
+        with pytest.raises(ValueError, match='grad_clip_value'):
+            O.Adam(lr=0.1, grad_clip_value=-1.0)
+
+    def test_R8_scheduler_lr_not_rejected(self):
+        # A scheduler lr must still be accepted (only float lr is range-checked).
+        opt = O.SGD(lr=O.StepLR(base_lr=0.1, step_size=1))
+        assert opt is not None
+
+
+# --------------------------------------------------------------------------- #
+# R-12: base OptaxOptimizer.default_tx uses coupled weight decay (like Adam)
+# --------------------------------------------------------------------------- #
+
+class TestBaseCoupledWeightDecay:
+    def test_R12_base_default_tx_is_coupled(self):
+        # Base fallback (scale_by_adam) with weight decay must equal coupled L2 Adam:
+        # chain(add_decayed_weights, scale_by_adam, scale(-lr)).
+        ref = optax.chain(optax.add_decayed_weights(0.1), optax.scale_by_adam(), optax.scale(-0.1))
+        ours, refp = _descend(O.OptaxOptimizer(lr=0.1, weight_decay=0.1), ref)
+        assert jnp.allclose(ours, refp, atol=1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# R-9/R-10: documented examples are now runnable (construction does not raise)
+# --------------------------------------------------------------------------- #
+
+class TestDocExamplesRunnable:
+    def test_R9_adafactor_positive_decay_rate(self):
+        opt = O.Adafactor(lr=0.05, decay_rate=0.8)
+        assert opt.decay_rate == pytest.approx(0.8)

@@ -367,7 +367,7 @@ from ._state_uniquifier import (
 )
 
 # Learning rate schedulers
-from ._optax_lr_scheduler import (
+from ._lr_scheduler import (
     LRScheduler,
     StepLR,
     MultiStepLR,

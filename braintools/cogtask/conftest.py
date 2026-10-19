@@ -61,7 +61,7 @@ FIXED_DURATION_TASKS = [
 # run in packed mode: buffers are sized to the static ``max_trial_duration``
 # and a per-timestep mask marks the valid steps, so they ARE vmap-safe via
 # ``batch_sample(return_mask=True)`` — see
-# ``task_variable_length_test.test_migrated_builtin_tasks_packed``. They are
+# ``task_test.test_migrated_builtin_tasks_packed``. They are
 # kept separate only because their valid length varies per trial.
 VARIABLE_DURATION_TASKS = [
     ct.HierarchicalReasoning,

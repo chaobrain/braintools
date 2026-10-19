@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 import braintools
-from braintools.visualize._utils import as_array, flatten_spikes, inter_spike_intervals
+from braintools.visualize._utils import as_array
 
 v = braintools.visualize
 
@@ -29,23 +29,6 @@ v = braintools.visualize
 def test_as_array_converts_python_lists():
     assert isinstance(as_array([[1, 2], [3, 4]]), np.ndarray)
     assert as_array([[1, 2], [3, 4]]).shape == (2, 2)
-
-
-def test_flatten_spikes_formats():
-    t, i = flatten_spikes([np.array([0.1, 0.3]), np.array([0.2])])
-    assert np.allclose(t, [0.1, 0.3, 0.2]) and list(i) == [0, 0, 1]
-    t, i = flatten_spikes([0.1, 0.2, 0.4])          # a list of numbers is one train
-    assert list(i) == [0, 0, 0]
-    t, i = flatten_spikes(np.array([0.1, 0.2]), neuron_ids=[3, 4])
-    assert list(i) == [3, 4]
-    with pytest.raises(ValueError):
-        flatten_spikes(np.array([0.1, 0.2]), neuron_ids=[1])
-
-
-def test_inter_spike_intervals_stay_within_neurons():
-    times = np.array([0.0, 0.05, 1.0, 1.1])
-    ids = np.array([0, 1, 0, 1])
-    assert np.allclose(sorted(inter_spike_intervals(times, ids)), [1.0, 1.05])
 
 
 @pytest.mark.parametrize('call', [
@@ -82,3 +65,20 @@ def test_dashboard_rates_use_recording_span():
     fig = v.dashboard_neural_activity(times, neuron_ids=ids)
     rate_hist = [tr for tr in fig.data if tr.type == 'histogram'][1]
     assert np.allclose(sorted(rate_hist.x), [1.0, 2.0])
+
+
+class TestInTimeUnit:
+    def test_converts_quantities_and_passes_numbers(self):
+        import brainunit as u
+        from braintools.visualize._utils import in_time_unit
+        assert in_time_unit(None, u.ms) is None
+        assert in_time_unit(2.5, u.ms) == 2.5
+        assert in_time_unit((0 * u.ms, 2 * u.second), u.ms) == (0.0, 2000.0)
+        assert in_time_unit([1 * u.ms, 3.0], u.ms) == (1.0, 3.0)
+
+    def test_quantity_with_unitless_times_raises(self):
+        import brainunit as u
+        import pytest
+        from braintools.visualize._utils import in_time_unit
+        with pytest.raises(ValueError, match='unitless'):
+            in_time_unit(1 * u.ms, None)

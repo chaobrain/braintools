@@ -35,6 +35,8 @@ import brainunit as u
 import numpy as np
 from scipy.spatial.distance import cdist
 
+from braintools._deprecation import register_deprecation, warn_deprecated
+from braintools.init import DistanceProfile, ExponentialProfile, GaussianProfile, LinearProfile
 from braintools.init._init_base import param, Initializer
 from ._base import MultiCompartmentConnectivity, ConnectionResult
 
@@ -607,6 +609,23 @@ class DendriteToDendrite(CompartmentSpecific):
         super().__init__(compartment_mapping=compartment_mapping, **kwargs)
 
 
+# Legacy ``MorphologyDistance(decay_function=<str>)`` values and the
+# ``braintools.init`` profile each one maps onto (built from ``sigma``).
+_LEGACY_DECAY_PROFILES = {
+    'gaussian': GaussianProfile,
+    'exponential': ExponentialProfile,
+    'linear': LinearProfile,
+}
+
+_DECAY_STRING_DEPRECATION = register_deprecation(
+    'braintools.conn.MorphologyDistance(decay_function=str)',
+    'pass a braintools.init.*Profile instance',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+
+
 class MorphologyDistance(MultiCompartmentConnectivity):
     """Distance-dependent connectivity based on neuron positions.
 
@@ -615,13 +634,29 @@ class MorphologyDistance(MultiCompartmentConnectivity):
     as ``pre_positions``/``post_positions``); the chosen target compartments
     come from ``compartment_mapping``. Positions are required.
 
+    For every (source, target) compartment pair, each neuron pair connects
+    with the probability given by the distance profile at their distance.
+
     Parameters
     ----------
-    sigma : float or Quantity
-        Characteristic distance scale for connectivity. A plain number is
-        interpreted in the unit of ``pre_positions``.
-    decay_function : str
-        Distance decay function ('gaussian', 'exponential', 'linear').
+    sigma : float or Quantity, optional
+        Characteristic distance scale of the built-in Gaussian profile (and of
+        the deprecated string decay functions). A plain number is interpreted
+        in the unit of ``pre_positions``. Required unless ``decay_function`` is
+        a :class:`braintools.init.DistanceProfile`, in which case it must be
+        omitted because the profile carries its own length scale.
+    decay_function : DistanceProfile, str or None, optional
+        Distance-to-probability profile. ``None`` (default) is a Gaussian
+        ``exp(-d**2 / (2 * sigma**2))``. A
+        :class:`braintools.init.DistanceProfile` instance (for example
+        ``braintools.init.ExponentialProfile(50 * u.um)``) is evaluated on the
+        distances expressed in the unit of ``pre_positions``.
+
+        .. deprecated:: 0.4.0
+           The strings ``'gaussian'``, ``'exponential'`` and ``'linear'`` are
+           deprecated and will be removed in 1.0.0. They map to
+           ``GaussianProfile(sigma)``, ``ExponentialProfile(sigma)`` and
+           ``LinearProfile(sigma)``.
     compartment_mapping : dict
         Mapping of which compartments can connect to which.
     weight : Initializer, optional
@@ -631,23 +666,51 @@ class MorphologyDistance(MultiCompartmentConnectivity):
     allow_self_connections : bool, optional
         Whether a neuron may connect to itself. Default ``False``.
 
+    Raises
+    ------
+    ValueError
+        If ``sigma`` is missing while ``decay_function`` is not a
+        ``DistanceProfile``, or given while it is. At generation time, if
+        ``decay_function`` is not recognised or ``sigma`` is not positive.
+
+    Warns
+    -----
+    BraintoolsDeprecationWarning
+        If ``decay_function`` is one of the legacy strings.
+
+    See Also
+    --------
+    braintools.init.GaussianProfile, braintools.init.ExponentialProfile,
+    braintools.init.LinearProfile
+
     Examples
     --------
     .. code-block:: python
 
         >>> import brainunit as u
-        >>> morph_dist = MorphologyDistance(
-        ...     sigma=50 * u.um,
-        ...     decay_function='gaussian',
-        ...     compartment_mapping={AXON: [BASAL_DENDRITE, APICAL_DENDRITE]}
+        >>> import numpy as np
+        >>> from braintools.conn import MorphologyDistance, AXON, BASAL_DENDRITE
+        >>> from braintools.init import ExponentialProfile
+        >>> gaussian = MorphologyDistance(sigma=50 * u.um)
+        >>> exponential = MorphologyDistance(
+        ...     decay_function=ExponentialProfile(80 * u.um),
+        ...     compartment_mapping={AXON: [BASAL_DENDRITE]},
+        ...     seed=0,
         ... )
+        >>> positions = np.random.RandomState(0).uniform(0, 200, (20, 2)) * u.um
+        >>> result = exponential(
+        ...     pre_size=20, post_size=20,
+        ...     pre_positions=positions, post_positions=positions,
+        ... )
+        >>> bool(np.all(result.post_compartments == BASAL_DENDRITE))
+        True
     """
     __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        sigma: Union[float, u.Quantity],
-        decay_function: str = 'gaussian',
+        sigma: Optional[Union[float, u.Quantity]] = None,
+        decay_function: Optional[Union[DistanceProfile, str]] = None,
         compartment_mapping: Dict = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -655,6 +718,20 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         **kwargs
     ):
         super().__init__(**kwargs)
+        if isinstance(decay_function, DistanceProfile):
+            if sigma is not None:
+                raise ValueError(
+                    '`sigma` must be omitted when `decay_function` is a DistanceProfile; '
+                    'the profile defines its own length scale.'
+                )
+        else:
+            if sigma is None:
+                raise ValueError(
+                    '`sigma` is required unless `decay_function` is a '
+                    'braintools.init.DistanceProfile instance.'
+                )
+            if isinstance(decay_function, str) and decay_function in _LEGACY_DECAY_PROFILES:
+                warn_deprecated(_DECAY_STRING_DEPRECATION)
         self.sigma = sigma
         self.decay_function = decay_function
         self.compartment_mapping = compartment_mapping or {AXON: [BASAL_DENDRITE, APICAL_DENDRITE]}
@@ -688,10 +765,25 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         else:
             post_num = post_size
 
-        # sigma and positions as plain numbers in a common unit
-        sigma_val, pre_pos_val, post_pos_val = _length_and_positions(
-            self.sigma, pre_positions, post_positions
-        )
+        profile = self.decay_function
+        if isinstance(profile, DistanceProfile):
+            # The profile converts distances itself, so keep the position unit.
+            pre_pos_val, distance_unit = u.split_mantissa_unit(pre_positions)
+            post_pos_val = u.Quantity(post_positions).to(distance_unit).mantissa
+            pre_pos_val = _as_2d_positions(pre_pos_val)
+            post_pos_val = _as_2d_positions(post_pos_val)
+        else:
+            # sigma and positions as plain numbers in a common unit
+            sigma_val, pre_pos_val, post_pos_val = _length_and_positions(
+                self.sigma, pre_positions, post_positions
+            )
+            distance_unit = None
+            if profile is None:
+                profile = GaussianProfile(sigma_val)
+            elif isinstance(profile, str) and profile in _LEGACY_DECAY_PROFILES:
+                profile = _LEGACY_DECAY_PROFILES[profile](sigma_val)
+            else:
+                raise ValueError(f"Unknown decay function: {self.decay_function}")
 
         # Check position sizes and adjust before distance calculation
         if len(pre_pos_val) != pre_num:
@@ -714,16 +806,11 @@ class MorphologyDistance(MultiCompartmentConnectivity):
 
         # Calculate distances
         distances = cdist(pre_pos_val, post_pos_val)
+        if distance_unit is not None and not distance_unit.is_unitless:
+            distances = distances * distance_unit
 
-        # Apply decay function
-        if self.decay_function == 'gaussian':
-            probs = np.exp(-distances ** 2 / (2 * sigma_val ** 2))
-        elif self.decay_function == 'exponential':
-            probs = np.exp(-distances / sigma_val)
-        elif self.decay_function == 'linear':
-            probs = np.maximum(0, 1 - distances / sigma_val)
-        else:
-            raise ValueError(f"Unknown decay function: {self.decay_function}")
+        # Connection probability from the distance profile
+        probs = np.asarray(profile.probability(distances))
 
         all_pre_indices = []
         all_post_indices = []
@@ -805,7 +892,8 @@ class MorphologyDistance(MultiCompartmentConnectivity):
             metadata={
                 'pattern': 'morphology_distance',
                 'sigma': self.sigma,
-                'decay_function': self.decay_function
+                # None is the Gaussian default; report it by name as before 0.4.
+                'decay_function': 'gaussian' if self.decay_function is None else self.decay_function
             }
         )
 

@@ -405,3 +405,40 @@ class SafeNormTest(parameterized.TestCase):
         f = jax.jit(lambda x: safe_norm(x, min_norm=1e-8))
         np.testing.assert_allclose(f(jnp.array([3.0, 4.0])), 5.0, atol=1e-6)
         np.testing.assert_allclose(f(jnp.array([0.0, 0.0])), 1e-8, atol=1e-12)
+
+
+class REG6L1LossScalarTest(parameterized.TestCase):
+    """Audit 2026-06-19, REG-6: ``l1_loss`` on 0-d inputs."""
+
+    def test_scalar_input_does_not_crash(self):
+        # REG-6: 0-d inputs previously raised IndexError via logits.shape[0].
+        out = braintools.metric.l1_loss(jnp.array(1.0), jnp.array(1.5))
+        np.testing.assert_allclose(float(out), 0.5, atol=1e-6)
+
+    def test_one_d_input_unchanged(self):
+        out = braintools.metric.l1_loss(jnp.array([1.0, 3.0]), jnp.array([1.5, 2.0]))
+        # per-sample MAE of [|1-1.5|, |3-2|] = [0.5, 1.0]; mean = 0.75
+        np.testing.assert_allclose(float(out), 0.75, atol=1e-6)
+
+
+class INIT1L1LossExportTest(parameterized.TestCase):
+    """Audit 2026-06-19, INIT-1: ``L1Loss`` is exported from ``braintools.metric``."""
+
+    def test_l1loss_importable_from_metric(self):
+        # INIT-1: L1Loss is a documented public class that was missing from
+        # braintools.metric.__all__ / __init__, so the import raised ImportError.
+        from braintools.metric import L1Loss  # noqa: F401
+        self.assertTrue(hasattr(braintools.metric, 'L1Loss'))
+        self.assertIn('L1Loss', braintools.metric.__all__)
+
+    def test_l1loss_update_matches_l1_loss(self):
+        from braintools.metric import L1Loss
+        logits = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        targets = jnp.array([[1.5, 2.5], [2.0, 4.0]])
+        for reduction in ('mean', 'sum', 'none'):
+            crit = L1Loss(reduction)
+            np.testing.assert_allclose(
+                np.asarray(crit.update(logits, targets)),
+                np.asarray(braintools.metric.l1_loss(logits, targets, reduction=reduction)),
+                atol=1e-6,
+            )

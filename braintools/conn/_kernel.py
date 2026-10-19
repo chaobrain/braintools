@@ -29,7 +29,7 @@ import numpy as np
 from brainstate.typing import ArrayLike
 from scipy.spatial.distance import cdist
 
-from braintools.init import param, Initializer
+from braintools.init import param, Initializer, DistanceProfile, GaussianProfile
 from ._base import PointConnectivity, ConnectionResult
 
 __all__ = [
@@ -42,6 +42,65 @@ __all__ = [
     'LaplacianKernel',
     'CustomKernel'
 ]
+
+
+def _gaussian(distances: np.ndarray, sigma) -> np.ndarray:
+    """Evaluate the unit-peak Gaussian ``exp(-d**2 / (2 * sigma**2))``.
+
+    The value comes from :class:`braintools.init.GaussianProfile`, the single
+    implementation of the Gaussian distance profile in ``braintools``.
+
+    Parameters
+    ----------
+    distances : numpy.ndarray
+        Distances as plain numbers, in the same unit as ``sigma``.
+    sigma : float
+        Standard deviation of the Gaussian, a plain positive number.
+
+    Returns
+    -------
+    numpy.ndarray
+        Gaussian values in ``(0, 1]``, with the shape of ``distances``.
+
+    Raises
+    ------
+    ValueError
+        If ``sigma`` is not positive.
+    """
+    return np.asarray(GaussianProfile(sigma).probability(distances))
+
+
+def _difference_of_gaussians(
+    sigma_center,
+    sigma_surround,
+    amplitude_center,
+    amplitude_surround,
+) -> DistanceProfile:
+    """Build the signed difference-of-Gaussians profile used by the DoG kernels.
+
+    The profile is ``amplitude_center * G(sigma_center) - amplitude_surround *
+    G(sigma_surround)``, composed from two :class:`braintools.init.GaussianProfile`
+    instances. :class:`braintools.init.DoGProfile` is not used because it clips
+    negative values to zero (it models a connection probability), while the
+    kernel weights keep their inhibitory surround. For the same reason
+    :class:`MexicanHat` (a DoG with a fixed ratio) does not use
+    :class:`braintools.init.MexicanHatProfile`, which is a clipped Ricker wavelet.
+
+    Parameters
+    ----------
+    sigma_center, sigma_surround : float
+        Standard deviations as plain positive numbers in the distance unit.
+    amplitude_center, amplitude_surround : float
+        Peak amplitudes of the two Gaussians.
+
+    Returns
+    -------
+    DistanceProfile
+        A composed profile whose ``probability(distances)`` returns the signed
+        DoG values.
+    """
+    return (amplitude_center * GaussianProfile(sigma_center)
+            - amplitude_surround * GaussianProfile(sigma_surround))
 
 
 def _same_population(pre_positions, post_positions) -> bool:
@@ -314,6 +373,23 @@ class GaussianKernel(PointConnectivity):
     delay : Initialization, optional
         Delay initialization.
 
+    Raises
+    ------
+    ValueError
+        At generation time, if ``sigma`` is not positive.
+
+    See Also
+    --------
+    braintools.init.GaussianProfile : The distance profile that computes the
+        Gaussian values.
+
+    Notes
+    -----
+    The unnormalized weight between neurons at distance ``d`` is
+    ``exp(-d**2 / (2 * sigma**2))``, evaluated by
+    :class:`braintools.init.GaussianProfile`. Pairs farther apart than
+    ``max_distance`` and weights not above ``1e-6`` are dropped.
+
     Examples
     --------
     .. code-block:: python
@@ -380,12 +456,12 @@ class GaussianKernel(PointConnectivity):
         else:
             max_dist_val = 3 * sigma_val
 
-        # Calculate Gaussian weights
-        gaussian_weights = np.exp(-distances ** 2 / (2 * sigma_val ** 2))
+        # Gaussian weights, from braintools.init.GaussianProfile.
+        gaussian_weights = _gaussian(distances, sigma_val)
 
         if self.normalize:
             # 2-D normalization constant (positions are treated as 2-D).
-            gaussian_weights /= (2 * np.pi * sigma_val ** 2)
+            gaussian_weights = gaussian_weights / (2 * np.pi * sigma_val ** 2)
 
         # Apply distance threshold
         connection_mask = distances <= max_dist_val
@@ -497,6 +573,19 @@ class GaborKernel(PointConnectivity):
     delay : Initialization, optional
         Delay initialization.
 
+    Raises
+    ------
+    ValueError
+        At generation time, if ``sigma`` is not positive.
+
+    Notes
+    -----
+    For a pre neuron at offset ``(dx, dy)`` from a post neuron, the weight is
+    ``G(r) * cos(2 * pi * frequency * x_rot + phase)``, where ``r`` is the
+    distance, ``x_rot = dx * cos(theta) + dy * sin(theta)`` and the Gaussian
+    envelope ``G`` is evaluated by :class:`braintools.init.GaussianProfile`.
+    Weights whose magnitude is not above ``1e-3`` are dropped.
+
     Examples
     --------
     .. code-block:: python
@@ -584,6 +673,10 @@ class GaborKernel(PointConnectivity):
         cos_theta = np.cos(self.theta)
         sin_theta = np.sin(self.theta)
 
+        # The Gaussian envelope is radially symmetric, so it is evaluated on the
+        # (rotation-invariant) distance through braintools.init.GaussianProfile.
+        envelope_profile = GaussianProfile(sigma_val)
+
         # For each post neuron
         for post_idx in range(post_num):
             post_pos = post_pos_val[post_idx]
@@ -592,31 +685,27 @@ class GaborKernel(PointConnectivity):
             rel_pos = pre_pos_val - post_pos
             distances = np.sqrt(np.sum(rel_pos ** 2, axis=1))
 
-            # Filter by max distance
-            in_range = distances <= max_dist_val
-            candidate_pre = np.where(in_range)[0]
+            # Filter by max distance, dropping the autapse within one population.
+            candidate_pre = np.where(distances <= max_dist_val)[0]
+            if same_population:
+                candidate_pre = candidate_pre[candidate_pre != post_idx]
+            if candidate_pre.size == 0:
+                continue
 
-            for pre_idx in candidate_pre:
-                if same_population and pre_idx == post_idx:
-                    continue
+            # Rotated coordinate along the carrier wave.
+            x_rot = rel_pos[candidate_pre, 0] * cos_theta + rel_pos[candidate_pre, 1] * sin_theta
 
-                dx = rel_pos[pre_idx, 0]
-                dy = rel_pos[pre_idx, 1]
+            # Gabor function: Gaussian envelope times sinusoidal carrier.
+            envelope = np.asarray(envelope_profile.probability(distances[candidate_pre]))
+            sinusoid = np.cos(2 * np.pi * self.frequency * x_rot + self.phase)
+            gabor_vals = envelope * sinusoid
 
-                # Rotate coordinates
-                x_rot = dx * cos_theta + dy * sin_theta
-                y_rot = -dx * sin_theta + dy * cos_theta
-
-                # Calculate Gabor function
-                gaussian = np.exp(-(x_rot ** 2 + y_rot ** 2) / (2 * sigma_val ** 2))
-                sinusoid = np.cos(2 * np.pi * self.frequency * x_rot + self.phase)
-                gabor_val = gaussian * sinusoid
-
-                # Prune cutoff: 1e-3 (magnitude).
-                if np.abs(gabor_val) > 1e-3:
-                    pre_indices.append(pre_idx)
-                    post_indices.append(post_idx)
-                    gabor_weights.append(gabor_val)
+            # Prune cutoff: 1e-3 (magnitude).
+            keep = np.abs(gabor_vals) > 1e-3
+            n_keep = int(np.count_nonzero(keep))
+            pre_indices.extend(candidate_pre[keep].tolist())
+            post_indices.extend([post_idx] * n_keep)
+            gabor_weights.extend(gabor_vals[keep].tolist())
 
         metadata = {
             'pattern': 'gabor_kernel',
@@ -725,6 +814,20 @@ class DoGKernel(PointConnectivity):
     delay : Initialization, optional
         Delay initialization.
 
+    Raises
+    ------
+    ValueError
+        At generation time, if either sigma is not positive.
+
+    Notes
+    -----
+    The weight at distance ``d`` is
+    ``amplitude_center * G_c(d) - amplitude_surround * G_s(d)``, where ``G_c``
+    and ``G_s`` are unit-peak :class:`braintools.init.GaussianProfile`
+    instances. Unlike :class:`braintools.init.DoGProfile`, negative values are
+    kept, so the surround is inhibitory. Weights whose magnitude is not above
+    ``1e-4`` are dropped.
+
     Examples
     --------
     .. code-block:: python
@@ -791,10 +894,11 @@ class DoGKernel(PointConnectivity):
         else:
             max_dist_val = 3 * sigma_s_val
 
-        # Calculate DoG weights
-        center_gauss = self.amplitude_center * np.exp(-distances ** 2 / (2 * sigma_c_val ** 2))
-        surround_gauss = self.amplitude_surround * np.exp(-distances ** 2 / (2 * sigma_s_val ** 2))
-        dog_weights = center_gauss - surround_gauss
+        # Signed DoG weights, composed from two braintools.init.GaussianProfile.
+        dog_profile = _difference_of_gaussians(
+            sigma_c_val, sigma_s_val, self.amplitude_center, self.amplitude_surround
+        )
+        dog_weights = np.asarray(dog_profile.probability(distances))
 
         # Apply distance threshold
         connection_mask = distances <= max_dist_val
@@ -888,6 +992,14 @@ class MexicanHat(DoGKernel):
         Weight initialization.
     delay : Initialization, optional
         Delay initialization.
+
+    Notes
+    -----
+    The weight at distance ``d`` is ``2 * G(d; sigma) - G(d; sqrt(2) * sigma)``
+    with unit-peak Gaussians from :class:`braintools.init.GaussianProfile`
+    (see :class:`DoGKernel`). This is not
+    :class:`braintools.init.MexicanHatProfile`, which is a Ricker wavelet
+    clipped at zero.
 
     Examples
     --------

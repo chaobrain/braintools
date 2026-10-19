@@ -12,7 +12,9 @@ Neural Visualization
 --------------------
 
 High-level helpers that focus on spike trains, trajectories, and other neural
-recordings.
+recordings. ``spike_raster``, ``spike_histogram``, ``isi_distribution``,
+``interactive_spike_raster`` and ``raster_plot`` also accept a
+:class:`braintools.spike.SpikeTrains` as their first argument.
 
 .. autosummary::
    :toctree: generated/

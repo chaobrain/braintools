@@ -31,6 +31,8 @@ import unittest
 
 import brainunit as u
 import numpy as np
+import pytest
+from scipy.spatial.distance import cdist
 
 from braintools.conn import (
     Conv2dKernel,
@@ -1861,6 +1863,224 @@ class TestKernelRegressions(unittest.TestCase):
             pre_positions=pre, post_positions=post2,
         )
         self.assertEqual(result2.n_connections, 1)
+
+
+# ---------------------------------------------------------------------------
+# C4 (v0.4): the distance kernels are computed through the ``braintools.init``
+# distance profiles. These tests pin the outputs to the closed-form formulas
+# the kernels used before that refactor, re-implemented below verbatim, so any
+# numerical drift beyond floating-point round-off is caught.
+# ---------------------------------------------------------------------------
+
+# Round-off budget: the profiles evaluate ``exp(-0.5 * (d / s) ** 2)`` where the
+# old code evaluated ``exp(-d ** 2 / (2 * s ** 2))``; the two differ by at most
+# a couple of ULPs. Connection sets must match exactly.
+_RTOL = 1e-12
+_ATOL = 1e-14
+
+
+def _ref_gaussian(pre, post, sigma, max_distance=None, normalize=True, same_population=True):
+    """Old ``GaussianKernel`` closed form (plain numbers in the position unit)."""
+    distances = cdist(pre[:, :2], post[:, :2])
+    max_dist = 3 * sigma if max_distance is None else max_distance
+    w = np.exp(-distances ** 2 / (2 * sigma ** 2))
+    if normalize:
+        w /= (2 * np.pi * sigma ** 2)
+    mask = distances <= max_dist
+    if same_population:
+        np.fill_diagonal(mask, False)
+    w = w * mask
+    i, j = np.where(w > 1e-6)
+    return i, j, w[i, j]
+
+
+def _ref_dog(pre, post, sigma_c, sigma_s, amp_c, amp_s, max_distance=None, same_population=True):
+    """Old ``DoGKernel`` closed form (plain numbers in the position unit)."""
+    distances = cdist(pre[:, :2], post[:, :2])
+    max_dist = 3 * sigma_s if max_distance is None else max_distance
+    center = amp_c * np.exp(-distances ** 2 / (2 * sigma_c ** 2))
+    surround = amp_s * np.exp(-distances ** 2 / (2 * sigma_s ** 2))
+    w = center - surround
+    mask = distances <= max_dist
+    if same_population:
+        np.fill_diagonal(mask, False)
+    w = w * mask
+    i, j = np.where(np.abs(w) > 1e-4)
+    return i, j, w[i, j]
+
+
+def _ref_gabor(pre, post, sigma, frequency, theta, phase=0.0, max_distance=None, same_population=True):
+    """Old ``GaborKernel`` closed form (plain numbers in the position unit)."""
+    pre = pre[:, :2]
+    post = post[:, :2]
+    max_dist = 3 * sigma if max_distance is None else max_distance
+    cos_t, sin_t = np.cos(theta), np.sin(theta)
+    out_i, out_j, out_w = [], [], []
+    for j in range(post.shape[0]):
+        rel = pre - post[j]
+        dist = np.sqrt(np.sum(rel ** 2, axis=1))
+        for i in np.where(dist <= max_dist)[0]:
+            if same_population and i == j:
+                continue
+            dx, dy = rel[i, 0], rel[i, 1]
+            x_rot = dx * cos_t + dy * sin_t
+            y_rot = -dx * sin_t + dy * cos_t
+            g = np.exp(-(x_rot ** 2 + y_rot ** 2) / (2 * sigma ** 2))
+            val = g * np.cos(2 * np.pi * frequency * x_rot + phase)
+            if np.abs(val) > 1e-3:
+                out_i.append(i)
+                out_j.append(j)
+                out_w.append(val)
+    return np.array(out_i, dtype=np.int64), np.array(out_j, dtype=np.int64), np.array(out_w)
+
+
+def _sorted_triplets(pre_idx, post_idx, weights):
+    pre_idx = np.asarray(pre_idx)
+    post_idx = np.asarray(post_idx)
+    weights = np.asarray(u.get_mantissa(weights), dtype=np.float64)
+    order = np.lexsort((post_idx, pre_idx))
+    return pre_idx[order], post_idx[order], weights[order]
+
+
+def _assert_matches_reference(result, ref, weight_scale=1.0):
+    pre_r, post_r, w_r = _sorted_triplets(*ref)
+    pre_a, post_a, w_a = _sorted_triplets(result.pre_indices, result.post_indices, result.weights)
+    assert len(pre_r) > 0, 'reference produced no connections; pick other parameters'
+    np.testing.assert_array_equal(pre_a, pre_r)
+    np.testing.assert_array_equal(post_a, post_r)
+    np.testing.assert_allclose(w_a, w_r * weight_scale, rtol=_RTOL, atol=_ATOL)
+
+
+def _positions(n=40, low=0.0, high=100.0, dims=2, seed=0):
+    return np.random.RandomState(seed).uniform(low, high, (n, dims))
+
+
+class TestGaussianKernelProfileEquivalence:
+    """``GaussianKernel`` through ``GaussianProfile`` matches the old closed form."""
+
+    def test_unitless_normalized_default_cutoff(self):
+        pos = _positions()
+        result = GaussianKernel(sigma=15.0)(
+            pre_size=40, post_size=40, pre_positions=pos, post_positions=pos)
+        _assert_matches_reference(result, _ref_gaussian(pos, pos, 15.0))
+
+    def test_quantity_unnormalized_with_max_distance_and_weight(self):
+        pos = _positions(seed=1)
+        result = GaussianKernel(
+            sigma=20.0 * u.um, max_distance=50.0 * u.um, normalize=False,
+            weight=Constant(2.0 * u.nS),
+        )(pre_size=40, post_size=40, pre_positions=pos * u.um, post_positions=pos * u.um)
+        assert u.get_unit(result.weights) == u.nS
+        _assert_matches_reference(
+            result, _ref_gaussian(pos, pos, 20.0, max_distance=50.0, normalize=False),
+            weight_scale=2.0,
+        )
+
+    def test_sigma_in_other_unit_than_positions(self):
+        # Positions in mm, sigma in um: sigma is converted to the position unit.
+        pos = _positions(high=0.1, seed=2)
+        result = GaussianKernel(sigma=15.0 * u.um)(
+            pre_size=40, post_size=40, pre_positions=pos * u.mm, post_positions=pos * u.mm)
+        sigma_mm = u.Quantity(15.0 * u.um).to(u.mm).mantissa
+        _assert_matches_reference(result, _ref_gaussian(pos, pos, sigma_mm))
+
+    def test_distinct_populations_3d_positions(self):
+        pre = _positions(n=30, dims=3, seed=3)
+        post = _positions(n=25, dims=3, seed=4)
+        result = GaussianKernel(sigma=12.0, max_distance=40.0)(
+            pre_size=30, post_size=25, pre_positions=pre, post_positions=post)
+        _assert_matches_reference(
+            result, _ref_gaussian(pre, post, 12.0, max_distance=40.0, same_population=False))
+
+    def test_closed_form_value_at_one_sigma(self):
+        pre = np.array([[0.0, 0.0]]) * u.um
+        post = np.array([[10.0, 0.0]]) * u.um
+        result = GaussianKernel(sigma=10.0 * u.um)(
+            pre_size=1, post_size=1, pre_positions=pre, post_positions=post)
+        expected = np.exp(-0.5) / (2 * np.pi * 10.0 ** 2)
+        np.testing.assert_allclose(np.asarray(result.weights), [expected], rtol=1e-14)
+
+
+class TestDoGKernelProfileEquivalence:
+    """``DoGKernel`` / ``MexicanHat`` through Gaussian profiles match the old closed form."""
+
+    def test_quantity_default_amplitudes(self):
+        pos = _positions(seed=5)
+        result = DoGKernel(sigma_center=10.0 * u.um, sigma_surround=25.0 * u.um)(
+            pre_size=40, post_size=40, pre_positions=pos * u.um, post_positions=pos * u.um)
+        ref = _ref_dog(pos, pos, 10.0, 25.0, 1.0, 0.8)
+        _assert_matches_reference(result, ref)
+        # The inhibitory surround is kept (signed weights), unlike DoGProfile.
+        assert np.any(np.asarray(result.weights) < 0)
+
+    def test_unitless_custom_amplitudes_max_distance_weight(self):
+        pos = _positions(seed=6)
+        result = DoGKernel(
+            sigma_center=8.0, sigma_surround=20.0, amplitude_center=1.5,
+            amplitude_surround=0.5, max_distance=45.0, weight=Constant(3.0),
+        )(pre_size=40, post_size=40, pre_positions=pos, post_positions=pos)
+        _assert_matches_reference(
+            result, _ref_dog(pos, pos, 8.0, 20.0, 1.5, 0.5, max_distance=45.0), weight_scale=3.0)
+
+    def test_mexican_hat_quantity(self):
+        pos = _positions(seed=7)
+        result = MexicanHat(sigma=12.0 * u.um)(
+            pre_size=40, post_size=40, pre_positions=pos * u.um, post_positions=pos * u.um)
+        ref = _ref_dog(pos, pos, 12.0, 12.0 * np.sqrt(2), 2.0, 1.0, max_distance=48.0)
+        _assert_matches_reference(result, ref)
+        assert np.any(np.asarray(result.weights) < 0)
+
+    def test_mexican_hat_unitless_max_distance(self):
+        pos = _positions(seed=8)
+        result = MexicanHat(sigma=8.0, max_distance=30.0)(
+            pre_size=40, post_size=40, pre_positions=pos, post_positions=pos)
+        _assert_matches_reference(
+            result, _ref_dog(pos, pos, 8.0, 8.0 * np.sqrt(2), 2.0, 1.0, max_distance=30.0))
+
+
+class TestGaborKernelProfileEquivalence:
+    """The Gaussian envelope of ``GaborKernel`` goes through ``GaussianProfile``."""
+
+    def test_quantity_oblique(self):
+        pos = _positions(seed=9)
+        result = GaborKernel(sigma=20.0 * u.um, frequency=0.05, theta=np.pi / 4)(
+            pre_size=40, post_size=40, pre_positions=pos * u.um, post_positions=pos * u.um)
+        _assert_matches_reference(result, _ref_gabor(pos, pos, 20.0, 0.05, np.pi / 4))
+
+    def test_unitless_phase_max_distance_weight(self):
+        pos = _positions(seed=10)
+        result = GaborKernel(
+            sigma=10.0, frequency=0.1, theta=0.3, phase=np.pi / 2,
+            max_distance=25.0, weight=Constant(0.5),
+        )(pre_size=40, post_size=40, pre_positions=pos, post_positions=pos)
+        _assert_matches_reference(
+            result, _ref_gabor(pos, pos, 10.0, 0.1, 0.3, phase=np.pi / 2, max_distance=25.0),
+            weight_scale=0.5)
+
+    def test_distinct_populations(self):
+        pre = _positions(n=20, seed=11)
+        post = _positions(n=15, seed=12)
+        result = GaborKernel(sigma=15.0, frequency=0.03, theta=1.0)(
+            pre_size=20, post_size=15, pre_positions=pre, post_positions=post)
+        _assert_matches_reference(
+            result, _ref_gabor(pre, post, 15.0, 0.03, 1.0, same_population=False))
+
+
+class TestKernelNonPositiveSigma:
+    """The Gaussian profile rejects a non-positive width at generation time."""
+
+    @pytest.mark.parametrize('make', [
+        lambda s: GaussianKernel(sigma=s, max_distance=50.0),
+        lambda s: GaborKernel(sigma=s, frequency=0.05, theta=0.0, max_distance=50.0),
+        lambda s: DoGKernel(sigma_center=s, sigma_surround=20.0, max_distance=50.0),
+        lambda s: DoGKernel(sigma_center=5.0, sigma_surround=s, max_distance=50.0),
+        lambda s: MexicanHat(sigma=s, max_distance=50.0),
+    ])
+    @pytest.mark.parametrize('sigma', [0.0, -10.0])
+    def test_raises(self, make, sigma):
+        pos = _positions(n=10)
+        with pytest.raises(ValueError, match='sigma'):
+            make(sigma)(pre_size=10, post_size=10, pre_positions=pos, post_positions=pos)
 
 
 if __name__ == '__main__':

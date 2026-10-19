@@ -4,43 +4,38 @@
 .. currentmodule:: braintools
 .. automodule:: braintools
 
-BrainTools aggregates reusable building blocks for spiking neural computations,
-including encoders, spike arithmetic utilities, and parameter transforms.
+The top-level ``braintools`` namespace exposes the subpackages (``braintools.conn``,
+``braintools.spike``, ``braintools.analysis``, ...) together with the
+spike-operation aliases and the deprecated encoder aliases listed below.
 
-Spike Encoders
---------------
+Spike Encoders (moved)
+----------------------
 
-Encoders that convert continuous-valued signals or event streams into spike
-trains suitable for spiking network simulations.
+Since 0.4.0 the spike encoders live in :mod:`braintools.spike`:
+``braintools.spike.LatencyEncoder``, ``braintools.spike.RateEncoder``,
+``braintools.spike.PoissonEncoder``, ``braintools.spike.PopulationEncoder``,
+``braintools.spike.BernoulliEncoder``, ``braintools.spike.DeltaEncoder``,
+``braintools.spike.StepCurrentEncoder``, ``braintools.spike.SpikeCountEncoder``,
+``braintools.spike.TemporalEncoder`` and ``braintools.spike.RankOrderEncoder``
+(see :doc:`spike`).
 
-.. autosummary::
-    :toctree: generated/
-    :nosignatures:
-    :template: classtemplate.rst
-
-    LatencyEncoder
-    RateEncoder
-    PoissonEncoder
-    PopulationEncoder
-    BernoulliEncoder
-    DeltaEncoder
-    StepCurrentEncoder
-    SpikeCountEncoder
-    TemporalEncoder
-    RankOrderEncoder
-
+The top-level names (``braintools.LatencyEncoder`` and so on) are deprecated
+aliases: they still work, but instantiating one emits a
+``BraintoolsDeprecationWarning``. They will be removed in 1.0.0.
 
 
 Spike Operations
 ----------------
 
 Vectorized boolean and arithmetic helpers for manipulating spike trains and
-combining encoder outputs.
+combining encoder outputs. They are implemented in :mod:`braintools.spike`
+under shorter names (``spike_bitwise_or`` is ``braintools.spike.bitwise_or``,
+``spike_bitwise`` is ``braintools.spike.bitwise``, and so on); the top-level
+names below are kept as aliases of those functions and do not warn.
 
 .. autosummary::
     :toctree: generated/
     :nosignatures:
-    :template: classtemplate.rst
 
     spike_bitwise_or
     spike_bitwise_and
@@ -49,4 +44,3 @@ combining encoder outputs.
     spike_bitwise_xor
     spike_bitwise_ixor
     spike_bitwise
-

@@ -29,7 +29,6 @@ import brainunit as u
 import numpy as np
 
 from braintools._misc import set_module_as
-from ._deprecation import create_deprecated_function
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -598,11 +597,3 @@ def ramp(
     cc = np.linspace(c_start, c_end, p2 - p1)
     current[p1: p2] = cc
     return u.maybe_decimal(current * c_unit)
-
-
-section_input = create_deprecated_function(section, 'section_input', 'section')
-constant_input = create_deprecated_function(constant, 'constant_input', 'constant')
-step_input = create_deprecated_function(step, 'step_input', 'step')
-ramp_input = create_deprecated_function(ramp, 'ramp_input', 'ramp')
-
-__all__.extend(['section', 'constant', 'step', 'ramp'])

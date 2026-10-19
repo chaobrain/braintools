@@ -19,12 +19,19 @@ import os
 import tempfile
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 import brainstate
 import braintools
 import braintools.file as bf
-
+from braintools._deprecation import BraintoolsDeprecationWarning
+from braintools.trainer import DataLoader, LightningModule, Trainer
+from braintools.trainer._progress import (
+    RichProgressBarWrapper,
+    SimpleProgressBar,
+    TQDMProgressBarWrapper,
+)
 from braintools.trainer._callbacks import (
     Callback,
     CallbackList,
@@ -133,6 +140,37 @@ class DummyOptPlainFloat:
 
     def __init__(self, value):
         self.lr = value
+
+
+# Real model + loader for end-to-end ModelCheckpoint tests (trainer audit T-B).
+class _Net(LightningModule):
+    def __init__(self):
+        super().__init__()
+        self.l = brainstate.nn.Linear(4, 2)
+
+    def __call__(self, x):
+        return self.l(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        loss = jnp.mean((self(x) - y) ** 2)
+        self.log('train_loss', loss, prog_bar=True)
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        loss = jnp.mean((self(x) - y) ** 2)
+        self.log('val_loss', loss)
+        return {'val_loss': loss}
+
+    def configure_optimizers(self):
+        return braintools.optim.Adam(lr=1e-3)
+
+
+def _random_loader(n=16, bs=4):
+    x = jnp.asarray(np.random.randn(n, 4).astype('float32'))
+    y = jnp.asarray(np.random.randn(n, 2).astype('float32'))
+    return DataLoader((x, y), batch_size=bs)
 
 
 # ---------------------------------------------------------------------------
@@ -727,25 +765,72 @@ class TestLearningRateMonitor:
 
 
 # ---------------------------------------------------------------------------
+# T-B: ModelCheckpoint must not leave more than save_top_k files on disk
+# ---------------------------------------------------------------------------
+
+class TestModelCheckpointTopK:
+    def test_save_top_k_enforced_on_disk(self):
+        with tempfile.TemporaryDirectory() as d:
+            class _Worsening(_Net):
+                def validation_step(self, batch, batch_idx):
+                    # val_loss strictly increases with epoch -> later epochs worse.
+                    loss = jnp.asarray(float(self.current_epoch + 1))
+                    self.log('val_loss', loss)
+                    return {'val_loss': loss}
+
+            mc = ModelCheckpoint(
+                dirpath=d, monitor='val_loss', mode='min', save_top_k=2,
+                save_last=False, filename='ck-{epoch:02d}',
+            )
+            trainer = Trainer(
+                max_epochs=6, logger=False, enable_progress_bar=False,
+                enable_checkpointing=False, callbacks=[mc],
+                check_val_every_n_epoch=1,
+            )
+            trainer.fit(_Worsening(), _random_loader(), _random_loader())
+
+            files = sorted(f for f in os.listdir(d) if f.endswith('.ckpt'))
+            assert len(files) == 2, f"save_top_k=2 but found {files}"
+            # The two best (lowest val_loss) are epochs 0 and 1.
+            assert files == ['ck-00.ckpt', 'ck-01.ckpt']
+            assert len(mc.best_k_models) == 2
+
+
+# ---------------------------------------------------------------------------
 # GradientClipCallback
 # ---------------------------------------------------------------------------
 
 class TestGradientClipCallback:
+    """The no-op callback is deprecated (v0.4); every construction warns."""
+
+    def test_construction_warns(self):
+        with pytest.warns(BraintoolsDeprecationWarning, match='GradientClipCallback') as record:
+            GradientClipCallback(clip_val=1.0)
+        assert len(record) == 1
+        message = str(record[0].message)
+        assert 'Trainer(gradient_clip_val=...)' in message
+        assert '0.4.0' in message and '1.0.0' in message
+
     def test_init_valid_algorithms(self):
-        assert GradientClipCallback(clip_val=1.0, clip_algorithm='norm').clip_algorithm == 'norm'
-        assert GradientClipCallback(clip_val=1.0, clip_algorithm='value').clip_algorithm == 'value'
+        with pytest.warns(BraintoolsDeprecationWarning):
+            assert GradientClipCallback(clip_val=1.0, clip_algorithm='norm').clip_algorithm == 'norm'
+        with pytest.warns(BraintoolsDeprecationWarning):
+            assert GradientClipCallback(clip_val=1.0, clip_algorithm='value').clip_algorithm == 'value'
 
     def test_invalid_algorithm_raises(self):
-        with pytest.raises(ValueError, match="clip_algorithm must be"):
-            GradientClipCallback(clip_algorithm='bogus')
+        with pytest.warns(BraintoolsDeprecationWarning):
+            with pytest.raises(ValueError, match="clip_algorithm must be"):
+                GradientClipCallback(clip_algorithm='bogus')
 
     def test_hook_with_clip_val(self):
-        cb = GradientClipCallback(clip_val=1.0, log_grad_norm=True)
+        with pytest.warns(BraintoolsDeprecationWarning):
+            cb = GradientClipCallback(clip_val=1.0, log_grad_norm=True)
         # No-op body but must run cleanly.
         cb.on_before_optimizer_step(None, None, None)
 
     def test_hook_without_clip_val_returns_early(self):
-        cb = GradientClipCallback(clip_val=None)
+        with pytest.warns(BraintoolsDeprecationWarning):
+            cb = GradientClipCallback(clip_val=None)
         cb.on_before_optimizer_step(None, None, None)
 
 
@@ -857,9 +942,64 @@ class TestTQDMProgressBar:
         trainer = FakeTrainer()  # no train_dataloader attr -> total=None
         cb.on_train_epoch_start(trainer, model)
         assert cb._pbar is not None
-        # tqdm raises on bool() when total is None, so the callback's own
-        # on_train_epoch_end cannot be exercised for this case; close manually.
         cb._pbar.close()
+
+    def test_delegates_to_wrapper(self):
+        cb = TQDMProgressBar(refresh_rate=2, process_position=1, leave=False)
+        model = FakeModule(current_epoch=3)
+        model._prog_bar = {'loss': 0.25}
+        trainer = FakeTrainer(train_dataloader=[0] * 4)
+        cb.on_train_epoch_start(trainer, model)
+        assert isinstance(cb._pbar, TQDMProgressBarWrapper)
+        bar = cb._pbar._pbar  # the underlying tqdm instance
+        assert bar.total == 4
+        assert bar.desc == 'Epoch 3'
+        assert cb._pbar._kwargs == {'position': 1, 'leave': False}
+        assert bar.leave is False
+        for i in range(4):
+            cb.on_train_batch_end(trainer, model, None, None, i)
+        # refresh_rate=2: updates on batches 0 and 2, advancing by 2 each.
+        assert bar.n == 4
+        assert 'loss' in bar.postfix
+        cb.on_train_epoch_end(trainer, model)
+        assert cb._pbar is None
+
+    def test_epoch_end_with_unknown_total(self):
+        # tqdm's bool() raises when total is None; the callback must not rely on it.
+        cb = TQDMProgressBar()
+        model = FakeModule(current_epoch=0)
+        trainer = FakeTrainer()
+        cb.on_train_epoch_start(trainer, model)
+        cb.on_train_batch_end(trainer, model, None, None, 0)
+        cb.on_train_epoch_end(trainer, model)
+        assert cb._pbar is None
+
+    def test_empty_dataloader_bar_is_closed(self):
+        # total=0 makes a tqdm bar falsy; it must still be closed.
+        cb = TQDMProgressBar()
+        model = FakeModule(current_epoch=0)
+        trainer = FakeTrainer(train_dataloader=[])
+        cb.on_train_epoch_start(trainer, model)
+        assert cb._pbar is not None
+        cb.on_train_epoch_end(trainer, model)
+        assert cb._pbar is None
+
+    def test_missing_tqdm_warns_and_disables(self, monkeypatch):
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == 'tqdm' or name.startswith('tqdm.'):
+                raise ImportError(name)
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', fake_import)
+        cb = TQDMProgressBar()
+        with pytest.warns(UserWarning, match='tqdm package not installed'):
+            cb.on_train_epoch_start(FakeTrainer(train_dataloader=[0]), FakeModule())
+        assert cb._pbar is None
+        cb.on_train_batch_end(None, FakeModule(), None, None, 0)
+        cb.on_train_epoch_end(None, FakeModule())
 
 
 class TestRichProgressBar:
@@ -891,6 +1031,45 @@ class TestRichProgressBar:
         trainer = FakeTrainer()  # no train_dataloader
         cb.on_train_epoch_start(trainer, model)
         cb.on_train_epoch_end(trainer, model)
+
+    @pytest.mark.parametrize('leave', [False, True])
+    def test_delegates_to_wrapper(self, leave):
+        cb = RichProgressBar(refresh_rate=2, leave=leave)
+        model = FakeModule(current_epoch=5)
+        trainer = FakeTrainer(train_dataloader=[0] * 4)
+        cb.on_train_epoch_start(trainer, model)
+        assert isinstance(cb._progress, RichProgressBarWrapper)
+        progress = cb._progress._progress  # the underlying rich Progress
+        task = progress.tasks[0]
+        assert task.total == 4
+        assert task.description == 'Epoch 5'
+        # ``leave=False`` makes the rich display transient.
+        assert progress.live.transient is (not leave)
+        for i in range(4):
+            cb.on_train_batch_end(trainer, model, None, None, i)
+        assert task.completed == 4
+        cb.on_train_epoch_end(trainer, model)
+        assert cb._progress is None
+
+    def test_missing_rich_warns_and_falls_back(self, monkeypatch, capsys):
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == 'rich' or name.startswith('rich.'):
+                raise ImportError(name)
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', fake_import)
+        cb = RichProgressBar()
+        trainer = FakeTrainer(train_dataloader=[0, 0])
+        with pytest.warns(UserWarning, match='rich package not installed'):
+            cb.on_train_epoch_start(trainer, FakeModule())
+        assert isinstance(cb._progress._progress, SimpleProgressBar)
+        cb.on_train_batch_end(trainer, FakeModule(), None, None, 0)
+        cb.on_train_epoch_end(trainer, FakeModule())
+        assert cb._progress is None
+        assert 'Epoch 0' in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------

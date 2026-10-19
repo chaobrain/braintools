@@ -13,8 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 
+import brainunit as u
 import numpy as np
 
+# The spike-format helpers live in ``braintools.spike``; they are re-exported
+# here for the plotting functions.
+from braintools.spike._convert import flatten_spikes, inter_spike_intervals  # noqa: F401
+from braintools.spike._spike_trains import SpikeTrains
 from braintools.tree import as_numpy
 
 
@@ -28,35 +33,78 @@ def as_array(x):
     return np.asarray(as_numpy(x))
 
 
+def is_spike_trains(x):
+    """Whether ``x`` is a :class:`braintools.spike.SpikeTrains`."""
+    return isinstance(x, SpikeTrains)
 
-def flatten_spikes(spike_times, neuron_ids=None):
-    """Flatten spike-time input into ``(times, ids)`` arrays.
 
-    Accepted formats:
+def spike_trains_events(spike_trains, neuron_ids=None, unit=None):
+    """Flatten a :class:`~braintools.spike.SpikeTrains` for plotting.
 
-    - a list (or tuple) of arrays, one spike train per neuron (``neuron_ids``
-      is then ignored); a list of numbers is a single train;
-    - a flat array of spike times with matching ``neuron_ids``;
-    - a flat array without ``neuron_ids``: a single train (ids all 0).
+    Parameters
+    ----------
+    spike_trains : SpikeTrains
+        The spike trains (concrete, not traced).
+    neuron_ids : None
+        Must be None: a ``SpikeTrains`` already carries the neuron indices.
+    unit : brainunit.Unit, optional
+        Unit to express the times in, when the trains carry units. Defaults
+        to the trains' own unit.
+
+    Returns
+    -------
+    times : numpy.ndarray
+        Spike times as plain numbers, sorted.
+    ids : numpy.ndarray
+        Neuron index of every spike.
+    unit : brainunit.Unit or None
+        The unit of ``times``, or None for unitless trains.
+
+    Raises
+    ------
+    ValueError
+        If ``neuron_ids`` is given.
     """
-    if isinstance(spike_times, (list, tuple)) and neuron_ids is None:
-        if all(np.ndim(t) == 0 for t in spike_times):
-            times = as_array(spike_times).ravel()
-            return times, np.zeros(len(times), dtype=int)
-        trains = [as_array(t).ravel() for t in spike_times]
-        times = np.concatenate(trains) if trains else np.zeros(0)
-        ids = np.concatenate([np.full(len(t), i, dtype=int) for i, t in enumerate(trains)]) if trains else np.zeros(0, int)
-        return times, ids
-    times = as_array(spike_times).ravel()
-    if neuron_ids is None:
-        return times, np.zeros(len(times), dtype=int)
-    ids = as_array(neuron_ids).ravel()
-    if len(ids) != len(times):
-        raise ValueError(f"neuron_ids has {len(ids)} entries but there are {len(times)} spike times.")
-    return times, ids
+    if neuron_ids is not None:
+        raise ValueError('neuron_ids must be None when spike_times is a SpikeTrains; '
+                         'the SpikeTrains already holds the neuron indices.')
+    times, ids = spike_trains.to_events()
+    if isinstance(times, u.Quantity):
+        unit = times.unit if unit is None else unit
+        times = times.to_decimal(unit)
+    else:
+        unit = None
+    return np.asarray(times), np.asarray(ids), unit
 
 
-def inter_spike_intervals(times, ids):
-    """Inter-spike intervals computed within each neuron (spike times sorted)."""
-    isis = [np.diff(np.sort(times[ids == i])) for i in np.unique(ids)]
-    return np.concatenate(isis) if isis else np.zeros(0)
+def in_time_unit(value, unit):
+    """Express a time value (or tuple of them) as plain numbers in ``unit``.
+
+    Parameters
+    ----------
+    value : float, Quantity, tuple, list or None
+        A time, or a tuple or list of times such as ``time_range``. Plain numbers are
+        returned unchanged (they are taken to be in ``unit`` already).
+    unit : brainunit.Unit or None
+        The unit of the plotted spike times, or None when they are unitless.
+
+    Returns
+    -------
+    float, tuple or None
+        ``value`` with every Quantity converted to a number in ``unit``.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` holds a Quantity but the spike times are unitless.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (tuple, list)):
+        return tuple(in_time_unit(v, unit) for v in value)
+    if isinstance(value, u.Quantity):
+        if unit is None:
+            raise ValueError(f'Got the Quantity {value} but the spike times are unitless; '
+                             f'pass a plain number instead.')
+        return float(value.to_decimal(unit))
+    return value

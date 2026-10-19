@@ -1,7 +1,11 @@
 -r requirements.txt
 nevergrad
 matplotlib
+tqdm
+rich
+pyyaml
 
 # test requirements
 pytest
+pytest-cov
 absl-py

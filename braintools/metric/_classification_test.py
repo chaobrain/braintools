@@ -835,3 +835,14 @@ class AssertDtypeHelpersTest(parameterized.TestCase):
         labels = np.array([0, 1], dtype=np.int32)
         braintools.metric.softmax_cross_entropy_with_integer_labels(logits, labels)
         np.testing.assert_array_equal(logits, original)
+
+
+class CLS2SigmoidBCEListInputsTest(parameterized.TestCase):
+    """Audit 2026-06-19, CLS-2: list inputs to ``sigmoid_binary_cross_entropy``."""
+
+    def test_list_inputs_accepted(self):
+        # CLS-2: list inputs previously raised AttributeError on .astype/.dtype.
+        out = braintools.metric.sigmoid_binary_cross_entropy([1.0, -1.0], [1.0, 0.0])
+        ref = braintools.metric.sigmoid_binary_cross_entropy(
+            jnp.array([1.0, -1.0]), jnp.array([1.0, 0.0]))
+        np.testing.assert_allclose(np.asarray(out), np.asarray(ref), atol=1e-6)

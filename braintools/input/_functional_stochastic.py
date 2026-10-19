@@ -26,7 +26,6 @@ import brainunit as u
 import numpy as np
 
 from braintools._misc import set_module_as
-from ._deprecation import create_deprecated_function
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -538,8 +537,3 @@ def poisson(
     currents[i_start:i_end] = spike_values
 
     return u.maybe_decimal(currents * c_unit)
-
-
-poisson_input = create_deprecated_function(poisson, 'poisson_input', 'poisson')
-
-__all__.append('poisson')

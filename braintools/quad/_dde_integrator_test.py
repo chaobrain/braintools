@@ -17,8 +17,11 @@
 import math
 
 import brainstate
+import brainunit as u
 import jax.numpy as jnp
 import jax.tree
+import numpy as np
+import pytest
 
 import braintools
 
@@ -204,3 +207,120 @@ def test_dde_linear_stability():
         # Higher-order methods should be different from Euler
         assert abs(y_heun - y_euler) > 1e-10
         assert abs(y_rk4 - y_euler) > 1e-10
+
+
+# ==============================================================================
+# Edge-case / branch / unit-invariance tests. A recurring invariant is *scale
+# invariance*: integrating ``dy/dt = -y / tau`` with units (mV, ms) must give a
+# mantissa identical to the dimensionless version (same RNG seed for SDEs).
+# ==============================================================================
+
+
+# ===========================================================================
+# DDE: all methods, reduction to ODE, units, multiple delays
+# ===========================================================================
+DDE_METHODS = [
+    'dde_euler_step', 'dde_heun_step', 'dde_rk4_step',
+    'dde_euler_pc_step', 'dde_heun_pc_step',
+]
+
+
+@pytest.mark.parametrize('name', DDE_METHODS)
+def test_dde_independent_of_history_when_delay_unused(name):
+    # If f ignores the delayed term, the result must not depend on the history
+    # values: history may only influence the output through f's delayed argument.
+    method = getattr(braintools.quad, name)
+
+    def f_dde(t, y, y_delayed):
+        return -y  # ignores y_delayed
+
+    def hist_a(t_past):
+        return 123.0
+
+    def hist_b(t_past):
+        return -999.0
+
+    with brainstate.environ.context(dt=0.05):
+        ya = method(f_dde, 1.0, 0.0, hist_a, 0.5)
+        yb = method(f_dde, 1.0, 0.0, hist_b, 0.5)
+    assert np.isfinite(float(ya))
+    assert np.allclose(float(ya), float(yb))
+
+
+def test_dde_euler_matches_explicit_euler_when_delay_unused():
+    # The plain forward-Euler DDE predictor (no corrector) reduces exactly to the
+    # explicit ODE Euler step when f ignores the delayed term.
+    def f_dde(t, y, y_delayed):
+        return -y
+
+    def f_ode(y, t):
+        return -y
+
+    def history_fn(t_past):
+        return 123.0
+
+    with brainstate.environ.context(dt=0.05):
+        y_dde = braintools.quad.dde_euler_step(f_dde, 1.0, 0.0, history_fn, 0.5)
+        y_euler = braintools.quad.ode_euler_step(f_ode, 1.0, 0.0)
+    assert np.allclose(float(y_dde), float(y_euler))
+
+
+def test_dde_euler_with_units():
+    tau = 10.0 * u.ms
+
+    def f(t, y, y_delayed):
+        return (-y + y_delayed) / tau
+
+    def history_fn(t_past):
+        return -65.0 * u.mV
+
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        v1 = braintools.quad.dde_euler_step(f, -65.0 * u.mV, 0.0 * u.ms, history_fn, 1.0 * u.ms)
+    assert u.get_unit(v1) == u.mV
+    assert np.isfinite(u.get_mantissa(v1))
+
+
+def test_dde_multiple_delays_and_pytree():
+    def f(t, y, yd1, yd2):
+        return jnp.tanh(yd1) + 0.5 * jnp.sin(yd2) - y
+
+    def history_fn(t_past):
+        return jnp.array([0.1, 0.2])
+
+    with brainstate.environ.context(dt=0.05):
+        y1 = braintools.quad.dde_rk4_step(
+            f, jnp.array([0.1, 0.2]), 0.0, history_fn, [0.5, 1.0]
+        )
+    assert y1.shape == (2,)
+    assert np.all(np.isfinite(np.asarray(y1)))
+
+
+def test_dde_pc_iterations_change_result():
+    # More corrector iterations should change (refine) the predictor-corrector result.
+    def f(t, y, y_delayed):
+        return -3.0 * y + 0.5 * y_delayed
+
+    def history_fn(t_past):
+        return 1.0
+
+    with brainstate.environ.context(dt=0.1):
+        y1 = braintools.quad.dde_euler_pc_step(f, 1.0, 0.0, history_fn, 0.5, max_iter=1)
+        y5 = braintools.quad.dde_euler_pc_step(f, 1.0, 0.0, history_fn, 0.5, max_iter=5)
+    assert not np.allclose(y1, y5)
+
+
+@pytest.mark.parametrize('name', ['dde_euler_pc_step', 'dde_heun_pc_step'])
+def test_dde_pc_accepts_list_of_delays(name):
+    # The predictor-corrector methods must accept multiple delays passed as a list,
+    # not only a single scalar delay.
+    method = getattr(braintools.quad, name)
+
+    def f(t, y, yd1, yd2):
+        return -y + 0.3 * yd1 + 0.2 * yd2
+
+    def history_fn(t_past):
+        return 1.0
+
+    with brainstate.environ.context(dt=0.1):
+        y_list = method(f, 1.0, 0.0, history_fn, [0.5, 1.0], max_iter=3)
+    assert np.isfinite(float(y_list))

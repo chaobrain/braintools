@@ -1,8 +1,10 @@
 numpy>=1.15
 brainstate>=0.1.0
-brainunit>=0.0.8
+brainunit>=0.5.2
+brainevent
 typing_extensions
 jax
 matplotlib
 msgpack
 optax
+scipy

@@ -29,7 +29,10 @@ import unittest
 
 import brainunit as u
 import numpy as np
+import pytest
+from scipy.spatial.distance import cdist
 
+from braintools._deprecation import BraintoolsDeprecationWarning
 from braintools.conn._compartment import (
     # Constants
     SOMA, BASAL_DENDRITE, APICAL_DENDRITE, AXON, COMPARTMENT_NAMES,
@@ -70,7 +73,13 @@ from braintools.conn._compartment import (
     # Custom patterns
     CustomCompartment,
 )
-from braintools.init import Constant, Uniform
+from braintools.init import (
+    Constant,
+    Uniform,
+    ExponentialProfile,
+    GaussianProfile,
+    LinearProfile,
+)
 
 
 class TestCompartmentConstants(unittest.TestCase):
@@ -479,7 +488,6 @@ class TestMorphologyAwarePatterns(unittest.TestCase):
         # Distance-dependent connectivity
         morph_dist = MorphologyDistance(
             sigma=50 * u.um,
-            decay_function='gaussian',
             compartment_mapping={AXON: [BASAL_DENDRITE, APICAL_DENDRITE]}
         )
 
@@ -505,7 +513,6 @@ class TestMorphologyAwarePatterns(unittest.TestCase):
         # Previously it silently fell back to a hardcoded prob=0.1; now it raises.
         conn = MorphologyDistance(
             sigma=50 * u.um,
-            decay_function='gaussian',
             seed=42
         )
 
@@ -516,11 +523,13 @@ class TestMorphologyAwarePatterns(unittest.TestCase):
         pre_positions = np.random.RandomState(42).uniform(0, 100, (10, 2)) * u.um
         post_positions = np.random.RandomState(42).uniform(0, 100, (10, 2)) * u.um
 
-        conn = MorphologyDistance(
-            sigma=50 * u.um,
-            decay_function='gaussian',
-            seed=42
-        )
+        # Legacy string decay function (deprecated in 0.4.0).
+        with pytest.warns(BraintoolsDeprecationWarning):
+            conn = MorphologyDistance(
+                sigma=50 * u.um,
+                decay_function='gaussian',
+                seed=42
+            )
 
         result = conn(
             pre_size=10, post_size=10,
@@ -540,12 +549,14 @@ class TestMorphologyAwarePatterns(unittest.TestCase):
             # allow_self_connections so the zero-distance diagonal (i==j) is kept;
             # otherwise the sparse off-diagonal pairs can yield an empty result with
             # no metadata for the 'linear' decay on this toy data.
-            conn = MorphologyDistance(
-                sigma=10 * u.um,
-                decay_function=decay_func,
-                allow_self_connections=True,
-                seed=42
-            )
+            # Legacy string decay functions (deprecated in 0.4.0).
+            with pytest.warns(BraintoolsDeprecationWarning):
+                conn = MorphologyDistance(
+                    sigma=10 * u.um,
+                    decay_function=decay_func,
+                    allow_self_connections=True,
+                    seed=42
+                )
 
             result = conn(
                 pre_size=2, post_size=2,
@@ -579,7 +590,6 @@ class TestMorphologyAwarePatterns(unittest.TestCase):
 
         conn = MorphologyDistance(
             sigma=10.0,  # Scalar
-            decay_function='gaussian',
             seed=42
         )
 
@@ -1347,7 +1357,6 @@ class TestEdgeCases(unittest.TestCase):
 
         conn = MorphologyDistance(
             sigma=50 * u.um,
-            decay_function='gaussian',
             seed=42
         )
 
@@ -1368,7 +1377,6 @@ class TestEdgeCases(unittest.TestCase):
 
         conn = MorphologyDistance(
             sigma=50 * u.um,
-            decay_function='gaussian',
             seed=42
         )
 
@@ -1460,7 +1468,7 @@ class TestConnFixesRegression(unittest.TestCase):
         pre_positions = np.array([0.0, 10.0, 20.0]) * u.um
         post_positions = np.array([0.0, 10.0, 20.0]) * u.um
 
-        morph = MorphologyDistance(sigma=15 * u.um, decay_function='gaussian', seed=42)
+        morph = MorphologyDistance(sigma=15 * u.um, seed=42)
         result = morph(
             pre_size=3, post_size=3,
             pre_positions=pre_positions, post_positions=post_positions
@@ -1540,6 +1548,153 @@ class TestConnFixesRegression(unittest.TestCase):
         conn = CustomCompartment(connection_func=bad_func)
         with self.assertRaises(ValueError):
             conn(pre_size=5, post_size=5)
+
+
+# ---------------------------------------------------------------------------
+# C4 (v0.4): MorphologyDistance takes a ``braintools.init`` DistanceProfile.
+# The legacy decay strings map onto profiles; ``_ref_morphology`` re-implements
+# the pre-refactor closed forms verbatim so the outputs stay pinned.
+# ---------------------------------------------------------------------------
+
+def _ref_morphology(pre, post, sigma, kind, seed, allow_self=False):
+    """Old ``MorphologyDistance.generate`` (plain numbers, default mapping)."""
+    distances = cdist(pre, post)
+    if kind == 'gaussian':
+        probs = np.exp(-distances ** 2 / (2 * sigma ** 2))
+    elif kind == 'exponential':
+        probs = np.exp(-distances / sigma)
+    elif kind == 'linear':
+        probs = np.maximum(0, 1 - distances / sigma)
+    else:
+        raise AssertionError(kind)
+    rng = np.random.RandomState(seed)
+    quads = []
+    for target in (BASAL_DENDRITE, APICAL_DENDRITE):
+        i, j = np.where(rng.random((len(pre), len(post))) < probs)
+        quads.extend(zip(i.tolist(), j.tolist(), [AXON] * len(i), [target] * len(i)))
+    if not allow_self and len(pre) == len(post):
+        quads = [q for q in quads if q[0] != q[1]]
+    return quads
+
+
+def _quads(result):
+    return list(zip(
+        np.asarray(result.pre_indices).tolist(),
+        np.asarray(result.post_indices).tolist(),
+        np.asarray(result.pre_compartments).tolist(),
+        np.asarray(result.post_compartments).tolist(),
+    ))
+
+
+_LEGACY_DECAYS = ['gaussian', 'exponential', 'linear']
+
+
+class TestMorphologyDistanceProfiles:
+    """``decay_function`` accepts DistanceProfile instances; strings are deprecated."""
+
+    pre = np.random.RandomState(0).uniform(0, 120, (25, 2))
+    post = np.random.RandomState(1).uniform(0, 120, (25, 2))
+
+    def _call(self, conn, unit=u.um):
+        scale = 1 if unit is None else unit
+        return conn(pre_size=25, post_size=25,
+                    pre_positions=self.pre * scale, post_positions=self.post * scale)
+
+    @pytest.mark.parametrize('kind', _LEGACY_DECAYS)
+    def test_legacy_string_warns_and_matches_old_output(self, kind):
+        with pytest.warns(BraintoolsDeprecationWarning, match='decay_function') as record:
+            conn = MorphologyDistance(sigma=30 * u.um, decay_function=kind, seed=7)
+        assert len(record) == 1
+        assert '1.0.0' in str(record[0].message)
+        assert 'braintools.init' in str(record[0].message)
+        result = self._call(conn)
+        assert result.n_connections > 0
+        assert _quads(result) == _ref_morphology(self.pre, self.post, 30.0, kind, seed=7)
+        assert result.metadata['decay_function'] == kind
+
+    @pytest.mark.parametrize('kind', _LEGACY_DECAYS)
+    def test_legacy_string_unitless(self, kind):
+        with pytest.warns(BraintoolsDeprecationWarning):
+            conn = MorphologyDistance(sigma=30.0, decay_function=kind, seed=3)
+        result = self._call(conn, unit=None)
+        assert _quads(result) == _ref_morphology(self.pre, self.post, 30.0, kind, seed=3)
+
+    def test_default_is_gaussian_and_does_not_warn(self):
+        # pytest turns BraintoolsDeprecationWarning into an error, so merely
+        # constructing and calling proves the default path is silent.
+        conn = MorphologyDistance(sigma=30 * u.um, seed=7)
+        assert conn.decay_function is None
+        result = self._call(conn)
+        assert _quads(result) == _ref_morphology(self.pre, self.post, 30.0, 'gaussian', seed=7)
+        # Same metadata as before 0.4, when the default was the string 'gaussian'.
+        assert result.metadata['decay_function'] == 'gaussian'
+
+    @pytest.mark.parametrize('profile, kind', [
+        (GaussianProfile(30 * u.um), 'gaussian'),
+        (ExponentialProfile(30 * u.um), 'exponential'),
+        (LinearProfile(30 * u.um), 'linear'),
+    ])
+    def test_profile_instance_matches_legacy_string(self, profile, kind):
+        conn = MorphologyDistance(decay_function=profile, seed=11)
+        result = self._call(conn)
+        assert _quads(result) == _ref_morphology(self.pre, self.post, 30.0, kind, seed=11)
+        assert result.metadata['decay_function'] is profile
+
+    def test_profile_unitless_positions(self):
+        conn = MorphologyDistance(decay_function=GaussianProfile(30.0), seed=5)
+        result = self._call(conn, unit=None)
+        assert _quads(result) == _ref_morphology(self.pre, self.post, 30.0, 'gaussian', seed=5)
+
+    def test_profile_unit_converted_to_positions(self):
+        # A profile length in mm is applied to micrometre positions.
+        conn = MorphologyDistance(decay_function=ExponentialProfile(0.03 * u.mm), seed=5)
+        result = self._call(conn)
+        assert _quads(result) == _ref_morphology(self.pre, self.post, 30.0, 'exponential', seed=5)
+
+    def test_profile_max_distance_is_respected(self):
+        conn = MorphologyDistance(
+            decay_function=GaussianProfile(30 * u.um, max_distance=20 * u.um),
+            allow_self_connections=True, seed=5,
+        )
+        result = self._call(conn)
+        d = cdist(self.pre, self.post)
+        assert result.n_connections > 0
+        assert np.all(d[result.pre_indices, result.post_indices] <= 20.0)
+
+    def test_composed_profile_connects_subset(self):
+        full = self._call(MorphologyDistance(decay_function=GaussianProfile(30 * u.um), seed=9))
+        half = self._call(MorphologyDistance(decay_function=GaussianProfile(30 * u.um) * 0.5, seed=9))
+        assert 0 < half.n_connections < full.n_connections
+        assert set(_quads(half)) <= set(_quads(full))
+
+    def test_profile_incompatible_with_unitless_positions_raises(self):
+        conn = MorphologyDistance(decay_function=GaussianProfile(30 * u.um), seed=5)
+        with pytest.raises(Exception):
+            self._call(conn, unit=None)
+
+    def test_sigma_and_profile_together_raises(self):
+        with pytest.raises(ValueError, match='sigma'):
+            MorphologyDistance(sigma=30 * u.um, decay_function=GaussianProfile(30 * u.um))
+
+    def test_missing_sigma_raises(self):
+        with pytest.raises(ValueError, match='sigma'):
+            MorphologyDistance()
+
+    def test_unknown_string_raises_at_generate_without_deprecation(self):
+        conn = MorphologyDistance(sigma=30 * u.um, decay_function='cosine', seed=1)
+        with pytest.raises(ValueError, match='Unknown decay function'):
+            self._call(conn)
+
+    def test_invalid_type_raises_at_generate(self):
+        conn = MorphologyDistance(sigma=30 * u.um, decay_function=42, seed=1)
+        with pytest.raises(ValueError, match='Unknown decay function'):
+            self._call(conn)
+
+    @pytest.mark.parametrize('sigma', [0.0, -30.0])
+    def test_non_positive_sigma_raises(self, sigma):
+        conn = MorphologyDistance(sigma=sigma * u.um, seed=1)
+        with pytest.raises(ValueError, match='sigma'):
+            self._call(conn)
 
 
 if __name__ == '__main__':

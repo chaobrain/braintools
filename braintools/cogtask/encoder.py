@@ -37,6 +37,7 @@ from typing import Optional, Callable, Any
 
 import jax.numpy as jnp
 
+from braintools.spike._tuning import gaussian_tuning
 from .context import Context
 from .feature import Feature
 
@@ -414,7 +415,7 @@ def gaussian(
                 )
 
         # Gaussian tuning: exp(-0.5 * ((x - mu) / sigma)^2)
-        response = jnp.exp(-0.5 * ((value - center_vals) / sigma) ** 2)
+        response = gaussian_tuning(value, center_vals, sigma)
 
         # Add baseline
         response = response * (1.0 - base_value) + base_value

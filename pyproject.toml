@@ -41,22 +41,38 @@ dependencies = [
     "jax",
     "numpy>=1.15",
     "brainstate>=0.1.0",
-    "brainunit>=0.0.8",
+    "brainunit>=0.5.2",  # 0.5.2: saiunit einsum works on JAX 0.11
     "typing_extensions",
     "optax",
     "matplotlib",
     "msgpack",
     "scipy",
+    "brainevent",  # imported at module level by braintools.conn
 ]
 
 [project.optional-dependencies]
 testing = [
+    # Everything the CI test suite needs (see .github/workflows/CI.yml).
     "pytest",
     "pytest-cov",
     "absl-py",
     "nevergrad",
     "tqdm",
     "rich",
+    "pyyaml",
+]
+viz = [
+    # Interactive figures in braintools.visualize (plotly backends).
+    "plotly",
+]
+progress = [
+    # Progress bars in braintools.trainer.
+    "tqdm",
+    "rich",
+]
+nevergrad = [
+    # Gradient-free optimization in braintools.optim.NevergradOptimizer.
+    "nevergrad",
 ]
 type-check = [
     "mypy>=1.8",
@@ -73,9 +89,11 @@ cuda13 = [
 tpu = [
     "jax[tpu]",
 ]
+# Compatibility alias kept so `pip install braintools[cogtask]` keeps working.
+# It only duplicates core dependencies; braintools.cogtask needs no extras.
 cogtask = [
     "brainstate>=0.1.0",
-    "brainunit>=0.0.8",
+    "brainunit>=0.5.2",
 ]
 doc = [
     "pandoc",
@@ -118,6 +136,17 @@ braintools = ["py.typed"]
 [tool.setuptools.dynamic]
 version = { attr = "braintools._version.__version__" }
 
+[tool.pytest.ini_options]
+# braintools' own code and tests must use the new API paths; calling a
+# deprecated braintools alias outside `pytest.warns` fails the test.
+# The filter matches the standard message of braintools._deprecation on the
+# builtin category, instead of naming BraintoolsDeprecationWarning: resolving
+# that class would import braintools while pytest parses its configuration,
+# before pytest-cov starts measuring, and under-report coverage.
+filterwarnings = [
+    'error:`braintools\.[^`]*` is deprecated since:DeprecationWarning',
+]
+
 [tool.coverage.run]
 # `sysmon` uses CPython's sys.monitoring (3.12+); it is faster and avoids a
 # native-tracer crash when jaxlib is imported under the C tracer.
@@ -143,7 +172,18 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-python_version = "3.14"
+# Keep in sync with the Python version used by .github/workflows/type-check.yml.
+python_version = "3.13"
+# The typed public surface checked in CI (`mypy` with no arguments). Keep this
+# list in sync with TYPED_PUBLIC_MODULES in braintools/__init___test.py.
+files = [
+    "braintools/__init__.py",
+    "braintools/_deprecation.py",
+    "braintools/_misc.py",
+    "braintools/analysis",
+    "braintools/spike",
+    "braintools/tree.py",
+]
 # Many scientific dependencies (jax, brainunit, optax, scipy, ...) ship partial
 # or no type information; don't fail on their missing stubs.
 ignore_missing_imports = true

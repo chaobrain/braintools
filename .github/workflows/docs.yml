@@ -1,0 +1,82 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'braintools/**'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  sphinx:
+    name: Sphinx build
+    runs-on: ubuntu-latest
+    env:
+      JAX_PLATFORMS: cpu
+      XLA_PYTHON_CLIENT_PREALLOCATE: 'false'
+      MPLBACKEND: Agg
+      BRAINX_HEADER_TTL: '0'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-doc.txt
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[testing]"
+          python -m pip install -r requirements-doc.txt
+
+      # Why not `sphinx-build -W --keep-going`?
+      # The docs still carry ~340 pre-existing warnings, almost all from older
+      # docstrings (field lists ending without a blank line, footnotes,
+      # autosummary stubs, duplicate object descriptions, ...). A strict build
+      # would fail on every PR until all of them are fixed. Instead we build
+      # non-strictly, keep the warning log, and fail only on warnings in the
+      # areas that must stay clean (the new braintools.analysis and
+      # braintools.spike packages, their docs pages, and the specs). Switch to
+      # `-W --keep-going` once the legacy warnings are gone.
+      - name: Build documentation (non-strict, warnings logged)
+        run: |
+          mkdir -p docs/_build
+          sphinx-build -b html \
+            -w docs/_build/sphinx-warnings.log \
+            docs docs/_build/html
+          test -f docs/_build/html/index.html
+          echo "Total warning lines: $(grep -c 'WARNING\|ERROR' docs/_build/sphinx-warnings.log || true)"
+
+      - name: Reject warnings in clean areas
+        run: |
+          pattern='braintools[/.](analysis|spike)\b|docs/analysis/|apis/(analysis|spike)\b|specs/'
+          if grep -E "$pattern" docs/_build/sphinx-warnings.log; then
+            echo "::error::Sphinx warnings in braintools.analysis / braintools.spike / their docs (listed above)."
+            exit 1
+          fi
+          echo "No warnings in the gated areas."
+
+      - name: Upload warning log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sphinx-warnings
+          path: docs/_build/sphinx-warnings.log
+          if-no-files-found: ignore

@@ -26,7 +26,6 @@ import brainunit as u
 import numpy as np
 
 from braintools._misc import set_module_as
-from ._deprecation import create_deprecated_function
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -713,9 +712,3 @@ def burst(
         currents[start_i:end_i] = burst[:actual_length]
 
     return u.maybe_decimal(currents * c_unit)
-
-
-spike_input = create_deprecated_function(spike, 'spike_input', 'spike')
-burst_input = create_deprecated_function(burst, 'burst_input', 'burst')
-
-__all__.extend(['spike', 'burst'])

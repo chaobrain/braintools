@@ -1,6 +1,139 @@
 # Release Notes
 
 
+## Version 0.4.0 (unreleased)
+
+Phase 0.4 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *consolidate and
+place*. Every existing function now lives in its final home, so new code has a
+clear place to go. Neuroscience analysis moves out of `metric` into a new
+`braintools.analysis` package. Spike data, encoders and bitwise operations
+gather in a new `braintools.spike` package. All moved names keep working
+through deprecated aliases until 1.0.0. The design is in
+`docs/specs/2026-10-19-v0.4-consolidation.md`.
+
+### Highlights
+
+- **`braintools.analysis`**: spike-train statistics, spectral/LFP analysis,
+  field potentials, population correlations and correlation statistics, in the
+  subpackages `analysis.spike`, `.spectral`, `.field`, `.population` and
+  `.stats`.
+- **`braintools.spike`**: the new `SpikeTrains` container, a JAX pytree with
+  dense and padded-event forms that is unit-aware and jit/vmap friendly, plus
+  the spike encoders and bitwise spike operations.
+- **One deprecation mechanism**: deprecated names warn with
+  `braintools._deprecation.BraintoolsDeprecationWarning` when they are
+  *called*, never on import. Downstream packages that bind braintools names at
+  import time therefore stay silent until they use them. A registry test
+  enforces the 1.0.0 removal date.
+- **`trainer` is frozen**: it gets maintenance fixes only. Its no-op features
+  are deprecated.
+
+### Added
+
+- `braintools.analysis` with the subpackages `spike`, `spectral`, `field`,
+  `population` and `stats`.
+- `braintools.spike`:
+  - `SpikeTrains`. Constructors: `from_dense`, `from_events`, `from_list`.
+    Conversions: `to_dense`, `to_events`, `to_list`. Operations: `bin`,
+    `window`, `select`, `check`, `mask`. It has an explicit capacity and
+    overflow policy: concrete input raises on overflow; traced input is
+    clipped and sets the `overflow` flag.
+  - The encoders.
+  - `bitwise_or`, `bitwise_and`, `bitwise_iand`, `bitwise_not`,
+    `bitwise_xor`, `bitwise_ixor` and `bitwise`.
+- `visualize.spike_raster`, `isi_distribution`, `spike_histogram`,
+  `interactive_spike_raster` and `raster_plot` accept a `SpikeTrains`. Every
+  existing call form keeps working.
+- `conn.MorphologyDistance(decay_function=...)` accepts a `braintools.init`
+  `DistanceProfile` instance.
+- `cogtask.utils.rate_to_prob`, the new name of `cogtask.utils.firing_rate`.
+- New install extras: `viz` (plotly), `progress` (tqdm, rich) and
+  `nevergrad`.
+
+### Changed
+
+- `conn.GaussianKernel`, `DoGKernel`, `MexicanHat` and the `GaborKernel`
+  envelope are now computed through the `braintools.init` distance profiles.
+  Connection sets are unchanged, and weights agree with 0.3.0 to within
+  2.2e-16 (rounding only).
+- `MorphologyDistance(decay_function=...)` defaults to `None` (a Gaussian
+  profile), and `sigma` is optional when a profile is given.
+- A non-positive `sigma` in the conn kernels and `MorphologyDistance` now
+  raises `ValueError`. It used to produce NaN, or silently act like
+  `abs(sigma)`.
+- `trainer.RichProgressBar` and `TQDMProgressBar` delegate rendering to
+  `trainer._progress`. `RichProgressBar` now honours `leave`, which was
+  ignored before. With the default `leave=False`, the bar is cleared at the
+  end of each epoch.
+- `braintools.cogtask.__version__` and `__version_info__` now report the
+  braintools version (the separate `0.0.1` cogtask version is gone).
+- `spike.PoissonEncoder(time_window=...)` warns with
+  `BraintoolsDeprecationWarning` instead of a plain `DeprecationWarning`.
+- Dependencies:
+  - `brainevent` is now a declared core dependency (it was already imported
+    by `conn`).
+  - `brainunit>=0.5.2` is required. With saiunit 0.5.1 on JAX 0.11,
+    `einsum` called the removed `jax.core.is_constant_dim`.
+- The private module `optim/_optax_lr_scheduler.py` is renamed to
+  `optim/_lr_scheduler.py`.
+
+### Deprecated (removal in 1.0.0)
+
+| Deprecated | Replacement |
+|---|---|
+| `metric.{firing_rate, victor_purpura_distance, van_rossum_distance, spike_train_synchrony, burst_synchrony_index, phase_locking_value, spike_time_tiling_coefficient, correlation_index, cross_correlation}` | `analysis.spike.*` |
+| `metric.{power_spectral_density, coherence_analysis, phase_amplitude_coupling, theta_gamma_coupling, spectral_entropy, lfp_phase_coherence}` | `analysis.spectral.*` |
+| `metric.{unitary_LFP, current_source_density}` | `analysis.field.*` |
+| `metric.{voltage_fluctuation, functional_connectivity, functional_connectivity_dynamics}` | `analysis.population.*` |
+| `metric.{matrix_correlation, weighted_correlation}` | `analysis.stats.*` |
+| `metric.raster_plot` | `spike.SpikeTrains.from_dense` |
+| `braintools.{LatencyEncoder, RateEncoder, PoissonEncoder, PopulationEncoder, BernoulliEncoder, DeltaEncoder, StepCurrentEncoder, SpikeCountEncoder, TemporalEncoder, RankOrderEncoder}` | `braintools.spike.*` |
+| `MorphologyDistance(decay_function='gaussian' / 'exponential' / 'linear')` | a `braintools.init.*Profile` instance |
+| `cogtask.utils.firing_rate` | `cogtask.utils.rate_to_prob` |
+| `trainer.GradientClipCallback` (never clipped) | `Trainer(gradient_clip_val=...)` |
+| `Trainer(precision != 32, deterministic=..., benchmark=..., strategy=...)` (never implemented) | omit the argument |
+
+The top-level `braintools.spike_bitwise*` names stay as non-warning aliases of
+`braintools.spike.bitwise*`, because brainstate binds them.
+
+### Removed
+
+- The 32 never-exported deprecated `input` aliases (`SectionInput`,
+  `section_input`, ...) and `braintools/input/_deprecation.py`. None of them
+  was reachable from `braintools.input`.
+- `braintools/cogtask/_version.py`.
+
+### Fixed
+
+- `tree.squared_norm` (and other unit-aware `einsum` users) failed with
+  `AttributeError` on JAX 0.11. Requiring `brainunit>=0.5.2` brings in
+  saiunit 0.5.2, which restores JAX 0.11 compatibility.
+- Five optim tests were never collected, because a test class name was
+  defined twice. They now run and pass.
+- `None` defaults in `analysis.spike` are annotated as `Optional`, so the
+  package type-checks.
+
+### Infrastructure
+
+- `pyproject.toml` turns any braintools deprecation warning into a test error
+  outside `pytest.warns`. braintools' own code and tests use only the new
+  paths. The filter matches the warning message rather than the class, so
+  pytest does not import braintools before pytest-cov starts measuring.
+- Test layout: 26 orphan test files (`*_audit_*`, `*_extra_*`, ...) were
+  folded into the `foo_test.py` sibling of the module they exercise (AGENTS.md
+  rule 9). No tests were lost.
+- CI tests Python 3.11–3.14 on Ubuntu and 3.13 on macOS and Windows. It runs
+  one pytest process per subpackage, to bound memory. A `file` test that
+  allocated an 11 GB byte string to check a size limit now uses an 11-byte
+  payload; no subpackage process needs more than about 2 GB.
+- New `docs.yml` workflow: builds the docs on pull requests and fails if new
+  warnings involve `analysis`, `spike` or the specs.
+- New `downstream.yml` workflow (weekly or manual): runs the brainpy,
+  brainmass and brainpy_state test suites against braintools.
+- Codecov patch coverage is blocking at 90%.
+- mypy now covers `_deprecation`, `analysis` and `spike`.
+
+
 ## Version 0.3.0 (2026-06-19)
 
 This release completes the library-wide correctness audit campaign begun in

@@ -7,9 +7,7 @@
 <p align="center">
   <a href="https://pypi.org/project/braintools/"><img alt="Supported Python Version" src="https://img.shields.io/pypi/pyversions/braintools"></a>
   <a href="https://github.com/chaobrain/braintools/blob/main/LICENSE"><img alt="LICENSE" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
-  <a href='https://brainx.chaobrain.com/braintools/'>
-    <img src='https://readthedocs.org/projects/braintools/badge/?version=latest' alt='Documentation Status' />
-  </a>
+  <a href="https://brainx.chaobrain.com/braintools/"><img alt="Documentation Status" src="https://github.com/chaobrain/braintools/actions/workflows/deploy-docs.yml/badge.svg"></a>
   <a href="https://badge.fury.io/py/braintools"><img alt="PyPI version" src="https://badge.fury.io/py/braintools.svg"></a>
   <a href="https://github.com/chaobrain/braintools/actions/workflows/CI.yml"><img alt="Continuous Integration" src="https://github.com/chaobrain/braintools/actions/workflows/CI.yml/badge.svg"></a>
   <a href="https://codecov.io/gh/chaobrain/braintools"><img alt="Test Coverage" src="https://codecov.io/gh/chaobrain/braintools/graph/badge.svg"></a>
@@ -20,11 +18,15 @@
 
 ## Highlights
 
-- **Composable connectivity**: declarative builders for point, multi-compartment, and population networks with spatial kernels, degree constraints, and unit-aware metadata
-- **Cognitive task framework**: phase-based, composable trial construction (`braintools.cogtask`) for training and analyzing neural networks on classic systems-neuroscience paradigms — decision making, working memory, reasoning, motor — plus a registry of pre-built tasks
-- **Visualization suite**: publication plots, interactive dashboards, 3D viewers, and animation helpers in `braintools.visualize`
-- **Metrics and solvers**: losses, evaluation metrics, and PyTree-aware ODE/SDE/DDE integrators ready for `jit`/`vmap`
-- **Signal and optimization helpers**: reusable generators and lightweight optimizers to prototype models quickly
+- **Connectivity builders** (`braintools.conn`): declarative, unit-aware patterns for point neurons (random, distance-dependent, small-world, modular, ...), multi-compartment morphologies, and convolution kernels
+- **Initializers** (`braintools.init`): parameter initializers (distributions, variance scaling, orthogonal, composites) and distance profiles shared with the connectivity builders
+- **Spike data** (`braintools.spike`): the `SpikeTrains` container (a padded, `jit`/`vmap`-friendly spike-time layout with dense/event conversions), spike encoders (latency, rate, Poisson, population, ...), and bitwise spike operations
+- **Neural data analysis** (`braintools.analysis`): spike-train statistics (firing rates, distances, synchrony), spectral and LFP analysis (power spectra, coherence, cross-frequency coupling, current source density), and population correlations and functional connectivity
+- **Cognitive task framework** (`braintools.cogtask`): phase-based, composable trial construction for training and analyzing networks on classic systems-neuroscience paradigms, plus a registry of pre-built tasks
+- **Numerical integration** (`braintools.quad`): PyTree-aware ODE/SDE/DDE/IMEX one-step integrators ready for `jit`/`vmap`
+- **Losses and metrics** (`braintools.metric`): classification, regression, ranking, and pairwise-similarity losses for training
+- **Inputs, surrogates, and visualization**: input-current generators (`braintools.input`), surrogate gradients (`braintools.surrogate`), and plotting helpers (`braintools.visualize`)
+- **Training helpers**: optimizer wrappers (`braintools.optim`) and a lightweight training loop (`braintools.trainer`)
 
 `braintools` integrates smoothly with the broader ecosystem (e.g., `brainstate`, `brainunit`) while keeping a simple, functional style.
 
@@ -34,14 +36,23 @@
 pip install -U braintools
 ```
 
-Optional extras are published for hardware-specific builds:
+Optional extras select a JAX backend:
 
 ```bash
 pip install -U braintools[cpu]
-# CUDA 12.x wheels
+# CUDA 12.x / CUDA 13.x wheels
 pip install -U braintools[cuda12]
+pip install -U braintools[cuda13]
 # TPU runtime
 pip install -U braintools[tpu]
+```
+
+and enable optional features:
+
+```bash
+pip install -U braintools[viz]        # interactive plotly figures in braintools.visualize
+pip install -U braintools[progress]   # tqdm / rich progress bars in braintools.trainer
+pip install -U braintools[nevergrad]  # gradient-free optimization in braintools.optim
 ```
 
 Alternatively, install the curated BrainX bundle that ships with `braintools` and related projects:

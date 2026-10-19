@@ -14,7 +14,10 @@
 # ==============================================================================
 
 
+import math
+
 import brainstate
+import brainunit as u
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -232,3 +235,270 @@ def test_sde_implicit_euler_superlinear_drift_stays_finite():
         y, _ = brainstate.transform.scan(body, jnp.zeros(500), jnp.arange(50))
     assert np.all(np.isfinite(np.asarray(y)))
     assert np.max(np.abs(np.asarray(y))) < 10
+
+
+# ==============================================================================
+# Edge-case / branch / unit-invariance tests. A recurring invariant is *scale
+# invariance*: integrating ``dy/dt = -y / tau`` with units (mV, ms) must give a
+# mantissa identical to the dimensionless version (same RNG seed for SDEs).
+# ==============================================================================
+
+
+# ===========================================================================
+# SDE: branch coverage (Stratonovich, invalid types) + scale invariance
+# ===========================================================================
+def test_milstein_stratonovich_differs_from_ito():
+    def df(y, t):
+        return 0.1 * y
+
+    def dg(y, t):
+        return 0.3 * y
+
+    with brainstate.environ.context(dt=0.05):
+        brainstate.random.seed(1)
+        mi = braintools.quad.sde_milstein_step(df, dg, 1.0, 0.0, sde_type='ito')
+        brainstate.random.seed(1)
+        ms = braintools.quad.sde_milstein_step(df, dg, 1.0, 0.0, sde_type='stra')
+    # Same noise, different Ito/Stratonovich correction -> different result
+    assert not np.allclose(mi, ms)
+
+
+def test_heun_stratonovich_runs():
+    def df(y, t):
+        return -0.5 * y
+
+    def dg(y, t):
+        return 0.2 * y
+
+    with brainstate.environ.context(dt=0.05):
+        y1 = braintools.quad.sde_heun_step(df, dg, 1.0, 0.0, sde_type='stra')
+    assert np.isfinite(float(y1))
+
+
+@pytest.mark.parametrize('name', ['sde_euler_step', 'sde_milstein_step', 'sde_heun_step'])
+def test_sde_invalid_type_raises(name):
+    method = getattr(braintools.quad, name)
+
+    def df(y, t):
+        return -y
+
+    def dg(y, t):
+        return 0.1
+
+    with brainstate.environ.context(dt=0.1):
+        with pytest.raises(AssertionError):
+            method(df, dg, 1.0, 0.0, sde_type='nonsense')
+
+
+SDE_METHODS = [
+    'sde_euler_step', 'sde_milstein_step', 'sde_heun_step',
+    'sde_tamed_euler_step', 'sde_implicit_euler_step',
+    'sde_srk2_step', 'sde_srk3_step', 'sde_srk4_step', 'sde_expeuler_step',
+]
+
+
+@pytest.mark.parametrize('name', SDE_METHODS)
+def test_sde_unit_scale_invariance(name):
+    method = getattr(braintools.quad, name)
+    sigma = 0.5
+
+    def df_dimless(y, t):
+        return -y / 10.0
+
+    def dg_dimless(y, t):
+        return sigma
+
+    def df_unit(v, t):
+        return -v / (10.0 * u.ms)
+
+    def dg_unit(v, t):
+        return sigma * u.mV / u.ms ** 0.5
+
+    brainstate.random.seed(42)
+    with brainstate.environ.context(dt=0.1):
+        yd = method(df_dimless, dg_dimless, -65.0, 0.0)
+    brainstate.random.seed(42)
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        yu = method(df_unit, dg_unit, -65.0 * u.mV, 0.0 * u.ms)
+
+    assert u.get_unit(yu) == u.mV
+    assert np.allclose(u.get_mantissa(yu), float(yd), rtol=1e-5)
+
+
+def test_sde_expeuler_diffusion_unit_mismatch_raises():
+    # Drift has unit mV/ms (state mV); diffusion with a wrong unit must be caught.
+    def df(v, t):
+        return -v / (10.0 * u.ms)
+
+    def dg(v, t):
+        return 0.5 * u.mV  # wrong: should be mV / sqrt(ms)
+
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        with pytest.raises(ValueError):
+            braintools.quad.sde_expeuler_step(df, dg, -65.0 * u.mV, 0.0 * u.ms)
+
+
+def test_implicit_euler_converges_for_contractive_drift():
+    # Picard iteration converges when the drift is contractive (|a*dt| < 1).
+    a = -2.0
+
+    def df(y, t):
+        return a * y
+
+    def dg(y, t):
+        return 0.0
+
+    dt = 0.1
+    with brainstate.environ.context(dt=dt):
+        y1 = braintools.quad.sde_implicit_euler_step(df, dg, 1.0, 0.0, max_iter=60)
+    assert np.allclose(float(y1), 1.0 / (1.0 - a * dt), rtol=1e-4)
+
+
+def _milstein_strong_errors(sde_type, monkeypatch):
+    """Strong errors on geometric Brownian motion with a shared Brownian path."""
+    from braintools.quad import _sde_integrator as S
+    mu, sig, T, M, n_fine = 1.5, 1.0, 1.0, 2000, 2 ** 8
+    rng = np.random.default_rng(0)
+    dW_fine = rng.normal(size=(n_fine, M)) * np.sqrt(T / n_fine)
+    W = dW_fine.sum(0)
+    drift_exp = mu - 0.5 * sig ** 2 if sde_type == 'ito' else mu
+    exact = np.exp(drift_exp * T + sig * W)
+    errors = []
+    for k in [16, 8, 4]:
+        dt = T * k / n_fine
+        normals = iter(dW_fine.reshape(-1, k, M).sum(1) / np.sqrt(dt))
+        monkeypatch.setattr(S, 'randn_like', lambda y: jnp.asarray(next(normals)))
+        y = jnp.ones(M)
+        with brainstate.environ.context(dt=dt):
+            for j in range(n_fine // k):
+                y = braintools.quad.sde_milstein_step(lambda y, t: mu * y, lambda y, t: sig * y, y, j * dt,
+                                                      sde_type=sde_type)
+        errors.append(np.mean(np.abs(np.asarray(y) - exact)))
+    return errors
+
+
+@pytest.mark.parametrize('sde_type', ['ito', 'stra'])
+def test_milstein_strong_order_one(sde_type, monkeypatch):
+    # Halving dt must roughly halve the strong error (order 1). The Stratonovich
+    # branch used to keep the drift in its support point and converged at 1/2.
+    errors = _milstein_strong_errors(sde_type, monkeypatch)
+    orders = [np.log2(errors[i] / errors[i + 1]) for i in range(len(errors) - 1)]
+    assert min(orders) > 0.8, orders
+
+
+# ==============================================================================
+# Regression tests for bugs found in the 2026-06-18 ``braintools.quad`` audit.
+# Each reproduces a confirmed bug and asserts the *correct* behaviour.
+# ==============================================================================
+
+
+# ---------------------------------------------------------------------------
+# Bug 2 + 3: sde_expeuler_step used randn_like(args[0]) (crashes with no extra
+# args) and the wrong unit. With zero diffusion it must equal exp-Euler drift.
+# ---------------------------------------------------------------------------
+def test_sde_expeuler_step_no_extra_args():
+    def df(x, t):
+        return -x
+
+    def dg(x, t):
+        return 0.0
+
+    with brainstate.environ.context(dt=0.1):
+        x1 = braintools.quad.sde_expeuler_step(df, dg, 1.0, 0.0)
+    # Zero diffusion -> deterministic exp-Euler drift = exp(-0.1)
+    assert np.allclose(x1, math.exp(-0.1), rtol=1e-6)
+
+
+def test_sde_expeuler_step_with_units():
+    tau = 10.0 * u.ms
+
+    def df(v, t):
+        return -v / tau
+
+    def dg(v, t):
+        return 0.0 * u.mV / u.ms ** 0.5
+
+    v0 = -65.0 * u.mV
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        v1 = braintools.quad.sde_expeuler_step(df, dg, v0, 0.0 * u.ms)
+    assert u.get_unit(v1) == u.mV
+    assert np.allclose(u.get_mantissa(v1), -65.0 * math.exp(-0.01), rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Bug 4: sde_euler_step used jnp.sqrt(dt), which rejects unitful dt.
+# With zero diffusion the step is deterministic Euler.
+# ---------------------------------------------------------------------------
+def test_sde_euler_step_with_units():
+    tau = 10.0 * u.ms
+
+    def df(v, t):
+        return -v / tau
+
+    def dg(v, t):
+        return 0.0 * u.mV / u.ms ** 0.5
+
+    v0 = -65.0 * u.mV
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        v1 = braintools.quad.sde_euler_step(df, dg, v0, 0.0 * u.ms)
+    expected = -65.0 + (65.0 / 10.0) * 0.1  # v0 + (-v0/tau)*dt
+    assert u.get_unit(v1) == u.mV
+    assert np.allclose(u.get_mantissa(v1), expected, rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Bug 5: sde_tamed_euler_step added a dimensionless 1 to a unitful dt*|f|.
+# ---------------------------------------------------------------------------
+def test_sde_tamed_euler_step_with_units():
+    tau = 10.0 * u.ms
+
+    def df(v, t):
+        return -v / tau
+
+    def dg(v, t):
+        return 0.0 * u.mV / u.ms ** 0.5
+
+    v0 = -65.0 * u.mV
+    dt = 0.1
+    with brainstate.environ.context(dt=dt * u.ms):
+        v1 = braintools.quad.sde_tamed_euler_step(df, dg, v0, 0.0 * u.ms)
+    f_val = 65.0 / 10.0  # mantissa of -v0/tau in mV/ms
+    tamed = f_val / (1.0 + dt * abs(f_val))
+    expected = -65.0 + tamed * dt
+    assert u.get_unit(v1) == u.mV
+    assert np.allclose(u.get_mantissa(v1), expected, rtol=1e-6)
+
+
+def test_sde_tamed_euler_step_dimensionless_unchanged():
+    # Guard: dimensionless taming result must be unchanged by the fix.
+    def df(y, t):
+        return y ** 3
+
+    def dg(y, t):
+        return 0.0
+
+    y0 = 10.0
+    dt = 0.1
+    with brainstate.environ.context(dt=dt):
+        y1 = braintools.quad.sde_tamed_euler_step(df, dg, y0, 0.0)
+    f_val = y0 ** 3
+    expected = y0 + (f_val / (1.0 + dt * abs(f_val))) * dt
+    assert np.allclose(y1, expected, rtol=1e-6)
+
+
+def test_sde_expeuler_step_rejects_integer_scalar():
+    def df(x, t):
+        return -x
+
+    def dg(x, t):
+        return 0.0
+
+    with brainstate.environ.context(dt=0.1):
+        try:
+            braintools.quad.sde_expeuler_step(df, dg, 1, 0.0)  # python int
+        except ValueError:
+            pass
+        except Exception as e:  # pragma: no cover - explicit failure path
+            raise AssertionError(f"expected ValueError, got {type(e).__name__}: {e}")
+        else:
+            raise AssertionError("expected ValueError for integer input")

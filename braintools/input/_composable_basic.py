@@ -29,7 +29,6 @@ import brainstate
 import brainunit as u
 
 from ._composable_base import Input
-from ._deprecation import create_deprecated_class
 from ._functional_basic import section, constant, step, ramp
 
 __all__ = [
@@ -624,11 +623,3 @@ class Ramp(Input):
             self.t_start,
             self.t_end
         )
-
-
-SectionInput = create_deprecated_class(Section, 'SectionInput', 'Section')
-ConstantInput = create_deprecated_class(Constant, 'ConstantInput', 'Constant')
-StepInput = create_deprecated_class(Step, 'StepInput', 'Step')
-RampInput = create_deprecated_class(Ramp, 'RampInput', 'Ramp')
-
-__all__.extend(['SectionInput', 'ConstantInput', 'StepInput', 'RampInput'])

@@ -404,6 +404,14 @@ class TestUtilityMethods:
         model.freeze()
         model.unfreeze()
 
+    def test_freeze_single_name_and_is_frozen(self):
+        # Trainer audit T-16 (formerly in _trainer_audit_test.py).
+        model = SimpleModel()
+        name = next(iter(model.states(brainstate.ParamState).keys()))
+        model.freeze(name)
+        assert model.is_frozen(name)
+        assert name in model.frozen_parameters
+
     def test_print_summary(self, capsys):
         # FlatParamModel exposes flat-array ParamState values, which is what
         # print_summary's size/shape introspection requires.

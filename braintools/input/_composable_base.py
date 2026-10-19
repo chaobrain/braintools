@@ -30,7 +30,6 @@ import brainstate
 import brainunit as u
 import numpy as np
 
-from ._deprecation import create_deprecated_class
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -1185,16 +1184,3 @@ class Transformed(Input):
         """Generate the transformed input."""
         arr = self.input_obj()
         return self.func(arr)
-
-
-CompositeInput = create_deprecated_class(Composite, 'CompositeInput', 'Composite')
-SequentialInput = create_deprecated_class(Sequential, 'SequentialInput', 'Sequential')
-TimeShiftedInput = create_deprecated_class(TimeShifted, 'TimeShiftedInput', 'TimeShifted')
-ClippedInput = create_deprecated_class(Clipped, 'ClippedInput', 'Clipped')
-SmoothedInput = create_deprecated_class(Smoothed, 'SmoothedInput', 'Smoothed')
-RepeatedInput = create_deprecated_class(Repeated, 'RepeatedInput', 'Repeated')
-TransformedInput = create_deprecated_class(Transformed, 'TransformedInput', 'Transformed')
-
-__all__.extend(
-    ['CompositeInput', 'SequentialInput', 'TimeShiftedInput', 'ClippedInput', 'SmoothedInput', 'RepeatedInput',
-     'TransformedInput'])

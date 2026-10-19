@@ -17,9 +17,11 @@
 import math
 
 import brainstate
+import brainunit as u
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import braintools
 
@@ -178,3 +180,167 @@ def test_ode_integrators_vector_tree():
         y1 = braintools.quad.ode_rk4_step(f, y0, 0.0)
 
     assert y1.shape == (2,)
+
+
+# ==============================================================================
+# Edge-case / branch / unit-invariance tests. A recurring invariant is *scale
+# invariance*: integrating ``dy/dt = -y / tau`` with units (mV, ms) must give a
+# mantissa identical to the dimensionless version (same RNG seed for SDEs).
+# ==============================================================================
+
+
+# ===========================================================================
+# ODE: Ralston methods (previously untested) + order checks
+# ===========================================================================
+def _linear_one_step_err(method, dt, a=-1.3, y0=1.0):
+    def f(y, t):
+        return a * y
+
+    with brainstate.environ.context(dt=dt):
+        y1 = method(f, y0, 0.0)
+    return abs(float(y1) - y0 * math.exp(a * dt))
+
+
+def test_ralston2_is_second_order():
+    e1 = _linear_one_step_err(braintools.quad.ode_ralston2_step, 0.1)
+    e2 = _linear_one_step_err(braintools.quad.ode_ralston2_step, 0.05)
+    # 2nd order local error ~ dt^3; halving dt reduces error by ~8x (allow margin)
+    assert e2 < e1 / 4.0
+
+
+def test_ralston3_is_third_order():
+    e1 = _linear_one_step_err(braintools.quad.ode_ralston3_step, 0.1)
+    e2 = _linear_one_step_err(braintools.quad.ode_ralston3_step, 0.05)
+    assert e2 < e1 / 8.0
+
+
+def test_ralston3_equals_rk23_third_order_solution():
+    # The Ralston RK3 tableau equals the 3rd-order solution of Bogacki-Shampine.
+    def f(y, t):
+        return -1.3 * y
+
+    with brainstate.environ.context(dt=0.1):
+        r3 = braintools.quad.ode_ralston3_step(f, 1.0, 0.0)
+        r23 = braintools.quad.ode_rk23_step(f, 1.0, 0.0)
+    assert np.allclose(r3, r23)
+
+
+def test_dopri8_return_error_is_small_and_finite():
+    def f(y, t):
+        return -1.0 * y
+
+    with brainstate.environ.context(dt=0.1):
+        y1, err = braintools.quad.ode_dopri8_step(f, 1.0, 0.0, return_error=True)
+    assert np.isfinite(float(y1)) and np.isfinite(float(err))
+    assert abs(float(err)) < 1e-6  # 8th order: tiny local error estimate
+
+
+# ===========================================================================
+# ODE: scale invariance across all deterministic methods
+# ===========================================================================
+ODE_METHODS = [
+    'ode_euler_step', 'ode_rk2_step', 'ode_rk3_step', 'ode_rk4_step',
+    'ode_midpoint_step', 'ode_heun_step', 'ode_rk4_38_step',
+    'ode_ralston2_step', 'ode_ralston3_step', 'ode_ssprk33_step',
+    'ode_rk45_step', 'ode_rk23_step', 'ode_dopri5_step', 'ode_rkf45_step',
+    'ode_dopri8_step', 'ode_expeuler_step',
+]
+
+
+@pytest.mark.parametrize('name', ODE_METHODS)
+def test_ode_unit_scale_invariance(name):
+    method = getattr(braintools.quad, name)
+
+    def f_dimless(y, t):
+        return -y / 10.0
+
+    def f_unit(v, t):
+        return -v / (10.0 * u.ms)
+
+    with brainstate.environ.context(dt=0.1):
+        yd = method(f_dimless, -65.0, 0.0)
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        yu = method(f_unit, -65.0 * u.mV, 0.0 * u.ms)
+
+    assert u.get_unit(yu) == u.mV
+    assert np.allclose(u.get_mantissa(yu), float(yd), rtol=1e-6)
+
+
+# ==============================================================================
+# Regression tests for bugs found in the 2026-06-18 ``braintools.quad`` audit.
+# Each reproduces a confirmed bug and asserts the *correct* behaviour.
+# ==============================================================================
+
+
+# ---------------------------------------------------------------------------
+# Bug 1: ode_expeuler_step divided by the Jacobian unit instead of the state
+# unit, raising "exprel requires a dimensionless x" for unitful states.
+# Exponential Euler is exact for linear ODEs: y1 = y0 * exp(A*dt).
+# ---------------------------------------------------------------------------
+def test_ode_expeuler_step_with_units():
+    tau = 10.0 * u.ms
+
+    def f(v, t):
+        return -v / tau
+
+    v0 = -65.0 * u.mV
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        v1 = braintools.quad.ode_expeuler_step(f, v0, 0.0 * u.ms)
+
+    expected = -65.0 * math.exp(-0.01)  # A*dt = -(1/10ms)*0.1ms = -0.01
+    assert u.get_unit(v1) == u.mV
+    assert np.allclose(u.get_mantissa(v1), expected, rtol=1e-6)
+
+
+def test_ode_expeuler_step_dimensionless_unchanged():
+    # Guard: the fix must not change the dimensionless result.
+    def f(x, t):
+        return -x
+
+    with brainstate.environ.context(dt=0.1):
+        x1 = braintools.quad.ode_expeuler_step(f, 1.0, 0.0)
+    assert np.allclose(x1, math.exp(-0.1), rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Bug 14: the primary (propagated) solution of an embedded method must be
+# identical whether or not the error estimate is requested. This characterises
+# the FSAL refactor of ode_dopri5_step (the extra stage must not change y).
+# ---------------------------------------------------------------------------
+def test_embedded_primary_matches_return_error_branch():
+    a = -0.9
+
+    def f(y, t):
+        return a * y
+
+    methods = [
+        braintools.quad.ode_rk45_step,
+        braintools.quad.ode_dopri5_step,
+        braintools.quad.ode_rkf45_step,
+        braintools.quad.ode_rk23_step,
+        braintools.quad.ode_dopri8_step,
+    ]
+    with brainstate.environ.context(dt=0.1):
+        for fn in methods:
+            y_plain = fn(f, 1.0, 0.0)
+            y_err, _ = fn(f, 1.0, 0.0, return_error=True)
+            assert np.allclose(y_plain, y_err), fn.__name__
+
+
+# ---------------------------------------------------------------------------
+# Bug 15: a disallowed (non-float) input must raise a clean ValueError, not an
+# AttributeError while formatting the message (Python scalars have no .dtype).
+# ---------------------------------------------------------------------------
+def test_ode_expeuler_step_rejects_integer_scalar():
+    def f(x, t):
+        return -x
+
+    with brainstate.environ.context(dt=0.1):
+        try:
+            braintools.quad.ode_expeuler_step(f, 1, 0.0)  # python int
+        except ValueError:
+            pass
+        except Exception as e:  # pragma: no cover - explicit failure path
+            raise AssertionError(f"expected ValueError, got {type(e).__name__}: {e}")
+        else:
+            raise AssertionError("expected ValueError for integer input")

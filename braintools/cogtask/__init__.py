@@ -95,7 +95,7 @@ Pre-built Tasks:
     - Motor: AntiReach, Reaching1D, EvidenceAccumulation
 """
 
-from ._version import (
+from braintools._version import (
     __version_info__,
     __version__,
 )
@@ -198,6 +198,7 @@ from .utils import (
     initialize2,
     interval_of,
     period_to_arr,
+    rate_to_prob,
     firing_rate,
 )
 
@@ -290,5 +291,6 @@ __all__ = [
     'initialize2',
     'interval_of',
     'period_to_arr',
+    'rate_to_prob',
     'firing_rate',
 ]

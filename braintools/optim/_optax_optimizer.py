@@ -25,7 +25,7 @@ from brainstate.typing import PyTree
 
 from braintools.file import msgpack_from_state_dict
 from ._base import Optimizer, OptimState
-from ._optax_lr_scheduler import LRScheduler, ConstantLR
+from ._lr_scheduler import LRScheduler, ConstantLR
 from ._state_uniquifier import UniqueStateManager
 
 MaskOrFn = Optional[Union[Any, Callable]]

@@ -20,8 +20,11 @@ from unittest.mock import patch
 
 import brainunit as u
 import jax.numpy as jnp
+import numpy as np
+import pytest
 
 import braintools
+import braintools.optim as O
 
 
 class TestNevergradOptimizer(unittest.TestCase):
@@ -239,3 +242,115 @@ class TestNevergradOptimizer(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             optimizer.minimize(n_iter="not a number")  # Not an integer
+
+
+# ==============================================================================
+# Regression tests for the 2026-06-18 ``braintools.optim`` audit fixes.
+# Each test maps to an issue ID from docs/braintools-optim-issues-found-20260618.md
+# and asserts the *corrected* behavior (i.e. it fails against the pre-fix code).
+# ==============================================================================
+
+
+# --------------------------------------------------------------------------- #
+# NevergradOptimizer fixes
+# --------------------------------------------------------------------------- #
+
+class TestNevergradOptimizerAuditFixes:
+    def test_N1_all_nan_losses_do_not_crash(self):
+        # N-1: an all-NaN iteration must not crash via np.nanargmin's "All-NaN slice";
+        # the optimizer falls back to Nevergrad's recommendation (with a warning).
+        pytest.importorskip('nevergrad')
+        import warnings
+        from braintools.optim import NevergradOptimizer
+
+        def batched_loss_fun(x, y):
+            return jnp.full(x.shape, jnp.nan)
+
+        opt = NevergradOptimizer(batched_loss_fun, [(-5.0, 5.0), (-3.0, 3.0)],
+                                 n_sample=6, method='OnePlusOne')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            res = opt.minimize(n_iter=1, verbose=False)
+        assert len(res) == 2
+        assert np.all(np.isfinite(np.asarray(res)))
+
+    def test_N1_all_nan_emits_warning(self):
+        # N-1: the all-NaN fallback should warn rather than silently continue.
+        pytest.importorskip('nevergrad')
+        from braintools.optim import NevergradOptimizer
+
+        def batched_loss_fun(x, y):
+            return jnp.full(x.shape, jnp.nan)
+
+        opt = NevergradOptimizer(batched_loss_fun, [(-5.0, 5.0), (-3.0, 3.0)],
+                                 n_sample=6, method='OnePlusOne')
+        with pytest.warns(RuntimeWarning):
+            opt.minimize(n_iter=1, verbose=False)
+
+    def test_N3_seed_makes_runs_reproducible(self):
+        # N-3: with a seed, the ask/tell sampling is reproducible across runs.
+        pytest.importorskip('nevergrad')
+        from braintools.optim import NevergradOptimizer
+
+        def batched_loss_fun(x, y):
+            return x ** 2 + y ** 2
+
+        def run():
+            opt = NevergradOptimizer(batched_loss_fun, [(-5.0, 5.0), (-3.0, 3.0)],
+                                     n_sample=8, method='RandomSearch', budget=100, seed=42)
+            return opt.minimize(n_iter=2, verbose=False)
+
+        r1 = run()
+        r2 = run()
+        assert np.allclose(np.asarray(r1), np.asarray(r2))
+
+    def test_N3_different_seeds_differ(self):
+        # N-3 sanity: different seeds should generally explore differently.
+        pytest.importorskip('nevergrad')
+        from braintools.optim import NevergradOptimizer
+
+        def batched_loss_fun(x, y):
+            return x ** 2 + y ** 2
+
+        def run(seed):
+            opt = NevergradOptimizer(batched_loss_fun, [(-5.0, 5.0), (-3.0, 3.0)],
+                                     n_sample=8, method='RandomSearch', budget=100, seed=seed)
+            return opt.minimize(n_iter=2, verbose=False)
+
+        assert not np.allclose(np.asarray(run(1)), np.asarray(run(2)))
+
+    def test_N5_budget_exceeded_warns(self):
+        # N-5: n_iter*n_sample evals are not capped by `budget`; warn on a mismatch.
+        pytest.importorskip('nevergrad')
+        from braintools.optim import NevergradOptimizer
+
+        def batched_loss_fun(x, y):
+            return x ** 2 + y ** 2
+
+        opt = NevergradOptimizer(batched_loss_fun, [(-5.0, 5.0), (-3.0, 3.0)],
+                                 n_sample=8, method='OnePlusOne', budget=5)
+        with pytest.warns(RuntimeWarning, match='budget'):
+            opt.minimize(n_iter=2, verbose=False)
+
+
+class TestNevergradUnitStripping:
+    """With quantity bounds the loss receives plain numbers in the lower bound's unit."""
+
+    def test_loss_receives_plain_numbers(self):
+        import brainunit as u
+        seen = {}
+
+        def loss(tau, v):
+            seen['types'] = (type(tau), type(v))
+            seen['range'] = (float(jnp.min(tau)), float(jnp.max(tau)))
+            return (tau - 20.0) ** 2 + (v + 50.0) ** 2  # ms and mV as plain numbers
+
+        opt = O.NevergradOptimizer(loss, bounds=[(5.0 * u.ms, 0.05 * u.second), (-60.0 * u.mV, -40.0 * u.mV)],
+                                   n_sample=16, method='DE', seed=0)
+        tau, v = opt.minimize(n_iter=30, verbose=False)
+        assert not any(issubclass(t, u.Quantity) for t in seen['types'])
+        assert 5.0 <= seen['range'][0] and seen['range'][1] <= 50.0  # 0.05 s converted to ms
+        # the returned best parameters carry the bounds' units again
+        assert isinstance(tau, u.Quantity) and isinstance(v, u.Quantity)
+        np.testing.assert_allclose(tau.to_decimal(u.ms), 20.0, atol=1.0)
+        np.testing.assert_allclose(v.to_decimal(u.mV), -50.0, atol=1.0)

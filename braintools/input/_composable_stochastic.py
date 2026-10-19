@@ -29,7 +29,6 @@ import brainunit as u
 
 from . import _functional_stochastic as functional
 from ._composable_base import Input
-from ._deprecation import create_deprecated_class
 
 ArrayLike = brainstate.typing.ArrayLike
 
@@ -617,8 +616,3 @@ class Poisson(Input):
             t_end=self.t_end,
             seed=self.seed
         )
-
-
-PoissonInput = create_deprecated_class(Poisson, 'PoissonInput', 'Poisson')
-
-__all__.append('PoissonInput')

@@ -22,7 +22,9 @@ from matplotlib.colors import Normalize
 
 from braintools._misc import set_module_as
 from braintools.tree import as_numpy
-from ._utils import as_array, flatten_spikes, inter_spike_intervals
+from ._utils import (
+    as_array, flatten_spikes, in_time_unit, inter_spike_intervals, is_spike_trains, spike_trains_events,
+)
 
 # Default color of negative-weight (e.g. inhibitory) edges in network plots
 NEGATIVE_EDGE_COLOR = '#1f77b4'
@@ -64,11 +66,13 @@ def spike_raster(
     
     Parameters
     ----------
-    spike_times : array-like
-        Array of spike times or list of spike time arrays for each neuron.
+    spike_times : array-like or SpikeTrains
+        Array of spike times, list of spike time arrays for each neuron, or a
+        :class:`braintools.spike.SpikeTrains` (times are plotted in its unit).
     neuron_ids : array-like, optional
         Array of neuron IDs corresponding to spike_times. If None, assumes
-        spike_times is a list with one array per neuron.
+        spike_times is a list with one array per neuron. Must be None for a
+        ``SpikeTrains``.
     time_range : tuple, optional
         (start, end) time range to display.
     neuron_range : tuple, optional
@@ -100,10 +104,16 @@ def spike_raster(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
-    # A list holds one spike train per neuron; a flat array needs neuron_ids.
-    if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
-        raise ValueError("neuron_ids must be provided when spike_times is not a list")
-    spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
+    if is_spike_trains(spike_times):
+        spike_times, neuron_ids, unit = spike_trains_events(spike_times, neuron_ids)
+        if unit is not None and xlabel == 'Time':
+            xlabel = f'Time ({unit})'
+        time_range = in_time_unit(time_range, unit)
+    else:
+        # A list holds one spike train per neuron; a flat array needs neuron_ids.
+        if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
+            raise ValueError("neuron_ids must be provided when spike_times is not a list")
+        spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
 
     # When ``color`` is a per-spike array it must be filtered with the same masks
     # applied to the spikes; otherwise ``scatter`` raises a length-mismatch error
@@ -511,8 +521,10 @@ def spike_histogram(
     
     Parameters
     ----------
-    spike_times : array-like or list
-        Spike times or list of spike time arrays.
+    spike_times : array-like, list or SpikeTrains
+        Spike times, list of spike time arrays, or a
+        :class:`braintools.spike.SpikeTrains` (all neurons pooled, times in
+        its unit).
     bins : int or array-like
         Number of bins or bin edges.
     time_range : tuple, optional
@@ -543,7 +555,14 @@ def spike_histogram(
         fig, ax = plt.subplots(figsize=figsize)
 
     # Flatten spike times if list of arrays
-    spike_times, _ = flatten_spikes(spike_times)
+    if is_spike_trains(spike_times):
+        spike_times, _, unit = spike_trains_events(spike_times)
+        if unit is not None and xlabel == 'Time':
+            xlabel = f'Time ({unit})'
+        time_range = in_time_unit(time_range, unit)
+        bin_size = in_time_unit(bin_size, unit)
+    else:
+        spike_times, _ = flatten_spikes(spike_times)
 
     # Apply time filtering
     if time_range is not None:
@@ -601,8 +620,10 @@ def isi_distribution(
     
     Parameters
     ----------
-    spike_times : array-like or list
-        Spike times or list of spike time arrays.
+    spike_times : array-like, list or SpikeTrains
+        Spike times, list of spike time arrays, or a
+        :class:`braintools.spike.SpikeTrains` (intervals are computed within
+        each neuron, in its unit).
     bins : int or array-like
         Number of bins or bin edges.
     max_isi : float, optional
@@ -631,7 +652,11 @@ def isi_distribution(
         fig, ax = plt.subplots(figsize=figsize)
 
     # Calculate ISIs
-    all_isis = inter_spike_intervals(*flatten_spikes(spike_times))
+    if is_spike_trains(spike_times):
+        times, ids, _ = spike_trains_events(spike_times)
+        all_isis = inter_spike_intervals(times, ids)
+    else:
+        all_isis = inter_spike_intervals(*flatten_spikes(spike_times))
 
     # Filter ISIs
     if max_isi is not None:

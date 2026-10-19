@@ -392,6 +392,7 @@ Helper functions for periods, label arrays, and rate conversion:
    initialize2
    interval_of
    period_to_arr
+   rate_to_prob
    firing_rate
 
 

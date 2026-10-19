@@ -20,7 +20,7 @@ import numpy as np
 from braintools._misc import set_module_as
 from ._neural import _edge_attribute, NEGATIVE_EDGE_COLOR
 from ..tree import as_numpy
-from ._utils import as_array, flatten_spikes, inter_spike_intervals
+from ._utils import as_array, flatten_spikes, inter_spike_intervals, is_spike_trains, spike_trains_events
 
 # Try to import plotly
 try:
@@ -72,10 +72,12 @@ def interactive_spike_raster(
     
     Parameters
     ----------
-    spike_times : array-like or list
-        Array of spike times or list of spike time arrays for each neuron.
+    spike_times : array-like, list or SpikeTrains
+        Array of spike times, list of spike time arrays for each neuron, or a
+        :class:`braintools.spike.SpikeTrains` (times are plotted in its unit).
     neuron_ids : array-like, optional
-        Array of neuron IDs corresponding to spike_times.
+        Array of neuron IDs corresponding to spike_times. Must be None for a
+        ``SpikeTrains``.
     time_range : tuple, optional
         (start, end) time range to display.
     neuron_range : tuple, optional
@@ -96,10 +98,16 @@ def interactive_spike_raster(
     """
     _check_plotly()
 
-    # A list holds one spike train per neuron; a flat array needs neuron_ids.
-    if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
-        raise ValueError("neuron_ids must be provided when spike_times is not a list")
-    spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
+    xaxis_title = "Time"
+    if is_spike_trains(spike_times):
+        spike_times, neuron_ids, unit = spike_trains_events(spike_times, neuron_ids)
+        if unit is not None:
+            xaxis_title = f"Time ({unit})"
+    else:
+        # A list holds one spike train per neuron; a flat array needs neuron_ids.
+        if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
+            raise ValueError("neuron_ids must be provided when spike_times is not a list")
+        spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
 
     # Apply filtering
     if time_range is not None:
@@ -144,7 +152,7 @@ def interactive_spike_raster(
     # Update layout
     fig.update_layout(
         title=title,
-        xaxis_title="Time",
+        xaxis_title=xaxis_title,
         yaxis_title="Neuron ID",
         width=width,
         height=height,

@@ -28,7 +28,6 @@ import brainstate
 import brainunit as u
 
 from ._composable_base import Input
-from ._deprecation import create_deprecated_class
 from ._functional_pulses import (
     spike,
     gaussian_pulse,
@@ -862,9 +861,3 @@ class Burst(Input):
             n_bursts=self.n_bursts,
             duration=self.duration
         )
-
-
-SpikeInput = create_deprecated_class(Spike, 'SpikeInput', 'Spike')
-BurstInput = create_deprecated_class(Burst, 'BurstInput', 'Burst')
-
-__all__.extend(['SpikeInput', 'BurstInput'])

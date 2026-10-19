@@ -111,3 +111,71 @@ def test_mismatched_shapes_raise(monkeypatch):
             bounds=[(jnp.array([0.0, 0.0]), jnp.array([1.0]))],
             method='L-BFGS-B',
         )
+
+
+# ==============================================================================
+# Regression tests for the 2026-06-18 ``braintools.optim`` audit fixes.
+# Each test maps to an issue ID from docs/braintools-optim-issues-found-20260618.md
+# and asserts the *corrected* behavior (i.e. it fails against the pre-fix code).
+# ==============================================================================
+
+
+# --------------------------------------------------------------------------- #
+# ScipyOptimizer fixes
+# --------------------------------------------------------------------------- #
+
+class TestScipyOptimizer:
+    def test_X1_tnc_slsqp_run_under_float32_default(self):
+        # X-1: TNC/SLSQP Cython kernels need float64 buffers; the wrapper must cast
+        # x0/jac/bounds to float64 so these methods don't crash under JAX float32.
+        pytest.importorskip('scipy')
+        from braintools.optim import ScipyOptimizer
+
+        def loss(x, y):
+            return (x - 1.0) ** 2 + (y + 2.0) ** 2
+
+        bounds = [(-5.0, 5.0), (-3.0, 3.0)]
+        for method in ('TNC', 'SLSQP'):
+            opt = ScipyOptimizer(loss_fun=loss, bounds=bounds, method=method)
+            res = opt.minimize(n_iter=3)
+            assert res is not None
+            assert np.isfinite(res.fun)
+            # convex quadratic → gradient method converges near the optimum
+            assert res.fun < 1e-2, (method, res.fun)
+
+    def test_X2_minimize_returns_result_on_nonfinite_loss(self, monkeypatch):
+        # X-2: `inf < inf` / `nan < inf` are False, so a plain `<` left best_res=None
+        # for diverging losses. minimize() must return a result, not None.
+        import types
+        import braintools.optim._scipy_optimizer as so
+
+        def fake_minimize_with_jax(x0, loss_fun, **kwargs):
+            return types.SimpleNamespace(fun=float('inf'), x=x0)
+
+        monkeypatch.setattr(so, 'scipy_minimize_with_jax', fake_minimize_with_jax, raising=False)
+        from braintools.optim import ScipyOptimizer
+
+        def loss(x):
+            return jnp.inf * jnp.sum(x ** 2)
+
+        opt = ScipyOptimizer(loss_fun=loss, bounds=[(-1.0, 1.0)], method='L-BFGS-B')
+        res = opt.minimize(n_iter=3)
+        assert res is not None
+        assert not np.isfinite(res.fun)
+
+    def test_X3_gradient_free_method_emits_no_jac_warning(self):
+        # X-3: gradient-free methods must not be handed a Jacobian (which triggers a
+        # per-iteration "does not use gradient information" RuntimeWarning).
+        pytest.importorskip('scipy')
+        import warnings
+        from braintools.optim import ScipyOptimizer
+
+        def loss(x, y):
+            return (x - 1.0) ** 2 + (y + 2.0) ** 2
+
+        opt = ScipyOptimizer(loss_fun=loss, bounds=[(-5.0, 5.0), (-3.0, 3.0)], method='Powell')
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter('always')
+            opt.minimize(n_iter=1)
+        msgs = [str(w.message) for w in rec]
+        assert not any('does not use gradient' in m for m in msgs), msgs

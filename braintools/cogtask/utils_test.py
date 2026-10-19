@@ -21,6 +21,7 @@ from braintools.cogtask.utils import (
     initialize2,
     interval_of,
     period_to_arr,
+    rate_to_prob,
     firing_rate,
     choice,
 )
@@ -193,17 +194,54 @@ def test_period_to_arr_three_periods():
 
 
 # ---------------------------------------------------------------------------
-# firing_rate
+# rate_to_prob (and its deprecated alias firing_rate)
 # ---------------------------------------------------------------------------
 
-def test_firing_rate_returns_probability_per_step():
+def test_rate_to_prob_returns_probability_per_step():
     # 100 Hz, dt=1 ms → 100 * 1 / 1000 = 0.1
-    assert firing_rate(100.0, 1.0) == pytest.approx(0.1)
+    assert rate_to_prob(100.0, 1.0) == pytest.approx(0.1)
 
 
-def test_firing_rate_rejects_overflow():
+def test_rate_to_prob_boundary_is_allowed():
+    # base * dt == 1e3 is the largest allowed product → probability 1.
+    assert rate_to_prob(1000.0, 1.0) == pytest.approx(1.0)
+    assert rate_to_prob(0.0, 1.0) == 0.0
+
+
+def test_rate_to_prob_rejects_overflow():
     with pytest.raises(ValueError, match="dt"):
-        firing_rate(1e9, 1.0)
+        rate_to_prob(1e9, 1.0)
+
+
+def test_firing_rate_alias_warns_and_forwards():
+    from braintools._deprecation import BraintoolsDeprecationWarning
+    with pytest.warns(BraintoolsDeprecationWarning, match="rate_to_prob"):
+        assert firing_rate(100.0, 1.0) == pytest.approx(0.1)
+
+
+def test_firing_rate_alias_metadata():
+    from braintools._deprecation import registered_deprecations
+    assert firing_rate.__name__ == 'firing_rate'
+    assert firing_rate.__module__ == 'braintools.cogtask.utils'
+    records = [r for r in registered_deprecations()
+               if r.old_name == 'braintools.cogtask.utils.firing_rate']
+    assert len(records) == 1
+    assert records[0].target is rate_to_prob
+    assert records[0].new_name == 'braintools.cogtask.utils.rate_to_prob'
+
+
+def test_firing_rate_alias_exported_from_package():
+    import braintools.cogtask as ct
+    assert ct.firing_rate is firing_rate
+    assert ct.rate_to_prob is rate_to_prob
+    assert 'firing_rate' in ct.__all__ and 'rate_to_prob' in ct.__all__
+
+
+def test_firing_rate_alias_still_validates():
+    from braintools._deprecation import BraintoolsDeprecationWarning
+    with pytest.warns(BraintoolsDeprecationWarning):
+        with pytest.raises(ValueError, match="dt"):
+            firing_rate(1e9, 1.0)
 
 
 # ---------------------------------------------------------------------------

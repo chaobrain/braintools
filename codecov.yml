@@ -11,7 +11,9 @@ coverage:
         informational: true
     patch:
       default:
-        informational: true
+        # New and changed lines must be covered: blocking at 90%.
+        target: 90%
+        informational: false
 
 comment:
   layout: "reach, diff, flags, files"

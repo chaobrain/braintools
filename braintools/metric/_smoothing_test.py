@@ -95,3 +95,12 @@ class SmoothLabelsTest(parameterized.TestCase):
         labels = jnp.eye(4)
         out = braintools.metric.smooth_labels(labels, alpha=1.0)
         np.testing.assert_allclose(out, jnp.full((4, 4), 0.25), atol=1e-6)
+
+
+class SM1SmoothLabelsValidationTest(parameterized.TestCase):
+    """Audit 2026-06-19, SM-1: validation raises a real exception."""
+
+    def test_integer_labels_raise_type_error(self):
+        # SM-1: validation must use a real exception (survives `python -O`).
+        with self.assertRaises(TypeError):
+            braintools.metric.smooth_labels(jnp.array([[1, 0, 0], [0, 1, 0]]), 0.1)

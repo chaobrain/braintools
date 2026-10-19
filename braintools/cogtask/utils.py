@@ -22,6 +22,8 @@ import brainunit as u
 import jax
 import jax.numpy as jnp
 
+from braintools._deprecation import deprecated_function
+
 __all__ = [
     'TruncExp',
     'UniformDuration',
@@ -31,6 +33,7 @@ __all__ = [
     'initialize2',
     'interval_of',
     'period_to_arr',
+    'rate_to_prob',
     'firing_rate',
 ]
 
@@ -382,22 +385,46 @@ def period_to_arr(periods: Dict[str, int]) -> jax.Array:
     return jnp.concatenate(res)
 
 
-def firing_rate(base, dt):
-    """
-    Convert firing rate to spike probability per timestep.
+def rate_to_prob(base, dt):
+    """Convert a firing rate to a spike probability per time step.
+
+    Computes ``base * dt / 1000``: the probability that a Poisson neuron
+    firing at ``base`` Hz emits a spike within one step of ``dt`` ms. This
+    function was called ``firing_rate`` before braintools 0.4.0; that name
+    remains as a deprecated alias.
 
     Parameters
     ----------
     base : float
-        Base firing rate in Hz.
+        Firing rate in Hz.
     dt : float
         Time step in ms.
 
     Returns
     -------
     float
-        Probability of spike per timestep or scaled rate.
+        Spike probability per time step, ``base * dt / 1e3``.
+
+    Raises
+    ------
+    ValueError
+        If ``base * dt > 1e3``, i.e. the probability would exceed 1.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> from braintools.cogtask import rate_to_prob
+        >>> rate_to_prob(100.0, 1.0)
+        0.1
     """
     if base * dt > 1e3:
         raise ValueError(f'dt is too big, so that dt * fr > 1e3.')
     return base * dt / 1e3
+
+
+firing_rate = deprecated_function(
+    rate_to_prob,
+    'braintools.cogtask.utils.firing_rate',
+    'braintools.cogtask.utils.rate_to_prob',
+)

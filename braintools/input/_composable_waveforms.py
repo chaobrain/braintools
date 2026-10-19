@@ -30,7 +30,6 @@ import brainunit as u
 
 from . import _functional_waveforms as functional
 from ._composable_base import Input
-from ._deprecation import create_deprecated_class
 
 ArrayLike = brainstate.typing.ArrayLike
 
@@ -1143,14 +1142,3 @@ class NoisySinusoidal(Input):
             t_end=self.t_end,
             seed=self.seed
         )
-
-
-SinusoidalInput = create_deprecated_class(Sinusoidal, 'SinusoidalInput', 'Sinusoidal')
-SquareInput = create_deprecated_class(Square, 'SquareInput', 'Square')
-TriangularInput = create_deprecated_class(Triangular, 'TriangularInput', 'Triangular')
-SawtoothInput = create_deprecated_class(Sawtooth, 'SawtoothInput', 'Sawtooth')
-ChirpInput = create_deprecated_class(Chirp, 'ChirpInput', 'Chirp')
-NoisySinusoidalInput = create_deprecated_class(NoisySinusoidal, 'NoisySinusoidalInput', 'NoisySinusoidal')
-
-__all__.extend(
-    ['SinusoidalInput', 'SquareInput', 'TriangularInput', 'SawtoothInput', 'ChirpInput', 'NoisySinusoidalInput'])

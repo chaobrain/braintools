@@ -8,6 +8,7 @@ import pytest
 
 import brainstate
 import braintools
+import braintools.optim as O
 
 
 class MLP(brainstate.nn.Module):
@@ -230,3 +231,122 @@ def test_sofoscan_step_before_register_raises():
     ys = jnp.zeros((2, 4, 2))
     with pytest.raises(ValueError):
         opt.step(jnp.zeros((4, 4)), (xs, ys))
+
+
+# ==============================================================================
+# Regression tests for the 2026-06-18 ``braintools.optim`` audit fixes.
+# Each test maps to an issue ID from docs/braintools-optim-issues-found-20260618.md
+# and asserts the *corrected* behavior (i.e. it fails against the pre-fix code).
+# ==============================================================================
+
+
+# --------------------------------------------------------------------------- #
+# SOFO fixes
+# --------------------------------------------------------------------------- #
+
+class TestSOFO:
+    def _model(self):
+        lin = brainstate.nn.Linear(4, 2)
+        return lin
+
+    def test_F1_damping_floor_no_nan(self):
+        # F-1: degenerate inputs/targets must not produce NaN/Inf updates.
+        model = self._model()
+        loss_fn = lambda pred, y: jnp.mean((pred - y) ** 2)
+        opt = O.SOFO(model, loss_fn, lr=1e-2, tangent_size=8, damping=0.0,
+                     key=brainstate.random.split_key())
+        opt.register_trainable_weights(model.states(brainstate.ParamState))
+        opt.step(jnp.zeros((3, 4)), jnp.zeros((3, 2)))
+        w = list(model.states(brainstate.ParamState).values())[0].value['weight']
+        assert jnp.all(jnp.isfinite(w))
+
+    def test_F2_fixed_key_resamples_each_step(self):
+        # F-2: with a fixed key, consecutive steps must use different tangents (folded
+        # with the step count), so the applied directions differ step to step.
+        import jax
+        model = self._model()
+        loss_fn = lambda pred, y: jnp.mean((pred - y) ** 2)
+        opt = O.SOFO(model, loss_fn, lr=1e-1, tangent_size=8, key=jax.random.PRNGKey(0))
+        opt.register_trainable_weights(model.states(brainstate.ParamState))
+        x = jnp.ones((4, 4))
+        y = jnp.ones((4, 2))
+        w = lambda: list(model.states(brainstate.ParamState).values())[0].value['weight']
+        w0 = w().copy()
+        opt.step(x, y)
+        d1 = w() - w0
+        w1 = w().copy()
+        opt.step(x, y)
+        d2 = w() - w1
+        # If the key were not folded with the step count the two raw tangent batches
+        # would be identical; the resulting updates must not be proportional/identical.
+        assert not jnp.allclose(d1, d2)
+
+    def test_sofo_reduces_loss(self):
+        model = self._model()
+        loss_fn = lambda pred, y: jnp.mean((pred - y) ** 2)
+        opt = O.SOFO(model, loss_fn, lr=5e-2, tangent_size=16,
+                     key=brainstate.random.split_key())
+        opt.register_trainable_weights(model.states(brainstate.ParamState))
+        x = jnp.ones((8, 4))
+        y = jnp.ones((8, 2))
+        first = float(opt.step(x, y))
+        for _ in range(15):
+            last = float(opt.step(x, y))
+        assert last < first
+
+
+# --------------------------------------------------------------------------- #
+# SOFO update() data-alias and momentum branches
+# --------------------------------------------------------------------------- #
+
+class _ScanCell(brainstate.nn.Module):
+    def __init__(self, n_in, n_hidden, n_out):
+        super().__init__()
+        self.wh = brainstate.nn.Linear(n_hidden, n_hidden)
+        self.wx = brainstate.nn.Linear(n_in, n_hidden)
+        self.wo = brainstate.nn.Linear(n_hidden, n_out)
+
+    def __call__(self, latent, inputs):
+        new_latent = self.wh(latent) + self.wx(inputs)
+        return new_latent, self.wo(new_latent)
+
+
+class TestSOFOContract:
+    def test_sofo_update_is_data_alias_of_step(self):
+        # F-3: SOFO.update(inputs, targets) is the documented data-alias of step().
+        model = brainstate.nn.Linear(4, 2)
+        loss_fn = lambda pred, y: jnp.mean((pred - y) ** 2)
+        opt = O.SOFO(model, loss_fn, lr=1e-2, tangent_size=8,
+                     key=brainstate.random.split_key())
+        opt.register_trainable_weights(model.states(brainstate.ParamState))
+        loss = opt.update(jnp.ones((4, 4)), jnp.ones((4, 2)))
+        assert jnp.isfinite(loss)
+
+    def test_sofo_momentum_nesterov_steps(self):
+        # Exercise the momentum/nesterov default_tx branch of SOFO.
+        model = brainstate.nn.Linear(4, 2)
+        loss_fn = lambda pred, y: jnp.mean((pred - y) ** 2)
+        opt = O.SOFO(model, loss_fn, lr=2e-2, tangent_size=16, momentum=0.9,
+                     nesterov=True, key=brainstate.random.split_key())
+        opt.register_trainable_weights(model.states(brainstate.ParamState))
+        x, y = jnp.ones((8, 4)), jnp.ones((8, 2))
+        first = float(opt.step(x, y))
+        for _ in range(10):
+            last = float(opt.step(x, y))
+        assert jnp.isfinite(last) and last < first
+
+    def test_sofoscan_update_is_data_alias_of_step(self):
+        # F-3 for SOFOScan: update(z_init, batch) aliases step().
+        brainstate.random.seed(0)
+        n_in, n_hidden, n_out, batch, T = 3, 5, 2, 4, 5
+        cell = _ScanCell(n_in, n_hidden, n_out)
+        loss_fn = lambda out, label: jnp.mean((out - label) ** 2)
+        opt = O.SOFOScan(cell, loss_fn, lr=1e-2, tangent_size=32,
+                         key=brainstate.random.split_key())
+        opt.register_trainable_weights(cell.states(brainstate.ParamState))
+        rng = brainstate.random.RandomState(0)
+        xs = rng.randn(T, batch, n_in)
+        ys = rng.randn(T, batch, n_out)
+        z0 = jnp.zeros((batch, n_hidden))
+        loss = opt.update(z0, (xs, ys))
+        assert jnp.isfinite(loss)

@@ -33,6 +33,7 @@ import brainstate
 from brainstate import ParamState
 from brainstate.typing import PyTree
 
+from braintools._deprecation import register_deprecation, warn_deprecated
 from braintools.optim import Optimizer, UniqueStateManager
 
 from ._callbacks import Callback, CallbackList, EarlyStopping, ModelCheckpoint
@@ -47,6 +48,43 @@ __all__ = [
     'Trainer',
     'TrainerState',
 ]
+
+
+# Trainer arguments that are recorded for API compatibility but have no effect
+# on the training loop. Each warns only when a non-default value is passed.
+_PRECISION_DEPRECATION = register_deprecation(
+    'braintools.trainer.Trainer(precision=...)',
+    'explicit dtype casts of the model and data',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+_DETERMINISTIC_DEPRECATION = register_deprecation(
+    'braintools.trainer.Trainer(deterministic=...)',
+    'Trainer(seed=...)',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+_BENCHMARK_DEPRECATION = register_deprecation(
+    'braintools.trainer.Trainer(benchmark=...)',
+    'the default (XLA autotunes automatically)',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+_STRATEGY_DEPRECATION = register_deprecation(
+    'braintools.trainer.Trainer(strategy=...)',
+    "the default strategy='auto'",
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+
+
+def _is_default_strategy(strategy: Any) -> bool:
+    """Whether ``strategy`` selects the default automatic strategy."""
+    return strategy is None or (isinstance(strategy, str) and strategy == 'auto')
 
 
 class TrainerState:
@@ -118,20 +156,48 @@ class Trainer:
         Distributed training strategy. The active training loop drives a single
         optimizer on the selected device(s); multi-host strategies are provided
         but not exercised by :meth:`fit`.
+
+        .. deprecated:: 0.4.0
+           Passing any value other than ``'auto'`` (or ``None``) is deprecated
+           and the argument will be removed in 1.0.0.
     precision : str, default='32'
         Requested compute precision (``'32'``, ``'16'``, ``'bf16'``, optionally
         with a ``'-mixed'``/``'-true'`` suffix). Recorded for API compatibility;
         the loop currently computes in float32 and emits a warning for any
         non-32 value. Cast your model/data explicitly for reduced precision.
+
+        .. deprecated:: 0.4.0
+           Values other than ``'32'``/``'32-true'`` are deprecated and the
+           argument will be removed in 1.0.0.
     deterministic : bool, default=False
         Recorded for API compatibility. Determinism in JAX is governed by the
         PRNG keys you use and XLA flags; this flag does not itself change
         execution.
+
+        .. deprecated:: 0.4.0
+           Passing ``True`` is deprecated and the argument will be removed in
+           1.0.0. Use ``seed`` instead.
     benchmark : bool, default=False
         Recorded for API compatibility; has no effect (XLA autotunes and there
         is no cuDNN benchmark switch in JAX). A warning is emitted if set.
+
+        .. deprecated:: 0.4.0
+           Passing ``True`` is deprecated and the argument will be removed in
+           1.0.0.
     seed : int, optional
         Random seed for reproducibility. Seeds both NumPy and ``brainstate``.
+
+    Raises
+    ------
+    ValueError
+        If ``gradient_clip_algorithm``, ``accumulate_grad_batches``,
+        ``precision`` or ``strategy`` is invalid.
+
+    Warns
+    -----
+    BraintoolsDeprecationWarning
+        If ``precision``, ``deterministic``, ``benchmark`` or ``strategy`` is
+        given a non-default value.
 
     Notes
     -----
@@ -212,6 +278,7 @@ class Trainer:
                 f"'32', '16', 'bf16' (optionally with a '-mixed'/'-true' suffix)."
             )
         if self.precision not in ('32', '32-true'):
+            warn_deprecated(_PRECISION_DEPRECATION)
             warnings.warn(
                 f"precision={precision!r} is recorded but not yet applied: the "
                 f"trainer currently computes in float32. Cast your model/data "
@@ -220,8 +287,11 @@ class Trainer:
             )
 
         self.deterministic = deterministic
+        if deterministic:
+            warn_deprecated(_DETERMINISTIC_DEPRECATION)
         self.benchmark = benchmark
         if benchmark:
+            warn_deprecated(_BENCHMARK_DEPRECATION)
             warnings.warn(
                 "benchmark=True has no effect: XLA already performs autotuning "
                 "and there is no cuDNN benchmark flag to toggle in JAX.",
@@ -244,6 +314,8 @@ class Trainer:
         # Setup distributed
         self._setup_devices(devices)
         self.strategy = get_strategy(strategy)
+        if not _is_default_strategy(strategy):
+            warn_deprecated(_STRATEGY_DEPRECATION)
 
         # Training state
         self.state = TrainerState()

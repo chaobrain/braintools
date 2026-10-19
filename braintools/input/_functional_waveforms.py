@@ -26,7 +26,6 @@ import brainunit as u
 import numpy as np
 
 from braintools._misc import set_module_as
-from ._deprecation import create_deprecated_function
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -1162,12 +1161,3 @@ def noisy_sinusoidal(
     currents[start_i:end_i] = noisy_signal
 
     return u.maybe_decimal(currents * c_unit)
-
-
-sinusoidal_input = create_deprecated_function(sinusoidal, 'sinusoidal_input', 'sinusoidal')
-square_input = create_deprecated_function(square, 'square_input', 'square')
-triangular_input = create_deprecated_function(triangular, 'triangular_input', 'triangular')
-sawtooth_input = create_deprecated_function(sawtooth, 'sawtooth_input', 'sawtooth')
-chirp_input = create_deprecated_function(chirp, 'chirp_input', 'chirp')
-
-__all__.extend(['sinusoidal', 'square', 'triangular', 'sawtooth', 'chirp'])
