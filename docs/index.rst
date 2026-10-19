@@ -67,6 +67,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobr
     cogtask/index.md
     conn/index.md
     file/index.md
+    fit/index.md
     init/index.md
     input/index.md
     metric/index.md
@@ -88,6 +89,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobr
     apis/cogtask.rst
     apis/conn.rst
     apis/file.rst
+    apis/fit.rst
     apis/init.rst
     apis/input.rst
     apis/metric.rst

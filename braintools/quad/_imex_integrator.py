@@ -234,10 +234,10 @@ def imex_cnab_step(
     CNAB (Crank–Nicolson / Adams–Bashforth) IMEX step (second order).
 
     Advances using explicit AB2 for the nonstiff part and trapezoidal rule for
-    the stiff part:
+    the stiff part::
 
-    ``y_{n+1} = y_n + dt * [ 3/2 f_exp(y_n, t_n) - 1/2 f_exp(y_{n-1}, t_{n-1}) ]
-                   + dt/2 * [ f_imp(y_{n+1}, t_{n+1}) + f_imp(y_n, t_n) ]``
+        y_{n+1} = y_n + dt * [ 3/2 f_exp(y_n, t_n) - 1/2 f_exp(y_{n-1}, t_{n-1}) ]
+                      + dt/2 * [ f_imp(y_{n+1}, t_{n+1}) + f_imp(y_n, t_n) ]
 
     This is a two-step method: start it with a one-step method (for example
     :func:`imex_ars222_step`) to obtain ``y_prev`` at the first step.

@@ -35,6 +35,7 @@ TYPED_PUBLIC_MODULES = (
     '_deprecation.py',
     '_misc.py',
     'analysis',
+    'fit',
     'spike',
     'tree.py',
 )

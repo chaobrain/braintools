@@ -237,6 +237,32 @@ objectives. These wrappers provide a unified interface to powerful optimization 
   other population-based methods. Excellent for high-dimensional, noisy, or discrete
   optimization problems.
 
+Multi-Start Minimization
+------------------------
+
+:func:`multistart_minimize` minimizes a pure, differentiable function from many
+starting points at once: the starts are stacked on a leading axis and run as one
+compiled, vmapped loop with a per-start convergence mask (L-BFGS, Adam or
+gradient descent via Optax). Box bounds are handled by a sigmoid
+reparameterization; :func:`multistart_init` draws uniform starts inside the
+bounds. Starts whose loss becomes non-finite are marked as not converged and are
+never selected as the best. :class:`braintools.fit.Fitter` uses it as its
+``'grad'`` backend.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   multistart_minimize
+   multistart_init
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   MultiStartResult
+
 Utilities
 ---------
 

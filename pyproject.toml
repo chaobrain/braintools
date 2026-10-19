@@ -60,6 +60,15 @@ testing = [
     "tqdm",
     "rich",
     "pyyaml",
+    # Reference implementations used by the analysis and fit tests.
+    "scikit-learn",
+    "mne",
+    "statsmodels",
+    # Optional I/O backends of braintools.file.
+    "h5py",
+    "pynwb",
+    "neo",
+    "quantities",
 ]
 viz = [
     # Interactive figures in braintools.visualize (plotly backends).
@@ -73,6 +82,19 @@ progress = [
 nevergrad = [
     # Gradient-free optimization in braintools.optim.NevergradOptimizer.
     "nevergrad",
+]
+nwb = [
+    # Neurodata Without Borders I/O in braintools.file (save_nwb_units, ...).
+    "pynwb",
+]
+neo = [
+    # NEO interoperability in braintools.file (to_neo, from_neo).
+    "neo",
+    "quantities",
+]
+hdf5 = [
+    # HDF5 I/O with unit metadata in braintools.file (save_hdf5, load_hdf5).
+    "h5py",
 ]
 type-check = [
     "mypy>=1.8",
@@ -181,6 +203,7 @@ files = [
     "braintools/_deprecation.py",
     "braintools/_misc.py",
     "braintools/analysis",
+    "braintools/fit",
     "braintools/spike",
     "braintools/tree.py",
 ]

@@ -1,6 +1,6 @@
 # Numerical Integration
 
-`braintools.quad` provides one-step integrators for ordinary, stochastic, implicit–explicit, and delay differential equations. Each call advances a JAX PyTree state (optionally with `brainunit` units) by one step of size `dt` taken from `brainstate.environ`; you write the loop, usually with a scan.
+`braintools.quad` provides one-step integrators for ordinary, stochastic, implicit–explicit, and delay differential equations. Each call advances a JAX PyTree state (optionally with `brainunit` units) by one step of size `dt` taken from `brainstate.environ`; you write the loop, usually with a scan. For whole trajectories, `quad.odeint` runs any registered stepper over a fixed time grid as one compiled `scan`, and `quad.solve_ivp` integrates with an adaptive step size (both are used in the {doc}`model-fitting tutorial <../fit/01_fitting_models>`).
 
 ## What you'll find here
 

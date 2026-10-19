@@ -121,13 +121,25 @@ def load_matfile(
 
     Examples
     --------
-    >>> data = load_matfile('experiment_data.mat')
-    >>> print(data.keys())
-    dict_keys(['trial_data', 'timestamps', 'spike_times'])
+    .. code-block:: python
+
+        >>> import os
+        >>> import tempfile
+        >>> import numpy as np
+        >>> from braintools.file import load_matfile, save_matfile
+        >>> path = os.path.join(tempfile.mkdtemp(), 'data.mat')
+        >>> save_matfile(path, {'spike_times': np.array([0.1, 0.5]), 'label': 'trial-1'})
+        >>> data = load_matfile(path)
+        >>> sorted(data.keys())
+        ['label', 'spike_times']
 
     Include the MATLAB metadata headers:
 
-    >>> data = load_matfile('experiment_data.mat', include_header=True)
+    .. code-block:: python
+
+        >>> data = load_matfile(path, include_header=True)
+        >>> '__header__' in data
+        True
     """
     # Backward-compatible handling of the deprecated, inverted ``header_info`` flag.
     if header_info is not None:
@@ -251,8 +263,16 @@ def save_matfile(
 
     Examples
     --------
-    >>> import numpy as np
-    >>> save_matfile('out.mat', {'x': np.arange(3), 'label': 'trial-1'})
+    .. code-block:: python
+
+        >>> import os
+        >>> import tempfile
+        >>> import numpy as np
+        >>> from braintools.file import save_matfile
+        >>> path = os.path.join(tempfile.mkdtemp(), 'out.mat')
+        >>> save_matfile(path, {'x': np.arange(3), 'label': 'trial-1'})
+        >>> os.path.exists(path)
+        True
     """
     if not isinstance(filename, (str, os.PathLike)):
         raise TypeError(

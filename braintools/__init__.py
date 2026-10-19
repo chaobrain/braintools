@@ -18,6 +18,7 @@ from . import analysis
 from . import cogtask
 from . import conn
 from . import file
+from . import fit
 from . import init
 from . import input
 from . import metric
@@ -72,6 +73,7 @@ __all__ = [
     'input',
     'init',
     'file',
+    'fit',
     'metric',
     'visualize',
     'optim',

@@ -1,6 +1,97 @@
 # Release Notes
 
 
+## Version 0.6.0 (unreleased)
+
+Phase 0.6 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *data and
+fitting*. braintools can now fit any JAX or `brainstate` model to data. It adds
+trajectory drivers for `quad`, a vmapped multi-start minimiser in `optim`, a new
+model-agnostic `braintools.fit` package, and readers and writers for standard
+neuroscience data formats. The design is in
+`docs/specs/2026-10-19-v0.6-data-fitting.md`.
+
+### Added
+
+- **`quad`: trajectories and a method registry.**
+  - `odeint` drives any ODE stepper over a fixed time grid as one compiled
+    `scan`. `checkpoint=True` bounds memory for backpropagation through time,
+    and `n_steps=` allows use under `jit`.
+  - `solve_ivp` integrates with an adaptive step size, using the embedded error
+    estimates of `dopri5`, `rk45`, `rkf45`, `rk23`, `bs32` and `dopri8` and a
+    PI step-size controller.
+    - The loop is bounded (`max_steps`) and reverse-mode differentiable. The
+      gradient replays only the accepted steps, through a checkpointed scan by
+      default, so rejected attempts cannot produce NaN gradients and memory
+      stays small.
+    - `t_eval` points are hit exactly.
+    - It returns an `ODESolution`.
+    - It is checked against `scipy.integrate.solve_ivp`.
+  - `register_method`, `get_method` and `list_methods` look steppers up by short
+    name (`'rk4'`, `'dopri5'`, `'milstein'`, …). User-defined methods can be
+    registered too.
+- **`optim`: multi-start minimisation.**
+  - `multistart_minimize` minimises a pure function from many starts at once:
+    one compiled, vmapped loop with per-start convergence masks.
+  - The update rule is L-BFGS, Adam or gradient descent.
+  - Box bounds are handled by a sigmoid reparameterisation.
+  - Starts whose loss becomes non-finite are never chosen as the best.
+  - `multistart_init` draws uniform starts inside bounds.
+- **`braintools.fit`** (new package):
+  - `Term` and `Objective` compose weighted losses with `+` and `*`;
+    `breakdown` reports each term separately.
+  - `Fitter` fits a pure `simulate(params)` over a search space (Quantity
+    bounds allowed), or a `brainstate` module through `Fitter.from_module`.
+    - Module mode uses the module's `Param(fit=True)` parameters and their
+      bounding transforms. It writes the best values back only when the fit
+      finishes, and adds `reg_loss()` when the module defines it.
+    - Backends: `'grad'` (all starts vmapped), `'scipy'` and `'nevergrad'`
+      (each generation evaluated as one vmapped batch).
+    - Results come back as a `FitResult`.
+  - `sweep` evaluates a function over a parameter grid (cartesian product or
+    zipped values) in memory-bounded vmapped chunks.
+  - `hessian_ci` gives confidence intervals from the Hessian at the optimum.
+    For a linear model they equal statsmodels' OLS intervals.
+- **`braintools.fit.losses`**:
+  - `mse`, `rmse`, `mae` and `correlation_loss`;
+  - functional connectivity: `fc_correlation_loss`, `fc_rmse`, `fcd_ks` and
+    `fcd_wasserstein`;
+  - distributions: `ks_distance` and `wasserstein_1d`;
+  - summary statistics: `psd_log_distance`, `rate_loss` and `cv_loss`;
+  - `van_rossum_loss`, a van Rossum distance on dense rasters that is
+    differentiable through surrogate-gradient spikes.
+
+  The FCD and distribution losses port `brainmass.objectives` with identical
+  numerics, so brainmass's fitter can later be rebased onto them.
+- **`file`: neuroscience data formats** (optional extras):
+  - `save_hdf5` and `load_hdf5` (`braintools[hdf5]`) store nested pytrees of
+    arrays, `brainunit` Quantities (the exact unit is kept) and `SpikeTrains`.
+  - `save_nwb_units`, `load_nwb_units`, `save_nwb_timeseries` and
+    `load_nwb_timeseries` (`braintools[nwb]`).
+  - `to_neo` and `from_neo` (`braintools[neo]`).
+
+  A missing backend raises an `ImportError` with the install hint.
+- **Docs.** API pages for `fit`, plus new sections on the `quad`, `optim` and
+  `file` pages. A model-fitting tutorial, `docs/fit/01_fitting_models.ipynb`.
+
+### Changed
+
+- The `quad` module docstring drives steppers with `odeint` and `scan` instead
+  of Python loops.
+- The `testing` extra now installs the reference libraries used by the test
+  suite: scikit-learn, mne, statsmodels, h5py, pynwb, neo and quantities.
+  Before this, CI skipped the 0.5 analysis reference tests.
+- mypy and the strict docs-warning gate now also cover `braintools.fit`. The
+  docs gate also covers `braintools.quad` and `braintools.file`.
+
+### Fixed
+
+- RST markup errors in the docstrings of `dde_euler_step`,
+  `dde_euler_pc_step`, `dde_heun_pc_step` and `imex_cnab_step`.
+- The docstring examples of `dde_euler_step`, `load_matfile` and
+  `save_matfile` were missing their imports or data. They are now
+  self-contained and doctested.
+
+
 ## Version 0.5.0 (unreleased)
 
 Phase 0.5 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *analysis depth*.
