@@ -99,7 +99,8 @@ def firing_rate(
     r"""Calculate the smoothed population firing rate from spike data.
 
     Computes the time-varying population firing rate by averaging spike counts
-    across neurons and applying temporal smoothing with a rectangular window.
+    across neurons and applying temporal smoothing with a rectangular window, as in
+    Brian 2 [1]_.
     This provides a measure of the overall activity level of the neural population
     over time [1]_.
 
@@ -789,7 +790,7 @@ def phase_locking_value(
     This computes the **vector strength** (Rayleigh resultant length) of each
     neuron's spikes relative to an *external* reference oscillation of frequency
     ``reference_freq``. It is therefore a spike–field locking measure, **not** the
-    Lachaux et al. (1999) pairwise PLV between two continuous signals.
+    Lachaux et al. (1999) [1]_ pairwise PLV between two continuous signals.
 
     Vector strength is biased upward for small spike counts: a neuron with a single
     spike trivially yields ``PLV = 1``, and a handful of spikes can give a large
@@ -906,7 +907,7 @@ def spike_time_tiling_coefficient(
     -----
     The time-coverage terms :math:`T_A`, :math:`T_B` use the **union** of the
     per-spike :math:`[\,s - \tau,\ s + \tau\,]` windows, so overlapping windows are
-    not double-counted (the defining quantity in Cutts & Eglen, 2014). Each STTC
+    not double-counted (the defining quantity in Cutts & Eglen, 2014 [1]_). Each STTC
     term is guarded independently against a zero denominator.
 
     All pairs are computed at once: a cumulative sum marks the samples covered

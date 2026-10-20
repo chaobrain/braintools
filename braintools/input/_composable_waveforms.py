@@ -168,7 +168,7 @@ class Sinusoidal(Input):
     - Frequency should be less than Nyquist frequency (1/(2*dt))
     - With bias=True, output ranges from 0 to 2*amplitude
     - Without bias, output ranges from -amplitude to +amplitude
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -344,7 +344,7 @@ class Square(Input):
     - With bias: alternates between 0 and 2*amplitude
     - Duty cycle controls fraction of time at high level
     - Transitions are instantaneous (limited by dt resolution)
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -517,7 +517,7 @@ class Triangular(Input):
     - With bias=True, ramps between 0 and 2*amplitude
     - Peaks occur at 0, 0.5/frequency, 1/frequency, etc.
     - More suitable than sawtooth for symmetric ramping
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -696,7 +696,7 @@ class Sawtooth(Input):
     - With bias=True, ramps from 0 to 2*amplitude
     - The ramp is continuous, reset is instantaneous
     - Useful for finding thresholds and testing reset mechanisms
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -904,7 +904,7 @@ class Chirp(Input):
     - Logarithmic chirp: frequency changes exponentially
     - Phase is continuous throughout the sweep
     - Useful for finding resonant frequencies
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------
@@ -1108,7 +1108,7 @@ class NoisySinusoidal(Input):
     - Signal-to-noise ratio = amplitude / noise_amplitude
     - Total variance = amplitude²/2 + noise_amplitude²
     - Useful for testing noise robustness
-    - Can be combined with other Input classes using +, -, *, /
+    - Can be combined with other Input classes using ``+``, ``-``, ``*``, ``/``
 
     See Also
     --------

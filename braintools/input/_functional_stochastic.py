@@ -317,7 +317,7 @@ def ou_process(
     -----
     - The process starts at ``mean`` and reverts to it with time constant tau
     - Stationary variance: σ²
-    - Autocorrelation decays as exp(-|lag| / tau)
+    - Autocorrelation decays as :math:`\exp(-|\text{lag}| / \tau)`
     - Useful for modeling synaptic background activity
     """
     dt = brainstate.environ.get_dt()

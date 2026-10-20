@@ -26,12 +26,15 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 
+import importlib
 import os
 import sys
 
 sys.path.insert(0, os.path.abspath('../'))
+sys.path.insert(0, os.path.abspath('_ext'))
 
 import braintools
+from autosummary_names import case_collision_filename_map, documented_modules
 
 import shutil
 
@@ -83,6 +86,13 @@ source_suffix = ['.rst', '.ipynb', '.md']
 # source_suffix = '.rst'
 autosummary_generate = True
 napoleon_numpy_docstring = True  # 你用的是 NumPy 风格
+# Render "Attributes" as ``:ivar:`` fields so they don't duplicate ``:members:``.
+napoleon_use_ivar = True
+
+# Keep stub file names unique on case-insensitive filesystems (``step`` vs ``Step``).
+autosummary_filename_map = case_collision_filename_map(
+    importlib.import_module(name) for name in documented_modules('apis')
+)
 
 # The master toctree document.
 master_doc = 'index'
@@ -96,7 +106,8 @@ nitpick_ignore = [
     ("py:class", "docutils.parsers.rst.directives.body.Sidebar"),
 ]
 
-suppress_warnings = ["myst.domains", "ref.ref"]
+# Plotly outputs also carry a ``text/html`` fallback, which is what gets rendered.
+suppress_warnings = ["myst.domains", "ref.ref", "mystnb.unknown_mime_type"]
 
 numfig = True
 
@@ -123,7 +134,7 @@ html_last_updated_fmt = ""
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
-jupyter_execute_notebooks = "off"
+nb_execution_mode = "off"
 thebe_config = {
     "repository_url": "https://github.com/binder-examples/jupyter-stacks-datascience",
     "repository_branch": "master",
@@ -135,7 +146,7 @@ html_theme_options = {
 
 # -- Options for myst ----------------------------------------------
 # Notebook cell execution timeout; defaults to 30.
-execution_timeout = 200
+nb_execution_timeout = 200
 
 autodoc_default_options = {
     'exclude-members': '....,default_rng',

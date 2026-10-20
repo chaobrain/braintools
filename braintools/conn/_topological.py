@@ -215,7 +215,7 @@ def _group_sizes(n: int, n_groups: int, ratios, label: str) -> List[int]:
 class SmallWorld(PointConnectivity):
     """Watts-Strogatz small-world network topology.
 
-    This class implements the Watts-Strogatz model for generating small-world networks,
+    This class implements the Watts-Strogatz model [1]_ for generating small-world networks,
     which exhibit both high clustering coefficient (like regular lattices) and short
     average path length (like random graphs). The algorithm starts with a regular ring
     lattice where each node connects to its k nearest neighbors, then randomly rewires
@@ -404,13 +404,13 @@ class SmallWorld(PointConnectivity):
 class ScaleFree(PointConnectivity):
     """Barabási-Albert scale-free network with preferential attachment.
 
-    This class implements the Barabási-Albert model for generating scale-free networks,
+    This class implements the Barabási-Albert model [1]_ for generating scale-free networks,
     which exhibit a power-law degree distribution where P(k) ~ k^(-γ). The algorithm uses
     preferential attachment: new nodes preferentially connect to existing nodes with higher
     degree, following the principle of "rich get richer".
 
     Scale-free networks are ubiquitous in real-world systems including the Internet, social
-    networks, protein interaction networks, and neural connectivity patterns in the brain.
+    networks, protein interaction networks, and neural connectivity patterns in the brain [2]_.
     These networks are characterized by the presence of highly connected "hub" nodes and
     are remarkably robust to random failures but vulnerable to targeted attacks on hubs.
 
@@ -747,9 +747,9 @@ class ModularRandom(PointConnectivity):
     distinct modules (communities) with different connection probabilities within
     and between modules. Intra-module connections (within the same module) typically
     have higher probability than inter-module connections (between different modules),
-    creating a community structure.
+    creating a community structure [1]_.
 
-    Modular organization is a fundamental feature of brain networks, observed across
+    Modular organization is a fundamental feature of brain networks [2]_, observed across
     multiple scales from cortical columns to large-scale brain areas. This topology
     enables specialized local processing within modules while maintaining global
     integration through sparse inter-module connections. It balances functional
@@ -1313,12 +1313,12 @@ class HierarchicalRandom(PointConnectivity):
     (layers), where connections flow primarily in a feedforward direction from lower to
     higher levels, with optional feedback connections. Within each level, recurrent
     connections can be specified. This architecture mirrors the hierarchical organization
-    observed in cortical processing streams and deep neural networks.
+    observed in cortical processing streams [1]_ and deep neural networks.
 
     Hierarchical organization is fundamental to brain architecture, enabling progressive
     processing of information from sensory inputs through increasingly abstract
     representations. Each level performs specialized computations while maintaining
-    bidirectional communication with adjacent levels for top-down modulation and
+    bidirectional communication with adjacent levels for top-down modulation [2]_ and
     bottom-up information flow.
 
     Parameters
@@ -1370,7 +1370,8 @@ class HierarchicalRandom(PointConnectivity):
     - Neurons are assigned to levels in sequential order
     - Self-connections are automatically excluded
     - Feedforward connections: level i → level i+1
-    - Feedback connections: level i+1 → level i
+    - Feedback connections: level i+1 → level i (together with the feedforward
+      connections these form a counterstream architecture [3]_)
     - Skip connections: level i → level i+k where k > 1
     - The same weight and delay initialization is used for all connection types
     - Expected connectivity follows a hierarchical pattern with stronger feedforward flow
@@ -1599,10 +1600,10 @@ class HierarchicalRandom(PointConnectivity):
 class CorePeripheryRandom(PointConnectivity):
     """Core-periphery network with densely connected core and sparse periphery.
 
-    This class creates a network with a core-periphery structure where a subset of
+    This class creates a network with a core-periphery structure [1]_ where a subset of
     nodes (the core) are densely interconnected, while the remaining nodes (the periphery)
     are sparsely connected to each other but maintain connections to the core. This
-    architecture is common in brain networks, social networks, and infrastructure systems.
+    architecture is common in brain networks [2]_, social networks, and infrastructure systems.
 
     Core-periphery organization enables efficient information integration through the
     densely connected core while maintaining specialized processing in the periphery.

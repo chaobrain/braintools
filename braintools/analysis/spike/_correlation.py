@@ -84,7 +84,7 @@ def cross_correlation(
     To JIT compile this function, make ``bin``, ``dt``, and ``method`` static.
     For example: ``partial(cross_correlation, bin=10, method='loop')``.
 
-    This is the coincidence-based coherence of Wang & Buzsáki (1996), not a
+    This is the coincidence-based coherence of Wang & Buzsáki (1996) [1]_, not a
     Pearson correlation coefficient.
 
     Examples

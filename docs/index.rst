@@ -87,7 +87,7 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobr
     surrogate/index.md
     trainer/index.md
     visualize/index.md
-    misc/spike_encoding.md
+    misc/index.md
     migration.md
 
 

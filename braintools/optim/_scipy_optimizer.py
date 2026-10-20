@@ -324,10 +324,11 @@ class ScipyOptimizer(Optimizer):
     This optimizer accepts the same bounds structure as
     ``braintools.optim.NevergradOptimizer`` and a loss function with matching
     signature:
-      - If ``bounds`` is a sequence of ``(min, max)`` pairs, ``loss_fun`` is
-        called positionally as ``loss_fun(*params)``.
-      - If ``bounds`` is a dict mapping names to ``(min, max)`` pairs,
-        ``loss_fun`` is called by keyword as ``loss_fun(**params)``.
+
+    - If ``bounds`` is a sequence of ``(min, max)`` pairs, ``loss_fun`` is
+      called positionally as ``loss_fun(*params)``.
+    - If ``bounds`` is a dict mapping names to ``(min, max)`` pairs,
+      ``loss_fun`` is called by keyword as ``loss_fun(**params)``.
 
     Bounds can be scalars or arrays, and may optionally be provided as
     ``brainunit.Quantity``. Internally, SciPy works on the numeric mantissas
