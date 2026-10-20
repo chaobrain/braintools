@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Optional, Tuple, List
+from typing import Any, Optional, Tuple, List
 
 import warnings
 
@@ -245,8 +245,8 @@ def brain_surface_3d(
         # correctly (dividing by ``max`` alone pushed negatives outside [0, 1],
         # where the colormap clamps them). Guard against a degenerate (constant)
         # range that would produce NaN colors.
-        min_val = np.min(face_values)
-        max_val = np.max(face_values)
+        min_val: Any = np.min(face_values)
+        max_val: Any = np.max(face_values)
         span = max_val - min_val
         scaled = (face_values - min_val) / span if span != 0 else np.zeros_like(face_values)
         # ``plt.cm.get_cmap`` was deprecated in matplotlib 3.7 and is removed in
@@ -359,6 +359,8 @@ def connectivity_3d(
             connections = connections.reshape(0, 2)
 
     # Plot source nodes
+    source_colors: Any
+    target_colors: Any
     if node_colors is not None:
         source_colors = node_colors[:len(source_positions)]
         target_colors = node_colors[len(source_positions):len(source_positions) + len(target_positions)]
@@ -366,6 +368,8 @@ def connectivity_3d(
         source_colors = 'red'
         target_colors = 'blue'
 
+    source_sizes: Any
+    target_sizes: Any
     if node_sizes is not None:
         source_sizes = node_sizes[:len(source_positions)]
         target_sizes = node_sizes[len(source_positions):len(source_positions) + len(target_positions)]
@@ -428,6 +432,7 @@ def connectivity_3d(
                     start = source_positions[i]
                     end = target_positions[j]
 
+                    line_width: Any
                     if connection_strengths is not None:
                         line_width = connection_strengths[i, j] * 5
                     else:
@@ -666,7 +671,7 @@ def electrode_array_3d(
         else:
             signal_magnitude = np.abs(signals)
 
-        max_magnitude = np.max(signal_magnitude)
+        max_magnitude: Any = np.max(signal_magnitude)
         relative = signal_magnitude / max_magnitude if max_magnitude > 0 else np.zeros_like(signal_magnitude)
         sizes = 10.0 + 90.0 * signal_scale * relative
         scatter = ax.scatter(electrode_positions[:, 0],

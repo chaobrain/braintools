@@ -54,3 +54,34 @@ Checkpointing
     AsyncManager
     AlreadyExistsError
     InvalidCheckpointPath
+
+Neuro Data Formats
+------------------
+
+Optional backends for standard neuroscience formats; each imports its library
+lazily and raises an ``ImportError`` with the install hint when it is missing.
+
+- **HDF5** (``pip install braintools[hdf5]``): :func:`save_hdf5` /
+  :func:`load_hdf5` round-trip nested dicts, lists and tuples of arrays and
+  scalars, :class:`brainunit.Quantity` leaves (with their exact unit) and
+  :class:`braintools.spike.SpikeTrains`.
+- **NWB** (``pip install braintools[nwb]``): :func:`save_nwb_units` /
+  :func:`load_nwb_units` map a units table to and from ``SpikeTrains`` (times
+  stored in seconds); :func:`save_nwb_timeseries` / :func:`load_nwb_timeseries`
+  store a regularly sampled signal.
+- **NEO** (``pip install braintools[neo]``): :func:`to_neo` / :func:`from_neo`
+  convert between ``SpikeTrains`` and a list of ``neo.SpikeTrain``.
+
+.. autosummary::
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
+
+    save_hdf5
+    load_hdf5
+    save_nwb_units
+    load_nwb_units
+    save_nwb_timeseries
+    load_nwb_timeseries
+    to_neo
+    from_neo

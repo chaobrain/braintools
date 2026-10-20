@@ -1,6 +1,380 @@
 # Release Notes
 
 
+## Version 0.8.0 (unreleased)
+
+Phase 0.8 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): the *release
+candidate*, the last release before 1.0. It adds no features. Every public
+name is in the API reference, the whole package is type-checked, and every
+docstring example runs in CI. Deprecations become visible to end users, and a
+migration guide lists everything that 1.0 removes. The design is in `docs/specs/2026-10-19-v0.8-release-candidate.md`.
+
+### Removal schedule
+
+**braintools 1.0.0 removes every deprecated name and argument** listed in the
+new migration guide (`docs/migration.md`). That covers the `metric` analysis
+functions moved to `braintools.analysis`, the top-level encoders and spike
+operations moved to `braintools.spike`, and the deprecated arguments and
+`trainer` settings. Code that runs without `BraintoolsDeprecationWarning` on
+0.8 is ready for 1.0.
+
+### Changed
+
+- **Deprecation warnings are now shown by default.**
+  `BraintoolsDeprecationWarning` subclasses `FutureWarning` instead of
+  `DeprecationWarning`. Python hides `DeprecationWarning` outside `__main__`,
+  so most users never saw the warnings before.
+  - Filters and `pytest.warns` on `BraintoolsDeprecationWarning` keep working.
+  - **Filters on `DeprecationWarning` no longer catch these warnings**, for
+    example `warnings.filterwarnings('ignore', category=DeprecationWarning)`
+    or a pytest `filterwarnings` entry such as
+    `error::DeprecationWarning`. Filter on `BraintoolsDeprecationWarning` (or
+    `FutureWarning`) instead.
+- **All deprecations go through the registry.** These used to emit a plain
+  `DeprecationWarning` and are now registered, warn with
+  `BraintoolsDeprecationWarning`, and are removed in 1.0.0:
+  - `load_matfile(header_info=...)`;
+  - the `unit=` argument of the initializers in `braintools.init`;
+  - `optim.Adam(beta1=..., beta2=...)`. Use `b1` and `b2`.
+
+  Their messages now use the registry format shared by all deprecations
+  (`` `old` is deprecated since X and will be removed in 1.0.0. Use `new`
+  instead. ``), so code that matched the old message text must be updated.
+- **The whole package is type-checked.** `mypy` (the `[tool.mypy]` config,
+  now `files = ["braintools"]` with tests excluded) reports no errors; before
+  this release CI checked 7 modules and the rest had 456 errors. As before,
+  the bodies of unannotated functions are not checked (`check_untyped_defs`
+  is off). Public
+  annotations were corrected where they were wrong, without changing
+  behaviour:
+  - several were widened to what the code already accepts (for example
+    `LightningModule.on_before_optimizer_step(optimizer)` and
+    `on_after_optimizer_step` take `Optional[Optimizer]`, since they receive
+    `None` when no optimizer is configured);
+  - the abstract `generate` methods of `PointConnectivity` and
+    `MultiCompartmentConnectivity` declare `pre_size`, `post_size`,
+    `pre_positions` and `post_positions`, as every built-in subclass already
+    did. `__call__` still passes them by keyword, so custom subclasses that
+    take `**kwargs` keep working.
+- `trainer`: with `accumulate_grad_batches=k`, `global_step` and `max_steps`
+  count optimizer updates rather than batches (the `max_steps` docstring said
+  batches). Nothing changes for `k = 1`.
+- `braintools.tree` no longer has a `PyTree` attribute (it was an import of
+  `brainstate.typing.PyTree`, never in `__all__`).
+- The `viz` install hint of the interactive plots names the extra
+  (`pip install braintools[viz]`).
+- `nevergrad` is imported only when a `NevergradOptimizer` is created, not on
+  `import braintools.optim`; without it, creating one raises `ImportError`
+  naming the extra (`pip install braintools[nevergrad]`).
+
+### Added
+
+- **Migration guide**, `docs/migration.md`: a table of all registered
+  deprecations (old name, replacement, kind, since, removal) and notes on the
+  larger moves. A test fails when a registered deprecation has no matching
+  table row.
+- **Doctests in CI.** `scripts/run_doctests.py` runs the examples of every
+  public module, including methods and properties, one process per module;
+  the new `doctest` workflow runs it on Python 3.13. All examples now pass.
+  Many were fixed (missing imports, seeds or outputs, stale signatures). The
+  only skipped examples are those that need an external logging service.
+  Some public names, notably most of `visualize`, the `quad` steppers and the
+  surrogate functions, still have no example.
+- **API documentation is complete.** `Initializer`, `metric.L1Loss`,
+  `surrogate.Surrogate`, `visualize.animator`, `interactive_histogram`,
+  `interactive_surface` and `interactive_correlation_matrix` are in the API
+  reference. A test checks that every name in a public `__all__` is listed
+  in the section of its own module; deprecated aliases are covered by the
+  migration guide instead.
+- **Tutorials:**
+  - `docs/spike/01_spike_trains.ipynb`: `SpikeTrains`, conversions, capacity,
+    encoders, bitwise operations and plotting;
+  - `docs/quad/trajectories_and_adaptive.ipynb`: `odeint`, adaptive
+    `solve_ivp` against SciPy, `t_eval`, gradients and the method registry;
+  - `docs/trainer/01_training_loop.ipynb`: a classifier trained with
+    `Trainer`, callbacks, checkpoints and CSV logging;
+  - `docs/optim/06_readout_learning.ipynb`: FORCE, RLS against ridge
+    regression, lasso and `multistart_minimize`.
+
+### Fixed
+
+- `optim`: resuming from a msgpack checkpoint crashed. After
+  `OptaxOptimizer.load_state_dict` with a state dict saved through msgpack,
+  the first `step()` raised `AttributeError: 'str' object has no attribute
+  'mu'` for Adam, SGD with momentum and every other optimizer with internal
+  state. In-memory round trips were unaffected.
+- `optim`: `OptaxOptimizer.state_dict()` crashed before
+  `register_trainable_weights`; it now returns `opt_state: None`, which
+  `load_state_dict` accepts.
+- `optim`: after `SequentialLR.load_state_dict`, `get_last_lr()` and the
+  optimizer's `current_lr` kept their old values; they are now recomputed.
+  Loading also restored only one of the two copies of the milestones, so a
+  scheduler built with different milestones drifted from the saved schedule.
+  Both are restored now, and a state whose milestone count does not match the
+  number of schedulers raises `ValueError`.
+- `optim`: once a scheduler was attached, `optimizer.current_lr` reported
+  `base_lr` at epoch 0 instead of the scheduled rate (the gradient step
+  already used the scheduled rate). Values logged at epoch 0, for example by
+  `trainer`'s `LearningRateMonitor`, change accordingly.
+- `optim`: `OneCycleLR` given only one of `epochs` and `steps_per_epoch`
+  raises `ValueError` instead of silently ignoring it.
+- `trainer`: batch-end callbacks received a leaked JIT tracer for the metrics
+  logged in `training_step` on the first batch and an empty dict on later
+  batches. They now see concrete values on every batch.
+- `trainer`: `Logger.name` of an unnamed W&B or Neptune run returned `None`;
+  it now returns `'default'`.
+- `trainer`: `default_collate_fn` returned a tuple of scalars for a 1-D
+  label array of int32, float32 or another non-float64 NumPy dtype. NumPy
+  scalars, bools and complex values are now stacked into an array that keeps
+  its dtype.
+- `trainer`: `global_step` was never advanced, so checkpoints always stored
+  step 0, `{step}` filenames showed 0, and `ModelCheckpoint(every_n_train_steps=n)`
+  saved a single file. `trainer.global_step` and `model.global_step` now count
+  optimizer steps and stay in sync.
+- `trainer`: `fit(ckpt_path=...)` restarted at epoch 0 and trained
+  `max_epochs` more epochs. It now continues from the epoch after the
+  checkpoint up to `max_epochs` (a total), the step count continues, and it
+  warns when nothing is left to train. A checkpoint saved mid-epoch resumes at
+  the next epoch boundary.
+- `trainer`: resuming did not restore the LR schedulers, so the schedule
+  restarted from its first epoch. `ModelCheckpoint` now saves the state of the
+  schedulers returned by `configure_optimizers` and `fit(ckpt_path=...)`
+  restores it; for older checkpoints without it, the schedulers are stepped
+  once per completed epoch, with a warning.
+- `trainer`: resuming from a checkpoint that had already reached `max_steps`
+  took one more optimizer step. It now warns and trains nothing.
+- `trainer`: `validate`, `test` and `predict` with `ckpt_path` overwrote the
+  trainer's epoch and step counts. They now load only the model weights.
+- `trainer`: `Trainer(enable_checkpointing=True)`, the default, created an
+  empty `checkpoints/` directory in the working directory. The flag is kept
+  for compatibility and does nothing; checkpoints are saved by
+  `ModelCheckpoint`.
+- `conn.CompositeConnectivity`: intersection and difference crashed when the
+  sizes were lists rather than tuples.
+- `cogtask`: composing a feature taken out of a `FeatureSet` (or a shifted
+  set) with `+`, `|`, `*` or `-` kept its old offset, which produced
+  overlapping or out-of-range slices. The result is now laid out from index 0.
+  The same holds for a set built from features taken out of another set, and
+  for a copy of a shifted set; `FeatureSet.copy()` now keeps the original's
+  slice instead of resetting it while keeping the shifted feature offsets.
+  Features composed from fresh `Feature` objects, which is how the built-in
+  tasks build their layouts, are unchanged.
+- Docstrings that could not be parsed (`braintools.input`, `Burst`) or that
+  rendered incorrectly (`imex` integrator) were fixed.
+
+
+## Version 0.7.0 (unreleased)
+
+Phase 0.7 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *building
+blocks and scale*. `braintools.conn` gains degree-constrained generators,
+population networks and exporters to every `brainevent` format, and all
+generators are vectorised and memory-bounded so that 1e5-neuron networks build
+in seconds. It also adds structural graph measures, readout learning rules and
+three cognitive tasks. The design is in
+`docs/specs/2026-10-19-v0.7-building-blocks.md`.
+
+### Added
+
+- **`conn`: fixed-degree generators.** `FixedOutDegree(k)`,
+  `FixedInDegree(k)` and `FixedTotalNum(n)` fix the number of connections
+  exactly. `k` and `n` may be fractions of the population size. Partners are
+  distinct by default (`with_replacement=False`), and self-connections can be
+  excluded.
+- **`conn`: population networks.**
+  - `Population` is a named group of neurons with optional positions.
+  - `Projection` binds a generator to a pre- and a postsynaptic population.
+  - `Network` numbers all neurons globally (`offsets`, `n_neurons`), builds
+    every projection, and assembles them into one block `brainevent.CSR` with
+    `to_csr()`.
+- **`conn`: exporters on `ConnectionResult`.**
+  - `to_fixed_num_per_pre()` and `to_fixed_num_per_post()` export to
+    `brainevent.FixedNumPerPre` and `FixedNumPerPost`. A homogeneous weight
+    stays a scalar.
+  - `to_csc()` exports to `brainevent.CSC`.
+  - `to_scipy_csr(data='weight', unit=None)` exports to SciPy for host-side
+    analysis.
+- **`braintools.analysis.graph`** (new subpackage). It works on a
+  `ConnectionResult`, a SciPy sparse matrix or a dense matrix, and never
+  builds an `N x N` array. Results match networkx.
+  - `degree_distribution`, `clustering_coefficient` (directed or undirected,
+    optionally weighted), `characteristic_path_length` (exact, or from sampled
+    sources) and `modularity`.
+  - `motif_counts`: the 16-class triad census, dyad counts and reciprocity.
+  - `spectral_radius`, which keeps the weight unit.
+  - `small_world_index`, compared against Erdős–Rényi graphs of the same size.
+- **`optim`: readout learning and regression.**
+  - `RLS` (recursive least squares, with an optional forgetting factor),
+    `FORCE` (RLS applied to the readout of a recurrent network) and `LMS`.
+    Each updates registered weight States in place from
+    `step(inputs, outputs, targets)` and runs under `jit` and
+    `brainstate.transform.for_loop`.
+  - `linear_regression`, `ridge_regression`, `lasso_regression` and
+    `elastic_net_regression` return a `RegressionResult`. Linear and ridge
+    regression are differentiable; lasso and elastic net are solved with FISTA.
+- **`cogtask`: three tasks.** `MultiSensoryIntegration`, `OneTwoThreeGo` and
+  `EconomicDecisionMaking`, modelled on the NeuroGym tasks of the same names.
+- **Benchmark.** `benchmarks/conn_build.py` measures build time and peak
+  memory for four 1e5-neuron cases, each in its own process (`--quick` runs
+  N = 1e4). Results are in `benchmarks/README.md`.
+- **Docs.** A tutorial on population networks, graph measures and scale,
+  `docs/conn/06_networks_and_scale.ipynb`, plus API sections for the new names.
+
+### Changed
+
+- **All `conn` generators are vectorised and memory-bounded.**
+  - Python loops over neurons, pairs or edges are replaced by array code.
+  - All-pairs work (distances, probabilities) runs in row chunks of at most
+    `2**22` pairs, or uses a k-d tree when a distance cutoff is set.
+  - No generator builds a dense `n_pre x n_post` array, so memory grows with
+    the number of edges. For example, at N = 1e4, `FixedProb(0.001)` takes
+    0.013 s and 335 MB instead of 1.2 s and 1.2 GB.
+- **The random stream changed** for the classes below: the same `seed` gives
+  a different, identically distributed set of connections. Each class has a
+  `versionchanged:: 0.7.0` note in its docstring.
+  - `Random` / `FixedProb`, `ExcitatoryInhibitory`, `ClusteredRandom` and
+    `RadialPatches`.
+  - `DistanceDependent`, `Gaussian` and `Exponential`, only when a distance
+    cutoff (`max_distance`) is set.
+  - `SmallWorld` (`p > 0`), `ScaleFree`, `Regular`, `ModularRandom`,
+    `HierarchicalRandom` and `CorePeripheryRandom`.
+  - `CompartmentSpecific` and the anatomical classes built on it
+    (`SomaToDendrite`, `AxonToSoma`, `DendriteToSoma`, `AxonToDendrite`,
+    `DendriteToDendrite`, `ProximalTargeting`, `DistalTargeting`,
+    `BasalDendriteTargeting`, `ApicalDendriteTargeting`, `BranchSpecific`),
+    `DendriticTree`, `AxonalProjection` and `TopographicProjection` without
+    spatial terms or a map, `DendriticIntegration`, `SynapticClustering`,
+    `AxonalBranching` and `SynapticPlacement`. `AllToAllCompartments` keeps
+    its edges; only random weight and delay initializers draw different
+    values.
+
+  Unchanged for the same seed:
+  - `Ring`, `Grid2d`, `AllToAll` and `OneToOne`;
+  - the distance generators without a cutoff;
+  - all kernels;
+  - `MorphologyDistance`, `AxonalArborization`, and the spatial forms of
+    `AxonalProjection` and `TopographicProjection`.
+- `SmallWorld` rewiring now picks new targets uniformly among nodes that are
+  neither the source nor one of its current targets. Before, the original
+  targets of edges not yet rewired were also excluded.
+- **Input validation.**
+  - `ModularRandom`, `HierarchicalRandom` and `CorePeripheryRandom` raise
+    `ValueError` for probabilities outside `[0, 1]`; such values used to act
+    as 0 or 1.
+  - `ClusteredRandom` raises `ValueError` when the number of positions does
+    not match the population size.
+  - The kernels raise `ValueError` instead of `IndexError` when there are
+    fewer post positions than `post_size`.
+  - `AxonalArborization`, and `AxonalProjection` / `TopographicProjection`
+    with a spatial term, raise `ValueError` when the number of positions
+    differs from the population size. Before, extra positions were used and
+    could produce out-of-range indices.
+- `weight2csr()` and `delay2csr()` cast floating values to the default float
+  type (`brainstate.environ.dftype()`), like the new exporters, instead of
+  handing host float64 arrays to `brainevent`. A missing weight or delay is
+  now a 0-d array instead of a Python float.
+- `ExcitatoryInhibitory` accepts list sizes as well as tuples.
+- The `testing` extra installs networkx, the reference for the graph measures.
+
+### Fixed
+
+- `ScaleFree`'s docstring example crashed (`Uniform(min=, max=)`), and its
+  note claimed that the average degree grows logarithmically; it is about
+  `2 m`.
+- Docstring examples of `AllToAll`, `OneToOne` and `Exponential` were missing
+  imports or outputs. They are now self-contained and doctested.
+
+
+## Version 0.6.0 (unreleased)
+
+Phase 0.6 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *data and
+fitting*. braintools can now fit any JAX or `brainstate` model to data. It adds
+trajectory drivers for `quad`, a vmapped multi-start minimiser in `optim`, a new
+model-agnostic `braintools.fit` package, and readers and writers for standard
+neuroscience data formats. The design is in
+`docs/specs/2026-10-19-v0.6-data-fitting.md`.
+
+### Added
+
+- **`quad`: trajectories and a method registry.**
+  - `odeint` drives any ODE stepper over a fixed time grid as one compiled
+    `scan`. `checkpoint=True` bounds memory for backpropagation through time,
+    and `n_steps=` allows use under `jit`.
+  - `solve_ivp` integrates with an adaptive step size, using the embedded error
+    estimates of `dopri5`, `rk45`, `rkf45`, `rk23`, `bs32` and `dopri8` and a
+    PI step-size controller.
+    - The loop is bounded (`max_steps`) and reverse-mode differentiable. The
+      gradient replays only the accepted steps, through a checkpointed scan by
+      default, so rejected attempts cannot produce NaN gradients and memory
+      stays small.
+    - `t_eval` points are hit exactly.
+    - It returns an `ODESolution`.
+    - It is checked against `scipy.integrate.solve_ivp`.
+  - `register_method`, `get_method` and `list_methods` look steppers up by short
+    name (`'rk4'`, `'dopri5'`, `'milstein'`, …). User-defined methods can be
+    registered too.
+- **`optim`: multi-start minimisation.**
+  - `multistart_minimize` minimises a pure function from many starts at once:
+    one compiled, vmapped loop with per-start convergence masks.
+  - The update rule is L-BFGS, Adam or gradient descent.
+  - Box bounds are handled by a sigmoid reparameterisation.
+  - Starts whose loss becomes non-finite are never chosen as the best.
+  - `multistart_init` draws uniform starts inside bounds.
+- **`braintools.fit`** (new package):
+  - `Term` and `Objective` compose weighted losses with `+` and `*`;
+    `breakdown` reports each term separately.
+  - `Fitter` fits a pure `simulate(params)` over a search space (Quantity
+    bounds allowed), or a `brainstate` module through `Fitter.from_module`.
+    - Module mode uses the module's `Param(fit=True)` parameters and their
+      bounding transforms. It writes the best values back only when the fit
+      finishes, and adds `reg_loss()` when the module defines it.
+    - Backends: `'grad'` (all starts vmapped), `'scipy'` and `'nevergrad'`
+      (each generation evaluated as one vmapped batch).
+    - Results come back as a `FitResult`.
+  - `sweep` evaluates a function over a parameter grid (cartesian product or
+    zipped values) in memory-bounded vmapped chunks.
+  - `hessian_ci` gives confidence intervals from the Hessian at the optimum.
+    For a linear model they equal statsmodels' OLS intervals.
+- **`braintools.fit.losses`**:
+  - `mse`, `rmse`, `mae` and `correlation_loss`;
+  - functional connectivity: `fc_correlation_loss`, `fc_rmse`, `fcd_ks` and
+    `fcd_wasserstein`;
+  - distributions: `ks_distance` and `wasserstein_1d`;
+  - summary statistics: `psd_log_distance`, `rate_loss` and `cv_loss`;
+  - `van_rossum_loss`, a van Rossum distance on dense rasters that is
+    differentiable through surrogate-gradient spikes.
+
+  The FCD and distribution losses port `brainmass.objectives` with identical
+  numerics, so brainmass's fitter can later be rebased onto them.
+- **`file`: neuroscience data formats** (optional extras):
+  - `save_hdf5` and `load_hdf5` (`braintools[hdf5]`) store nested pytrees of
+    arrays, `brainunit` Quantities (the exact unit is kept) and `SpikeTrains`.
+  - `save_nwb_units`, `load_nwb_units`, `save_nwb_timeseries` and
+    `load_nwb_timeseries` (`braintools[nwb]`).
+  - `to_neo` and `from_neo` (`braintools[neo]`).
+
+  A missing backend raises an `ImportError` with the install hint.
+- **Docs.** API pages for `fit`, plus new sections on the `quad`, `optim` and
+  `file` pages. A model-fitting tutorial, `docs/fit/01_fitting_models.ipynb`.
+
+### Changed
+
+- The `quad` module docstring drives steppers with `odeint` and `scan` instead
+  of Python loops.
+- The `testing` extra now installs the reference libraries used by the test
+  suite: scikit-learn, mne, statsmodels, h5py, pynwb, neo and quantities.
+  Before this, CI skipped the 0.5 analysis reference tests.
+- mypy and the strict docs-warning gate now also cover `braintools.fit`. The
+  docs gate also covers `braintools.quad` and `braintools.file`.
+
+### Fixed
+
+- RST markup errors in the docstrings of `dde_euler_step`,
+  `dde_euler_pc_step`, `dde_heun_pc_step` and `imex_cnab_step`.
+- The docstring examples of `dde_euler_step`, `load_matfile` and
+  `save_matfile` were missing their imports or data. They are now
+  self-contained and doctested.
+
+
 ## Version 0.5.0 (unreleased)
 
 Phase 0.5 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *analysis depth*.

@@ -21,7 +21,9 @@ from .decision_making import (
     ContextDecisionMaking,
     SingleContextDecisionMaking,
     PulseDecisionMaking,
+    MultiSensoryIntegration,
 )
+from .economic import EconomicDecisionMaking
 from .motor import (
     AntiReach,
     Reaching1D,
@@ -45,6 +47,7 @@ from .working_memory import (
     ImmediateDirectionReproduction,
     DelayDirectionClassification,
     ImmediateDirectionClassification,
+    OneTwoThreeGo,
 )
 
 __all__ = [
@@ -54,6 +57,8 @@ __all__ = [
     'ContextDecisionMaking',
     'SingleContextDecisionMaking',
     'PulseDecisionMaking',
+    'MultiSensoryIntegration',
+    'EconomicDecisionMaking',
     # Working Memory
     'DelayMatchSample',
     'DualDelayMatchSample',
@@ -68,6 +73,7 @@ __all__ = [
     'ImmediateDirectionReproduction',
     'DelayDirectionClassification',
     'ImmediateDirectionClassification',
+    'OneTwoThreeGo',
     # Reasoning
     'HierarchicalReasoning',
     'ProbabilisticReasoning',

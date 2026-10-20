@@ -14,7 +14,7 @@
 # ==============================================================================
 
 import warnings
-from typing import Optional, Union, Tuple, List
+from typing import Any, Optional, Union, Tuple, List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,7 +27,7 @@ from ._utils import as_array
 # ``np.trapz`` was renamed to ``np.trapezoid`` in NumPy 2.0 and removed
 # outright in NumPy 2.4, so resolve whichever name the installed NumPy
 # provides (falling back to ``np.trapz`` for NumPy < 2.0).
-_trapezoid = getattr(np, 'trapezoid', None) or np.trapz
+_trapezoid = getattr(np, 'trapezoid', None) or getattr(np, 'trapz')
 
 
 def _as_groups(data):
@@ -148,7 +148,7 @@ def correlation_matrix(
 
     # Mask diagonal if requested
     if mask_diagonal:
-        mask = np.eye(corr_matrix.shape[0], dtype=bool)
+        mask: Any = np.eye(corr_matrix.shape[0], dtype=bool)
         corr_matrix = np.ma.masked_array(corr_matrix, mask=mask)
 
     # Plot matrix
@@ -335,13 +335,13 @@ def qq_plot(
     n = len(data)
     probs = (np.arange(1, n + 1) - 0.5) / n
     if distribution == 'norm':
-        theoretical_q = stats.norm.ppf(probs)
+        theoretical_q = np.asarray(stats.norm.ppf(probs))
         dist_name = 'Normal'
     elif distribution == 'uniform':
-        theoretical_q = stats.uniform.ppf(probs)
+        theoretical_q = np.asarray(stats.uniform.ppf(probs))
         dist_name = 'Uniform'
     elif distribution == 'expon':
-        theoretical_q = stats.expon.ppf(probs)
+        theoretical_q = np.asarray(stats.expon.ppf(probs))
         dist_name = 'Exponential'
     else:
         raise ValueError(f"Unknown distribution: {distribution}")
@@ -698,8 +698,8 @@ def regression_plot(
         # which would otherwise divide by zero and yield NaN: a perfect fit
         # (ss_res == 0) is R² = 1.0, anything else is undefined -> 0.0.
         y_pred = np.polyval(coeffs, x)
-        ss_res = np.sum((y - y_pred) ** 2)
-        ss_tot = np.sum((y - np.mean(y)) ** 2)
+        ss_res: Any = np.sum((y - y_pred) ** 2)
+        ss_tot: Any = np.sum((y - np.mean(y)) ** 2)
         if ss_tot == 0:
             r_squared = 1.0 if np.isclose(ss_res, 0.0) else 0.0
         else:
@@ -955,10 +955,10 @@ def roc_curve(
     for threshold in thresholds:
         y_pred = (y_scores >= threshold).astype(int)
 
-        tp = np.sum((y_true == 1) & (y_pred == 1))
-        fp = np.sum((y_true == 0) & (y_pred == 1))
-        tn = np.sum((y_true == 0) & (y_pred == 0))
-        fn = np.sum((y_true == 1) & (y_pred == 0))
+        tp: Any = np.sum((y_true == 1) & (y_pred == 1))
+        fp: Any = np.sum((y_true == 0) & (y_pred == 1))
+        tn: Any = np.sum((y_true == 0) & (y_pred == 0))
+        fn: Any = np.sum((y_true == 1) & (y_pred == 0))
 
         tpr.append(tp / (tp + fn) if (tp + fn) > 0 else 0)
         fpr.append(fp / (fp + tn) if (fp + tn) > 0 else 0)
@@ -1040,9 +1040,9 @@ def precision_recall_curve(
     for threshold in thresholds:
         y_pred = (y_scores >= threshold).astype(int)
 
-        tp = np.sum((y_true == 1) & (y_pred == 1))
-        fp = np.sum((y_true == 0) & (y_pred == 1))
-        fn = np.sum((y_true == 1) & (y_pred == 0))
+        tp: Any = np.sum((y_true == 1) & (y_pred == 1))
+        fp: Any = np.sum((y_true == 0) & (y_pred == 1))
+        fn: Any = np.sum((y_true == 1) & (y_pred == 0))
 
         prec = tp / (tp + fp) if (tp + fp) > 0 else 0
         rec = tp / (tp + fn) if (tp + fn) > 0 else 0

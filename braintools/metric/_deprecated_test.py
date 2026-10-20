@@ -174,14 +174,14 @@ def test_metric_all_keeps_names_and_order():
 
 
 def test_analysis_exposes_only_subpackages():
-    assert braintools.analysis.__all__ == ['spike', 'spectral', 'field', 'population', 'stats']
+    assert braintools.analysis.__all__ == ['spike', 'spectral', 'field', 'population', 'stats', 'graph']
     for name in MOVED:
         assert not hasattr(braintools.analysis, name), name
 
 
 def test_new_functions_do_not_warn():
     with warnings.catch_warnings():
-        warnings.simplefilter('error', DeprecationWarning)
+        warnings.simplefilter('error', BraintoolsDeprecationWarning)
         braintools.analysis.stats.weighted_correlation(_X, _Y, _W)
 
 

@@ -15,6 +15,9 @@
 
 # -*- coding: utf-8 -*-
 
+import os
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -354,3 +357,27 @@ class TestNevergradUnitStripping:
         assert isinstance(tau, u.Quantity) and isinstance(v, u.Quantity)
         np.testing.assert_allclose(tau.to_decimal(u.ms), 20.0, atol=1.0)
         np.testing.assert_allclose(v.to_decimal(u.mV), -50.0, atol=1.0)
+
+
+class TestLazyNevergradImport:
+
+    def test_importing_optim_does_not_import_nevergrad(self):
+        # nevergrad is an optional extra: it must load only when a
+        # NevergradOptimizer is created, not on ``import braintools.optim``.
+        code = (
+            "import sys, braintools, braintools.optim, braintools.fit; "
+            "print('nevergrad' in sys.modules)"
+        )
+        out = subprocess.run(
+            [sys.executable, '-c', code], capture_output=True, text=True, check=True,
+            env={**os.environ, 'JAX_PLATFORMS': 'cpu'},
+        )
+        assert out.stdout.strip().splitlines()[-1] == 'False'
+
+    def test_missing_nevergrad_raises_with_install_hint(self):
+        # ``sys.modules[name] = None`` makes ``import name`` raise ImportError.
+        with patch.dict(sys.modules, {'nevergrad': None}):
+            with pytest.raises(ImportError, match=r'braintools\[nevergrad\]'):
+                O.NevergradOptimizer(
+                    lambda x: jnp.sum(x ** 2, axis=-1), bounds=[(-1.0, 1.0)], n_sample=4,
+                )

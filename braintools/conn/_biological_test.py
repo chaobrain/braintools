@@ -514,3 +514,63 @@ class TestExcitatoryInhibitory(unittest.TestCase):
             ExcitatoryInhibitory(exc_prob=1.2)
         with self.assertRaises(ValueError):
             ExcitatoryInhibitory(inh_prob=-0.5)
+
+
+class TestExcitatoryInhibitoryStatistics(unittest.TestCase):
+    """0.7: binomial-count blocks (statistical checks instead of exact edges)."""
+
+    @staticmethod
+    def _within(count, mean, var, k=5.0):
+        return abs(count - mean) <= k * np.sqrt(var) + 1
+
+    def test_block_counts_within_binomial_bounds(self):
+        pre, post, ratio, pe, pi = 500, 400, 0.8, 0.1, 0.25
+        result = ExcitatoryInhibitory(exc_ratio=ratio, exc_prob=pe, inh_prob=pi, seed=0)(
+            pre_size=pre, post_size=post)
+        n_exc = int(pre * ratio)
+        exc = result.pre_indices < n_exc
+        m_e, m_i = n_exc * post, (pre - n_exc) * post
+        self.assertTrue(self._within(int(exc.sum()), m_e * pe, m_e * pe * (1 - pe)))
+        self.assertTrue(self._within(int((~exc).sum()), m_i * pi, m_i * pi * (1 - pi)))
+        self.assertEqual(result.metadata['n_excitatory'], n_exc)
+        self.assertEqual(result.metadata['n_inhibitory'], pre - n_exc)
+
+    def test_sorted_distinct_and_excitatory_first(self):
+        result = ExcitatoryInhibitory(exc_ratio=0.75, exc_prob=0.2, inh_prob=0.4, seed=1)(
+            pre_size=120, post_size=90)
+        key = result.pre_indices * 90 + result.post_indices
+        self.assertTrue(np.all(np.diff(key) > 0))
+        self.assertTrue(np.all(result.post_indices < 90))
+        self.assertEqual(result.pre_indices.dtype, np.int64)
+
+    def test_weights_follow_block_order(self):
+        result = ExcitatoryInhibitory(exc_ratio=0.8, exc_prob=0.3, inh_prob=0.3,
+                                      exc_weight=1.0 * u.nS, inh_weight=-2.0 * u.nS, seed=2)(
+            pre_size=50, post_size=40)
+        w = u.get_mantissa(result.weights)
+        exc = result.pre_indices < 40
+        np.testing.assert_allclose(w[exc], 1.0)
+        np.testing.assert_allclose(w[~exc], -2.0)
+
+    def test_self_connections_are_kept(self):
+        n, p = 1000, 0.3
+        result = ExcitatoryInhibitory(exc_ratio=0.5, exc_prob=p, inh_prob=p, seed=3)(pre_size=n, post_size=n)
+        n_self = int(np.sum(result.pre_indices == result.post_indices))
+        self.assertTrue(self._within(n_self, n * p, n * p * (1 - p)))
+
+    def test_tuple_and_list_sizes(self):
+        result = ExcitatoryInhibitory(exc_prob=0.2, inh_prob=0.2, seed=4)(pre_size=[4, 5], post_size=(3, 4))
+        self.assertTrue(np.all(result.pre_indices < 20))
+        self.assertTrue(np.all(result.post_indices < 12))
+
+    def test_memory_bound_2e4(self):
+        import tracemalloc
+        # Dense float64 masks for the two blocks would need 3.2 GB.
+        tracemalloc.start()
+        try:
+            result = ExcitatoryInhibitory(exc_prob=0.01, inh_prob=0.02, seed=5)(pre_size=20000, post_size=20000)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertGreater(result.n_connections, 4_000_000)
+        self.assertLess(peak, 300 * 2 ** 20)

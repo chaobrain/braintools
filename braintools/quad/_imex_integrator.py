@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
+r"""
 Implicit–explicit (IMEX) time integrators for split ODEs.
 
 These steppers solve ODEs split into nonstiff (explicit) and stiff (implicit)
@@ -41,7 +41,7 @@ very stiff implicit parts may need more Newton iterations (``max_iter``).
 """
 
 import math
-from typing import Callable, Any
+from typing import Callable, TypeAlias
 
 import brainstate
 import jax
@@ -56,9 +56,10 @@ __all__ = [
     'imex_cnab_step',
 ]
 
-DT = brainstate.typing.ArrayLike
-PyTree = brainstate.typing.PyTree
-F = Callable[[PyTree, DT, Any], PyTree]
+DT: TypeAlias = brainstate.typing.ArrayLike
+PyTree: TypeAlias = brainstate.typing.PyTree
+# f(y, t, *args, **kwargs) -> contribution to dy/dt
+F: TypeAlias = Callable[..., PyTree]
 
 
 # States with at most this many elements use a dense Jacobian and direct solve;
@@ -234,10 +235,10 @@ def imex_cnab_step(
     CNAB (Crank–Nicolson / Adams–Bashforth) IMEX step (second order).
 
     Advances using explicit AB2 for the nonstiff part and trapezoidal rule for
-    the stiff part:
+    the stiff part::
 
-    ``y_{n+1} = y_n + dt * [ 3/2 f_exp(y_n, t_n) - 1/2 f_exp(y_{n-1}, t_{n-1}) ]
-                   + dt/2 * [ f_imp(y_{n+1}, t_{n+1}) + f_imp(y_n, t_n) ]``
+        y_{n+1} = y_n + dt * [ 3/2 f_exp(y_n, t_n) - 1/2 f_exp(y_{n-1}, t_{n-1}) ]
+                      + dt/2 * [ f_imp(y_{n+1}, t_{n+1}) + f_imp(y_n, t_n) ]
 
     This is a two-step method: start it with a one-step method (for example
     :func:`imex_ars222_step`) to obtain ``y_prev`` at the first step.

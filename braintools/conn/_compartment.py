@@ -26,10 +26,18 @@ Key Features:
 - Axonal projection patterns and targeting rules
 - Morphology-aware spatial connectivity
 - Realistic synaptic placement based on neuron morphology
+
+Memory and time: no generator builds an ``N_pre x N_post`` array. Uniform
+connection probabilities draw a binomial edge count and then that many distinct
+pairs, so the cost scales with the number of edges. Pair-specific probabilities
+(distance profiles, topographic maps, arborization fields) are evaluated in
+pre-neuron chunks of at most ``MAX_CHUNK_PAIRS`` pairs; drawing their uniforms
+chunk by chunk consumes the random stream in the same order as a single
+full-matrix draw, so those classes give the same output as before.
 """
 
 import warnings
-from typing import Optional, Tuple, Union, Dict, List, Callable
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import brainunit as u
 import numpy as np
@@ -39,6 +47,13 @@ from braintools._deprecation import register_deprecation, warn_deprecated
 from braintools.init import DistanceProfile, ExponentialProfile, GaussianProfile, LinearProfile
 from braintools.init._init_base import param, Initializer
 from ._base import MultiCompartmentConnectivity, ConnectionResult
+from ._sampling import (
+    MAX_CHUNK_PAIRS,
+    bernoulli_pairs,
+    randint,
+    row_chunks,
+    sample_rows_without_replacement,
+)
 
 __all__ = [
     'SOMA',
@@ -125,6 +140,24 @@ def _as_2d_positions(positions):
     return positions
 
 
+def _check_position_counts(owner, pre_values, post_values, pre_num, post_num):
+    """Raise ``ValueError`` unless there is exactly one position per neuron.
+
+    ``pre_values``/``post_values`` are the 2-D position arrays and
+    ``pre_num``/``post_num`` the flattened population sizes.
+    """
+    if len(pre_values) != pre_num:
+        raise ValueError(
+            f'{owner} got {len(pre_values)} pre_positions for pre_size {pre_num}; '
+            f'one position per neuron is required.'
+        )
+    if len(post_values) != post_num:
+        raise ValueError(
+            f'{owner} got {len(post_values)} post_positions for post_size {post_num}; '
+            f'one position per neuron is required.'
+        )
+
+
 def _length_and_positions(length, pre_positions, post_positions):
     """Express a length scale and both position arrays as plain numbers in one unit.
 
@@ -147,6 +180,146 @@ def _length_and_positions(length, pre_positions, post_positions):
         _as_2d_positions(pre_val),
         _as_2d_positions(post_val),
     )
+
+
+def _chunks(n_pre, n_post):
+    """Pre-row chunks of at most ``MAX_CHUNK_PAIRS`` pairs (read at call time)."""
+    return row_chunks(n_pre, n_post, MAX_CHUNK_PAIRS)
+
+
+def _uniform_pairs(rng, pre_num, post_num, prob, exclude_self):
+    """Independent Bernoulli(``prob``) pairs without a dense mask.
+
+    Draws the edge count from a binomial and then that many distinct pairs,
+    sorted by ``(pre, post)``. With ``exclude_self`` (square blocks only) the
+    pairs ``(i, i)`` are never drawn.
+    """
+    return bernoulli_pairs(rng, pre_num, post_num, prob, allow_self_connections=not exclude_self)
+
+
+def _chunked_mask_pairs(rng, pre_num, post_num, chunk_probs):
+    """Draw ``uniform < probability`` for every pair, one pre-row chunk at a time.
+
+    ``chunk_probs(start, stop)`` returns the ``(stop - start, post_num)``
+    probabilities (or a boolean ``(probs, eligible)`` tuple) of that chunk. The
+    uniforms are drawn chunk by chunk in row order, which consumes ``rng``
+    exactly like one ``rng.random((pre_num, post_num))`` call.
+
+    Returns
+    -------
+    pre, post : np.ndarray
+        int64 indices sorted by ``(pre, post)``.
+    """
+    pre_parts, post_parts = [], []
+    for start, stop in _chunks(pre_num, post_num):
+        probs = chunk_probs(start, stop)
+        eligible = None
+        if isinstance(probs, tuple):
+            probs, eligible = probs
+        mask = rng.random((stop - start, post_num)) < probs
+        if eligible is not None:
+            mask &= eligible
+        i, j = np.nonzero(mask)
+        pre_parts.append(i.astype(np.int64) + start)
+        post_parts.append(j.astype(np.int64))
+    if not pre_parts:
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
+    return np.concatenate(pre_parts), np.concatenate(post_parts)
+
+
+def _unique_rows(values):
+    """``np.unique(values, axis=0)`` with a flat inverse index."""
+    uniq, inverse = np.unique(values, axis=0, return_inverse=True)
+    return uniq, np.asarray(inverse).reshape(-1)
+
+
+def _evaluate_pair_function(func, pre_values, post_unique, post_inverse):
+    """Evaluate a scalar ``func(pre_row, post_row)`` on all pairs of a chunk.
+
+    The function is called once per pair of *distinct* positions (rows that
+    compare equal share one call); the results are scattered back to the
+    ``(len(pre_values), len(post_inverse))`` pair grid.
+    """
+    pre_unique, pre_inverse = _unique_rows(pre_values)
+    grid = np.empty((len(pre_unique), len(post_unique)), dtype=float)
+    for a, pre_row in enumerate(pre_unique):
+        for b, post_row in enumerate(post_unique):
+            grid[a, b] = func(pre_row, post_row)
+    return grid[pre_inverse][:, post_inverse]
+
+
+def _uniform_branches(rng, n_branches, post_num, exclude_self):
+    """Uniform distinct targets for every axon, ``n_branches[i]`` for axon ``i``.
+
+    Counts are capped at the number of allowed targets. Axons with the same
+    count are sampled together (a loop over the few distinct counts), so the
+    work is ``O(total branches)``. Returns ``(pre, post)`` sorted by pre, post.
+    """
+    available = max(post_num - (1 if exclude_self else 0), 0)
+    n_branches = np.minimum(n_branches, available)
+    pre_parts, post_parts = [], []
+    for k in np.unique(n_branches[n_branches > 0]):
+        rows = np.nonzero(n_branches == k)[0].astype(np.int64)
+        targets = sample_rows_without_replacement(
+            rng, rows.size, post_num, int(k), exclude=rows if exclude_self else None
+        )
+        pre_parts.append(np.repeat(rows, int(k)))
+        post_parts.append(targets.reshape(-1))
+    if not pre_parts:
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
+    return _sorted_by_pre_post(np.concatenate(pre_parts), np.concatenate(post_parts))
+
+
+def _weighted_branches(rng, n_branches, post_num, pre_pos, post_pos, spread, exclude_self):
+    """Distance-weighted distinct targets for every axon, in pre-row chunks.
+
+    Axon ``i`` picks ``n_branches[i]`` distinct targets by successive sampling
+    with weights ``w = exp(-d**2 / (2 * spread**2))`` (targets whose weight
+    underflows to zero, and the axon's own neuron when ``exclude_self``, are not
+    eligible; the count is capped at the number of eligible targets). Successive
+    sampling is done with exponential keys: the targets with the smallest
+    ``E / w`` (``E ~ Exp(1)``, compared in log space) are the ones drawn first
+    (Efraimidis and Spirakis, 2006). ``pre_pos`` and ``post_pos`` must hold one
+    row per neuron (``len(n_branches)`` and ``post_num`` rows; checked by the
+    caller). Returns ``(pre, post)`` sorted by pre, post.
+    """
+    pre_num = len(n_branches)
+    pre_parts, post_parts = [], []
+    for start, stop in _chunks(pre_num, post_num):
+        counts = n_branches[start:stop]
+        if not counts.any():
+            continue
+        distances = cdist(pre_pos[start:stop], post_pos)
+        log_w = -distances ** 2 / (2 * spread ** 2)
+        eligible = np.exp(log_w) > 0
+        if exclude_self:
+            rows = np.arange(start, min(stop, post_num))
+            eligible[rows - start, rows] = False
+        counts = np.minimum(counts, np.count_nonzero(eligible, axis=1))
+        k_max = int(counts.max())
+        if k_max == 0:
+            continue
+        with np.errstate(divide='ignore'):
+            log_keys = np.log(rng.standard_exponential(distances.shape)) - log_w
+        log_keys[~eligible] = np.inf
+        if k_max < post_num:
+            cand = np.argpartition(log_keys, k_max - 1, axis=1)[:, :k_max]
+        else:
+            cand = np.broadcast_to(np.arange(post_num), log_keys.shape)
+        cand = np.take_along_axis(cand, np.argsort(np.take_along_axis(log_keys, cand, axis=1), axis=1), axis=1)
+        take = np.arange(k_max)[None, :] < counts[:, None]
+        rows = np.broadcast_to(np.arange(start, stop, dtype=np.int64)[:, None], cand.shape)
+        pre_parts.append(rows[take])
+        post_parts.append(cand[take].astype(np.int64))
+    if not pre_parts:
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
+    return _sorted_by_pre_post(np.concatenate(pre_parts), np.concatenate(post_parts))
+
+
+def _sorted_by_pre_post(*arrays):
+    """Sort parallel edge arrays by ``(pre, post)`` (the first two arrays)."""
+    order = np.lexsort((arrays[1], arrays[0]))
+    return tuple(a[order] for a in arrays)
 
 
 class CompartmentSpecific(MultiCompartmentConnectivity):
@@ -174,6 +347,20 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
         pre/post populations have the same size, connections with
         ``pre_idx == post_idx`` are dropped regardless of compartment. Default ``False``.
 
+    Notes
+    -----
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Connected pairs are sampled by drawing a binomial edge count and
+       then that many distinct pairs, without a dense
+       ``pre_size x post_size`` matrix, so time and memory grow with the
+       number of edges. The edges for a given ``seed`` differ from 0.6
+       (same distribution). This also applies to the subclasses that
+       delegate to it (``SomaToDendrite``, ``AxonToSoma``, ``BranchSpecific``,
+       ``AllToAllCompartments`` and the other targeting shortcuts).
+
     Examples
     --------
     Axon-to-soma connections:
@@ -181,13 +368,22 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import (
+        ...     CompartmentSpecific, AXON, SOMA, BASAL_DENDRITE, APICAL_DENDRITE
+        ... )
         >>> from braintools.init import Normal
         >>> axon_soma = CompartmentSpecific(
         ...     compartment_mapping={AXON: SOMA},
         ...     connection_prob=0.1,
-        ...     weight=Normal(mean=2.0 * u.nS, std=0.5 * u.nS)
+        ...     weight=Normal(mean=2.0 * u.nS, std=0.5 * u.nS),
+        ...     seed=0,
         ... )
         >>> result = axon_soma(pre_size=100, post_size=100)
+        >>> result.n_connections
+        993
+        >>> bool(np.all(result.post_compartments == SOMA))
+        True
 
     Complex multi-compartment targeting:
 
@@ -224,7 +420,7 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
 
     def __init__(
         self,
-        compartment_mapping: Dict[Union[int, str], Union[int, str, List[Union[int, str]]]],
+        compartment_mapping: Mapping[Any, Union[int, str, Sequence[Union[int, str]]]],
         connection_prob: Union[float, Dict] = 0.1,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -327,8 +523,8 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
 
         all_pre_indices = []
         all_post_indices = []
-        all_pre_compartments = []
-        all_post_compartments = []
+        all_pre_compartments: List[np.ndarray] = []
+        all_post_compartments: List[np.ndarray] = []
 
         # Pre-filter compartment pairs with non-zero probabilities
         active_pairs = []
@@ -353,12 +549,14 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
                 if prob > 0:
                     active_pairs.append((source_comp, target_comp, prob))
 
-        # Generate connections only for active pairs
+        # Self-connections (autapses) are never drawn when not allowed and the
+        # populations match.
+        exclude_self = not self.allow_self_connections and pre_num == post_num
+
+        # Generate connections only for active pairs (binomial edge count, then
+        # distinct pairs: no pre x post mask is built).
         for source_comp, target_comp, prob in active_pairs:
-            # Vectorized connection generation
-            random_matrix = self.rng.random((pre_num, post_num))
-            connection_mask = random_matrix < prob
-            pre_idx, post_idx = np.where(connection_mask)
+            pre_idx, post_idx = _uniform_pairs(self.rng, pre_num, post_num, prob, exclude_self)
 
             n_conns = len(pre_idx)
             if n_conns > 0:
@@ -439,6 +637,11 @@ class SomaToDendrite(CompartmentSpecific):
     compartments, commonly used for modeling antidromic activation or
     backpropagating action potentials.
 
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+
     Parameters
     ----------
     target_dendrites : list, optional
@@ -452,10 +655,15 @@ class SomaToDendrite(CompartmentSpecific):
 
     .. code-block:: python
 
+        >>> from braintools.conn import SomaToDendrite, BASAL_DENDRITE, APICAL_DENDRITE
         >>> soma_dend = SomaToDendrite(
         ...     target_dendrites=[BASAL_DENDRITE, APICAL_DENDRITE],
-        ...     prob_per_dendrite=0.8
+        ...     prob_per_dendrite=0.8,
+        ...     seed=0,
         ... )
+        >>> result = soma_dend(pre_size=50, post_size=50)
+        >>> result.n_connections
+        3914
 
     Different probabilities for different dendrite types:
 
@@ -473,7 +681,7 @@ class SomaToDendrite(CompartmentSpecific):
 
     def __init__(
         self,
-        target_dendrites: List[int] = None,
+        target_dendrites: Optional[List[int]] = None,
         prob_per_dendrite: Union[float, Dict[int, float]] = 0.8,
         **kwargs
     ):
@@ -502,16 +710,26 @@ class AxonToSoma(CompartmentSpecific):
     This creates connections specifically from axon compartments to soma
     compartments, representing direct synaptic input to the cell body.
 
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+
     Examples
     --------
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> from braintools.conn import AxonToSoma
         >>> from braintools.init import LogNormal
         >>> axon_soma = AxonToSoma(
         ...     connection_prob=0.05,
-        ...     weight=LogNormal(mean=1.0 * u.nS, std=0.3 * u.nS)
+        ...     weight=LogNormal(mean=1.0 * u.nS, std=0.3 * u.nS),
+        ...     seed=0,
         ... )
+        >>> result = axon_soma(pre_size=50, post_size=50)
+        >>> result.n_connections
+        127
     """
     __module__ = 'braintools.conn'
 
@@ -526,6 +744,11 @@ class DendriteToSoma(CompartmentSpecific):
     This creates connections from dendritic compartments to soma compartments,
     modeling dendritic integration and signal propagation to the cell body.
 
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+
     Parameters
     ----------
     source_dendrites : list, optional
@@ -535,16 +758,21 @@ class DendriteToSoma(CompartmentSpecific):
     --------
     .. code-block:: python
 
+        >>> from braintools.conn import DendriteToSoma, BASAL_DENDRITE, APICAL_DENDRITE
         >>> dend_soma = DendriteToSoma(
         ...     source_dendrites=[BASAL_DENDRITE, APICAL_DENDRITE],
-        ...     connection_prob=0.6
+        ...     connection_prob=0.6,
+        ...     seed=0,
         ... )
+        >>> result = dend_soma(pre_size=50, post_size=50)
+        >>> result.n_connections
+        2934
     """
     __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        source_dendrites: List[int] = None,
+        source_dendrites: Optional[List[int]] = None,
         **kwargs
     ):
         if source_dendrites is None:
@@ -560,21 +788,31 @@ class AxonToDendrite(CompartmentSpecific):
     This represents the most common type of synaptic connection where
     axons form synapses on dendritic branches.
 
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+
     Examples
     --------
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> from braintools.conn import AxonToDendrite, BASAL_DENDRITE, APICAL_DENDRITE
         >>> from braintools.init import LogNormal
         >>> axon_dend = AxonToDendrite(
         ...     target_dendrites=[BASAL_DENDRITE, APICAL_DENDRITE],
         ...     connection_prob=0.1,
-        ...     weight=LogNormal(mean=2.0 * u.nS, std=0.5 * u.nS)
+        ...     weight=LogNormal(mean=2.0 * u.nS, std=0.5 * u.nS),
+        ...     seed=0,
         ... )
+        >>> result = axon_dend(pre_size=50, post_size=50)
+        >>> result.n_connections
+        505
     """
     __module__ = 'braintools.conn'
 
-    def __init__(self, target_dendrites: List[int] = None, **kwargs):
+    def __init__(self, target_dendrites: Optional[List[int]] = None, **kwargs):
         if target_dendrites is None:
             target_dendrites = [BASAL_DENDRITE, APICAL_DENDRITE]
 
@@ -588,16 +826,26 @@ class DendriteToDendrite(CompartmentSpecific):
     This models lateral connections between dendritic branches,
     important for dendritic computation and integration.
 
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+
     Examples
     --------
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> from braintools.conn import DendriteToDendrite
         >>> from braintools.init import Normal
         >>> dend_dend = DendriteToDendrite(
         ...     connection_prob=0.2,
-        ...     weight=Normal(mean=0.5 * u.nS, std=0.1 * u.nS)
+        ...     weight=Normal(mean=0.5 * u.nS, std=0.1 * u.nS),
+        ...     seed=0,
         ... )
+        >>> result = dend_dend(pre_size=50, post_size=50)
+        >>> result.n_connections
+        1993
     """
     __module__ = 'braintools.conn'
 
@@ -683,6 +931,15 @@ class MorphologyDistance(MultiCompartmentConnectivity):
     braintools.init.GaussianProfile, braintools.init.ExponentialProfile,
     braintools.init.LinearProfile
 
+    Notes
+    -----
+    Pair probabilities are evaluated in chunks of presynaptic rows of
+    bounded size, so peak memory does not grow with
+    ``pre_size * post_size``. The random draws are the same as in version
+    0.6, so a given ``seed`` gives the same edges.
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
@@ -711,7 +968,7 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         self,
         sigma: Optional[Union[float, u.Quantity]] = None,
         decay_function: Optional[Union[DistanceProfile, str]] = None,
-        compartment_mapping: Dict = None,
+        compartment_mapping: Optional[Dict] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         allow_self_connections: bool = False,
@@ -804,18 +1061,17 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         pre_pos_val = _as_2d_positions(pre_pos_val)[:pre_num]
         post_pos_val = _as_2d_positions(post_pos_val)[:post_num]
 
-        # Calculate distances
-        distances = cdist(pre_pos_val, post_pos_val)
-        if distance_unit is not None and not distance_unit.is_unitless:
-            distances = distances * distance_unit
-
-        # Connection probability from the distance profile
-        probs = np.asarray(profile.probability(distances))
+        def chunk_probs(start, stop):
+            # Connection probability from the distance profile, one pre chunk at a time.
+            distances = cdist(pre_pos_val[start:stop], post_pos_val)
+            if distance_unit is not None and not distance_unit.is_unitless:
+                distances = distances * distance_unit
+            return np.asarray(profile.probability(distances))
 
         all_pre_indices = []
         all_post_indices = []
-        all_pre_compartments = []
-        all_post_compartments = []
+        all_pre_compartments: List[np.ndarray] = []
+        all_post_compartments: List[np.ndarray] = []
 
         # Generate connections for each compartment mapping
         for source_comp, target_comps in self.compartment_mapping.items():
@@ -823,9 +1079,7 @@ class MorphologyDistance(MultiCompartmentConnectivity):
                 target_comps = [target_comps]
 
             for target_comp in target_comps:
-                random_matrix = self.rng.random((pre_num, post_num))
-                connection_mask = random_matrix < probs
-                pre_idx, post_idx = np.where(connection_mask)
+                pre_idx, post_idx = _chunked_mask_pairs(self.rng, pre_num, post_num, chunk_probs)
 
                 n_conns = len(pre_idx)
                 if n_conns > 0:
@@ -923,13 +1177,30 @@ class DendriticTree(MultiCompartmentConnectivity):
     allow_self_connections : bool, optional
         Whether a neuron may connect to itself. Default ``False``.
 
+    Notes
+    -----
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Connected pairs are sampled by drawing a binomial edge count and
+       then that many distinct pairs, without a dense
+       ``pre_size x post_size`` matrix, so time and memory grow with the
+       number of edges. The edges for a given ``seed`` differ from 0.6
+       (same distribution).
+
     Examples
     --------
     .. code-block:: python
 
+        >>> from braintools.conn import DendriticTree
         >>> dend_tree = DendriticTree(
-        ...     branch_targeting={'proximal': 0.8, 'distal': 0.2}
+        ...     branch_targeting={'proximal': 0.8, 'distal': 0.2},
+        ...     seed=0,
         ... )
+        >>> result = dend_tree(pre_size=50, post_size=50)
+        >>> result.n_connections
+        2450
     """
     __module__ = 'braintools.conn'
 
@@ -976,28 +1247,19 @@ class DendriticTree(MultiCompartmentConnectivity):
 
         all_pre_indices = []
         all_post_indices = []
-        all_pre_compartments = []
-        all_post_compartments = []
+        all_pre_compartments: List[np.ndarray] = []
+        all_post_compartments: List[np.ndarray] = []
 
-        # Basal dendrite connections
-        random_matrix = self.rng.random((pre_num, post_num))
-        connection_mask = random_matrix < basal_prob
-        pre_idx, post_idx = np.where(connection_mask)
-        if len(pre_idx) > 0:
-            all_pre_indices.append(pre_idx)
-            all_post_indices.append(post_idx)
-            all_pre_compartments.append(np.full(len(pre_idx), AXON, dtype=np.int64))
-            all_post_compartments.append(np.full(len(pre_idx), BASAL_DENDRITE, dtype=np.int64))
-
-        # Apical dendrite connections
-        random_matrix = self.rng.random((pre_num, post_num))
-        connection_mask = random_matrix < apical_prob
-        pre_idx, post_idx = np.where(connection_mask)
-        if len(pre_idx) > 0:
-            all_pre_indices.append(pre_idx)
-            all_post_indices.append(post_idx)
-            all_pre_compartments.append(np.full(len(pre_idx), AXON, dtype=np.int64))
-            all_post_compartments.append(np.full(len(pre_idx), APICAL_DENDRITE, dtype=np.int64))
+        # Basal, then apical dendrite connections (binomial edge count, then
+        # distinct pairs; autapses are never drawn when excluded).
+        exclude_self = not self.allow_self_connections and pre_num == post_num
+        for prob, target in ((basal_prob, BASAL_DENDRITE), (apical_prob, APICAL_DENDRITE)):
+            pre_idx, post_idx = _uniform_pairs(self.rng, pre_num, post_num, prob, exclude_self)
+            if len(pre_idx) > 0:
+                all_pre_indices.append(pre_idx)
+                all_post_indices.append(post_idx)
+                all_pre_compartments.append(np.full(len(pre_idx), AXON, dtype=np.int64))
+                all_post_compartments.append(np.full(len(pre_idx), target, dtype=np.int64))
 
         if len(all_pre_indices) == 0:
             return ConnectionResult(
@@ -1101,16 +1363,49 @@ class AxonalProjection(MultiCompartmentConnectivity):
     allow_self_connections : bool, optional
         Whether a neuron may connect to itself. Default ``False``.
 
+    Notes
+    -----
+    With a spatial term (``topographic_map`` or ``arborization_sigma``) the
+    pair probabilities are evaluated in chunks of presynaptic rows of
+    bounded size, and the random draws are the same as in version 0.6.
+    ``topographic_map`` stays a scalar function of one pre and one post
+    position; within each chunk it is called once per pair of *distinct*
+    positions and the values are shared by neurons at equal positions, so
+    repeated positions cost no extra calls. It is still a Python call per
+    distinct pair, so its cost grows with ``pre_size * post_size`` when all
+    positions differ.
+
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Without ``topographic_map`` and ``arborization_sigma`` the pairs are
+       sampled with a binomial edge count and distinct pairs, so the
+       edges for a given ``seed`` differ from 0.6 (same distribution).
+       ``topographic_map`` is called once per pair of distinct positions
+       instead of once per neuron pair.
+
     Examples
     --------
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import AxonalProjection
         >>> def retinotopic_map(source_pos, target_pos):
         ...     return 0.5 * np.exp(-np.sum((source_pos - target_pos) ** 2) / (2 * 50.0 ** 2))
         >>>
-        >>> topographic = AxonalProjection(topographic_map=retinotopic_map)
-        >>> local_arbor = AxonalProjection(connection_prob=0.3, arborization_sigma=80 * u.um)
+        >>> positions = np.random.RandomState(0).uniform(0, 300, (40, 2)) * u.um
+        >>> topographic = AxonalProjection(topographic_map=retinotopic_map, seed=0)
+        >>> result = topographic(pre_size=40, post_size=40,
+        ...                      pre_positions=positions, post_positions=positions)
+        >>> result.n_connections
+        88
+        >>> local_arbor = AxonalProjection(connection_prob=0.3, arborization_sigma=80 * u.um, seed=0)
+        >>> result = local_arbor(pre_size=40, post_size=40,
+        ...                      pre_positions=positions, post_positions=positions)
+        >>> result.n_connections
+        114
     """
     __module__ = 'braintools.conn'
 
@@ -1163,32 +1458,42 @@ class AxonalProjection(MultiCompartmentConnectivity):
                 "both pre_positions and post_positions."
             )
 
-        probs = np.full((pre_num, post_num), self.connection_prob, dtype=float)
-        if has_positions:
+        exclude_self = not self.allow_self_connections and pre_num == post_num
+        spatial = self.topographic_map is not None or self.arborization_sigma is not None
+
+        if spatial:
+            # Pair-specific probabilities, evaluated one pre chunk at a time.
             sigma_val, pre_pos_vals, post_pos_vals = _length_and_positions(
                 1.0 if self.arborization_sigma is None else self.arborization_sigma,
                 pre_positions, post_positions,
             )
-
+            _check_position_counts('AxonalProjection', pre_pos_vals, post_pos_vals, pre_num, post_num)
             if self.topographic_map is not None:
-                for i in range(pre_num):
-                    for j in range(post_num):
-                        probs[i, j] = self.topographic_map(pre_pos_vals[i], post_pos_vals[j])
+                post_unique, post_inverse = _unique_rows(post_pos_vals)
 
-            if self.arborization_sigma is not None:
-                distances = cdist(pre_pos_vals, post_pos_vals)
-                probs = probs * np.exp(-distances ** 2 / (2 * sigma_val ** 2))
+            def chunk_probs(start, stop):
+                probs = np.full((stop - start, post_num), self.connection_prob, dtype=float)
+                if self.topographic_map is not None:
+                    probs[:] = _evaluate_pair_function(
+                        self.topographic_map, pre_pos_vals[start:stop], post_unique, post_inverse
+                    )
+                if self.arborization_sigma is not None:
+                    distances = cdist(pre_pos_vals[start:stop], post_pos_vals)
+                    probs = probs * np.exp(-distances ** 2 / (2 * sigma_val ** 2))
+                return probs
 
-        # Generate connections
-        random_matrix = self.rng.random((pre_num, post_num))
-        connection_mask = random_matrix < probs
-        pre_indices, post_indices = np.where(connection_mask)
+            pre_indices, post_indices = _chunked_mask_pairs(self.rng, pre_num, post_num, chunk_probs)
 
-        # Drop self-connections (autapses) when not allowed and populations match.
-        if not self.allow_self_connections and pre_num == post_num:
-            keep = pre_indices != post_indices
-            pre_indices = pre_indices[keep]
-            post_indices = post_indices[keep]
+            # Drop self-connections (autapses) when not allowed and populations match.
+            if exclude_self:
+                keep = pre_indices != post_indices
+                pre_indices = pre_indices[keep]
+                post_indices = post_indices[keep]
+        else:
+            # Uniform probability: binomial edge count, then distinct pairs.
+            pre_indices, post_indices = _uniform_pairs(
+                self.rng, pre_num, post_num, self.connection_prob, exclude_self
+            )
 
         if len(pre_indices) == 0:
             return ConnectionResult(
@@ -1202,7 +1507,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
             )
 
         n_connections = len(pre_indices)
-        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        pre_compartments: np.ndarray = np.full(n_connections, AXON, dtype=np.int64)
         # Randomly assign each connection to one of the target dendritic compartments.
         post_compartments = self.rng.choice(
             self.target_compartments,
@@ -1238,7 +1543,13 @@ class AxonalProjection(MultiCompartmentConnectivity):
 
 # Additional specialized patterns
 class ProximalTargeting(CompartmentSpecific):
-    """Connectivity targeting proximal dendritic compartments."""
+    """Connectivity targeting proximal dendritic compartments.
+
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+    """
     __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
@@ -1248,7 +1559,13 @@ class ProximalTargeting(CompartmentSpecific):
 
 
 class DistalTargeting(CompartmentSpecific):
-    """Connectivity targeting distal dendritic compartments."""
+    """Connectivity targeting distal dendritic compartments.
+
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+    """
     __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
@@ -1281,12 +1598,22 @@ class BranchSpecific(MultiCompartmentConnectivity):
     - Index 0, 1: BASAL_DENDRITE
     - Index 2+: APICAL_DENDRITE
     This can be extended with full morphological information.
+
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Connected pairs are sampled by drawing a binomial edge count and
+       then that many distinct pairs, without a dense
+       ``pre_size x post_size`` matrix, so time and memory grow with the
+       number of edges. The edges for a given ``seed`` differ from 0.6
+       (same distribution).
     """
     __module__ = 'braintools.conn'
 
     def __init__(
         self,
-        branch_indices: List[int] = None,
+        branch_indices: Optional[List[int]] = None,
         connection_prob: float = 0.3,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -1335,7 +1662,13 @@ class BranchSpecific(MultiCompartmentConnectivity):
 
 
 class BasalDendriteTargeting(CompartmentSpecific):
-    """Specific targeting of basal dendrites."""
+    """Specific targeting of basal dendrites.
+
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+    """
     __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
@@ -1344,7 +1677,13 @@ class BasalDendriteTargeting(CompartmentSpecific):
 
 
 class ApicalDendriteTargeting(CompartmentSpecific):
-    """Specific targeting of apical dendrites."""
+    """Specific targeting of apical dendrites.
+
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
+       count, then distinct pairs), so the edges for a given ``seed`` differ
+       from 0.6.
+    """
     __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
@@ -1368,6 +1707,33 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+    allow_self_connections : bool, optional
+        Whether a neuron may connect to itself. Default ``False``.
+
+    Notes
+    -----
+    Each of the ``n_clusters`` clusters of a postsynaptic neuron draws
+    ``min(cluster_size, pre_size)`` distinct presynaptic neurons and lands on
+    the basal or the apical dendrite with equal probability. Synapses repeated
+    across clusters of the same neuron are merged.
+
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       All clusters are sampled in one vectorised call instead of a Python
+       loop over postsynaptic neurons and clusters. The edges for a given
+       ``seed`` differ from 0.6 (same distribution).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> from braintools.conn import DendriticIntegration
+        >>> clusters = DendriticIntegration(cluster_size=4, n_clusters=3, seed=0)
+        >>> result = clusters(pre_size=100, post_size=20)
+        >>> result.n_connections
+        236
     """
     __module__ = 'braintools.conn'
 
@@ -1408,26 +1774,12 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         else:
             post_num = post_size
 
-        all_pre_indices = []
-        all_post_indices = []
-        all_pre_compartments = []
-        all_post_compartments = []
-
-        # Create clusters for each postsynaptic neuron
-        for post_idx in range(post_num):
-            for cluster_idx in range(self.n_clusters):
-                # Choose random presynaptic neurons for this cluster
-                pre_selected = self.rng.choice(pre_num, size=min(self.cluster_size, pre_num), replace=False)
-
-                # Randomly assign to basal or apical dendrite
-                dendrite_type = self.rng.choice([BASAL_DENDRITE, APICAL_DENDRITE])
-
-                all_pre_indices.append(pre_selected)
-                all_post_indices.append(np.full(len(pre_selected), post_idx, dtype=np.int64))
-                all_pre_compartments.append(np.full(len(pre_selected), AXON, dtype=np.int64))
-                all_post_compartments.append(np.full(len(pre_selected), dendrite_type, dtype=np.int64))
-
-        if len(all_pre_indices) == 0:
+        # One cluster per (post neuron, cluster) row, all rows at once: each
+        # cluster draws ``k`` distinct presynaptic neurons and one dendrite
+        # (basal or apical, equally likely).
+        k = min(self.cluster_size, pre_num)
+        n_rows = post_num * self.n_clusters
+        if n_rows == 0 or k == 0:
             return ConnectionResult(
                 np.array([], dtype=np.int64),
                 np.array([], dtype=np.int64),
@@ -1437,11 +1789,13 @@ class DendriticIntegration(MultiCompartmentConnectivity):
                 pre_positions=pre_positions,
                 post_positions=post_positions,
             )
+        pre_selected = sample_rows_without_replacement(self.rng, n_rows, pre_num, k)
+        dendrite_type = np.where(randint(self.rng, 2, n_rows) == 0, BASAL_DENDRITE, APICAL_DENDRITE)
 
-        pre_indices = np.concatenate(all_pre_indices)
-        post_indices = np.concatenate(all_post_indices)
-        pre_compartments = np.concatenate(all_pre_compartments)
-        post_compartments = np.concatenate(all_post_compartments)
+        pre_indices = pre_selected.reshape(-1)
+        post_indices: np.ndarray = np.repeat(np.arange(post_num, dtype=np.int64), self.n_clusters * k)
+        pre_compartments: np.ndarray = np.full(pre_indices.size, AXON, dtype=np.int64)
+        post_compartments: np.ndarray = np.repeat(dendrite_type.astype(np.int64), k)
 
         # Deduplicate (pre, post, pre_comp, post_comp) quads. The same neuron can be
         # sampled into multiple clusters of the same post neuron (replace=False only
@@ -1522,6 +1876,45 @@ class AxonalBranching(MultiCompartmentConnectivity):
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+    allow_self_connections : bool, optional
+        Whether a neuron may connect to itself. Default ``False``.
+
+    Notes
+    -----
+    The number of branches of each axon is Poisson distributed and capped
+    at the number of eligible targets; the targets of one axon are distinct.
+    With ``branch_spread`` the targets are drawn by successive sampling
+    without replacement, implemented with exponential keys [1]_ evaluated in
+    chunks of presynaptic rows of bounded size.
+
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       The branch counts and targets are drawn in bulk instead of in a
+       Python loop over axons, and no ``pre_size x post_size`` distance
+       matrix is built. The edges for a given ``seed`` differ from 0.6
+       (same distribution).
+
+    References
+    ----------
+    .. [1] Efraimidis, P. S., & Spirakis, P. G. (2006). Weighted random
+           sampling with a reservoir. Information Processing Letters,
+           97(5), 181-185.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import AxonalBranching
+        >>> positions = np.random.RandomState(0).uniform(0, 500, (60, 2)) * u.um
+        >>> branching = AxonalBranching(branches_per_axon=4, branch_spread=50 * u.um, seed=0)
+        >>> result = branching(pre_size=60, post_size=60,
+        ...                    pre_positions=positions, post_positions=positions)
+        >>> result.n_connections
+        237
     """
     __module__ = 'braintools.conn'
 
@@ -1561,22 +1954,11 @@ class AxonalBranching(MultiCompartmentConnectivity):
         else:
             post_num = post_size
 
-        # Target-selection weights: uniform, or a Gaussian of distance when spread
-        target_weights = None
-        if self.branch_spread is not None:
-            if pre_positions is None or post_positions is None:
-                raise ValueError(
-                    "AxonalBranching with branch_spread requires both pre_positions "
-                    "and post_positions."
-                )
-            spread_val, pre_pos_val, post_pos_val = _length_and_positions(
-                self.branch_spread, pre_positions, post_positions
+        if self.branch_spread is not None and (pre_positions is None or post_positions is None):
+            raise ValueError(
+                "AxonalBranching with branch_spread requires both pre_positions "
+                "and post_positions."
             )
-            distances = cdist(pre_pos_val, post_pos_val)
-            target_weights = np.exp(-distances ** 2 / (2 * spread_val ** 2))
-
-        all_pre_indices = []
-        all_post_indices = []
 
         # A neuron is not a candidate target of its own axon when autapses are
         # excluded; choosing it and dropping it afterwards would shrink the branch
@@ -1584,21 +1966,21 @@ class AxonalBranching(MultiCompartmentConnectivity):
         # where the source itself, at distance 0, is the most likely target).
         exclude_self = not self.allow_self_connections and pre_num == post_num
 
-        # Each presynaptic neuron branches to multiple postsynaptic targets
-        for pre_idx in range(pre_num):
-            n_branches = self.rng.poisson(self.branches_per_axon)
-            w = np.ones(post_num) if target_weights is None else target_weights[pre_idx].copy()
-            if exclude_self:
-                w[pre_idx] = 0.0
-            n_branches = min(n_branches, int(np.count_nonzero(w)))
-            p = w / w.sum() if n_branches > 0 else None
+        # Poisson branch count of every axon, drawn at once.
+        n_branches = self.rng.poisson(self.branches_per_axon, size=pre_num).astype(np.int64)
 
-            if n_branches > 0:
-                post_targets = self.rng.choice(post_num, size=n_branches, replace=False, p=p)
-                all_pre_indices.append(np.full(n_branches, pre_idx, dtype=np.int64))
-                all_post_indices.append(post_targets)
+        if self.branch_spread is None:
+            pre_indices, post_indices = _uniform_branches(self.rng, n_branches, post_num, exclude_self)
+        else:
+            spread_val, pre_pos_val, post_pos_val = _length_and_positions(
+                self.branch_spread, pre_positions, post_positions
+            )
+            _check_position_counts('AxonalBranching', pre_pos_val, post_pos_val, pre_num, post_num)
+            pre_indices, post_indices = _weighted_branches(
+                self.rng, n_branches, post_num, pre_pos_val, post_pos_val, spread_val, exclude_self
+            )
 
-        if len(all_pre_indices) == 0:
+        if len(pre_indices) == 0:
             return ConnectionResult(
                 np.array([], dtype=np.int64),
                 np.array([], dtype=np.int64),
@@ -1608,9 +1990,6 @@ class AxonalBranching(MultiCompartmentConnectivity):
                 pre_positions=pre_positions,
                 post_positions=post_positions,
             )
-
-        pre_indices = np.concatenate(all_pre_indices)
-        post_indices = np.concatenate(all_post_indices)
 
         # Drop self-connections (autapses) when not allowed and populations match.
         if not self.allow_self_connections and pre_num == post_num:
@@ -1631,7 +2010,7 @@ class AxonalBranching(MultiCompartmentConnectivity):
 
         n_connections = len(pre_indices)
 
-        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        pre_compartments: np.ndarray = np.full(n_connections, AXON, dtype=np.int64)
         post_compartments = self.rng.choice(
             [BASAL_DENDRITE, APICAL_DENDRITE],
             size=n_connections
@@ -1683,6 +2062,30 @@ class AxonalArborization(MultiCompartmentConnectivity):
         Delay initialization.
     allow_self_connections : bool, optional
         Whether a neuron may connect to itself. Default ``False``.
+
+    Notes
+    -----
+    A pair within ``arborization_radius`` connects with probability
+    ``density``. Pair probabilities are evaluated in chunks of presynaptic rows of
+    bounded size, so peak memory does not grow with
+    ``pre_size * post_size``. The random draws are the same as in version
+    0.6, so a given ``seed`` gives the same edges.
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import AxonalArborization
+        >>> positions = np.random.RandomState(0).uniform(0, 500, (60, 2)) * u.um
+        >>> arbor = AxonalArborization(arborization_radius=100 * u.um, density=0.3, seed=0)
+        >>> result = arbor(pre_size=60, post_size=60,
+        ...                pre_positions=positions, post_positions=positions)
+        >>> result.n_connections
+        113
     """
     __module__ = 'braintools.conn'
 
@@ -1718,25 +2121,24 @@ class AxonalArborization(MultiCompartmentConnectivity):
                 "(spatial arborization cannot be computed without them)."
             )
 
+        pre_num = int(np.prod(pre_size)) if isinstance(pre_size, tuple) else pre_size
+        post_num = int(np.prod(post_size)) if isinstance(post_size, tuple) else post_size
+
         # Radius and positions as plain numbers in a common unit
         radius_val, pre_pos_val, post_pos_val = _length_and_positions(
             self.arborization_radius, pre_positions, post_positions
         )
+        _check_position_counts('AxonalArborization', pre_pos_val, post_pos_val, pre_num, post_num)
 
-        # Calculate distances
-        distances = cdist(pre_pos_val, post_pos_val)
+        def chunk_probs(start, stop):
+            # Density inside the arborization radius, one pre chunk at a time.
+            within_radius = cdist(pre_pos_val[start:stop], post_pos_val) <= radius_val
+            return self.density, within_radius
 
-        # Within arborization radius
-        within_radius = distances <= radius_val
-
-        # Apply density probability
-        random_matrix = self.rng.random(distances.shape)
-        connection_mask = within_radius & (random_matrix < self.density)
-
-        pre_indices, post_indices = np.where(connection_mask)
+        pre_indices, post_indices = _chunked_mask_pairs(self.rng, pre_num, post_num, chunk_probs)
 
         # Drop self-connections (autapses) when not allowed and populations match.
-        if not self.allow_self_connections and len(pre_pos_val) == len(post_pos_val):
+        if not self.allow_self_connections and pre_num == post_num:
             keep = pre_indices != post_indices
             pre_indices = pre_indices[keep]
             post_indices = post_indices[keep]
@@ -1753,7 +2155,7 @@ class AxonalArborization(MultiCompartmentConnectivity):
             )
 
         n_connections = len(pre_indices)
-        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        pre_compartments: np.ndarray = np.full(n_connections, AXON, dtype=np.int64)
         post_compartments = self.rng.choice(
             [BASAL_DENDRITE, APICAL_DENDRITE],
             size=n_connections
@@ -1798,6 +2200,42 @@ class TopographicProjection(MultiCompartmentConnectivity):
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+
+    Notes
+    -----
+    ``topographic_map`` is a scalar function of one pre and one post
+    position. It is called once per pair of distinct positions (within each
+    chunk of presynaptic rows), so neurons at equal positions share one
+    call; see :class:`AxonalProjection`.
+
+    With ``topographic_map=None`` there is no spatial term and every pair
+    connects with the default ``AxonalProjection`` probability (0.05).
+
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       With ``topographic_map=None`` the pairs are sampled by the uniform
+       path of :class:`AxonalProjection` (binomial edge count, then distinct
+       pairs), so the edges for a given ``seed`` differ from 0.6. With a
+       map, the random draws are the same as in 0.6.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.conn import TopographicProjection
+        >>> grid = np.stack(np.meshgrid(np.arange(6), np.arange(6)), -1).reshape(-1, 2)
+        >>> positions = np.repeat(grid, 2, axis=0) * 40.0 * u.um  # two neurons per site
+        >>> topo = TopographicProjection(
+        ...     topographic_map=lambda a, b: 0.8 * float(np.hypot(*(a - b)) < 50.0), seed=0
+        ... )
+        >>> result = topo(pre_size=72, post_size=72,
+        ...               pre_positions=positions, post_positions=positions)
+        >>> result.n_connections
+        443
     """
     __module__ = 'braintools.conn'
 
@@ -1861,15 +2299,31 @@ class SynapticPlacement(MultiCompartmentConnectivity):
     allow_self_connections : bool, optional
         Whether a neuron may connect to itself. Default ``False``.
 
+    Notes
+    -----
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Connected pairs are sampled by drawing a binomial edge count and
+       then that many distinct pairs, without a dense
+       ``pre_size x post_size`` matrix, so time and memory grow with the
+       number of edges. The edges for a given ``seed`` differ from 0.6
+       (same distribution).
+
     Examples
     --------
     .. code-block:: python
 
+        >>> from braintools.conn import SynapticPlacement, APICAL_DENDRITE, BASAL_DENDRITE
         >>> distal_input = SynapticPlacement(
         ...     connection_prob=0.1,
         ...     compartment_preferences={APICAL_DENDRITE: 0.8, BASAL_DENDRITE: 0.2},
+        ...     seed=0,
         ... )
         >>> result = distal_input(pre_size=100, post_size=100)
+        >>> result.n_connections
+        993
     """
     __module__ = 'braintools.conn'
 
@@ -1920,10 +2374,11 @@ class SynapticPlacement(MultiCompartmentConnectivity):
         else:
             post_num = post_size
 
-        connection_mask = self.rng.random((pre_num, post_num)) < self.connection_prob
-        if not self.allow_self_connections and pre_num == post_num:
-            np.fill_diagonal(connection_mask, False)
-        pre_indices, post_indices = np.where(connection_mask)
+        # Binomial edge count, then distinct pairs (autapses never drawn when excluded).
+        exclude_self = not self.allow_self_connections and pre_num == post_num
+        pre_indices, post_indices = _uniform_pairs(
+            self.rng, pre_num, post_num, self.connection_prob, exclude_self
+        )
 
         if len(pre_indices) == 0:
             return ConnectionResult(
@@ -1939,7 +2394,7 @@ class SynapticPlacement(MultiCompartmentConnectivity):
         n_connections = len(pre_indices)
         compartments = np.array(list(self.compartment_preferences.keys()), dtype=np.int64)
         prefs = np.array(list(self.compartment_preferences.values()), dtype=float)
-        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        pre_compartments: np.ndarray = np.full(n_connections, AXON, dtype=np.int64)
         post_compartments = self.rng.choice(compartments, size=n_connections, p=prefs / prefs.sum())
 
         weights = param(self.weight_init, n_connections, rng=self.rng)
@@ -1984,6 +2439,27 @@ class SynapticClustering(MultiCompartmentConnectivity):
         Weight initialization.
     delay : Initializer, optional
         Delay initialization.
+
+    Notes
+    -----
+    Shorthand for :class:`DendriticIntegration`.
+
+    Generation runs on the host with NumPy and cannot be traced by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Vectorised with :class:`DendriticIntegration`; the edges for a
+       given ``seed`` differ from 0.6 (same distribution).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> from braintools.conn import SynapticClustering
+        >>> clustering = SynapticClustering(cluster_size=3, n_clusters_per_neuron=2, seed=0)
+        >>> result = clustering(pre_size=50, post_size=10)
+        >>> result.n_connections
+        58
     """
     __module__ = 'braintools.conn'
 
@@ -2022,7 +2498,13 @@ class SynapticClustering(MultiCompartmentConnectivity):
 
 
 class AllToAllCompartments(CompartmentSpecific):
-    """All-to-all compartment connectivity."""
+    """All-to-all compartment connectivity.
+
+    .. versionchanged:: 0.7.0
+       Pairs are sampled as in :class:`CompartmentSpecific`. With probability 1
+       every pair is still connected, but random weight or delay initializers
+       draw different values for a given ``seed`` than in 0.6.
+    """
     __module__ = 'braintools.conn'
 
     def __init__(self, **kwargs):
@@ -2046,15 +2528,22 @@ class CustomCompartment(MultiCompartmentConnectivity):
         super().__init__(**kwargs)
         self.connection_func = connection_func
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate custom compartment connections."""
-        # Validate required kwargs
-        if 'pre_size' not in kwargs:
-            raise ValueError("CustomCompartment.generate() requires 'pre_size' parameter")
-        if 'post_size' not in kwargs:
-            raise ValueError("CustomCompartment.generate() requires 'post_size' parameter")
-
-        result_data = self.connection_func(**kwargs)
+        result_data = self.connection_func(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
 
         if not isinstance(result_data, (tuple, list)):
             raise ValueError(
@@ -2083,10 +2572,10 @@ class CustomCompartment(MultiCompartmentConnectivity):
             weights=u.math.array(weights) if weights is not None else None,
             delays=delays,
             model_type='multi_compartment',
-            pre_size=kwargs['pre_size'],
-            post_size=kwargs['post_size'],
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             pre_compartments=np.array(pre_compartments, dtype=np.int64),
             post_compartments=np.array(post_compartments, dtype=np.int64),
             metadata={'pattern': 'custom_compartment'}

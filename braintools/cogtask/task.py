@@ -82,49 +82,6 @@ class Task:
     - define_phases(): Return the phase structure
     - trial_init(ctx): Initialize trial-level state
 
-    Examples
-    --------
-    Instance-based (traditional):
-
-    >>> import brainunit as u
-    >>> from braintools.cogtask import Feature, Fixation, Stimulus, Response, circular, label
-    >>> fix = Feature(1, 'fixation')
-    >>> stim = Feature(8, 'stimulus')
-    >>> choice = Feature(2, 'choice')
-    >>> task = Task(
-    ...     phases=(
-    ...         Fixation(100 * u.ms, inputs={'fixation': 1.0})
-    ...         >> Stimulus(2000 * u.ms, inputs={'stimulus': circular('direction')})
-    ...         >> Response(100 * u.ms, outputs={'label': label('ground_truth')})
-    ...     ),
-    ...     input_features=fix + stim,
-    ...     output_features=fix + choice,
-    ...     trial_init=lambda ctx: ctx.update(
-    ...         ground_truth=ctx.rng.choice(2),
-    ...         direction=ctx.rng.uniform(0, 2 * 3.14159)
-    ...     )
-    ... )
-
-    Class-based (new):
-
-    >>> class MyTask(Task):
-    ...     t_fixation = 300 * u.ms
-    ...     num_stimuli = 8
-    ...
-    ...     def define_features(self):
-    ...         fix = Feature(1, 'fixation')
-    ...         stim = Feature(self.num_stimuli, 'stimulus')
-    ...         return fix + stim, fix + Feature(2, 'response')
-    ...
-    ...     def define_phases(self):
-    ...         return (Fixation(self.t_fixation, inputs={'fixation': 1.0})
-    ...                 >> Response(100 * u.ms, outputs={'label': label('ground_truth')}))
-    ...
-    ...     def trial_init(self, ctx):
-    ...         ctx['ground_truth'] = ctx.rng.choice(2)
-    ...
-    >>> task = MyTask(num_stimuli=16, seed=42)
-
     Parameters
     ----------
     phases : Phase, optional
@@ -146,11 +103,78 @@ class Task:
         consistent regardless of the ambient environment.
     **kwargs
         Override class attributes (e.g., t_fixation=500*u.ms, num_stimuli=16).
+
+    Examples
+    --------
+    Instance-based:
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.cogtask import (
+        ...     Feature, Fixation, Response, Stimulus, Task, circular, label)
+        >>> fix = Feature(1, 'fixation')
+        >>> stim = Feature(8, 'stimulus')
+        >>> choice = Feature(2, 'choice')
+        >>> task = Task(
+        ...     phases=(
+        ...         Fixation(100 * u.ms, inputs={'fixation': 1.0})
+        ...         >> Stimulus(200 * u.ms, inputs={'stimulus': circular('direction')})
+        ...         >> Response(100 * u.ms, outputs={'label': label('ground_truth')})
+        ...     ),
+        ...     input_features=fix + stim,
+        ...     output_features=fix + choice,
+        ...     trial_init=lambda ctx: ctx.update(
+        ...         ground_truth=ctx.rng.choice(2),
+        ...         direction=ctx.rng.uniform(0, 2 * 3.14159)
+        ...     ),
+        ...     dt=10.0 * u.ms,
+        ...     seed=0,
+        ... )
+        >>> task
+        Task(name=Task, inputs=9, outputs=3, output_mode=categorical)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((40, 9), (40,))
+        >>> [name for name, start, end in info['phase_history']]
+        ['Fixation', 'Stimulus', 'Response', 'Sequence']
+        >>> X, Y = task.batch_sample(8)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((40, 8, 9), (40, 8))
+
+    Class-based:
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.cogtask import Feature, Fixation, Response, Task, label
+        >>> class MyTask(Task):
+        ...     t_fixation = 300 * u.ms
+        ...     num_stimuli = 8
+        ...
+        ...     def define_features(self):
+        ...         fix = Feature(1, 'fixation')
+        ...         stim = Feature(self.num_stimuli, 'stimulus')
+        ...         return fix + stim, fix + Feature(2, 'response')
+        ...
+        ...     def define_phases(self):
+        ...         return (Fixation(self.t_fixation, inputs={'fixation': 1.0})
+        ...                 >> Response(100 * u.ms, outputs={'label': label('ground_truth')}))
+        ...
+        ...     def trial_init(self, ctx):
+        ...         ctx['ground_truth'] = ctx.rng.choice(2)
+        ...
+        >>> task = MyTask(num_stimuli=16, seed=42, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (17, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape
+        (40, 17)
     """
 
     def __init__(
         self,
-        phases: Phase = None,
+        phases: Optional[Phase] = None,
         input_features=None,
         output_features=None,
         trial_init: Optional[Callable[[Context], None]] = None,
@@ -637,21 +661,31 @@ def create_task(
 
     Examples
     --------
-    >>> import brainunit as u
-    >>> from braintools.cogtask import Feature, Fixation, Stimulus, Response, circular, label
-    >>> task = create_task(
-    ...     phases=(
-    ...         Fixation(100 * u.ms, inputs={'fixation': 1.0})
-    ...         >> Stimulus(500 * u.ms, inputs={'stimulus': circular('direction')})
-    ...         >> Response(100 * u.ms, outputs={'label': label('ground_truth')})
-    ...     ),
-    ...     input_features=Feature(1, 'fixation') + Feature(2, 'stimulus'),
-    ...     output_features=Feature(1, 'fixation') + Feature(2, 'choice'),
-    ...     trial_init=lambda ctx: ctx.update(
-    ...         ground_truth=ctx.rng.choice(2),
-    ...         direction=ctx.rng.uniform(0, 2 * 3.14159)
-    ...     ),
-    ... )
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.cogtask import (
+        ...     Feature, Fixation, Response, Stimulus, circular, create_task, label)
+        >>> task = create_task(
+        ...     phases=(
+        ...         Fixation(100 * u.ms, inputs={'fixation': 1.0})
+        ...         >> Stimulus(500 * u.ms, inputs={'stimulus': circular('direction')})
+        ...         >> Response(100 * u.ms, outputs={'label': label('ground_truth')})
+        ...     ),
+        ...     input_features=Feature(1, 'fixation') + Feature(2, 'stimulus'),
+        ...     output_features=Feature(1, 'fixation') + Feature(2, 'choice'),
+        ...     trial_init=lambda ctx: ctx.update(
+        ...         ground_truth=ctx.rng.choice(2),
+        ...         direction=ctx.rng.uniform(0, 2 * 3.14159)
+        ...     ),
+        ...     seed=0,
+        ...     dt=10.0 * u.ms,
+        ... )
+        >>> task.num_inputs, task.num_classes
+        (3, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((70, 3), (70,))
     """
     return Task(phases, input_features, output_features, trial_init, name,
                 output_mode=output_mode, seed=seed, num_classes=num_classes, dt=dt)

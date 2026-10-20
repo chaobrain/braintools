@@ -21,6 +21,7 @@ import unittest
 
 import numpy as np
 
+from braintools._deprecation import BraintoolsDeprecationWarning, registered_deprecations
 from braintools.init import (
     Orthogonal,
     DeltaOrthogonal,
@@ -247,7 +248,7 @@ class TestUnitDeprecationWarning(unittest.TestCase):
             warnings.simplefilter('always')
             Orthogonal(unit=u.nS)
         self.assertEqual(len(caught), 1)
-        self.assertTrue(issubclass(caught[0].category, DeprecationWarning))
+        self.assertIs(caught[0].category, BraintoolsDeprecationWarning)
         # stacklevel=2 attributes the warning to this test module, not the
         # library source file.
         self.assertTrue(caught[0].filename.endswith('_init_orthogonal_test.py'))
@@ -259,8 +260,43 @@ class TestUnitDeprecationWarning(unittest.TestCase):
             warnings.simplefilter('always')
             DeltaOrthogonal(unit=u.nS)
         self.assertEqual(len(caught), 1)
-        self.assertTrue(issubclass(caught[0].category, DeprecationWarning))
+        self.assertIs(caught[0].category, BraintoolsDeprecationWarning)
         self.assertTrue(caught[0].filename.endswith('_init_orthogonal_test.py'))
+
+    def test_records_registered_and_used(self):
+        import warnings
+        import brainunit as u
+        records = {r.old_name: r for r in registered_deprecations()}
+        for cls in (Orthogonal, DeltaOrthogonal):
+            with self.subTest(cls=cls.__name__):
+                record = records[f'braintools.init.{cls.__name__}(unit=...)']
+                self.assertEqual(record.kind, 'argument')
+                self.assertEqual(record.since, '0.1.0')
+                self.assertEqual(record.removed_in, '1.0.0')
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter('always')
+                    init = cls(unit=u.nS)
+                self.assertEqual([str(w.message) for w in caught], [record.message])
+                self.assertEqual(init.unit, u.nS)
+
+    def test_no_warning_without_unit(self):
+        import warnings
+        import brainunit as u
+        for cls in (Orthogonal, DeltaOrthogonal):
+            with self.subTest(cls=cls.__name__):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter('always')
+                    init = cls(scale=2.0)
+                self.assertEqual(caught, [])
+                self.assertEqual(init.unit, u.UNITLESS)
+
+    def test_deprecated_unit_still_applied(self):
+        import warnings
+        import brainunit as u
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', BraintoolsDeprecationWarning)
+            weights = Orthogonal(unit=u.nS)((4, 4), rng=np.random.default_rng(0))
+        self.assertEqual(u.get_unit(weights), u.nS)
 
 
 if __name__ == '__main__':

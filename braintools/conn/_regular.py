@@ -44,17 +44,28 @@ class AllToAll(PointConnectivity):
         dimensionless; pass a ``brainunit`` Quantity (e.g. ``1.0 * u.ms``)
         for physical units. If None, no delays are generated.
 
+    Notes
+    -----
+    The output is dense by nature (``N_pre * N_post`` edges, minus the diagonal
+    when self-connections are excluded on a square block). Edges are built
+    directly in row-major ``(pre, post)`` order without intermediate index
+    grids. This is host-side NumPy build-time code; it is not traceable by
+    ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
     Examples
     --------
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> from braintools.conn import AllToAll
         >>> from braintools.init import Constant
         >>> all_to_all = AllToAll(
         ...     weight=Constant(0.5 * u.nS),
         ...     delay=Constant(1.0 * u.ms)
         ... )
         >>> result = all_to_all(pre_size=50, post_size=50)
+        >>> result.n_connections
+        2450
     """
     __module__ = 'braintools.conn'
 
@@ -89,16 +100,16 @@ class AllToAll(PointConnectivity):
         else:
             post_num = post_size
 
-        # Vectorized generation using meshgrid
-        pre_grid, post_grid = np.meshgrid(np.arange(pre_num), np.arange(post_num), indexing='ij')
-        pre_indices = pre_grid.flatten()
-        post_indices = post_grid.flatten()
-
-        # Remove self-connections if needed
-        if not self.include_self_connections and pre_num == post_num:
-            mask = pre_indices != post_indices
-            pre_indices = pre_indices[mask]
-            post_indices = post_indices[mask]
+        # Row-major (pre, post) order, built directly without meshgrid copies. For a
+        # square block without self-connections, row i lists 0..n-2 with the
+        # entries >= i shifted up by one, which skips the diagonal.
+        drop_self = not self.include_self_connections and pre_num == post_num
+        n_cols = post_num - 1 if drop_self else post_num
+        n_cols = max(n_cols, 0)
+        pre_indices: np.ndarray = np.repeat(np.arange(pre_num, dtype=np.int64), n_cols)
+        post_indices = np.tile(np.arange(n_cols, dtype=np.int64), pre_num)
+        if drop_self:
+            post_indices += post_indices >= pre_indices
 
         n_connections = len(pre_indices)
 
@@ -125,8 +136,8 @@ class AllToAll(PointConnectivity):
         )
 
         return ConnectionResult(
-            np.array(pre_indices, dtype=np.int64),
-            np.array(post_indices, dtype=np.int64),
+            pre_indices,
+            post_indices,
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,
@@ -164,8 +175,11 @@ class OneToOne(PointConnectivity):
     .. code-block:: python
 
         >>> import brainunit as u
+        >>> from braintools.conn import OneToOne
         >>> one_to_one = OneToOne(weight=1.5 * u.nS)
         >>> result = one_to_one(pre_size=100, post_size=100)
+        >>> result.n_connections
+        100
     """
     __module__ = 'braintools.conn'
 
@@ -216,12 +230,12 @@ class OneToOne(PointConnectivity):
 
         if self.circular:
             n_connections = max(pre_num, post_num)
-            pre_indices = np.arange(n_connections) % pre_num
-            post_indices = np.arange(n_connections) % post_num
+            pre_indices: np.ndarray = np.arange(n_connections, dtype=np.int64) % pre_num
+            post_indices: np.ndarray = np.arange(n_connections, dtype=np.int64) % post_num
         else:
             n_connections = min(pre_num, post_num)
-            pre_indices = np.arange(n_connections)
-            post_indices = np.arange(n_connections)
+            pre_indices = np.arange(n_connections, dtype=np.int64)
+            post_indices = pre_indices
 
         # Generate weights and delays using initialization classes
         weights = param(
@@ -246,8 +260,8 @@ class OneToOne(PointConnectivity):
         )
 
         return ConnectionResult(
-            pre_indices.astype(np.int64),
-            post_indices.astype(np.int64),
+            pre_indices,
+            post_indices,
             pre_size=pre_size,
             post_size=post_size,
             weights=weights,

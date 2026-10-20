@@ -30,41 +30,35 @@ making them ideal for simulation loops with minimal boilerplate.
 - **PyTree Compatible**: Works with arbitrary nested state structures
 - **Unit-Aware**: Full integration with BrainUnit for physical quantities
 - **JAX-Optimized**: JIT-compatible, vectorizable, and differentiable
+- **Trajectory drivers**: :func:`odeint` (fixed step, one compiled ``scan``)
+  and :func:`solve_ivp` (adaptive step size with error control)
+- **Method registry**: :func:`get_method`, :func:`register_method` and
+  :func:`list_methods` look steppers up by short name (``'rk4'``, ``'dopri5'``, ...)
 
-**Quick Start - ODE Integration:**
+**Quick Start - ODE Trajectories** (one compiled ``scan``, no Python loop):
 
 .. code-block:: python
 
-    import brainstate as bst
-    import jax.numpy as jnp
-    from braintools.quad import ode_euler_step, ode_rk4_step
+    >>> import jax.numpy as jnp
+    >>> from braintools.quad import odeint, solve_ivp
+    >>> def f(y, t):
+    ...     return -y + jnp.sin(t)
+    >>> ts, ys = odeint(f, jnp.array(0.0), 0.0, 1.0, 0.01, method='rk4')
+    >>> ts.shape, ys.shape
+    ((101,), (101,))
+    >>> sol = solve_ivp(f, (0.0, 1.0), jnp.array(0.0), t_eval=jnp.array([0.5, 1.0]))
+    >>> print(f'{float(ys[-1]):.5f} {float(sol.ys[-1]):.5f}')
+    0.33452 0.33452
 
-    # Set global time step (dimensionless for this simple scalar ODE)
-    bst.environ.set(dt=0.01)
-
-    # Define ODE: dy/dt = -y + sin(t)
-    def f(y, t):
-        return -y + jnp.sin(t)
-
-    # Simple Euler integration
-    y = 0.0
-    t = 0.0
-    for _ in range(100):
-        y = ode_euler_step(f, y, t)
-        t += bst.environ.get_dt()
-
-    # Higher accuracy with RK4
-    y = 0.0
-    t = 0.0
-    for _ in range(100):
-        y = ode_rk4_step(f, y, t)
-        t += bst.environ.get_dt()
+The single-step functions below are the building blocks: ``odeint`` accepts
+any registered ODE stepper by name (``method='euler'``, ``'rk4'``, ...).
 
 **Quick Start - SDE Integration:**
 
 .. code-block:: python
 
     import brainstate as bst
+    import jax.numpy as jnp
     from braintools.quad import sde_euler_step, sde_milstein_step
 
     # Set global time step (dimensionless for this simple scalar SDE)
@@ -77,19 +71,17 @@ making them ideal for simulation loops with minimal boilerplate.
     def diffusion(y, t):
         return 0.5
 
-    # Euler-Maruyama integration
-    y = 1.0
-    t = 0.0
-    for _ in range(1000):
-        y = sde_euler_step(drift, diffusion, y, t)
-        t += bst.environ.get_dt()
+    # Drive a stepper with a compiled scan (not a Python loop)
+    def simulate(step, y0, n_steps):
+        def body(y, i):
+            y = step(drift, diffusion, y, i * bst.environ.get_dt())
+            return y, y
+        _, ys = bst.transform.scan(body, y0, jnp.arange(n_steps))
+        return ys
 
-    # Higher accuracy with Milstein
-    y = 1.0
-    t = 0.0
-    for _ in range(1000):
-        y = sde_milstein_step(drift, diffusion, y, t)
-        t += bst.environ.get_dt()
+    run = bst.transform.jit(simulate, static_argnums=(0, 2))
+    ys_em = run(sde_euler_step, jnp.array(1.0), 1000)       # Euler-Maruyama
+    ys_mil = run(sde_milstein_step, jnp.array(1.0), 1000)   # Milstein
 
 **ODE Integrators:**
 
@@ -239,7 +231,6 @@ making them ideal for simulation loops with minimal boilerplate.
 
     import brainstate as bst
     import jax.numpy as jnp
-    from collections import deque
     from braintools.quad import (
         dde_euler_step, dde_heun_step, dde_rk4_step,
         dde_euler_pc_step, dde_heun_pc_step
@@ -250,46 +241,40 @@ making them ideal for simulation loops with minimal boilerplate.
     # Delayed feedback system: dy/dt = -y(t) + tanh(y(t - delay))
     delay = 5.0
     dt = bst.environ.get_dt()
-    n_hist = int(delay / dt) + 1
-
-    # History buffers seeded over the delay interval (constant IC y = 0.1)
-    history = deque([0.1] * n_hist, maxlen=n_hist)
-    times = deque([-delay + i * dt for i in range(n_hist)], maxlen=n_hist)
-
-    # History lookup: nearest stored sample, clamped to the buffer.
-    # Replace with proper interpolation for production use.
-    def history_fn(t_past):
-        idx = int(round((t_past - times[0]) / dt))
-        idx = min(max(idx, 0), len(history) - 1)
-        return history[idx]
+    n_hist = int(round(delay / dt)) + 1
 
     # DDE right-hand side
     def f(t, y, y_delayed):
         return -y + jnp.tanh(y_delayed)
 
-    # Integration loop
-    y = 0.1
-    t = 0.0
-    for _ in range(100):
-        # Euler method for DDEs
-        y_new = dde_euler_step(f, y, t, history_fn, delays=delay)
+    # One step. The history is a ring buffer carried through the scan:
+    # buf[k] holds y(t - delay + k * dt). The lookup takes the nearest sample,
+    # clamped to the buffer; replace it with interpolation for production use.
+    def body(carry, i):
+        y, buf = carry
+        t = i * dt
 
+        def history_fn(t_past):
+            k = jnp.clip(jnp.round((t_past - (t - delay)) / dt).astype(int), 0, n_hist - 1)
+            return buf[k]
+
+        y_new = dde_euler_step(f, y, t, history_fn, delays=delay)
         # Or use higher-order / predictor-corrector methods:
         # y_new = dde_heun_step(f, y, t, history_fn, delays=delay)
         # y_new = dde_rk4_step(f, y, t, history_fn, delays=delay)
         # y_new = dde_euler_pc_step(f, y, t, history_fn, delays=delay)
+        buf = jnp.roll(buf, -1).at[-1].set(y_new)
+        return (y_new, buf), y_new
 
-        # Update history
-        history.append(y_new)
-        times.append(t)
-        y = y_new
-        t += dt
+    # Constant initial history y = 0.1; 100 steps in one compiled scan
+    y0 = jnp.asarray(0.1)
+    _, ys = bst.transform.scan(body, (y0, jnp.full(n_hist, 0.1)), jnp.arange(100))
 
-    # Multiple delays example
+    # Multiple delays: pass a list, size the buffer for the longest delay, and
+    # give the right-hand side one delayed argument per delay
     def f_multi(t, y, y_delay1, y_delay2):
         return -y + 0.5 * jnp.tanh(y_delay1) + 0.3 * jnp.sin(y_delay2)
-
-    y_new = dde_euler_step(f_multi, y, t, history_fn, delays=[5.0, 10.0])
+    # y_new = dde_euler_step(f_multi, y, t, history_fn, delays=[5.0, 10.0])
 
 **PyTree State Integration:**
 
@@ -387,6 +372,18 @@ making them ideal for simulation loops with minimal boilerplate.
 
 """
 
+# Trajectory drivers and the method registry
+from ._odeint import odeint
+from ._registry import (
+    register_method,
+    get_method,
+    list_methods,
+)
+from ._solve_ivp import (
+    ODESolution,
+    solve_ivp,
+)
+
 # ODE integrators
 from ._ode_integrator import (
     ode_euler_step,
@@ -440,6 +437,14 @@ from ._dde_integrator import (
 )
 
 __all__ = [
+    # Trajectory drivers and the method registry
+    'odeint',
+    'solve_ivp',
+    'ODESolution',
+    'register_method',
+    'get_method',
+    'list_methods',
+
     # ODE integrators - Basic methods
     'ode_euler_step',
     'ode_rk2_step',

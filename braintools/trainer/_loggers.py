@@ -55,13 +55,14 @@ class Logger(ABC):
     __module__ = 'braintools.trainer'
 
     def __init__(self):
-        self._name: str = 'default'
+        # Subclasses may store ``None`` for an unnamed run (W&B, Neptune).
+        self._name: Optional[str] = 'default'
         self._version: Optional[str] = None
 
     @property
     def name(self) -> str:
-        """Experiment name."""
-        return self._name
+        """Experiment name (``'default'`` when the run is unnamed)."""
+        return self._name if self._name is not None else 'default'
 
     @property
     def version(self) -> Optional[str]:
@@ -215,8 +216,20 @@ class TensorBoardLogger(Logger):
 
     Examples
     --------
-    >>> logger = TensorBoardLogger('logs/', name='my_experiment')
-    >>> trainer = Trainer(logger=logger)
+    Construction is lazy; the writer is created on the first logging call:
+
+    .. code-block:: python
+
+        >>> import os
+        >>> import braintools
+        >>> logger = braintools.trainer.TensorBoardLogger(
+        ...     'logs', name='my_experiment', version='v0')
+        >>> logger.log_dir == os.path.join('logs', 'my_experiment', 'v0')
+        True
+        >>> # Needs ``tensorboard`` (or ``tensorboardX``) installed and writes
+        >>> # event files for a TensorBoard server, so it is not run here.
+        >>> logger.log_metrics({'loss': 0.5}, step=0)  # doctest: +SKIP
+        >>> trainer = braintools.trainer.Trainer(logger=logger)  # doctest: +SKIP
     """
     __module__ = 'braintools.trainer'
 
@@ -232,13 +245,14 @@ class TensorBoardLogger(Logger):
     ):
         super().__init__()
         self._save_dir = save_dir
-        self._name = name
-        self._version = version or datetime.now().strftime('%Y%m%d_%H%M%S')
+        self._name: str = name
+        self._version: str = version or datetime.now().strftime('%Y%m%d_%H%M%S')
         self._log_graph = log_graph
         self._default_hp_metric = default_hp_metric
         self._prefix = prefix
 
-        self._writer = None
+        # ``SummaryWriter`` from torch or tensorboardX (optional, untyped).
+        self._writer: Any = None
         self._initialized = False
 
     def _init_writer(self):
@@ -367,8 +381,15 @@ class WandBLogger(Logger):
 
     Examples
     --------
-    >>> logger = WandBLogger(project='my_project', name='run_1')
-    >>> trainer = Trainer(logger=logger)
+    .. code-block:: python
+
+        >>> import braintools
+        >>> logger = braintools.trainer.WandBLogger(project='my_project', name='run_1')
+        >>> logger.name
+        'run_1'
+        >>> # Logging starts a W&B run, which needs ``wandb`` and an account.
+        >>> logger.log_metrics({'loss': 0.5}, step=0)  # doctest: +SKIP
+        >>> trainer = braintools.trainer.Trainer(logger=logger)  # doctest: +SKIP
     """
     __module__ = 'braintools.trainer'
 
@@ -396,7 +417,7 @@ class WandBLogger(Logger):
         self._offline = offline
         self._log_model = log_model
 
-        self._run = None
+        self._run: Any = None  # backend run handle (optional, untyped package)
         self._initialized = False
 
     def _init_wandb(self):
@@ -528,8 +549,24 @@ class CSVLogger(Logger):
 
     Examples
     --------
-    >>> logger = CSVLogger('logs/', name='my_experiment')
-    >>> trainer = Trainer(logger=logger)
+    .. code-block:: python
+
+        >>> import shutil, tempfile
+        >>> import braintools
+        >>> tmp = tempfile.mkdtemp()
+        >>> logger = braintools.trainer.CSVLogger(tmp, name='my_experiment', version='v0')
+        >>> logger.log_hyperparams({'lr': 0.01})
+        >>> logger.log_metrics({'loss': 0.5}, step=0)
+        >>> logger.log_metrics({'loss': 0.25, 'acc': 0.75}, step=1)
+        >>> logger.finalize()
+        >>> with open(logger.metrics_file_path) as f:
+        ...     print(f.read().strip())
+        step,loss,acc
+        0,0.5,
+        1,0.25,0.75
+        >>> shutil.rmtree(tmp)
+
+    Pass it to the trainer with ``Trainer(logger=logger)``.
     """
     __module__ = 'braintools.trainer'
 
@@ -542,8 +579,8 @@ class CSVLogger(Logger):
     ):
         super().__init__()
         self._save_dir = save_dir
-        self._name = name
-        self._version = version or datetime.now().strftime('%Y%m%d_%H%M%S')
+        self._name: str = name
+        self._version: str = version or datetime.now().strftime('%Y%m%d_%H%M%S')
         self._flush_interval = flush_logs_every_n_steps
 
         self._metrics_buffer: List[Dict[str, Any]] = []
@@ -585,7 +622,7 @@ class CSVLogger(Logger):
 
         # Use ``step`` even when it is 0; only fall back to the internal counter
         # when no step was supplied. (T-14)
-        row = {'step': step if step is not None else self._step_count}
+        row: Dict[str, Any] = {'step': step if step is not None else self._step_count}
         row.update(metrics)
         self._metrics_buffer.append(row)
 
@@ -677,11 +714,22 @@ class CompositeLogger(Logger):
 
     Examples
     --------
-    >>> logger = CompositeLogger([
-    ...     TensorBoardLogger('logs/'),
-    ...     CSVLogger('logs/'),
-    ... ])
-    >>> trainer = Trainer(logger=logger)
+    .. code-block:: python
+
+        >>> import os, shutil, tempfile
+        >>> import braintools
+        >>> tmp = tempfile.mkdtemp()
+        >>> logger = braintools.trainer.CompositeLogger([
+        ...     braintools.trainer.CSVLogger(tmp, name='first', version='v0'),
+        ...     braintools.trainer.CSVLogger(tmp, name='second', version='v0'),
+        ... ])
+        >>> logger.name
+        'first'
+        >>> logger.log_metrics({'loss': 0.5}, step=0)
+        >>> logger.finalize()
+        >>> sorted(os.listdir(tmp))
+        ['first', 'second']
+        >>> shutil.rmtree(tmp)
     """
     __module__ = 'braintools.trainer'
 
@@ -767,8 +815,15 @@ class NeptuneLogger(Logger):
 
     Examples
     --------
-    >>> logger = NeptuneLogger(project='workspace/project')
-    >>> trainer = Trainer(logger=logger)
+    .. code-block:: python
+
+        >>> import braintools
+        >>> logger = braintools.trainer.NeptuneLogger(project='workspace/project', name='run_1')
+        >>> logger.name
+        'run_1'
+        >>> # Logging starts a Neptune run, which needs ``neptune`` and an API token.
+        >>> logger.log_metrics({'loss': 0.5}, step=0)  # doctest: +SKIP
+        >>> trainer = braintools.trainer.Trainer(logger=logger)  # doctest: +SKIP
     """
     __module__ = 'braintools.trainer'
 
@@ -788,7 +843,7 @@ class NeptuneLogger(Logger):
         self._tags = tags
         self._description = description
 
-        self._run = None
+        self._run: Any = None  # backend run handle (optional, untyped package)
         self._initialized = False
 
     def _init_neptune(self):
@@ -860,8 +915,15 @@ class MLFlowLogger(Logger):
 
     Examples
     --------
-    >>> logger = MLFlowLogger(experiment_name='my_experiment')
-    >>> trainer = Trainer(logger=logger)
+    .. code-block:: python
+
+        >>> import braintools
+        >>> logger = braintools.trainer.MLFlowLogger(experiment_name='my_experiment')
+        >>> logger.version is None  # set from the run ID once a run starts
+        True
+        >>> # Logging starts an MLflow run, which needs ``mlflow`` and a tracking server.
+        >>> logger.log_metrics({'loss': 0.5}, step=0)  # doctest: +SKIP
+        >>> trainer = braintools.trainer.Trainer(logger=logger)  # doctest: +SKIP
     """
     __module__ = 'braintools.trainer'
 
@@ -881,7 +943,7 @@ class MLFlowLogger(Logger):
         self._tags = tags
         self._save_dir = save_dir
 
-        self._run = None
+        self._run: Any = None  # backend run handle (optional, untyped package)
         self._initialized = False
 
     def _init_mlflow(self):

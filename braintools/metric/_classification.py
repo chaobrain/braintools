@@ -491,6 +491,7 @@ def poly_loss_cross_entropy(
     >>> labels = jnp.array([[1.0, 0.0, 0.0]])
     >>> loss = braintools.metric.poly_loss_cross_entropy(logits, labels, epsilon=2.0)
     >>> print(f"PolyLoss: {loss[0]:.4f}")
+    PolyLoss: 1.0990
 
     Notes
     -----
@@ -554,6 +555,7 @@ def kl_divergence(
     >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
     >>> kl_div = braintools.metric.kl_divergence(log_preds, targets)
     >>> print(f"KL divergence: {kl_div[0]:.4f}")
+    KL divergence: 0.0268
 
     Notes
     -----
@@ -619,6 +621,7 @@ def kl_divergence_with_log_targets(
     >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
     >>> kl_div = braintools.metric.kl_divergence_with_log_targets(log_preds, log_targets)
     >>> print(f"KL divergence: {kl_div[0]:.4f}")
+    KL divergence: 0.0268
 
     Notes
     -----
@@ -681,6 +684,7 @@ def convex_kl_divergence(
     >>> log_preds = jnp.log(jnp.array([[0.6, 0.3, 0.1]]))
     >>> conv_kl = braintools.metric.convex_kl_divergence(log_preds, targets)
     >>> print(f"Convex KL divergence: {conv_kl[0]:.4f}")
+    Convex KL divergence: 0.0268
 
     Notes
     -----

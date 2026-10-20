@@ -948,5 +948,184 @@ class TestClusteredRandom(unittest.TestCase):
         assert u.math.allclose(result.post_positions, post_positions)
 
 
+# ---------------------------------------------------------------------------
+# 0.7: binomial-count Random / FixedProb and KD-tree ClusteredRandom
+# ---------------------------------------------------------------------------
+
+import tracemalloc
+from unittest import mock
+
+from scipy import stats
+from scipy.spatial.distance import cdist
+
+from braintools.conn import _random, _spatial
+
+
+def _within(count, mean, var, k=5.0):
+    return abs(count - mean) <= k * np.sqrt(var) + 1
+
+
+class TestRandomStatistics(unittest.TestCase):
+
+    def test_edge_count_within_binomial_bounds(self):
+        for pre, post, p, allow in [(300, 300, 0.05, False), (300, 300, 0.05, True),
+                                    (200, 450, 0.2, False), (1, 1000, 0.5, False), (64, 64, 0.9, False)]:
+            result = Random(prob=p, allow_self_connections=allow, seed=1)(pre_size=pre, post_size=post)
+            m = pre * post - (pre if (pre == post and not allow) else 0)
+            self.assertTrue(_within(result.n_connections, m * p, m * p * (1 - p)), (pre, post, p, allow))
+
+    def test_sorted_distinct_in_range(self):
+        result = Random(prob=0.1, seed=2)(pre_size=(10, 20), post_size=150)
+        key = result.pre_indices * 150 + result.post_indices
+        self.assertTrue(np.all(np.diff(key) > 0))
+        self.assertTrue(np.all((result.pre_indices >= 0) & (result.pre_indices < 200)))
+        self.assertTrue(np.all((result.post_indices >= 0) & (result.post_indices < 150)))
+        self.assertEqual(result.pre_indices.dtype, np.int64)
+
+    def test_degree_mean_and_variance(self):
+        n, p = 600, 0.05
+        result = Random(prob=p, seed=3)(pre_size=n, post_size=n)
+        out_deg = np.bincount(result.pre_indices, minlength=n)
+        in_deg = np.bincount(result.post_indices, minlength=n)
+        mean, var = (n - 1) * p, (n - 1) * p * (1 - p)
+        for deg in (out_deg, in_deg):
+            self.assertLess(abs(deg.mean() - mean), 5 * np.sqrt(var / n))
+            self.assertLess(abs(deg.var() / var - 1), 0.25)
+
+    def test_targets_uniform_chi_square(self):
+        result = Random(prob=0.02, seed=4)(pre_size=2000, post_size=50)
+        counts = np.bincount(result.post_indices, minlength=50)
+        self.assertGreater(stats.chisquare(counts).pvalue, 1e-4)
+
+    def test_self_connection_rate_when_allowed(self):
+        n, p = 2000, 0.3
+        result = Random(prob=p, allow_self_connections=True, seed=5)(pre_size=n, post_size=n)
+        n_self = int(np.sum(result.pre_indices == result.post_indices))
+        self.assertTrue(_within(n_self, n * p, n * p * (1 - p)))
+
+    def test_fixed_prob_same_stream_as_random(self):
+        a = FixedProb(prob=0.1, seed=6)(pre_size=100, post_size=80)
+        b = Random(prob=0.1, seed=6)(pre_size=100, post_size=80)
+        np.testing.assert_array_equal(a.pre_indices, b.pre_indices)
+        np.testing.assert_array_equal(a.post_indices, b.post_indices)
+
+    def test_zero_size_population(self):
+        result = Random(prob=0.5, seed=7)(pre_size=0, post_size=10)
+        self.assertEqual(result.n_connections, 0)
+
+    def test_heterogeneous_weights_match_edge_count(self):
+        result = Random(prob=0.1, weight=Uniform(0.5 * u.nS, 1.5 * u.nS), seed=8)(pre_size=50, post_size=60)
+        self.assertEqual(u.math.size(result.weights), result.n_connections)
+        self.assertEqual(u.get_unit(result.weights), u.nS)
+
+    def test_memory_bound_2e4(self):
+        # A dense float64 random matrix of 2e4 x 2e4 would be 3.2 GB.
+        tracemalloc.start()
+        try:
+            result = FixedProb(prob=0.01, seed=9)(pre_size=20000, post_size=20000)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        m = 20000 * 19999
+        self.assertTrue(_within(result.n_connections, m * 0.01, m * 0.01 * 0.99))
+        self.assertLess(peak, 300 * 2 ** 20)
+
+
+class TestClusteredRandomStatistics(unittest.TestCase):
+
+    @staticmethod
+    def _positions(n, seed, side=200.0):
+        return np.random.RandomState(seed).uniform(0, side, (n, 2)) * u.um
+
+    def _check_rates(self, result, pre_pos, post_pos, radius, p_out, p_in, drop_self):
+        d = cdist(pre_pos.mantissa, post_pos.mantissa)
+        inside = d <= radius
+        valid = np.ones_like(inside)
+        if drop_self:
+            np.fill_diagonal(valid, False)
+        connected = np.zeros(d.shape, dtype=bool)
+        connected[result.pre_indices, result.post_indices] = True
+        for region, p in ((inside & valid, p_in), (~inside & valid, p_out)):
+            m = int(region.sum())
+            self.assertTrue(_within(int(connected[region].sum()), m * p, m * p * (1 - p)),
+                            (int(connected[region].sum()), m * p))
+        if drop_self:
+            self.assertFalse(np.any(np.diag(connected)))
+
+    def test_enhanced_probability_inside_radius(self):
+        pos = self._positions(500, 0)
+        result = ClusteredRandom(prob=0.05, cluster_radius=25 * u.um, cluster_factor=4.0, seed=0)(
+            pre_size=500, post_size=500, pre_positions=pos, post_positions=pos)
+        self._check_rates(result, pos, pos, 25.0, 0.05, 0.2, drop_self=True)
+        key = result.pre_indices * 500 + result.post_indices
+        self.assertTrue(np.all(np.diff(key) > 0))
+
+    def test_reduced_probability_inside_radius(self):
+        pos = self._positions(500, 1)
+        result = ClusteredRandom(prob=0.3, cluster_radius=30 * u.um, cluster_factor=0.5, seed=1)(
+            pre_size=500, post_size=500, pre_positions=pos, post_positions=pos)
+        self._check_rates(result, pos, pos, 30.0, 0.3, 0.15, drop_self=True)
+
+    def test_zero_cluster_factor_removes_in_radius_edges(self):
+        pos = self._positions(300, 2)
+        result = ClusteredRandom(prob=0.2, cluster_radius=30 * u.um, cluster_factor=0.0, seed=2)(
+            pre_size=300, post_size=300, pre_positions=pos, post_positions=pos)
+        d = np.linalg.norm(pos.mantissa[result.pre_indices] - pos.mantissa[result.post_indices], axis=1)
+        self.assertTrue(np.all(d > 30.0))
+        self._check_rates(result, pos, pos, 30.0, 0.2, 0.0, drop_self=True)
+
+    def test_clipped_probability_connects_every_in_radius_pair(self):
+        pos = self._positions(300, 3)
+        result = ClusteredRandom(prob=0.3, cluster_radius=20 * u.um, cluster_factor=10.0, seed=3)(
+            pre_size=300, post_size=300, pre_positions=pos, post_positions=pos)
+        d = cdist(pos.mantissa, pos.mantissa)
+        np.fill_diagonal(d, np.inf)
+        connected = np.zeros(d.shape, dtype=bool)
+        connected[result.pre_indices, result.post_indices] = True
+        self.assertTrue(np.all(connected[d <= 20.0]))
+        self._check_rates(result, pos, pos, 20.0, 0.3, 1.0, drop_self=True)
+
+    def test_cross_population_statistics(self):
+        pre_pos, post_pos = self._positions(400, 4), self._positions(350, 5)
+        result = ClusteredRandom(prob=0.04, cluster_radius=25 * u.um, cluster_factor=5.0, seed=4)(
+            pre_size=400, post_size=350, pre_positions=pre_pos, post_positions=post_pos)
+        self.assertEqual(result.shape, (400, 350))
+        self._check_rates(result, pre_pos, post_pos, 25.0, 0.04, 0.2, drop_self=False)
+
+    def test_small_chunks_statistics(self):
+        pos = self._positions(400, 6)
+        with mock.patch.object(_spatial, 'MAX_CHUNK_PAIRS', 513):
+            result = ClusteredRandom(prob=0.05, cluster_radius=25 * u.um, cluster_factor=6.0, seed=6)(
+                pre_size=400, post_size=400, pre_positions=pos, post_positions=pos)
+        self._check_rates(result, pos, pos, 25.0, 0.05, 0.3, drop_self=True)
+
+    def test_edge_distances_chunked(self):
+        rs = np.random.RandomState(7)
+        pre_val, post_val = rs.uniform(0, 10, (30, 3)), rs.uniform(0, 10, (40, 3))
+        pre, post = rs.randint(0, 30, 101), rs.randint(0, 40, 101)
+        with mock.patch.object(_random, 'MAX_CHUNK_PAIRS', 17):
+            got = _random._edge_distances(pre_val, post_val, pre, post)
+        np.testing.assert_allclose(got, np.linalg.norm(pre_val[pre] - post_val[post], axis=1))
+
+    def test_position_count_mismatch_raises(self):
+        pos = self._positions(10, 8)
+        conn = ClusteredRandom(prob=0.1, cluster_radius=20 * u.um, seed=8)
+        with self.assertRaises(ValueError):
+            conn(pre_size=12, post_size=10, pre_positions=pos, post_positions=pos)
+
+    def test_memory_bound_2e4(self):
+        n = 20000
+        pos = np.random.RandomState(9).uniform(0, np.sqrt(n) * 10.0, (n, 2)) * u.um
+        conn = ClusteredRandom(prob=0.002, cluster_radius=30 * u.um, cluster_factor=20.0, seed=9)
+        tracemalloc.start()
+        try:
+            result = conn(pre_size=n, post_size=n, pre_positions=pos, post_positions=pos)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertGreater(result.n_connections, 20 * n)
+        self.assertLess(peak, 200 * 2 ** 20)
+
+
 if __name__ == '__main__':
     unittest.main()

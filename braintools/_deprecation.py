@@ -21,10 +21,18 @@ so that
 - the warning is emitted when the deprecated object is *called* (or a class is
   instantiated), never when it is imported or accessed -- downstream packages
   bind ``braintools`` names at import time;
-- all warnings share one category, :class:`BraintoolsDeprecationWarning`,
-  which the test suite turns into an error outside ``pytest.warns``;
-- every deprecation is recorded in a registry, which a test checks for wiring
-  and for the scheduled removal version.
+- all warnings share one category, :class:`BraintoolsDeprecationWarning`, a
+  :class:`FutureWarning` subclass so that Python shows it by default, which
+  the test suite turns into an error outside ``pytest.warns``;
+- every deprecation, including deprecated arguments and argument values, is
+  recorded in a registry (:func:`register_deprecation`) and emitted through
+  :func:`warn_deprecated`; tests check the registry for wiring, for the
+  scheduled removal version, and against the migration guide
+  (``docs/migration.md``).
+
+To turn every ``braintools`` deprecation into an error, run Python with
+``-W error::FutureWarning`` or install
+``warnings.simplefilter('error', BraintoolsDeprecationWarning)``.
 """
 
 import dataclasses
@@ -46,12 +54,40 @@ __all__ = [
 _KINDS = ('function', 'class', 'argument', 'feature')
 
 
-class BraintoolsDeprecationWarning(DeprecationWarning):
+class BraintoolsDeprecationWarning(FutureWarning):
     """Warning category for deprecated ``braintools`` APIs.
 
-    A dedicated subclass of :class:`DeprecationWarning` lets users and the
-    test suite filter ``braintools`` deprecations independently of warnings
-    raised by other libraries.
+    The class derives from :class:`FutureWarning`, not
+    :class:`DeprecationWarning`. Python shows ``FutureWarning`` under its
+    default filters wherever it is raised, which is the convention for
+    deprecations aimed at the end users of a library; a ``DeprecationWarning``
+    raised from library code (outside ``__main__``) would stay hidden. As a
+    dedicated subclass it also lets users and the test suite filter
+    ``braintools`` deprecations independently of warnings from other
+    libraries.
+
+    Notes
+    -----
+    Up to braintools 0.7 this class derived from :class:`DeprecationWarning`.
+    Filters written against ``DeprecationWarning`` no longer match it; filter
+    on this class (or on ``FutureWarning``) instead.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import warnings
+        >>> from braintools._deprecation import BraintoolsDeprecationWarning
+        >>> issubclass(BraintoolsDeprecationWarning, FutureWarning)
+        True
+        >>> issubclass(BraintoolsDeprecationWarning, DeprecationWarning)
+        False
+        >>> with warnings.catch_warnings(record=True) as caught:
+        ...     warnings.simplefilter('always')
+        ...     warnings.filterwarnings('ignore', category=BraintoolsDeprecationWarning)
+        ...     warnings.warn('old API', BraintoolsDeprecationWarning)
+        >>> caught
+        []
     """
 
 

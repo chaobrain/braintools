@@ -19,7 +19,7 @@ import brainstate
 import brainunit as u
 import jax
 import numpy as np
-from brainstate.typing import PyTree, ArrayLike
+from brainstate.typing import ArrayLike
 
 __all__ = [
     'scale',
@@ -40,10 +40,10 @@ __all__ = [
 
 
 def scale(
-    tree: PyTree[ArrayLike],
+    tree: brainstate.typing.PyTree[ArrayLike],
     x: ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Multiply every leaf array in a PyTree by a value.
 
@@ -71,15 +71,26 @@ def scale(
     -----
     - Broadcasting follows the semantics of the underlying array type
       (e.g., JAX/NumPy). The structure of `tree` is preserved.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> out = braintools.tree.scale(tree, 2.0)
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'a': [2.0, 4.0], 'b': [6.0]}
     """
     return jax.tree.map(lambda a: a * x, tree, is_leaf=is_leaf)
 
 
 def mul(
-    tree: PyTree[ArrayLike],
-    x: PyTree[ArrayLike] | ArrayLike,
+    tree: brainstate.typing.PyTree[ArrayLike],
+    x: brainstate.typing.PyTree[ArrayLike] | ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Elementwise multiplication of a PyTree with a value or another PyTree.
 
@@ -110,6 +121,22 @@ def mul(
     -----
     - When `x` is a PyTree, both `tree` and `x` must have identical PyTree
       structures. Broadcasting applies per-leaf when `x` is array_like.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> other = {'a': jnp.array([10.0, 20.0]), 'b': jnp.array([30.0])}
+        >>> out = braintools.tree.mul(tree, other)
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'a': [10.0, 40.0], 'b': [90.0]}
+        >>>
+        >>> out = braintools.tree.mul(tree, 3.0)
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'a': [3.0, 6.0], 'b': [9.0]}
     """
     if isinstance(x, brainstate.typing.ArrayLike):
         return scale(tree, x)
@@ -117,10 +144,10 @@ def mul(
 
 
 def shift(
-    tree1: PyTree[ArrayLike],
+    tree1: brainstate.typing.PyTree[ArrayLike],
     x: ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Add a value to every leaf array in a PyTree.
 
@@ -143,15 +170,26 @@ def shift(
     --------
     add : Elementwise addition with a PyTree or value.
     sub : Elementwise subtraction of PyTrees.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> out = braintools.tree.shift(tree, 1.0)
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'a': [2.0, 3.0], 'b': [4.0]}
     """
     return jax.tree.map(lambda a: a + x, tree1, is_leaf=is_leaf)
 
 
 def add(
-    tree1: PyTree[ArrayLike],
-    tree2: PyTree[ArrayLike] | ArrayLike,
+    tree1: brainstate.typing.PyTree[ArrayLike],
+    tree2: brainstate.typing.PyTree[ArrayLike] | ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Elementwise addition of PyTrees or a PyTree and a value.
 
@@ -177,6 +215,22 @@ def add(
     sub : Elementwise subtraction of PyTrees.
     mul : Elementwise multiplication.
     shift : Add a single value to every leaf.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> other = {'a': jnp.array([10.0, 20.0]), 'b': jnp.array([30.0])}
+        >>> out = braintools.tree.add(tree, other)
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'a': [11.0, 22.0], 'b': [33.0]}
+        >>>
+        >>> out = braintools.tree.add(tree, 1.0)
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'a': [2.0, 3.0], 'b': [4.0]}
     """
     if isinstance(tree2, brainstate.typing.ArrayLike):
         return shift(tree1, tree2)
@@ -184,10 +238,10 @@ def add(
 
 
 def sub(
-    tree1: PyTree[ArrayLike],
-    tree2: PyTree[ArrayLike],
+    tree1: brainstate.typing.PyTree[ArrayLike],
+    tree2: brainstate.typing.PyTree[ArrayLike],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Elementwise subtraction of two PyTrees.
 
@@ -210,13 +264,25 @@ def sub(
     --------
     add : Elementwise addition of PyTrees.
     mul : Elementwise multiplication.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> other = {'a': jnp.array([10.0, 20.0]), 'b': jnp.array([30.0])}
+        >>> out = braintools.tree.sub(other, tree)
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'a': [9.0, 18.0], 'b': [27.0]}
     """
     return jax.tree.map(lambda a, b: a - b, tree1, tree2, is_leaf=is_leaf)
 
 
 def dot(
-    a: PyTree,
-    b: PyTree,
+    a: brainstate.typing.PyTree,
+    b: brainstate.typing.PyTree,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> jax.Array:
     """
@@ -250,6 +316,17 @@ def dot(
     - Leaf arrays must be broadcast-compatible for multiplication.
     - When leaves carry units (brainunit quantities), units propagate through
       the multiplications and sums according to quantity rules.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> other = {'a': jnp.array([10.0, 20.0]), 'b': jnp.array([30.0])}
+        >>> float(braintools.tree.dot(tree, other))
+        140.0
     """
     return jax.tree.reduce(
         u.math.add,
@@ -259,7 +336,7 @@ def dot(
 
 
 def sum(
-    tree: PyTree[ArrayLike],
+    tree: brainstate.typing.PyTree[ArrayLike],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> jax.Array:
     """
@@ -282,12 +359,22 @@ def sum(
     --------
     dot : Inner product across leaves.
     squared_norm : Sum of squares across leaves.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> float(braintools.tree.sum(tree))
+        6.0
     """
     return jax.tree.reduce(u.math.add, jax.tree.map(u.math.sum, tree, is_leaf=is_leaf), is_leaf=is_leaf)
 
 
 def squared_norm(
-    tree: PyTree[ArrayLike],
+    tree: brainstate.typing.PyTree[ArrayLike],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
 ) -> jax.Array:
     """
@@ -313,6 +400,16 @@ def squared_norm(
     Notes
     -----
     Equivalent to ``dot(tree, tree)``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> float(braintools.tree.squared_norm(tree))
+        14.0
     """
     return jax.tree.reduce(
         u.math.add,
@@ -322,10 +419,10 @@ def squared_norm(
 
 
 def concat(
-    trees: Sequence[PyTree[ArrayLike]],
+    trees: Sequence[brainstate.typing.PyTree[ArrayLike]],
     axis: int = 0,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Concatenate corresponding leaves from a sequence of PyTrees.
 
@@ -348,6 +445,18 @@ def concat(
     -----
     All PyTrees in `trees` must share the same PyTree structure, and their
     corresponding leaves must be compatible for concatenation along `axis`.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> other = {'a': jnp.array([10.0, 20.0]), 'b': jnp.array([30.0])}
+        >>> out = braintools.tree.concat([tree, other])
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'a': [1.0, 2.0, 10.0, 20.0], 'b': [3.0, 30.0]}
     """
     return jax.tree.map(
         lambda *args: u.math.concatenate(args, axis=axis),
@@ -357,10 +466,10 @@ def concat(
 
 
 def split(
-    tree: PyTree[jax.Array],
+    tree: brainstate.typing.PyTree[jax.Array],
     sizes: Tuple[int],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> Tuple[PyTree[jax.Array], ...]:
+) -> Tuple[brainstate.typing.PyTree[jax.Array], ...]:
     """
     Split each leaf of a PyTree along axis 0 according to sizes.
 
@@ -385,9 +494,20 @@ def split(
     Notes
     -----
     This function operates on axis 0 only.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'x': jnp.array([0.0, 1.0, 2.0, 3.0, 4.0])}
+        >>> parts = braintools.tree.split(tree, (2, 2))
+        >>> [p['x'].tolist() for p in parts]
+        [[0.0, 1.0], [2.0, 3.0], [4.0]]
     """
     idx = 0
-    result: list[PyTree[jax.Array]] = []
+    result: list[brainstate.typing.PyTree[jax.Array]] = []
     for s in sizes:
         result.append(jax.tree.map(lambda x: x[idx: idx + s], tree, is_leaf=is_leaf))
         idx += s
@@ -396,10 +516,10 @@ def split(
 
 
 def idx(
-    tree: PyTree[ArrayLike],
+    tree: brainstate.typing.PyTree[ArrayLike],
     idx: int | slice | ArrayLike,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Index every leaf of a PyTree.
 
@@ -417,6 +537,21 @@ def idx(
     -------
     PyTree
         PyTree with leaves indexed by `idx`.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'x': jnp.array([0.0, 1.0, 2.0, 3.0]), 'y': jnp.array([0.0, 10.0, 20.0, 30.0])}
+        >>> out = braintools.tree.idx(tree, 1)
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'x': 1.0, 'y': 10.0}
+        >>>
+        >>> out = braintools.tree.idx(tree, [0, 2])
+        >>> {k: v.tolist() for k, v in out.items()}
+        {'x': [0.0, 2.0], 'y': [0.0, 20.0]}
     """
     # ``idx`` is documented as array_like, which includes Python lists; indexing a
     # jax array with a list raises a confusing TypeError, so normalise it to an
@@ -429,10 +564,10 @@ def idx(
 
 
 def expand(
-    tree: PyTree[ArrayLike],
+    tree: brainstate.typing.PyTree[ArrayLike],
     axis: int,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Insert a length-1 axis into every leaf of a PyTree.
 
@@ -450,16 +585,27 @@ def expand(
     -------
     PyTree
         PyTree with ``expand_dims(x, axis)`` applied to each leaf ``x``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> out = braintools.tree.expand(tree, 0)
+        >>> {k: v.shape for k, v in out.items()}
+        {'a': (1, 2), 'b': (1, 1)}
     """
     return jax.tree.map(lambda x: u.math.expand_dims(x, axis), tree, is_leaf=is_leaf)
 
 
 def take(
-    tree: PyTree[ArrayLike],
+    tree: brainstate.typing.PyTree[ArrayLike],
     idx: int | slice | ArrayLike,
     axis: int,
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree:
+) -> brainstate.typing.PyTree:
     """
     Take elements from every leaf of a PyTree along a given axis.
 
@@ -480,6 +626,19 @@ def take(
     -------
     PyTree
         PyTree with elements selected along `axis`.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'m': jnp.array([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]])}
+        >>> braintools.tree.take(tree, jnp.array([0, 2]), axis=1)['m'].tolist()
+        [[0.0, 2.0], [3.0, 5.0]]
+        >>>
+        >>> braintools.tree.take(tree, slice(1, None), axis=1)['m'].tolist()
+        [[1.0, 2.0], [4.0, 5.0]]
     """
 
     def take_(x):
@@ -498,9 +657,9 @@ def take(
 
 
 def as_numpy(
-    tree: PyTree[ArrayLike],
+    tree: brainstate.typing.PyTree[ArrayLike],
     is_leaf: Callable[[Any], bool] | None = u.math.is_quantity
-) -> PyTree[np.ndarray]:
+) -> brainstate.typing.PyTree[np.ndarray]:
     """
     Convert all leaves of a PyTree to NumPy arrays.
 
@@ -521,5 +680,16 @@ def as_numpy(
     -----
     This performs a best-effort conversion using ``np.asarray``; for JAX
     arrays this typically results in host NumPy arrays.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tree = {'a': jnp.array([1.0, 2.0]), 'b': jnp.array([3.0])}
+        >>> out = braintools.tree.as_numpy(tree)
+        >>> type(out['a']).__name__, out['b'].tolist()
+        ('ndarray', [3.0])
     """
     return jax.tree.map(lambda x: np.asarray(x), tree, is_leaf=is_leaf)

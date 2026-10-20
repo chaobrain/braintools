@@ -16,7 +16,7 @@
 """Phase base class and composition operators for cognitive task construction."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Union, Callable, Any
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 import brainunit as u
 import jax
@@ -67,23 +67,37 @@ class Phase(ABC):
     - ``*`` operator: repetition
     - ``|`` operator: parallel composition
 
-    Examples
-    --------
-    >>> # Sequential composition
-    >>> phases = Fixation(100 * u.ms) >> Stimulus(500 * u.ms) >> Response(100 * u.ms)
-
-    >>> # Using concat function
-    >>> phases = concat([Fixation(100 * u.ms), Stimulus(500 * u.ms)])
-
-    >>> # Repetition
-    >>> repeated = Stimulus(100 * u.ms) * 5  # 5 repetitions
-
     Parameters
     ----------
     duration : Duration
         Phase duration as Quantity (e.g., 100 * u.ms, 1 * u.second).
     name : str, optional
         Phase name. Defaults to class name.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.cogtask import Context, Fixation, Stimulus, Response, concat
+        >>> # Sequential composition
+        >>> phases = Fixation(100 * u.ms) >> Stimulus(500 * u.ms) >> Response(100 * u.ms)
+        >>> phases
+        Sequence(Fixation >> Stimulus >> Response)
+        >>> # The same sequence built with ``concat``
+        >>> concat([Fixation(100 * u.ms), Stimulus(500 * u.ms), Response(100 * u.ms)])
+        Sequence(Fixation >> Stimulus >> Response)
+        >>> # Repetition and parallel composition
+        >>> Stimulus(100 * u.ms) * 5
+        Repeat(Stimulus, 5)
+        >>> Stimulus(100 * u.ms, name='visual') | Stimulus(100 * u.ms, name='audio')
+        Parallel(visual | audio)
+        >>>
+        >>> # Durations resolve to time steps with the environment's dt
+        >>> with brainstate.environ.context(dt=1.0 * u.ms):
+        ...     phases.get_duration(Context())
+        700
     """
 
     # Subclasses set this True when they manage their own children inside
@@ -256,9 +270,22 @@ class Sequence(Phase):
 
     Examples
     --------
-    >>> seq = Sequence(Fixation(100*u.ms), Stimulus(500*u.ms))
-    >>> # Equivalent to:
-    >>> seq = Fixation(100*u.ms) >> Stimulus(500*u.ms)
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.cogtask import Context, Fixation, Sequence, Stimulus
+        >>> seq = Sequence(Fixation(100 * u.ms), Stimulus(500 * u.ms))
+        >>> seq
+        Sequence(Fixation >> Stimulus)
+        >>> # Equivalent to:
+        >>> Fixation(100 * u.ms) >> Stimulus(500 * u.ms)
+        Sequence(Fixation >> Stimulus)
+        >>> len(seq)
+        2
+        >>> with brainstate.environ.context(dt=1.0 * u.ms):
+        ...     seq.get_duration(Context())
+        600
     """
 
     IS_COMPOUND = True
@@ -329,16 +356,25 @@ class Repeat(Phase):
 
     Examples
     --------
-    >>> # Repeat stimulus 5 times
-    >>> repeated = Stimulus(100*u.ms) * 5
+    .. code-block:: python
 
-    >>> # In a sequence
-    >>> phases = Fixation(100*u.ms) >> (Stimulus(50*u.ms) * 10) >> Response(100*u.ms)
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.cogtask import Context, Fixation, Response, Stimulus
+        >>> repeated = Stimulus(100 * u.ms) * 5  # same as Repeat(Stimulus(...), 5)
+        >>> repeated
+        Repeat(Stimulus, 5)
+        >>>
+        >>> # Inside a sequence
+        >>> phases = Fixation(100 * u.ms) >> (Stimulus(50 * u.ms) * 10) >> Response(100 * u.ms)
+        >>> with brainstate.environ.context(dt=1.0 * u.ms):
+        ...     repeated.get_duration(Context()), phases.get_duration(Context())
+        (500, 700)
     """
 
     IS_COMPOUND = True
 
-    def __init__(self, phase: Phase, count: int, name: str = None):
+    def __init__(self, phase: Phase, count: int, name: Optional[str] = None):
         self.phase = phase
         self.count = count
         super().__init__(duration=0 * u.ms, name=name or f'Repeat({phase.name}, {count})')
@@ -424,8 +460,23 @@ class Parallel(Phase):
 
     Examples
     --------
-    >>> # Two stimuli presented simultaneously
-    >>> parallel = StimulusA(500*u.ms) | StimulusB(500*u.ms)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.cogtask import Feature, Stimulus, Task
+        >>> # Two stimuli presented simultaneously on separate channels
+        >>> visual = Stimulus(50 * u.ms, inputs={'visual': 1.0}, name='visual')
+        >>> audio = Stimulus(30 * u.ms, inputs={'audio': 1.0}, name='audio')
+        >>> both = visual | audio
+        >>> both
+        Parallel(visual | audio)
+        >>> task = Task(both, Feature(1, 'visual') + Feature(1, 'audio'),
+        ...             Feature(1, 'choice'), dt=10.0 * u.ms)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> np.asarray(X).T  # the parent lasts as long as its longest child
+        array([[1., 1., 1., 1., 1.],
+               [1., 1., 1., 0., 0.]], dtype=float32)
     """
 
     IS_COMPOUND = True
@@ -499,7 +550,8 @@ class Parallel(Phase):
         contents outside their active range). Only the first child's
         output writes are propagated (matching the static semantic).
         """
-        parent_cursor = ctx.t_cursor
+        # Packed mode: the Task has set ``t_cursor`` before executing phases.
+        parent_cursor = cast(jax.Array, ctx.t_cursor)
         max_child_actual = jnp.asarray(0, dtype=jnp.int32)
 
         for i, child in enumerate(self.phases):
@@ -512,7 +564,7 @@ class Parallel(Phase):
                 saved_out = ctx.outputs
                 execute_phase_packed(child, ctx)
                 ctx.outputs = saved_out
-            child_actual = ctx.t_cursor - parent_cursor
+            child_actual = cast(jax.Array, ctx.t_cursor) - parent_cursor
             max_child_actual = jnp.maximum(max_child_actual, child_actual)
 
         ctx.t_cursor = parent_cursor + max_child_actual
@@ -557,7 +609,9 @@ def execute_phase(phase: Phase, ctx: Context) -> None:
     phase.on_enter(ctx)
 
     if phase.IS_COMPOUND:
-        phase.execute(ctx)
+        # Compound phases (Sequence, Repeat, Parallel, If, ...) define
+        # ``execute``; the base class does not declare it.
+        cast(Any, phase).execute(ctx)
     else:
         phase.encode_inputs(ctx)
         phase.encode_outputs(ctx)
@@ -679,9 +733,10 @@ def _execute_leaf_packed(
     write into the local block, then gate by ``actual`` and write the
     block back into the trial buffers at the traced ``slot_start``.
     """
-    real_inputs = ctx.inputs
-    real_outputs = ctx.outputs
-    real_mask = ctx.mask
+    # Packed mode: the Task allocates all three buffers before encoding.
+    real_inputs = cast(jax.Array, ctx.inputs)
+    real_outputs = cast(jax.Array, ctx.outputs)
+    real_mask = cast(jax.Array, ctx.mask)
 
     num_inputs = real_inputs.shape[1]
 
@@ -705,8 +760,8 @@ def _execute_leaf_packed(
     phase.encode_inputs(ctx)
     phase.encode_outputs(ctx)
 
-    written_in = ctx.inputs
-    written_out = ctx.outputs
+    written_in = cast(jax.Array, ctx.inputs)
+    written_out = cast(jax.Array, ctx.outputs)
 
     t = jnp.arange(max_dur, dtype=jnp.int32)
     gate1d = (t < actual)
@@ -757,11 +812,17 @@ def concat(phases: List[Phase]) -> Sequence:
 
     Examples
     --------
-    >>> task = concat([
-    ...     Fixation(100 * u.ms),
-    ...     Stimulus(200 * u.ms),
-    ...     Response(100 * u.ms)
-    ... ])
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.cogtask import Fixation, Response, Stimulus, concat
+        >>> phases = concat([
+        ...     Fixation(100 * u.ms),
+        ...     Stimulus(200 * u.ms),
+        ...     Response(100 * u.ms),
+        ... ])
+        >>> phases
+        Sequence(Fixation >> Stimulus >> Response)
     """
     if not phases:
         raise ValueError("Cannot concatenate empty list of phases")
@@ -827,7 +888,7 @@ class DeclarativePhase(Phase):
         noise: Optional[Dict[str, Data]] = None,
         on_enter: Optional[Callable[[Context], None]] = None,
         on_exit: Optional[Callable[[Context], None]] = None,
-        name: str = None,
+        name: Optional[str] = None,
     ):
         name = name if name is not None else self.__class__.__name__
         if name == 'DeclarativePhase':
@@ -942,7 +1003,7 @@ class DeclarativePhase(Phase):
             feature = self._task_input_features[feat_name]
             value = self._resolve_value(value_spec, ctx, feature)
             value = jnp.asarray(value)
-            ctx.inputs = ctx.inputs.at[start:end, feature.i].set(value)
+            ctx.inputs = cast(jax.Array, ctx.inputs).at[start:end, feature.i].set(value)
 
             if feat_name in self._noise_specs:
                 sigma_val = self._sigma_magnitude(self._noise_specs[feat_name])
@@ -950,7 +1011,7 @@ class DeclarativePhase(Phase):
                     dt_val = self._sigma_magnitude(ctx.dt)
                     noise = ctx.rng.randn(duration, feature.num)
                     noise = noise * (sigma_val / jnp.sqrt(dt_val))
-                    ctx.inputs = ctx.inputs.at[start:end, feature.i].add(noise)
+                    ctx.inputs = cast(jax.Array, ctx.inputs).at[start:end, feature.i].add(noise)
 
     def encode_outputs(self, ctx: Context) -> None:
         """
@@ -967,7 +1028,7 @@ class DeclarativePhase(Phase):
         duration = end - start
 
         # ----- categorical mode -----
-        if ctx.outputs.ndim == 1:
+        if cast(jax.Array, ctx.outputs).ndim == 1:
             label_spec = self._output_specs.get('label', 0)
             if isinstance(label_spec, str):
                 raise ValueError(
@@ -978,10 +1039,10 @@ class DeclarativePhase(Phase):
             label_value = self._resolve_value(label_spec, ctx, None)
             arr = jnp.asarray(label_value, dtype=jnp.int32)
             if arr.ndim == 0:
-                ctx.outputs = ctx.outputs.at[start:end].set(arr)
+                ctx.outputs = cast(jax.Array, ctx.outputs).at[start:end].set(arr)
             elif arr.ndim == 1:
                 # time-varying labels
-                ctx.outputs = ctx.outputs.at[start:end].set(arr)
+                ctx.outputs = cast(jax.Array, ctx.outputs).at[start:end].set(arr)
             else:
                 raise ValueError(
                     f"Phase '{self.name}': categorical label must be a scalar "
@@ -1002,7 +1063,7 @@ class DeclarativePhase(Phase):
             feature = self._task_output_features[feat_name]
             value = self._resolve_value(value_spec, ctx, feature)
             value = jnp.asarray(value, dtype=jnp.float32)
-            ctx.outputs = ctx.outputs.at[start:end, feature.i].set(value)
+            ctx.outputs = cast(jax.Array, ctx.outputs).at[start:end, feature.i].set(value)
 
     def describe(self) -> str:
         """Return a human-readable description of this phase's behavior."""

@@ -296,8 +296,10 @@ def scipy_minimize_with_jax(
             x = unravel(x_flat)
             return callback(x, *fun_args)
 
-    # Minimize with scipy
-    results = minimize(
+    # Minimize with scipy. scipy-stubs narrow ``method`` to a Literal and
+    # ``options`` to a TypedDict; we forward the user's str/dict, which SciPy
+    # validates at runtime.
+    results = minimize(  # type: ignore[call-overload]
         fun_wrapper,
         x0_flat,
         args=args,
@@ -377,24 +379,34 @@ class ScipyOptimizer(Optimizer):
     --------
     Minimize a simple quadratic with tuple bounds:
 
-    >>> import jax.numpy as jnp
-    >>> def loss(x, y):
-    ...     return (x - 1.0)**2 + (y + 2.0)**2
-    >>> bounds = [(-5.0, 5.0), (-3.0, 3.0)]
-    >>> opt = ScipyOptimizer(loss_fun=loss, bounds=bounds, method='L-BFGS-B')
-    >>> res = opt.minimize(n_iter=3)  # doctest: +SKIP
-    >>> isinstance(res.x, (list, tuple))  # same structure as bounds  # doctest: +SKIP
-    True
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> from braintools.optim import ScipyOptimizer
+        >>> np.random.seed(0)  # starting points come from NumPy's global generator
+        >>> def loss(x, y):
+        ...     return (x - 1.0)**2 + (y + 2.0)**2
+        >>> bounds = [(-5.0, 5.0), (-3.0, 3.0)]
+        >>> opt = ScipyOptimizer(loss_fun=loss, bounds=bounds, method='L-BFGS-B')
+        >>> res = opt.minimize(n_iter=3)
+        >>> isinstance(res.x, (list, tuple))  # same structure as bounds
+        True
+        >>> [round(float(v), 3) for v in res.x]
+        [1.0, -2.0]
 
     With named parameters using dict bounds:
 
-    >>> def loss(**p):  # doctest: +SKIP
-    ...     return (p['a'] - 1.0)**2 + (p['b'] + 2.0)**2
-    >>> bounds = {"a": (-5.0, 5.0), "b": (-3.0, 3.0)}  # doctest: +SKIP
-    >>> opt = ScipyOptimizer(loss_fun=loss, bounds=bounds, method='TNC')  # doctest: +SKIP
-    >>> res = opt.minimize(n_iter=2)  # doctest: +SKIP
-    >>> isinstance(res.x, dict)  # doctest: +SKIP
-    True
+    .. code-block:: python
+
+        >>> def loss(**p):
+        ...     return (p['a'] - 1.0)**2 + (p['b'] + 2.0)**2
+        >>> bounds = {"a": (-5.0, 5.0), "b": (-3.0, 3.0)}
+        >>> opt = ScipyOptimizer(loss_fun=loss, bounds=bounds, method='TNC')
+        >>> res = opt.minimize(n_iter=2)
+        >>> isinstance(res.x, dict)
+        True
+        >>> {k: round(float(v), 2) for k, v in res.x.items()}
+        {'a': 1.0, 'b': -2.0}
     """
     __module__ = 'braintools.optim'
 
@@ -420,8 +432,10 @@ class ScipyOptimizer(Optimizer):
 
         # Parse bounds into per-leaf low/high arrays preserving structure
         self._is_dict = isinstance(bounds, dict)
-        self._keys: Optional[Sequence[str]] = None
-        if self._is_dict:
+        self._keys: Sequence[str] = ()
+        self._low_struct: Any
+        self._high_struct: Any
+        if isinstance(bounds, dict):
             self._keys = list(bounds.keys())
             low_struct: Dict[str, Any] = {}
             high_struct: Dict[str, Any] = {}

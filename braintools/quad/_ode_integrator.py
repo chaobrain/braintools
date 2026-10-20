@@ -22,7 +22,7 @@ Runge–Kutta families as well as an exponential Euler variant for stiff linear
 parts.
 """
 
-from typing import Callable
+from typing import Callable, TypeAlias
 
 import brainstate
 import brainunit as u
@@ -51,8 +51,9 @@ __all__ = [
     'ode_ralston3_step',  # Ralston RK3
 ]
 
-DT = brainstate.typing.ArrayLike
-ODE = Callable[[brainstate.typing.PyTree, float | u.Quantity, ...], brainstate.typing.PyTree]
+DT: TypeAlias = brainstate.typing.ArrayLike
+# f(y, t, *args, **kwargs) -> dy/dt
+ODE: TypeAlias = Callable[..., brainstate.typing.PyTree]
 
 
 @set_module_as('braintools.quad')
