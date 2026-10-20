@@ -5,7 +5,7 @@
 (log: `/tmp/bt_docs.log`). Goal: a clean build. The user also asked to remove the
 "Documentation Status" (readthedocs) badge from README.md.
 All work goes on the worktree branch `worktree-fix-docs-build`. Per AGENTS.md rule 7, first write this
-plan to `doc/specs/2026-10-19-docs-build-warnings.md`.
+plan to `docs/specs/2026-10-19-docs-build-warnings.md`.
 
 ## Root causes and fixes (by count)
 
