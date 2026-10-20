@@ -106,7 +106,7 @@ class AllToAll(PointConnectivity):
         drop_self = not self.include_self_connections and pre_num == post_num
         n_cols = post_num - 1 if drop_self else post_num
         n_cols = max(n_cols, 0)
-        pre_indices = np.repeat(np.arange(pre_num, dtype=np.int64), n_cols)
+        pre_indices: np.ndarray = np.repeat(np.arange(pre_num, dtype=np.int64), n_cols)
         post_indices = np.tile(np.arange(n_cols, dtype=np.int64), pre_num)
         if drop_self:
             post_indices += post_indices >= pre_indices
@@ -230,8 +230,8 @@ class OneToOne(PointConnectivity):
 
         if self.circular:
             n_connections = max(pre_num, post_num)
-            pre_indices = np.arange(n_connections, dtype=np.int64) % pre_num
-            post_indices = np.arange(n_connections, dtype=np.int64) % post_num
+            pre_indices: np.ndarray = np.arange(n_connections, dtype=np.int64) % pre_num
+            post_indices: np.ndarray = np.arange(n_connections, dtype=np.int64) % post_num
         else:
             n_connections = min(pre_num, post_num)
             pre_indices = np.arange(n_connections, dtype=np.int64)

@@ -22,7 +22,7 @@ matrix over the concatenated populations (host-side NumPy, then
 """
 
 import copy
-from typing import Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import brainevent
 import brainstate
@@ -198,10 +198,13 @@ class Projection:
         self._generator = connectivity
         if pre is not post and getattr(connectivity, 'allow_self_connections', True) is False:
             # (i, i) between two different populations is not a self-connection.
-            self._generator = copy.copy(connectivity)
-            self._generator.allow_self_connections = True
-            self._generator._cached_result = None
-            self._generator._cache_key = None
+            # ``allow_self_connections`` exists only on some Connectivity subclasses
+            # (checked with getattr above), so the copy is typed as Any.
+            generator: Any = copy.copy(connectivity)
+            generator.allow_self_connections = True
+            generator._cached_result = None
+            generator._cache_key = None
+            self._generator = generator
 
     def build(self, recompute: bool = False) -> ConnectionResult:
         """Generate the projection's connections.

@@ -42,6 +42,7 @@ class UniqueStateManager:
 
         >>> import jax.numpy as jnp
         >>> from brainstate import ParamState
+        >>> from braintools.optim import UniqueStateManager
         >>>
         >>> # Create a pytree with some duplicate State objects
         >>> state1 = ParamState(jnp.ones((2, 3)))
@@ -59,6 +60,8 @@ class UniqueStateManager:
         >>>
         >>> # Recover to pytree structure
         >>> recovered = manager.to_pytree()
+        >>> sorted(recovered)
+        ['layer1', 'layer2']
     """
     __module__ = 'braintools.optim'
 
@@ -132,7 +135,7 @@ class UniqueStateManager:
             Reconstructed PyTree
         """
         # Build a dictionary from paths
-        result = {}
+        result: Dict[Any, Any] = {}
 
         for path, leaf in zip(paths, leaves):
             # Convert path to nested dictionary keys

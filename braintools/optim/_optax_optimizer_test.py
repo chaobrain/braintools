@@ -3956,12 +3956,17 @@ class TestLBFGSLinesearchDescent:
 class TestMiscBranches:
     def test_adam_beta1_beta2_deprecated_override(self):
         # The legacy beta1/beta2 kwargs must warn and override the betas tuple.
-        with pytest.warns(DeprecationWarning, match='beta1'):
+        from braintools._deprecation import BraintoolsDeprecationWarning, registered_deprecations
+        with pytest.warns(BraintoolsDeprecationWarning, match='beta1'):
             opt = O.Adam(lr=0.05, beta1=0.8)
         assert opt.betas[0] == 0.8
-        with pytest.warns(DeprecationWarning, match='beta2'):
+        with pytest.warns(BraintoolsDeprecationWarning, match='beta2'):
             opt = O.Adam(lr=0.05, beta2=0.99)
         assert opt.betas[1] == 0.99
+        # Both arguments are registered deprecations (listed in the migration guide).
+        names = {r.old_name for r in registered_deprecations()}
+        assert 'braintools.optim.Adam(beta1=...)' in names
+        assert 'braintools.optim.Adam(beta2=...)' in names
         # Both override and the optimizer still steps cleanly.
         w = brainstate.ParamState(jnp.array([1.0, -2.0]))
         opt.register_trainable_weights({'w': w})
@@ -4176,3 +4181,111 @@ class TestDocExamplesRunnable:
     def test_R9_adafactor_positive_decay_rate(self):
         opt = O.Adafactor(lr=0.05, decay_rate=0.8)
         assert opt.decay_rate == pytest.approx(0.8)
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint round trip through msgpack (resume must restore optax NamedTuples)
+# ---------------------------------------------------------------------------
+
+_STATEFUL_OPTIMIZERS = [
+    lambda: O.Adam(lr=0.01),
+    lambda: O.AdamW(lr=0.01, weight_decay=1e-2),
+    lambda: O.Momentum(lr=0.01, momentum=0.9),
+    lambda: O.RMSprop(lr=0.01),
+    lambda: O.Adagrad(lr=0.01),
+    lambda: O.Nadam(lr=0.01),
+    lambda: O.Yogi(lr=0.01),
+    lambda: O.Lamb(lr=0.01),
+    lambda: O.AdaBelief(lr=0.01),
+    lambda: O.Lion(lr=0.01),
+    lambda: O.Adam(lr=O.StepLR(base_lr=0.01, step_size=2, gamma=0.5)),
+]
+
+
+def _roundtrip_setup():
+    w = ParamState(jnp.array([[0.5, -0.3], [0.2, 0.1]]))
+    b = ParamState(jnp.array([0.1, -0.2]))
+    params = {'w': w, 'b': b}
+    x = jnp.array([[1.0, 2.0], [0.5, -1.0], [-0.3, 0.7]])
+
+    def loss_fn():
+        return jnp.sum((x @ w.value + b.value) ** 2)
+
+    def grads():
+        return brainstate.transform.grad(loss_fn, params)()
+
+    return params, grads
+
+
+@pytest.mark.parametrize('make_opt', _STATEFUL_OPTIMIZERS)
+def test_load_state_dict_after_msgpack_roundtrip_resumes(make_opt, tmp_path):
+    from braintools.file import msgpack_load, msgpack_save
+
+    params, grads = _roundtrip_setup()
+    opt = make_opt()
+    opt.register_trainable_weights(params)
+    for _ in range(3):
+        opt.step(grads())
+
+    path = str(tmp_path / 'opt.msgpack')
+    msgpack_save(path, opt.state_dict())
+    loaded = msgpack_load(path)
+
+    # Reference: continue the original run by one step.
+    snapshot = {k: v.value for k, v in params.items()}
+    g = grads()
+    opt.step(g)
+    expected = {k: np.asarray(v.value) for k, v in params.items()}
+
+    # Resume from the serialized checkpoint and take the same step.
+    for k, v in params.items():
+        v.value = snapshot[k]
+    resumed = make_opt()
+    resumed.register_trainable_weights(params)
+    resumed.load_state_dict(loaded)
+    assert jax.tree.structure(resumed.opt_state.value) == jax.tree.structure(opt.opt_state.value)
+    resumed.step(g)
+    for k, v in params.items():
+        np.testing.assert_allclose(np.asarray(v.value), expected[k], rtol=1e-6, atol=1e-6)
+
+
+def test_load_state_dict_after_msgpack_roundtrip_restores_param_group_states(tmp_path):
+    from braintools.file import msgpack_load, msgpack_save
+
+    w1 = ParamState(jnp.ones((2,)))
+    w2 = ParamState(jnp.ones((3,)))
+    opt = O.Adam(lr=0.01)
+    opt.register_trainable_weights({'w1': w1})
+    opt.add_param_group({'w2': w2}, lr=0.1)
+    opt.step({'w1': jnp.ones((2,)), 'w2': jnp.ones((3,))})
+
+    path = str(tmp_path / 'opt.msgpack')
+    msgpack_save(path, opt.state_dict())
+
+    resumed = O.Adam(lr=0.01)
+    resumed.register_trainable_weights({'w1': w1})
+    resumed.add_param_group({'w2': w2}, lr=0.1)
+    resumed.load_state_dict(msgpack_load(path))
+    assert (jax.tree.structure(resumed.param_groups_opt_states[0].value)
+            == jax.tree.structure(opt.param_groups_opt_states[0].value))
+    resumed.step({'w1': jnp.ones((2,)), 'w2': jnp.ones((3,))})
+
+
+def test_load_state_dict_in_memory_roundtrip_still_works():
+    params, grads = _roundtrip_setup()
+    opt = O.Adam(lr=0.01)
+    opt.register_trainable_weights(params)
+    opt.step(grads())
+    resumed = O.Adam(lr=0.01)
+    resumed.register_trainable_weights(params)
+    resumed.load_state_dict(opt.state_dict())
+    assert jax.tree.structure(resumed.opt_state.value) == jax.tree.structure(opt.opt_state.value)
+    resumed.step(grads())
+
+
+def test_state_dict_before_registration_has_no_opt_state():
+    # A fresh optimizer (no weights registered yet) can still be checkpointed.
+    opt = O.Adam(lr=0.01)
+    sd = opt.state_dict()
+    assert sd['opt_state'] is None
+    assert float(sd['lr']) == pytest.approx(0.01)

@@ -215,6 +215,7 @@ class SOFO(OptaxOptimizer):
         >>> import braintools
         >>> import jax.numpy as jnp
         >>>
+        >>> brainstate.random.seed(0)
         >>> class MLP(brainstate.nn.Module):
         ...     def __init__(self):
         ...         super().__init__()
@@ -227,8 +228,11 @@ class SOFO(OptaxOptimizer):
         >>> model = MLP()
         >>> loss_fn = lambda pred, y: jnp.mean((pred - y) ** 2)
         >>> opt = braintools.optim.SOFO(model, loss_fn, lr=1e-2, tangent_size=64)
-        >>> opt.register_trainable_weights(model.states(brainstate.ParamState))
-        >>> loss = opt.step(jnp.ones((4, 8)), jnp.zeros((4, 3)))  # doctest: +SKIP
+        >>> _ = opt.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> x, y = jnp.ones((4, 8)), jnp.zeros((4, 3))
+        >>> losses = brainstate.transform.for_loop(lambda i: opt.step(x, y), jnp.arange(20))
+        >>> bool(jnp.all(jnp.isfinite(losses))), bool(losses[-1] < losses[0])
+        (True, True)
     """
     __module__ = 'braintools.optim'
 
@@ -387,6 +391,7 @@ class SOFOScan(OptaxOptimizer):
         >>> import braintools
         >>> import jax.numpy as jnp
         >>>
+        >>> brainstate.random.seed(0)
         >>> class Cell(brainstate.nn.Module):
         ...     def __init__(self):
         ...         super().__init__()
@@ -400,9 +405,11 @@ class SOFOScan(OptaxOptimizer):
         >>> cell = Cell()
         >>> loss_fn = lambda pred, y: jnp.mean((pred - y) ** 2)
         >>> opt = braintools.optim.SOFOScan(cell, loss_fn, lr=1e-2, tangent_size=64)
-        >>> opt.register_trainable_weights(cell.states(brainstate.ParamState))
+        >>> _ = opt.register_trainable_weights(cell.states(brainstate.ParamState))
         >>> xs = jnp.ones((5, 4, 3)); ys = jnp.zeros((5, 4, 2)); z0 = jnp.zeros((4, 4))
-        >>> loss = opt.step(z0, (xs, ys))  # doctest: +SKIP
+        >>> losses = brainstate.transform.for_loop(lambda i: opt.step(z0, (xs, ys)), jnp.arange(20))
+        >>> bool(jnp.all(jnp.isfinite(losses))), bool(losses[-1] < losses[0])
+        (True, True)
     """
     __module__ = 'braintools.optim'
 

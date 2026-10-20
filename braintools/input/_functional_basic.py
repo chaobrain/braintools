@@ -85,6 +85,7 @@ def section(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import section
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple step protocol
@@ -117,6 +118,7 @@ def section(
         ...     return_length=True
         ... )
         >>> print(f"Total duration: {duration}")
+        Total duration: 120 ms
     
     Complex protocol with different phases
 
@@ -205,6 +207,7 @@ def constant(I_and_duration):
         >>> import brainunit as u
         >>> import brainstate
         >>> import numpy as np
+        >>> from braintools.input import constant
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple two-phase protocol
@@ -239,6 +242,7 @@ def constant(I_and_duration):
         ... ]
         >>> current, total_time = constant(phases)
         >>> print(f"Total stimulation time: {total_time}")
+        Total stimulation time: 250 ms
     
     Using arrays for spatial patterns
 
@@ -340,6 +344,7 @@ def step(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import step
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple three-level step function
@@ -491,6 +496,7 @@ def ramp(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import ramp
         >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Simple linear ramp from 0 to 10 pA over 100 ms

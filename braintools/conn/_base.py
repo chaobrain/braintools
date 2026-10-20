@@ -25,7 +25,7 @@ generation across different neuron model types:
 
 import hashlib
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Union, Dict, Any, Sequence
+from typing import Optional, Tuple, Union, Dict, Any, Sequence, cast, overload
 
 import brainevent
 import brainstate
@@ -532,8 +532,8 @@ class Connectivity(ABC):
         # Always use an isolated RandomState (even when seed is None) so generation
         # does not depend on / perturb the global ``np.random`` state.
         self.rng = np.random.RandomState(seed)
-        self._cached_result = None
-        self._cache_key = None
+        self._cached_result: Optional[ConnectionResult] = None
+        self._cache_key: Optional[Tuple[Any, ...]] = None
 
     def __call__(
         self,
@@ -561,16 +561,20 @@ class Connectivity(ABC):
             _positions_key(pre_positions),
             _positions_key(post_positions),
         )
-        if self._cached_result is None or recompute or self._cache_key != cache_key:
-            self._cached_result = self._generate(
-                pre_size=effective_pre_size,
-                post_size=effective_post_size,
+        result = self._cached_result
+        if result is None or recompute or self._cache_key != cache_key:
+            # A size that is still ``None`` here is passed through unchanged; the
+            # concrete ``generate`` reports it, as before.
+            result = self._generate(
+                pre_size=cast(Union[int, Tuple[int, ...]], effective_pre_size),
+                post_size=cast(Union[int, Tuple[int, ...]], effective_post_size),
                 pre_positions=pre_positions,
                 post_positions=post_positions,
                 **kwargs
             )
+            self._cached_result = result
             self._cache_key = cache_key
-        return self._cached_result
+        return result
 
     def _generate(
         self,
@@ -640,14 +644,34 @@ class PointConnectivity(Connectivity):
 
     __module__ = 'braintools.conn'
 
-    def _generate(self, **kwargs) -> ConnectionResult:
+    def _generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate point neuron connectivity."""
-        result = self.generate(**kwargs)
+        result = self.generate(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
         result.model_type = 'point'
         return result
 
     @abstractmethod
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate point neuron specific connections."""
         pass
 
@@ -661,14 +685,34 @@ class MultiCompartmentConnectivity(Connectivity):
 
     __module__ = 'braintools.conn'
 
-    def _generate(self, **kwargs) -> ConnectionResult:
+    def _generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate multi-compartment connectivity."""
-        result = self.generate(**kwargs)
+        result = self.generate(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
         result.model_type = 'multi_compartment'
         return result
 
     @abstractmethod
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate multi-compartment specific connections."""
         pass
 
@@ -695,10 +739,29 @@ class CompositeConnectivity(Connectivity):
         self.conn2 = conn2
         self.operator = operator
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate composite connectivity."""
-        result1 = self.conn1(**kwargs)
-        result2 = self.conn2(**kwargs)
+        result1 = self.conn1(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
+        result2 = self.conn2(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
 
         if self.operator == 'union':
             return self._union(result1, result2)
@@ -755,7 +818,7 @@ class CompositeConnectivity(Connectivity):
             all_post_comp = np.concatenate([post_comp1, post_comp2])
 
         if len(all_pre) == 0:
-            result_kwargs = {
+            result_kwargs: Dict[str, Any] = {
                 'pre_size': result1.pre_size,
                 'post_size': result1.post_size,
                 'pre_positions': result1.pre_positions,
@@ -785,6 +848,7 @@ class CompositeConnectivity(Connectivity):
         )
 
         if is_multicompartment:
+            assert all_pre_comp is not None and all_post_comp is not None
             # Encode with compartment information
             max_comp = 10  # Assume max 10 compartment types
             conn_codes = (all_pre * max_post * max_comp * max_comp +
@@ -938,11 +1002,14 @@ class CompositeConnectivity(Connectivity):
         if isinstance(result1.post_size, tuple):
             max_post = int(np.prod(result1.post_size))
         else:
+            # ``_size_count`` also flattens sizes given as a list.
+            post_count1 = _size_count(result1.post_size)
+            post_count2 = _size_count(result2.post_size)
             max_post = max(
                 np.max(result1.post_indices) + 1 if result1.post_indices.size > 0 else 0,
                 np.max(result2.post_indices) + 1 if result2.post_indices.size > 0 else 0,
-                result1.post_size if result1.post_size is not None else 1,
-                result2.post_size if result2.post_size is not None else 1
+                post_count1 if post_count1 is not None else 1,
+                post_count2 if post_count2 is not None else 1
             )
 
         if is_multicompartment:
@@ -984,7 +1051,7 @@ class CompositeConnectivity(Connectivity):
         common_codes = np.intersect1d(conn_codes1, conn_codes2, assume_unique=False)
 
         if common_codes.size == 0:
-            result_kwargs = {
+            result_kwargs: Dict[str, Any] = {
                 'pre_size': result1.pre_size,
                 'post_size': result1.post_size,
                 'model_type': result1.model_type
@@ -1130,11 +1197,14 @@ class CompositeConnectivity(Connectivity):
         if isinstance(result1.post_size, tuple):
             max_post = int(np.prod(result1.post_size))
         else:
+            # ``_size_count`` also flattens sizes given as a list.
+            post_count1 = _size_count(result1.post_size)
+            post_count2 = _size_count(result2.post_size)
             max_post = max(
                 np.max(result1.post_indices) + 1 if result1.post_indices.size > 0 else 0,
                 np.max(result2.post_indices) + 1 if result2.post_indices.size > 0 else 0,
-                result1.post_size if result1.post_size is not None else 1,
-                result2.post_size if result2.post_size is not None else 1
+                post_count1 if post_count1 is not None else 1,
+                post_count2 if post_count2 is not None else 1
             )
 
         if is_multicompartment:
@@ -1177,7 +1247,7 @@ class CompositeConnectivity(Connectivity):
         diff_codes = conn_codes1[mask]
 
         if diff_codes.size == 0:
-            result_kwargs = {
+            result_kwargs: Dict[str, Any] = {
                 'pre_size': result1.pre_size,
                 'post_size': result1.post_size,
                 'model_type': result1.model_type
@@ -1278,8 +1348,8 @@ class ScaledConnectivity(Connectivity):
     def __init__(
         self,
         base_connectivity: Connectivity,
-        weight_factor: float = None,
-        delay_factor: float = None
+        weight_factor: Optional[float] = None,
+        delay_factor: Optional[float] = None
     ):
         super().__init__(
             pre_size=base_connectivity.pre_size,
@@ -1289,9 +1359,22 @@ class ScaledConnectivity(Connectivity):
         self.weight_factor = weight_factor
         self.delay_factor = delay_factor
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate scaled connectivity."""
-        result = self.base_connectivity(**kwargs)
+        result = self.base_connectivity(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
 
         # Compute scaled weights/delays without mutating the base connectivity's
         # (possibly cached) result in place, which would corrupt it on reuse.
@@ -1381,7 +1464,19 @@ def _permute_values(values, order):
     return values[order]
 
 
-def _size_count(size):
+@overload
+def _size_count(size: None) -> None: ...
+
+
+@overload
+def _size_count(size: Union[int, np.integer, Sequence[int]]) -> int: ...
+
+
+@overload
+def _size_count(size: Optional[Union[int, np.integer, Sequence[int]]]) -> Optional[int]: ...
+
+
+def _size_count(size: Any) -> Optional[int]:
     """Return the scalar element count for a size given as int, tuple/list, or None."""
     if size is None:
         return None

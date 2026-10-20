@@ -29,8 +29,7 @@ This module provides fundamental weight initialization strategies including:
 """
 
 
-import warnings
-from typing import Optional
+from typing import Dict, Optional
 
 import brainstate
 import brainunit as u
@@ -39,6 +38,7 @@ import numpy as np
 from brainstate.typing import ArrayLike
 from jax.scipy.special import ndtr, ndtri
 
+from braintools._deprecation import DeprecationRecord, register_deprecation, warn_deprecated
 from ._init_base import Initialization
 
 __all__ = [
@@ -87,22 +87,41 @@ def _check_low_high(low: ArrayLike, high: ArrayLike) -> None:
         )
 
 
-def _resolve_deprecated_unit(unit: Optional[u.Unit], *values: ArrayLike) -> u.Unit:
-    """Resolve the deprecated ``unit=`` argument into ``self.unit``.
+def _register_unit_deprecation(name: str) -> DeprecationRecord:
+    """Register the deprecated ``unit=`` argument of initializer ``name``."""
+    return register_deprecation(
+        f'braintools.init.{name}(unit=...)',
+        f'braintools.init.{name}(...) with the unit attached to the value arguments',
+        since='0.1.0',
+        removed_in='1.0.0',
+        kind='argument',
+    )
 
-    Returns :data:`brainunit.UNITLESS` when ``unit`` is None. Otherwise emits a
-    ``DeprecationWarning`` and, if any supplied value already carries a physical
-    unit, raises ``ValueError`` (combining the two would silently create a
-    compound unit such as ``mS * nS``).
+
+# The initializers whose ``unit=`` argument is deprecated (``ZeroInit``'s is not).
+_UNIT_DEPRECATIONS: Dict[str, DeprecationRecord] = {
+    name: _register_unit_deprecation(name)
+    for name in (
+        'Constant', 'Uniform', 'Normal', 'LogNormal', 'Gamma',
+        'Exponential', 'TruncatedNormal', 'Beta', 'Weibull',
+    )
+}
+
+
+def _resolve_deprecated_unit(owner: str, unit: Optional[u.Unit], *values: ArrayLike) -> u.Unit:
+    """Resolve the deprecated ``unit=`` argument of initializer ``owner``.
+
+    Returns :data:`brainunit.UNITLESS` when ``unit`` is None. Otherwise emits
+    the registered :class:`~braintools._deprecation.BraintoolsDeprecationWarning`
+    for ``owner`` (attributed to the caller of ``owner.__init__``) and, if any
+    supplied value already carries a physical unit, raises ``ValueError``
+    (combining the two would silently create a compound unit such as
+    ``mS * nS``).
     """
     if unit is None:
         return u.UNITLESS
-    warnings.warn(
-        'The `unit` parameter is deprecated and will be removed in a future '
-        'version. Specify units directly on the value arguments instead.',
-        DeprecationWarning,
-        stacklevel=3,
-    )
+    # Frames: _resolve_deprecated_unit -> owner.__init__ -> user code.
+    warn_deprecated(_UNIT_DEPRECATIONS[owner], stacklevel=3)
     for v in values:
         if v is None:
             continue
@@ -143,7 +162,7 @@ class Constant(Initialization):
         if value is None:
             raise ValueError('`value` must not be None for Constant initialization.')
         self.value = value
-        self.unit = _resolve_deprecated_unit(unit, value)
+        self.unit = _resolve_deprecated_unit('Constant', unit, value)
 
     def __call__(self, size, **kwargs):
         return u.maybe_decimal(u.math.full(size, self.value) * self.unit)
@@ -225,7 +244,7 @@ class Uniform(Initialization):
         _check_low_high(low, high)
         self.low = low
         self.high = high
-        self.unit = _resolve_deprecated_unit(unit, low, high)
+        self.unit = _resolve_deprecated_unit('Uniform', unit, low, high)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -269,7 +288,7 @@ class Normal(Initialization):
         _check_non_negative(std, 'std')
         self.mean = mean
         self.std = std
-        self.unit = _resolve_deprecated_unit(unit, mean, std)
+        self.unit = _resolve_deprecated_unit('Normal', unit, mean, std)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -317,7 +336,7 @@ class LogNormal(Initialization):
         _check_non_negative(std, 'std')
         self.mean = mean
         self.std = std
-        self.unit = _resolve_deprecated_unit(unit, mean, std)
+        self.unit = _resolve_deprecated_unit('LogNormal', unit, mean, std)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -366,7 +385,7 @@ class Gamma(Initialization):
         _check_positive(shape, 'shape')
         self.shape = shape
         self.scale = scale
-        self.unit = _resolve_deprecated_unit(unit, scale)
+        self.unit = _resolve_deprecated_unit('Gamma', unit, scale)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -405,7 +424,7 @@ class Exponential(Initialization):
 
     def __init__(self, scale: ArrayLike, unit: u.Unit = None):
         self.scale = scale
-        self.unit = _resolve_deprecated_unit(unit, scale)
+        self.unit = _resolve_deprecated_unit('Exponential', unit, scale)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -472,7 +491,7 @@ class TruncatedNormal(Initialization):
         self.std = std
         self.low = low
         self.high = high
-        self.unit = _resolve_deprecated_unit(unit, mean, std, low, high)
+        self.unit = _resolve_deprecated_unit('TruncatedNormal', unit, mean, std, low, high)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -564,7 +583,7 @@ class Beta(Initialization):
         self.beta = beta
         self.low = low
         self.high = high
-        self.unit = _resolve_deprecated_unit(unit, low, high)
+        self.unit = _resolve_deprecated_unit('Beta', unit, low, high)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)
@@ -609,7 +628,7 @@ class Weibull(Initialization):
         _check_positive(shape, 'shape')
         self.shape = shape
         self.scale = scale
-        self.unit = _resolve_deprecated_unit(unit, scale)
+        self.unit = _resolve_deprecated_unit('Weibull', unit, scale)
 
     def __call__(self, size, **kwargs):
         rng = kwargs.get('rng', brainstate.random)

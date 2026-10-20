@@ -105,6 +105,84 @@ def test_subtraction_by_name_drops_correct_feature():
     assert fs2['a'].i == slice(0, 1)
 
 
+def _three_set():
+    # fix -> 0:1, stim -> 1:9, choice -> 9:11
+    return Feature(1, 'fix') + Feature(8, 'stim') + Feature(2, 'choice')
+
+
+def test_add_feature_taken_from_set_starts_at_zero():
+    # Regression: the extracted feature kept its offset inside the set, so the
+    # composed slices overlapped (stim 1:9, x 8:10) and ran past ``num``.
+    fs = _three_set()
+    out = fs['stim'] + Feature(2, 'x')
+    assert out.num == 10
+    assert out['stim'].i == slice(0, 8)
+    assert out['x'].i == slice(8, 10)
+    # Extracted feature on the right-hand side of a set
+    out = Feature(2, 'x') + fs['stim']
+    assert out['x'].i == slice(0, 2)
+    assert out['stim'].i == slice(2, 10)
+    # Two extracted features
+    out = fs['choice'] + fs['fix']
+    assert out['choice'].i == slice(0, 2)
+    assert out['fix'].i == slice(2, 3)
+    # Operands are left untouched
+    assert fs['stim'].i == slice(1, 9)
+
+
+def test_add_extracted_feature_with_another_set():
+    fs = _three_set()
+    other = Feature(3, 'a') + Feature(4, 'b')
+    out = fs['stim'] + other
+    assert out.num == 15
+    assert out['stim'].i == slice(0, 8)
+    assert out['a'].i == slice(8, 11)
+    assert out['b'].i == slice(11, 15)
+    out = other + fs['stim']
+    assert out['a'].i == slice(0, 3)
+    assert out['b'].i == slice(3, 7)
+    assert out['stim'].i == slice(7, 15)
+    out = other | fs['choice']
+    assert out['choice'].i == slice(7, 9)
+
+
+def test_mul_feature_taken_from_set_starts_at_zero():
+    fs = _three_set()
+    out = fs['choice'] * 3
+    assert out.num == 6
+    assert [f.i for f in out] == [slice(0, 2), slice(2, 4), slice(4, 6)]
+    lone = fs['stim'] * 1
+    assert lone.i == slice(0, 8)
+    assert fs['choice'].i == slice(9, 11)
+
+
+def test_fresh_feature_composition_unchanged():
+    out = Feature(1, 'fix') + Feature(8, 'stim')
+    assert [f.i for f in out] == [slice(0, 1), slice(1, 9)]
+    out = Feature(2, 'c') * 2
+    assert [f.i for f in out] == [slice(0, 2), slice(2, 4)]
+    out = (Feature(1, 'a') + Feature(2, 'b')) + (Feature(3, 'c') + Feature(4, 'd'))
+    assert [f.i for f in out] == [slice(0, 1), slice(1, 3), slice(3, 6), slice(6, 10)]
+
+
+def test_subtraction_recomputes_contiguous_indices():
+    # Regression: the remaining features kept their old (shifted) slices and
+    # were shifted again on re-composition, so indices ran past ``num``.
+    fs = Feature(1, 'fix') + Feature(8, 'stim') + Feature(2, 'choice')
+    fs2 = fs - 'fix'
+    assert fs2.num == 10
+    assert fs2['stim'].i == slice(0, 8)
+    assert fs2['choice'].i == slice(8, 10)
+    fs3 = fs - 'stim'
+    assert fs3['fix'].i == slice(0, 1)
+    assert fs3['choice'].i == slice(1, 3)
+    # A lone remaining feature starts at index 0 as well.
+    lone = (Feature(1, 'fix') + Feature(8, 'stim')) - 'fix'
+    assert lone.i == slice(0, 8)
+    # The original set is left untouched.
+    assert fs['choice'].i == slice(9, 11)
+
+
 def test_subtraction_by_feature_object_yields_lone_feature_when_one_left():
     # When only one feature remains, ``__sub__`` returns the bare Feature
     # rather than a 1-element FeatureSet (because the re-composition loop
@@ -188,6 +266,55 @@ def test_feature_set_copy_does_not_alias_features():
     fs_copy = fs.copy()
     fs_copy['a'].shift(100)
     assert fs['a'].i == slice(0, 1)
+
+
+def test_copy_of_shifted_feature_set_keeps_layout_and_set_slice():
+    # Regression: ``copy()`` reset the set's own slice to start at 0 while its
+    # features kept their shifted offsets, so the copy was internally inconsistent.
+    fs = Feature(1, 'a') + Feature(2, 'b')
+    fs.shift(5)
+    c = fs.copy()
+    assert c['a'].i == slice(5, 6)
+    assert c['b'].i == slice(6, 8)
+    assert c.i == slice(5, 8)
+    assert c.num == 3
+    # The copy is independent of the original.
+    c.shift(-5)
+    assert fs['a'].i == slice(5, 6)
+    assert fs.i == slice(5, 8)
+
+
+def test_composing_copy_of_shifted_feature_set_lays_out_from_zero():
+    # Regression: composition rebased on the copy's ``_start`` (0) rather than its
+    # features' offsets, giving a at 5:6, b at 6:8 and z at 3:4 with num == 4.
+    fs = Feature(1, 'a') + Feature(2, 'b')
+    fs.shift(5)
+    out = fs.copy() + Feature(1, 'z')
+    assert out['a'].i == slice(0, 1)
+    assert out['b'].i == slice(1, 3)
+    assert out['z'].i == slice(3, 4)
+    assert out.num == 4
+    assert out.i == slice(0, 4)
+    # Same when the shifted copy is the right-hand operand.
+    out2 = Feature(1, 'z') + fs.copy()
+    assert out2['z'].i == slice(0, 1)
+    assert out2['a'].i == slice(1, 2)
+    assert out2['b'].i == slice(2, 4)
+    assert out2.num == 4
+
+
+def test_composing_set_built_from_offset_features_lays_out_from_zero():
+    # A set constructed directly from features taken out of another set: its own
+    # slice starts at 0 but its feature starts at 1.
+    fs = Feature(1, 'a') + Feature(2, 'b')
+    sub = FeatureSet(fs['b'])
+    out = sub + Feature(1, 'z')
+    assert out['b'].i == slice(0, 2)
+    assert out['z'].i == slice(2, 3)
+    assert out.num == 3
+    out2 = Feature(1, 'z') + sub
+    assert out2['z'].i == slice(0, 1)
+    assert out2['b'].i == slice(1, 3)
 
 
 def test_feature_repr_includes_name_and_num():

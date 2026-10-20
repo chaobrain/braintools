@@ -102,6 +102,7 @@ Continuous-valued error metrics for fitting neural or behavioral signals.
    squared_error
    absolute_error
    l1_loss
+   L1Loss
    l2_loss
    l2_norm
    safe_norm

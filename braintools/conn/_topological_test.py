@@ -282,6 +282,43 @@ class TestModularGeneral(unittest.TestCase):
         self.assertEqual(result.metadata['n_modules'], 2)
         self.assertIsNone(result.metadata['inter_conn'])
 
+    def test_positions_are_sliced_per_module_block(self):
+        """Each intra and inter block receives the positions of its own modules."""
+        from braintools.conn import ConnectionResult, PointConnectivity
+
+        class _Recorder(PointConnectivity):
+            def __init__(self):
+                super().__init__()
+                self.seen = []
+
+            def generate(self, pre_size, post_size, pre_positions=None, post_positions=None, **kwargs):
+                self.seen.append((pre_positions, post_positions))
+                return ConnectionResult(
+                    np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64),
+                    pre_size=pre_size, post_size=post_size,
+                )
+
+        intra = [_Recorder(), _Recorder()]
+        inter = _Recorder()
+        positions = np.arange(12.0).reshape(6, 2)
+        ModularGeneral(intra_conn=intra, inter_conn=inter)(
+            pre_size=6, post_size=6, pre_positions=positions, post_positions=positions)
+
+        for module, recorder in enumerate(intra):
+            (pre_pos, post_pos), = recorder.seen
+            np.testing.assert_array_equal(pre_pos, positions[3 * module:3 * module + 3])
+            np.testing.assert_array_equal(post_pos, positions[3 * module:3 * module + 3])
+        self.assertEqual(len(inter.seen), 2)  # blocks (0, 1) and (1, 0)
+        for pre_pos, post_pos in inter.seen:
+            self.assertEqual(pre_pos.shape, (3, 2))
+            self.assertEqual(post_pos.shape, (3, 2))
+            self.assertFalse(np.array_equal(pre_pos, post_pos))
+
+        # Without positions, every block gets None.
+        intra = [_Recorder(), _Recorder()]
+        ModularGeneral(intra_conn=intra, inter_conn=None)(pre_size=6, post_size=6)
+        self.assertEqual(intra[0].seen, [(None, None)])
+
     def test_inter_conn_pair_overrides(self):
         """Test that inter_conn_pair overrides default inter_conn."""
         intra = [

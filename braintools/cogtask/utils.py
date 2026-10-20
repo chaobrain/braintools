@@ -53,14 +53,38 @@ class TruncExp:
 
     Examples
     --------
-    >>> # Duration sampled from truncated exponential
-    >>> duration = TruncExp(600*u.ms, 300*u.ms, 1500*u.ms)
-    >>> Delay(duration)  # Variable delay
+    .. code-block:: python
 
-    >>> # Use in trial_init
-    >>> def trial_init(ctx):
-    ...     t_delay = TruncExp(600*u.ms, 300*u.ms, 1500*u.ms)
-    ...     ctx['delay_duration'] = t_delay()
+        >>> import brainunit as u
+        >>> import jax
+        >>> import numpy as np
+        >>> from braintools.cogtask import (
+        ...     Feature, Fixation, Response, Task, TruncExp, VariableDuration)
+        >>> delay = TruncExp(600 * u.ms, 300 * u.ms, 1500 * u.ms, key=jax.random.PRNGKey(0))
+        >>> delay
+        TruncExp(mean=600ms, min=300ms, max=1500ms)
+        >>> delay.min_value(), delay.max_value()
+        (Quantity(300, "ms"), Quantity(1500, "ms"))
+        >>> d = delay()  # one sample from the sampler's own key
+        >>> bool(300 * u.ms <= d) and bool(d < 1500 * u.ms)
+        True
+        >>>
+        >>> # Typical use: sample in ``trial_init`` with the trial's RNG and
+        >>> # read the value in a ``VariableDuration`` phase.
+        >>> task = Task(
+        ...     Fixation(100 * u.ms, inputs={'fixation': 1.0})
+        ...     >> VariableDuration(300 * u.ms, 1500 * u.ms, ctx_key='delay',
+        ...                         inputs={'fixation': 1.0})
+        ...     >> Response(100 * u.ms, outputs={'label': 1}),
+        ...     Feature(1, 'fixation'), Feature(2, 'choice'),
+        ...     trial_init=lambda ctx: ctx.update(delay=delay(ctx)),
+        ...     dt=10.0 * u.ms, seed=0,
+        ... )
+        >>> task.max_trial_duration()  # 10 + 150 + 10 steps
+        170
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, 30 <= int(np.asarray(info['mask']).sum()) <= 170
+        ((170, 1), True)
     """
 
     def __init__(
@@ -83,8 +107,6 @@ class TruncExp:
             Maximum value (exclusive).
         key : jax.Array, optional
             JAX PRNGKey for random number generation.
-        seed : int, optional
-            Random seed (used if key is None).
         """
         mean = u.Quantity(mean)
         self._time_unit = mean.unit
@@ -150,8 +172,24 @@ class UniformDuration:
 
     Examples
     --------
-    >>> duration = UniformDuration(200*u.ms, 400*u.ms)
-    >>> Delay(duration)  # Variable delay sampled uniformly
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import jax
+        >>> from braintools.cogtask import Context, UniformDuration
+        >>> duration = UniformDuration(200 * u.ms, 400 * u.ms, key=jax.random.PRNGKey(0))
+        >>> duration
+        UniformDuration(200ms, 400ms)
+        >>> duration.min_value(), duration.max_value()
+        (Quantity(200, "ms"), Quantity(400, "ms"))
+        >>> d = duration()  # sample with the sampler's own key
+        >>> bool(200 * u.ms <= d) and bool(d < 400 * u.ms)
+        True
+        >>> # Inside ``trial_init`` pass the context to use the trial's RNG,
+        >>> # e.g. ``ctx['delay'] = duration(ctx)`` with a ``VariableDuration`` phase.
+        >>> ctx = Context(key=jax.random.PRNGKey(1))
+        >>> bool(200 * u.ms <= duration(ctx) < 400 * u.ms)
+        True
     """
 
     def __init__(
@@ -346,9 +384,14 @@ def interval_of(
 
     Examples
     --------
-    >>> periods = {'fixation': 10, 'stimulus': 20, 'delay': 15}
-    >>> interval_of('stimulus', periods)
-    slice(10, 30, None)
+    .. code-block:: python
+
+        >>> from braintools.cogtask import interval_of
+        >>> periods = {'fixation': 10, 'stimulus': 20, 'delay': 15}
+        >>> interval_of('stimulus', periods)
+        slice(10, 30, None)
+        >>> interval_of('delay', [('fixation', 10), ('stimulus', 20), ('delay', 15)])
+        slice(30, 45, None)
     """
     if isinstance(total, dict):
         total = tuple(total.items())
@@ -377,9 +420,12 @@ def period_to_arr(periods: Dict[str, int]) -> jax.Array:
 
     Examples
     --------
-    >>> periods = {'fixation': 3, 'stimulus': 2}
-    >>> period_to_arr(periods)
-    array([0, 0, 0, 1, 1])
+    .. code-block:: python
+
+        >>> from braintools.cogtask import period_to_arr
+        >>> periods = {'fixation': 3, 'stimulus': 2}
+        >>> period_to_arr(periods)
+        Array([0, 0, 0, 1, 1], dtype=int32)
     """
     res = [jnp.ones(length, dtype=jnp.int32) * i for i, length in enumerate(periods.values())]
     return jnp.concatenate(res)

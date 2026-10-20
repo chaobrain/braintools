@@ -62,7 +62,7 @@ def bm():
 
 def _bm_call(fn, *args):
     with warnings.catch_warnings():
-        warnings.simplefilter('ignore', DeprecationWarning)
+        warnings.simplefilter('ignore', FutureWarning)
         return fn(*args)
 
 

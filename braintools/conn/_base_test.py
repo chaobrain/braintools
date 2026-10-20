@@ -687,6 +687,27 @@ class TestCompositeConnectivity(unittest.TestCase):
         with self.assertRaises(ValueError):
             composite.generate(pre_size=2, post_size=2)
 
+    def test_list_sizes_supported_by_all_operators(self):
+        # Sizes given as a list (not a tuple) must work for every operator, as
+        # they already did for union. Intersection and difference used to
+        # compare the list against ints in ``max`` and crash.
+        conn1 = MockConnectivity(connections_data={
+            'pre_indices': np.array([0, 1]), 'post_indices': np.array([1, 3])})
+        conn2 = MockConnectivity(connections_data={
+            'pre_indices': np.array([0, 2]), 'post_indices': np.array([1, 3])})
+        expected = {
+            'union': ([0, 1, 2], [1, 3, 3]),
+            'intersection': ([0], [1]),
+            'difference': ([1], [3]),
+        }
+        for operator, (pre, post) in expected.items():
+            with self.subTest(operator=operator):
+                result = CompositeConnectivity(conn1, conn2, operator)(
+                    pre_size=[2, 2], post_size=[2, 2])
+                np.testing.assert_array_equal(result.pre_indices, pre)
+                np.testing.assert_array_equal(result.post_indices, post)
+                self.assertEqual(result.post_size, [2, 2])
+
 
 class TestScaledConnectivity(unittest.TestCase):
     """

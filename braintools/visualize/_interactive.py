@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Optional, Union, Tuple, List
+from typing import Any, Optional, Union, Tuple, List, cast
 
 import numpy as np
 
@@ -52,7 +52,10 @@ __all__ = [
 def _check_plotly():
     """Check if plotly is available."""
     if not PLOTLY_AVAILABLE:
-        raise ImportError("Plotly is required for interactive plots. Install with: pip install plotly")
+        raise ImportError(
+            "Plotly is required for interactive plots. "
+            "Install with: pip install braintools[viz] (or pip install plotly)"
+        )
 
 
 @set_module_as('braintools.visualize')
@@ -108,17 +111,19 @@ def interactive_spike_raster(
         if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
             raise ValueError("neuron_ids must be provided when spike_times is not a list")
         spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
+    spike_times = cast(np.ndarray, spike_times)
+    neuron_ids = cast(np.ndarray, neuron_ids)
 
     # Apply filtering
     if time_range is not None:
         mask = (spike_times >= time_range[0]) & (spike_times <= time_range[1])
-        spike_times = spike_times[mask]
-        neuron_ids = neuron_ids[mask]
+        spike_times = cast(np.ndarray, spike_times[mask])
+        neuron_ids = cast(np.ndarray, neuron_ids[mask])
 
     if neuron_range is not None:
         mask = (neuron_ids >= neuron_range[0]) & (neuron_ids <= neuron_range[1])
-        spike_times = spike_times[mask]
-        neuron_ids = neuron_ids[mask]
+        spike_times = cast(np.ndarray, spike_times[mask])
+        neuron_ids = cast(np.ndarray, neuron_ids[mask])
 
     # Set up colors
     color = None
@@ -865,7 +870,7 @@ def dashboard_neural_activity(
     n_neurons = len(unique_neurons)
     total_spikes = len(spike_times_flat)
     if len(spike_times_flat) > 0:
-        time_span = np.max(spike_times_flat) - np.min(spike_times_flat)
+        time_span: Any = np.max(spike_times_flat) - np.min(spike_times_flat)
         mean_rate = total_spikes / (n_neurons * time_span) if time_span > 0 else 0
     else:
         mean_rate = 0

@@ -1,6 +1,168 @@
 # Release Notes
 
 
+## Version 0.8.0 (unreleased)
+
+Phase 0.8 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): the *release
+candidate*, the last release before 1.0. It adds no features. Every public
+name is in the API reference, the whole package is type-checked, and every
+docstring example runs in CI. Deprecations become visible to end users, and a
+migration guide lists everything that 1.0 removes. The design is in `docs/specs/2026-10-19-v0.8-release-candidate.md`.
+
+### Removal schedule
+
+**braintools 1.0.0 removes every deprecated name and argument** listed in the
+new migration guide (`docs/migration.md`). That covers the `metric` analysis
+functions moved to `braintools.analysis`, the top-level encoders and spike
+operations moved to `braintools.spike`, and the deprecated arguments and
+`trainer` settings. Code that runs without `BraintoolsDeprecationWarning` on
+0.8 is ready for 1.0.
+
+### Changed
+
+- **Deprecation warnings are now shown by default.**
+  `BraintoolsDeprecationWarning` subclasses `FutureWarning` instead of
+  `DeprecationWarning`. Python hides `DeprecationWarning` outside `__main__`,
+  so most users never saw the warnings before.
+  - Filters and `pytest.warns` on `BraintoolsDeprecationWarning` keep working.
+  - **Filters on `DeprecationWarning` no longer catch these warnings**, for
+    example `warnings.filterwarnings('ignore', category=DeprecationWarning)`
+    or a pytest `filterwarnings` entry such as
+    `error::DeprecationWarning`. Filter on `BraintoolsDeprecationWarning` (or
+    `FutureWarning`) instead.
+- **All deprecations go through the registry.** These used to emit a plain
+  `DeprecationWarning` and are now registered, warn with
+  `BraintoolsDeprecationWarning`, and are removed in 1.0.0:
+  - `load_matfile(header_info=...)`;
+  - the `unit=` argument of the initializers in `braintools.init`;
+  - `optim.Adam(beta1=..., beta2=...)`. Use `b1` and `b2`.
+
+  Their messages now use the registry format shared by all deprecations
+  (`` `old` is deprecated since X and will be removed in 1.0.0. Use `new`
+  instead. ``), so code that matched the old message text must be updated.
+- **The whole package is type-checked.** `mypy` (the `[tool.mypy]` config,
+  now `files = ["braintools"]` with tests excluded) reports no errors; before
+  this release CI checked 7 modules and the rest had 456 errors. As before,
+  the bodies of unannotated functions are not checked (`check_untyped_defs`
+  is off). Public
+  annotations were corrected where they were wrong, without changing
+  behaviour:
+  - several were widened to what the code already accepts (for example
+    `LightningModule.on_before_optimizer_step(optimizer)` and
+    `on_after_optimizer_step` take `Optional[Optimizer]`, since they receive
+    `None` when no optimizer is configured);
+  - the abstract `generate` methods of `PointConnectivity` and
+    `MultiCompartmentConnectivity` declare `pre_size`, `post_size`,
+    `pre_positions` and `post_positions`, as every built-in subclass already
+    did. `__call__` still passes them by keyword, so custom subclasses that
+    take `**kwargs` keep working.
+- `trainer`: with `accumulate_grad_batches=k`, `global_step` and `max_steps`
+  count optimizer updates rather than batches (the `max_steps` docstring said
+  batches). Nothing changes for `k = 1`.
+- `braintools.tree` no longer has a `PyTree` attribute (it was an import of
+  `brainstate.typing.PyTree`, never in `__all__`).
+- The `viz` install hint of the interactive plots names the extra
+  (`pip install braintools[viz]`).
+- `nevergrad` is imported only when a `NevergradOptimizer` is created, not on
+  `import braintools.optim`; without it, creating one raises `ImportError`
+  naming the extra (`pip install braintools[nevergrad]`).
+
+### Added
+
+- **Migration guide**, `docs/migration.md`: a table of all registered
+  deprecations (old name, replacement, kind, since, removal) and notes on the
+  larger moves. A test fails when a registered deprecation has no matching
+  table row.
+- **Doctests in CI.** `scripts/run_doctests.py` runs the examples of every
+  public module, including methods and properties, one process per module;
+  the new `doctest` workflow runs it on Python 3.13. All examples now pass.
+  Many were fixed (missing imports, seeds or outputs, stale signatures). The
+  only skipped examples are those that need an external logging service.
+  Some public names, notably most of `visualize`, the `quad` steppers and the
+  surrogate functions, still have no example.
+- **API documentation is complete.** `Initializer`, `metric.L1Loss`,
+  `surrogate.Surrogate`, `visualize.animator`, `interactive_histogram`,
+  `interactive_surface` and `interactive_correlation_matrix` are in the API
+  reference. A test checks that every name in a public `__all__` is listed
+  in the section of its own module; deprecated aliases are covered by the
+  migration guide instead.
+- **Tutorials:**
+  - `docs/spike/01_spike_trains.ipynb`: `SpikeTrains`, conversions, capacity,
+    encoders, bitwise operations and plotting;
+  - `docs/quad/trajectories_and_adaptive.ipynb`: `odeint`, adaptive
+    `solve_ivp` against SciPy, `t_eval`, gradients and the method registry;
+  - `docs/trainer/01_training_loop.ipynb`: a classifier trained with
+    `Trainer`, callbacks, checkpoints and CSV logging;
+  - `docs/optim/06_readout_learning.ipynb`: FORCE, RLS against ridge
+    regression, lasso and `multistart_minimize`.
+
+### Fixed
+
+- `optim`: resuming from a msgpack checkpoint crashed. After
+  `OptaxOptimizer.load_state_dict` with a state dict saved through msgpack,
+  the first `step()` raised `AttributeError: 'str' object has no attribute
+  'mu'` for Adam, SGD with momentum and every other optimizer with internal
+  state. In-memory round trips were unaffected.
+- `optim`: `OptaxOptimizer.state_dict()` crashed before
+  `register_trainable_weights`; it now returns `opt_state: None`, which
+  `load_state_dict` accepts.
+- `optim`: after `SequentialLR.load_state_dict`, `get_last_lr()` and the
+  optimizer's `current_lr` kept their old values; they are now recomputed.
+  Loading also restored only one of the two copies of the milestones, so a
+  scheduler built with different milestones drifted from the saved schedule.
+  Both are restored now, and a state whose milestone count does not match the
+  number of schedulers raises `ValueError`.
+- `optim`: once a scheduler was attached, `optimizer.current_lr` reported
+  `base_lr` at epoch 0 instead of the scheduled rate (the gradient step
+  already used the scheduled rate). Values logged at epoch 0, for example by
+  `trainer`'s `LearningRateMonitor`, change accordingly.
+- `optim`: `OneCycleLR` given only one of `epochs` and `steps_per_epoch`
+  raises `ValueError` instead of silently ignoring it.
+- `trainer`: batch-end callbacks received a leaked JIT tracer for the metrics
+  logged in `training_step` on the first batch and an empty dict on later
+  batches. They now see concrete values on every batch.
+- `trainer`: `Logger.name` of an unnamed W&B or Neptune run returned `None`;
+  it now returns `'default'`.
+- `trainer`: `default_collate_fn` returned a tuple of scalars for a 1-D
+  label array of int32, float32 or another non-float64 NumPy dtype. NumPy
+  scalars, bools and complex values are now stacked into an array that keeps
+  its dtype.
+- `trainer`: `global_step` was never advanced, so checkpoints always stored
+  step 0, `{step}` filenames showed 0, and `ModelCheckpoint(every_n_train_steps=n)`
+  saved a single file. `trainer.global_step` and `model.global_step` now count
+  optimizer steps and stay in sync.
+- `trainer`: `fit(ckpt_path=...)` restarted at epoch 0 and trained
+  `max_epochs` more epochs. It now continues from the epoch after the
+  checkpoint up to `max_epochs` (a total), the step count continues, and it
+  warns when nothing is left to train. A checkpoint saved mid-epoch resumes at
+  the next epoch boundary.
+- `trainer`: resuming did not restore the LR schedulers, so the schedule
+  restarted from its first epoch. `ModelCheckpoint` now saves the state of the
+  schedulers returned by `configure_optimizers` and `fit(ckpt_path=...)`
+  restores it; for older checkpoints without it, the schedulers are stepped
+  once per completed epoch, with a warning.
+- `trainer`: resuming from a checkpoint that had already reached `max_steps`
+  took one more optimizer step. It now warns and trains nothing.
+- `trainer`: `validate`, `test` and `predict` with `ckpt_path` overwrote the
+  trainer's epoch and step counts. They now load only the model weights.
+- `trainer`: `Trainer(enable_checkpointing=True)`, the default, created an
+  empty `checkpoints/` directory in the working directory. The flag is kept
+  for compatibility and does nothing; checkpoints are saved by
+  `ModelCheckpoint`.
+- `conn.CompositeConnectivity`: intersection and difference crashed when the
+  sizes were lists rather than tuples.
+- `cogtask`: composing a feature taken out of a `FeatureSet` (or a shifted
+  set) with `+`, `|`, `*` or `-` kept its old offset, which produced
+  overlapping or out-of-range slices. The result is now laid out from index 0.
+  The same holds for a set built from features taken out of another set, and
+  for a copy of a shifted set; `FeatureSet.copy()` now keeps the original's
+  slice instead of resetting it while keeping the shifted feature offsets.
+  Features composed from fresh `Feature` objects, which is how the built-in
+  tasks build their layouts, are unchanged.
+- Docstrings that could not be parsed (`braintools.input`, `Burst`) or that
+  rendered incorrectly (`imex` integrator) were fixed.
+
+
 ## Version 0.7.0 (unreleased)
 
 Phase 0.7 of the roadmap (`docs/specs/2026-10-19-roadmap.md`): *building

@@ -423,6 +423,11 @@ class TestNeptuneLogger:
         logger = NeptuneLogger(project='ws/proj', name='run', tags=['a'])
         assert logger.name == 'run'
 
+    def test_name_defaults_to_string_when_unnamed(self):
+        # ``Logger.name`` is typed ``str``; an unnamed run must not leak None.
+        logger = NeptuneLogger(project='ws/proj')
+        assert logger.name == 'default'
+
     def test_log_metrics_without_neptune_raises(self):
         try:
             import neptune  # noqa: F401

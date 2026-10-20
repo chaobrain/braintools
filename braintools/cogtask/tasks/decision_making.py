@@ -68,8 +68,21 @@ class PerceptualDecisionMaking(Task):
 
     Examples
     --------
-    >>> task = PerceptualDecisionMaking(t_stimulus=1500*u.ms, num_choices=4)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.PerceptualDecisionMaking(
+        ...     t_stimulus=1500 * u.ms, num_choices=4, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (17, 5)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((170, 17), (170,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((170, 4, 17), (170, 4))
     """
 
     def __init__(
@@ -162,8 +175,20 @@ class PerceptualDecisionMakingDelayResponse(Task):
 
     Examples
     --------
-    >>> task = PerceptualDecisionMakingDelayResponse()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.PerceptualDecisionMakingDelayResponse(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((270, 9), (270,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((270, 4, 9), (270, 4))
     """
 
     def __init__(
@@ -267,8 +292,20 @@ class ContextDecisionMaking(Task):
 
     Examples
     --------
-    >>> task = ContextDecisionMaking()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.ContextDecisionMaking(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (19, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((150, 19), (150,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((150, 4, 19), (150, 4))
     """
 
     def __init__(
@@ -391,8 +428,21 @@ class SingleContextDecisionMaking(Task):
 
     Examples
     --------
-    >>> task = SingleContextDecisionMaking(context=0)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.SingleContextDecisionMaking(
+        ...     context=0, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (17, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((115, 17), (115,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((115, 4, 17), (115, 4))
     """
 
     def __init__(
@@ -505,8 +555,20 @@ class PulseDecisionMaking(Task):
 
     Examples
     --------
-    >>> task = PulseDecisionMaking()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.PulseDecisionMaking(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (3, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((303, 3), (303,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((303, 4, 3), (303, 4))
     """
 
     def __init__(

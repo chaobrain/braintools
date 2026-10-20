@@ -74,6 +74,9 @@ updates or user interaction.
    interactive_heatmap
    interactive_3d_scatter
    interactive_network
+   interactive_histogram
+   interactive_surface
+   interactive_correlation_matrix
    dashboard_neural_activity
 
 
@@ -111,6 +114,7 @@ Lightweight wrappers around matplotlib primitives for quick inspection.
    raster_plot
    animate_1D
    animate_2D
+   animator
 
 
 Styling and Colormaps
