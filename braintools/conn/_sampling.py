@@ -67,6 +67,26 @@ def randint(rng: RNG, high: int, size) -> np.ndarray:
     return rng.randint(0, high, size=size, dtype=np.int64)
 
 
+_LONG32_MAX = int(np.iinfo(np.int32).max)
+
+
+def _binomial(rng: RNG, n: int, p: float) -> int:
+    """Draw one ``Binomial(n, p)`` count, with ``n`` allowed beyond the int32 range.
+
+    The legacy ``RandomState.binomial`` takes ``n`` as a C ``long``, which is
+    32 bits on Windows. There ``n`` is split into chunks of at most
+    ``2**31 - 1`` and the chunk counts are summed; a sum of independent
+    binomials with the same ``p`` is again binomial, so the distribution is
+    unchanged.
+    """
+    n = int(n)
+    if isinstance(rng, np.random.Generator) or n <= _LONG32_MAX:
+        return int(rng.binomial(n, p))
+    n_full, rest = divmod(n, _LONG32_MAX)
+    total = int(rng.binomial(_LONG32_MAX, p, size=n_full).sum(dtype=np.int64))
+    return total + (int(rng.binomial(rest, p)) if rest else 0)
+
+
 def _random(rng: RNG, size) -> np.ndarray:
     return rng.random(size) if isinstance(rng, np.random.Generator) else rng.random_sample(size)
 
@@ -243,7 +263,7 @@ def bernoulli_pairs(
     total = n_pre * max(cols, 0)
     if total == 0:
         return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
-    n_edges = int(rng.binomial(total, p))
+    n_edges = _binomial(rng, total, p)
     flat = sample_flat_without_replacement(rng, total, n_edges)
     pre, post = np.divmod(flat, cols)
     if not allow_self_connections:

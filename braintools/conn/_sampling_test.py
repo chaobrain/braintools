@@ -173,6 +173,41 @@ def test_bernoulli_pairs_large_block_is_memory_light():
     assert peak < 50 * 2 ** 20  # a dense mask would need ~10 GB
 
 
+class _Long32RandomState(np.random.RandomState):
+    """``RandomState`` whose ``binomial`` rejects counts beyond a 32-bit C ``long``, as on Windows."""
+
+    def binomial(self, n, p, size=None):
+        if np.any(np.asarray(n) > np.iinfo(np.int32).max):
+            raise ValueError('n is out of bounds for long')
+        return super().binomial(n, p, size)
+
+
+def test_bernoulli_pairs_edge_count_beyond_int32_with_legacy_rng():
+    # 1e5 x 1e5 = 1e10 pairs: the legacy binomial must not see n > 2**31 - 1.
+    pre, post = bernoulli_pairs(_Long32RandomState(11), 100_000, 100_000, 1e-5)
+    assert abs(pre.size - 1e5) < 5 * np.sqrt(1e5)
+    assert pre.max() < 100_000 and post.max() < 100_000
+    pre, post = bernoulli_pairs(_Long32RandomState(3), 70_000, 70_000, 1.0 / 70_000,
+                                allow_self_connections=False)
+    assert not np.any(pre == post)
+    # p = 1 over a block larger than int32 must still count every pair exactly.
+    from braintools.conn._sampling import _binomial
+    assert _binomial(_Long32RandomState(0), 3 * 2 ** 31, 1.0) == 3 * 2 ** 31
+    assert _binomial(_Long32RandomState(0), 3 * 2 ** 31, 0.0) == 0
+
+
+def test_binomial_split_matches_distribution():
+    # Summing chunked binomials is exact: mean and variance of Binomial(n, p).
+    from braintools.conn._sampling import _binomial
+    rng = _Long32RandomState(5)
+    n, p = 5 * 2 ** 31, 2e-9
+    draws = np.array([_binomial(rng, n, p) for _ in range(400)], dtype=float)
+    mean, var = n * p, n * p * (1 - p)
+    assert abs(draws.mean() - mean) < 5 * np.sqrt(var / draws.size)
+    assert 0.6 * var < draws.var() < 1.5 * var
+    assert _binomial(np.random.default_rng(0), n, 1.0) == n
+
+
 def test_sorted_unique_matches_numpy():
     from braintools.conn._sampling import _sorted_unique
     x = np.random.RandomState(12).randint(0, 50, 1000).astype(np.int64)

@@ -103,9 +103,10 @@ PR when it is done.
   `MultiSensoryIntegration`, `OneTwoThreeGo` and `EconomicDecisionMaking`
   (`braintools/cogtask/tasks/`) were written from memory of the NeuroGym
   tasks; neurogym was not installed to compare.
-- [ ] **`bernoulli_pairs` on Windows.** The binomial edge count may overflow
-  the default integer type on Windows (`braintools/conn/_sampling.py`); untested
-  there.
+- [x] **`bernoulli_pairs` on Windows.** The legacy `RandomState.binomial`
+  rejected edge counts above 2**31 - 1 (a C `long` on Windows); the count is
+  now drawn in chunks (`_binomial` in `braintools/conn/_sampling.py`).
+  Caught by the Windows CI job on PR #129.
 - [ ] **`analysis.graph.spectral_radius`** relies on ARPACK, which can fail to
   converge on some matrices; a dense fallback for small graphs would make it
   robust.
