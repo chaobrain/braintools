@@ -195,8 +195,12 @@ class SingleDeviceStrategy(Strategy):
 
     Examples
     --------
-    >>> strategy = SingleDeviceStrategy()
-    >>> trainer = Trainer(strategy=strategy)
+    .. code-block:: python
+
+        >>> import braintools
+        >>> strategy = braintools.trainer.SingleDeviceStrategy()
+        >>> strategy.name, strategy.num_devices, strategy.is_distributed
+        ('single_device', 1, False)
     """
     __module__ = 'braintools.trainer'
 
@@ -256,8 +260,13 @@ class DataParallelStrategy(Strategy):
 
     Examples
     --------
-    >>> strategy = DataParallelStrategy()
-    >>> trainer = Trainer(strategy=strategy)
+    .. code-block:: python
+
+        >>> import jax
+        >>> import braintools
+        >>> strategy = braintools.trainer.DataParallelStrategy(devices=jax.devices()[:1])
+        >>> strategy.name, strategy.num_devices
+        ('data_parallel', 1)
     """
     __module__ = 'braintools.trainer'
 
@@ -343,7 +352,7 @@ class DataParallelStrategy(Strategy):
         self,
         tensor: Any,
         op: str = 'mean',
-        axis_name: str = None,
+        axis_name: Optional[str] = None,
     ) -> Any:
         """Reduce tensor across devices."""
         axis_name = axis_name or self._axis_name
@@ -385,8 +394,14 @@ class ShardedDataParallelStrategy(Strategy):
 
     Examples
     --------
-    >>> strategy = ShardedDataParallelStrategy()
-    >>> trainer = Trainer(strategy=strategy)
+    .. code-block:: python
+
+        >>> import braintools
+        >>> strategy = braintools.trainer.ShardedDataParallelStrategy()
+        >>> strategy.name
+        'sharded_data_parallel'
+        >>> strategy.mesh.axis_names
+        ('data',)
     """
     __module__ = 'braintools.trainer'
 
@@ -492,8 +507,17 @@ class FullyShardedDataParallelStrategy(Strategy):
 
     Examples
     --------
-    >>> strategy = FullyShardedDataParallelStrategy()
-    >>> trainer = Trainer(strategy=strategy)
+    .. code-block:: python
+
+        >>> import braintools
+        >>> strategy = braintools.trainer.FullyShardedDataParallelStrategy()
+        >>> strategy.name
+        'fsdp'
+        >>> strategy.mesh.axis_names
+        ('data',)
+        >>> strategy = braintools.trainer.FullyShardedDataParallelStrategy(model_axis='model')
+        >>> strategy.mesh.axis_names
+        ('data', 'model')
     """
     __module__ = 'braintools.trainer'
 
@@ -635,15 +659,25 @@ class AutoStrategy(Strategy):
 
     Examples
     --------
-    >>> strategy = AutoStrategy()
-    >>> trainer = Trainer(strategy=strategy)
+    The selected strategy depends on the visible devices (``'single_device'``
+    on a single CPU):
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> strategy = braintools.trainer.AutoStrategy()
+        >>> strategy.name
+        'auto(...)'
+        >>> isinstance(strategy.selected_strategy, braintools.trainer.Strategy)
+        True
     """
     __module__ = 'braintools.trainer'
 
     def __init__(self, prefer_fsdp: bool = False):
         super().__init__()
         self._prefer_fsdp = prefer_fsdp
-        self._inner_strategy: Optional[Strategy] = None
+        # Always set by ``_select_strategy`` below.
+        self._inner_strategy: Strategy
         self._select_strategy()
 
     def _select_strategy(self):
@@ -721,8 +755,16 @@ def get_strategy(
 
     Examples
     --------
-    >>> strategy = get_strategy('ddp')
-    >>> strategy = get_strategy('fsdp', prefer_fsdp=True)
+    .. code-block:: python
+
+        >>> import braintools
+        >>> braintools.trainer.get_strategy('ddp').name
+        'data_parallel'
+        >>> braintools.trainer.get_strategy('single').name
+        'single_device'
+        >>> strategy = braintools.trainer.get_strategy('auto', prefer_fsdp=True)
+        >>> type(strategy).__name__
+        'AutoStrategy'
     """
     if isinstance(strategy, Strategy):
         return strategy
@@ -769,9 +811,21 @@ def all_reduce(
 
     Examples
     --------
-    >>> @functools.partial(jax.pmap, axis_name='batch')
-    ... def parallel_fn(x):
-    ...     return all_reduce(x, op='mean', axis_name='batch')
+    Collectives need a named mapped axis. ``jax.pmap`` provides one across
+    devices; ``jax.vmap`` provides one on a single device:
+
+    .. code-block:: python
+
+        >>> import jax
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> x = jnp.arange(4.0)
+        >>> jax.vmap(lambda v: braintools.trainer.all_reduce(v, op='mean'),
+        ...          axis_name='batch')(x)
+        Array([1.5, 1.5, 1.5, 1.5], dtype=float32)
+        >>> jax.vmap(lambda v: braintools.trainer.all_reduce(v, op='max'),
+        ...          axis_name='batch')(x)
+        Array([3., 3., 3., 3.], dtype=float32)
     """
     if op == 'mean':
         return lax.pmean(tensor, axis_name=axis_name)
@@ -809,6 +863,18 @@ def broadcast(
     -------
     Any
         Broadcasted tensor.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> x = jnp.arange(4.0)
+        >>> jax.vmap(lambda v: braintools.trainer.broadcast(v, src=2),
+        ...          axis_name='batch')(x)
+        Array([2., 2., 2., 2.], dtype=float32)
     """
     # A broadcast sends one replica's value to every replica. ``lax.ppermute``
     # cannot express this (it requires unique sources/destinations), so we

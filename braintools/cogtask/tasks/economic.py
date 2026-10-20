@@ -15,7 +15,7 @@
 
 """Value-based (economic) decision-making task classes."""
 
-from typing import Any, Sequence, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 import brainunit as u
 import jax.numpy as jnp
@@ -195,7 +195,7 @@ class EconomicDecisionMaking(Task):
             lo, hi = (float(u.Quantity(v).to_decimal(u.ms)) for v in t_offer)
             if not 0.0 < lo <= hi:
                 raise ValueError(f"t_offer=(min, max) needs 0 < min <= max, got {t_offer}.")
-            self._offer_range_ms = (lo, hi)
+            self._offer_range_ms: Optional[Tuple[float, float]] = (lo, hi)
         else:
             u.Quantity(t_offer).to_decimal(u.ms)  # validate the time unit
             self._offer_range_ms = None
@@ -243,8 +243,8 @@ class EconomicDecisionMaking(Task):
         }
         offer_noise = {'quantity': self.noise_sigma}
         if self._offer_range_ms is None:
-            offer = Stimulus(duration=self.t_offer, name='offer', inputs=offer_inputs,
-                             outputs={'label': 0}, noise=offer_noise)
+            offer: Phase = Stimulus(duration=self.t_offer, name='offer', inputs=offer_inputs,
+                                    outputs={'label': 0}, noise=offer_noise)
         else:
             offer = VariableDuration(
                 min_duration=self._offer_range_ms[0] * u.ms,

@@ -32,7 +32,7 @@ Key concepts:
 - Initial conditions: require specification of solution over delay interval
 """
 
-from typing import Callable, Union, Sequence
+from typing import Callable, Sequence, TypeAlias, Union
 
 import brainstate
 
@@ -46,10 +46,11 @@ __all__ = [
     'dde_heun_pc_step',
 ]
 
-DT = brainstate.typing.ArrayLike
-PyTree = brainstate.typing.PyTree
-HistoryFn = Callable[[DT], PyTree]
-DDE = Callable[[DT, PyTree, PyTree, ...], PyTree]
+DT: TypeAlias = brainstate.typing.ArrayLike
+PyTree: TypeAlias = brainstate.typing.PyTree
+HistoryFn: TypeAlias = Callable[[DT], PyTree]
+# f(t, y, *delayed_states, *args, **kwargs) -> dy/dt
+DDE: TypeAlias = Callable[..., PyTree]
 
 
 @set_module_as('braintools.quad')

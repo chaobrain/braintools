@@ -14,7 +14,7 @@
 # ==============================================================================
 
 import warnings
-from typing import Optional, Union, Tuple, List
+from typing import Any, Optional, Union, Tuple, List, cast
 
 import brainunit as u
 import jax
@@ -118,6 +118,8 @@ def spike_raster(
         if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
             raise ValueError("neuron_ids must be provided when spike_times is not a list")
         spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
+    spike_times = cast(np.ndarray, spike_times)
+    neuron_ids = cast(np.ndarray, neuron_ids)
 
     # When ``color`` is a per-spike array it must be filtered with the same masks
     # applied to the spikes; otherwise ``scatter`` raises a length-mismatch error
@@ -132,16 +134,16 @@ def spike_raster(
     # Apply time filtering
     if time_range is not None:
         mask = (spike_times >= time_range[0]) & (spike_times <= time_range[1])
-        spike_times = spike_times[mask]
-        neuron_ids = neuron_ids[mask]
+        spike_times = cast(np.ndarray, spike_times[mask])
+        neuron_ids = cast(np.ndarray, neuron_ids[mask])
         if is_color_array:
             color_arr = np.asarray(color_arr)[mask]
 
     # Apply neuron filtering
     if neuron_range is not None:
         mask = (neuron_ids >= neuron_range[0]) & (neuron_ids <= neuron_range[1])
-        spike_times = spike_times[mask]
-        neuron_ids = neuron_ids[mask]
+        spike_times = cast(np.ndarray, spike_times[mask])
+        neuron_ids = cast(np.ndarray, neuron_ids[mask])
         if is_color_array:
             color_arr = np.asarray(color_arr)[mask]
 
@@ -159,7 +161,7 @@ def spike_raster(
     # Show statistics
     if show_stats and len(spike_times) > 0:
         n_neurons = len(np.unique(neuron_ids))
-        time_span = np.max(spike_times) - np.min(spike_times)
+        time_span: Any = np.max(spike_times) - np.min(spike_times)
         firing_rate = len(spike_times) / (n_neurons * time_span) if time_span > 0 else 0
 
         stats_text = f'Neurons: {n_neurons}\nSpikes: {len(spike_times)}\nRate: {firing_rate:.2f} Hz'
@@ -384,7 +386,7 @@ def connectivity_matrix(
 @set_module_as('braintools.visualize')
 def neural_trajectory(
     data: np.ndarray,
-    dims: Optional[Tuple[int, int, int]] = None,
+    dims: Optional[Tuple[int, ...]] = None,
     time_color: bool = True,
     start_marker: str = 'o',
     end_marker: str = 's',
@@ -567,11 +569,12 @@ def spike_histogram(
         bin_size = in_time_unit(bin_size, unit)
     else:
         spike_times, _ = flatten_spikes(spike_times)
+    spike_times = cast(np.ndarray, spike_times)
 
     # Apply time filtering
     if time_range is not None:
         mask = (spike_times >= time_range[0]) & (spike_times <= time_range[1])
-        spike_times = spike_times[mask]
+        spike_times = cast(np.ndarray, spike_times[mask])
 
     # Set up bins
     if bin_size is not None:
@@ -709,7 +712,8 @@ def isi_distribution(
     shows their mean and their coefficient of variation (population standard
     deviation over mean, computed with :func:`braintools.analysis.spike.cv`
     on the pooled intervals); the CV is shown as 0 for fewer than two
-    intervals.
+    intervals. Both are computed after the ``max_isi`` cut, so a cut that
+    removes the long tail lowers them.
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
@@ -978,10 +982,10 @@ def _edge_attribute(attr, i, j, k, n_nodes, n_edges, name):
 def network_topology(
     adjacency: np.ndarray,
     positions: Optional[np.ndarray] = None,
-    node_colors: Optional[np.ndarray] = None,
+    node_colors: Optional[Union[str, np.ndarray]] = None,
     edge_colors: Optional[np.ndarray] = None,
-    node_sizes: Optional[np.ndarray] = None,
-    edge_widths: Optional[np.ndarray] = None,
+    node_sizes: Optional[Union[float, np.ndarray]] = None,
+    edge_widths: Optional[Union[float, np.ndarray]] = None,
     ax: Optional[plt.Axes] = None,
     figsize: Tuple[float, float] = (10, 10),
     layout: str = 'spring',

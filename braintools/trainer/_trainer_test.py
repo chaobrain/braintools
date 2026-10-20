@@ -47,6 +47,7 @@ from braintools.trainer._trainer import (
     _clip_grad_norm,
     _clip_grad_value,
     _format_metric,
+    _from_msgpack_lists,
     _normalize_optimizer_states,
     _prefixed,
 )
@@ -808,7 +809,9 @@ class TestFitLoop:
                 content = f.read()
             assert 'loss' in content
 
-    def test_enable_checkpointing_creates_manager(self):
+    def test_enable_checkpointing_creates_no_directory(self):
+        # The trainer saves no checkpoints by itself, so it must not create an
+        # (always empty) ``checkpoints/`` directory either.
         with tempfile.TemporaryDirectory() as tmpdir:
             model = SimpleModel()
             trainer = Trainer(
@@ -816,7 +819,7 @@ class TestFitLoop:
                 enable_progress_bar=False, enable_checkpointing=True, logger=False,
             )
             trainer.fit(model, _make_loader(n=16, batch_size=8))
-            assert os.path.isdir(os.path.join(tmpdir, 'checkpoints'))
+            assert not os.path.exists(os.path.join(tmpdir, 'checkpoints'))
 
 
 # ---------------------------------------------------------------------------
@@ -1172,6 +1175,26 @@ class TestTrainingMetricsForwarded:
                 header = f.readline()
             assert 'mse' in header
 
+    def test_batch_end_callbacks_see_concrete_step_metrics(self):
+        # Metrics logged in the JIT-compiled ``training_step`` must be visible
+        # to batch-end hooks as concrete values on every batch: previously the
+        # first batch exposed a leaked tracer and later batches an empty dict.
+        seen = []
+        recorder = braintools.trainer.LambdaCallback(
+            on_train_batch_end=lambda trainer, module, outputs, batch, batch_idx:
+            seen.append((module._get_prog_bar_metrics(), module._get_logger_metrics()))
+        )
+        model = LinearRegressor()
+        trainer = Trainer(max_epochs=2, enable_progress_bar=False,
+                          enable_checkpointing=False, logger=False,
+                          callbacks=[recorder])
+        trainer.fit(model, _loader())
+        assert len(seen) == 4
+        for prog_bar, logged in seen:
+            assert set(prog_bar) == {'mse'}
+            assert isinstance(prog_bar['mse'], float)
+            assert isinstance(logged['mse'], float)
+
 
 # ---------------------------------------------------------------------------
 # T-2: no double val_/test_ prefix
@@ -1510,10 +1533,12 @@ class TestCheckpointResume:
             }, path)
 
             model = LinearRegressor()
-            trainer = Trainer(max_epochs=2, enable_progress_bar=False,
+            trainer = Trainer(max_epochs=7, enable_progress_bar=False,
                               enable_checkpointing=False, logger=False)
             trainer.fit(model, _loader(), ckpt_path=path)
-            assert trainer.current_epoch >= 0
+            # Only epoch 6 (2 batches) runs after the epoch-5 checkpoint.
+            assert trainer.current_epoch == 6
+            assert trainer.global_step == 202
 
     def test_fit_resume_from_checkpoint(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1528,13 +1553,14 @@ class TestCheckpointResume:
             braintools.trainer.save_checkpoint(state, ckpt_path)
 
             trainer = Trainer(
-                max_epochs=1, default_root_dir=tmpdir,
+                max_epochs=4, default_root_dir=tmpdir,
                 enable_progress_bar=False, enable_checkpointing=False, logger=False,
             )
             # Resume: _load_checkpoint sets epoch/step from the file, then the
-            # fit loop runs (max_epochs=1) and overwrites epoch with 0.
+            # fit loop runs the remaining epoch 3 only.
             trainer.fit(SimpleModel(), _make_loader(n=16, batch_size=8),
                         ckpt_path=ckpt_path)
+            assert trainer.current_epoch == 3
             # global_step accumulates on top of the resumed step (7 + 2).
             assert trainer.global_step == 9
 
@@ -1728,13 +1754,15 @@ class TestResumeStepNone:
             path = cm.save(_Net(), epoch=0, step=None, metrics={'val_loss': 0.5})
 
             trainer = Trainer(
-                max_epochs=1, logger=False, enable_progress_bar=False,
+                max_epochs=2, logger=False, enable_progress_bar=False,
                 enable_checkpointing=False,
             )
-            # Must not raise; global_step coerced to an int.
+            # Must not raise; global_step coerced to an int. The epoch-0
+            # checkpoint resumes at epoch 1.
             trainer.fit(_Net(), _random_loader(), ckpt_path=path)
             assert isinstance(trainer.global_step, int)
-            assert trainer.global_step >= 0
+            assert trainer.global_step > 0
+            assert trainer.current_epoch == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1816,6 +1844,407 @@ class TestDeprecatedTrainerArguments:
             )
         trainer.fit(SimpleModel(), _make_loader(n=16, batch_size=8))
         assert trainer.global_step == 2
+
+
+# ---------------------------------------------------------------------------
+# WP-M2b: global_step sync, resume epochs, eval ckpt_path, checkpoint dir
+# ---------------------------------------------------------------------------
+
+class _EpochRecorder(braintools.trainer.Callback):
+    """Record the epochs that actually train and the optimizer-step count."""
+
+    def __init__(self):
+        super().__init__()
+        self.epochs = []
+        self.optimizer_steps = 0
+        self.batches = 0
+
+    def on_train_epoch_start(self, trainer, module):
+        self.epochs.append((trainer.current_epoch, module.current_epoch))
+
+    def on_train_batch_end(self, trainer, module, outputs, batch, batch_idx):
+        self.batches += 1
+
+    def on_after_optimizer_step(self, trainer, module, optimizer):
+        self.optimizer_steps += 1
+
+
+def _quiet_trainer(**kw):
+    kw.setdefault('enable_progress_bar', False)
+    kw.setdefault('enable_checkpointing', False)
+    kw.setdefault('logger', False)
+    return Trainer(**kw)
+
+
+def _ckpt_files(dirpath):
+    return sorted(f for f in os.listdir(dirpath) if f.endswith('.ckpt'))
+
+
+class TestGlobalStepSync:
+    """``model.global_step`` follows the trainer's optimizer-step count."""
+
+    def test_model_global_step_after_fit(self):
+        model = LinearRegressor()
+        trainer = _quiet_trainer(max_epochs=3)
+        trainer.fit(model, _loader())  # 2 batches/epoch
+        assert trainer.global_step == 6
+        assert model.global_step == 6
+
+    def test_checkpoints_store_true_global_step(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt = braintools.trainer.ModelCheckpoint(
+                dirpath=tmpdir, filename='ckpt-{epoch}-{step}',
+                monitor='val_loss', save_top_k=-1)
+            trainer = _quiet_trainer(max_epochs=3, callbacks=[ckpt])
+            trainer.fit(LinearRegressor(), _loader(), _loader())
+            assert _ckpt_files(tmpdir) == [
+                'ckpt-0-2.ckpt', 'ckpt-1-4.ckpt', 'ckpt-2-6.ckpt', 'last.ckpt']
+            last = braintools.trainer.load_checkpoint(os.path.join(tmpdir, 'last.ckpt'))
+            assert int(last['global_step']) == 6
+            assert int(last['epoch']) == 2
+
+    def test_every_n_train_steps_sees_real_step(self):
+        # The step-based trigger used to see ``global_step == 0`` forever, so it
+        # saved one ``step=0`` file and nothing else.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt = braintools.trainer.ModelCheckpoint(
+                dirpath=tmpdir, filename='s-{step}', every_n_train_steps=2,
+                save_top_k=0, save_last=False)
+            _quiet_trainer(max_epochs=3, callbacks=[ckpt]).fit(LinearRegressor(), _loader())
+            assert _ckpt_files(tmpdir) == ['s-2.ckpt', 's-4.ckpt', 's-6.ckpt']
+            state = braintools.trainer.load_checkpoint(os.path.join(tmpdir, 's-4.ckpt'))
+            assert int(state['global_step']) == 4
+
+    def test_every_n_train_steps_with_accumulation_skips_step_zero(self):
+        # With accumulation the first micro-batch ends before any optimizer
+        # update (step 0); that must not produce a ``step=0`` checkpoint.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt = braintools.trainer.ModelCheckpoint(
+                dirpath=tmpdir, filename='s-{step}', every_n_train_steps=1,
+                save_top_k=0, save_last=False)
+            _quiet_trainer(max_epochs=1, accumulate_grad_batches=2,
+                           callbacks=[ckpt]).fit(LinearRegressor(), _loader(n=40, batch_size=10))
+            assert _ckpt_files(tmpdir) == ['s-1.ckpt', 's-2.ckpt']
+
+    def test_accumulation_counts_optimizer_steps(self):
+        # 3 batches/epoch with accumulate=2: one full window + one flushed
+        # partial window = 2 optimizer steps per epoch.
+        model = LinearRegressor()
+        rec = _EpochRecorder()
+        trainer = _quiet_trainer(max_epochs=2, accumulate_grad_batches=2, callbacks=[rec])
+        trainer.fit(model, _loader(n=30, batch_size=10))
+        assert rec.batches == 6
+        assert rec.optimizer_steps == 4
+        assert trainer.global_step == 4
+        assert model.global_step == 4
+
+    def test_max_steps_counts_optimizer_steps(self):
+        rec = _EpochRecorder()
+        trainer = _quiet_trainer(max_epochs=10, max_steps=2, accumulate_grad_batches=2,
+                                 callbacks=[rec])
+        trainer.fit(LinearRegressor(), _loader(n=40, batch_size=10))
+        assert trainer.global_step == 2
+        assert rec.batches == 4  # 2 optimizer steps x 2 micro-batches
+
+    def test_logged_step_shared_within_accumulation_window(self):
+        class StepSpy(_SpyLogger):
+            def __init__(self):
+                super().__init__()
+                self.logged = []
+
+            def log_metrics(self, metrics, step=None):
+                self.logged.append((dict(metrics), step))
+
+        logger = StepSpy()
+        trainer = _quiet_trainer(max_epochs=1, accumulate_grad_batches=2, logger=logger)
+        trainer.fit(LinearRegressor(), _loader(n=40, batch_size=10))
+        train_steps = [step for metrics, step in logger.logged if 'loss' in metrics]
+        assert train_steps == [0, 0, 1, 1]
+
+
+class TestResumeContinuesEpochs:
+    """``fit(ckpt_path=...)`` continues from ``checkpoint_epoch + 1``."""
+
+    def _train_three_epochs(self, tmpdir):
+        ckpt = braintools.trainer.ModelCheckpoint(
+            dirpath=tmpdir, monitor='val_loss', save_top_k=1)
+        trainer = _quiet_trainer(max_epochs=3, callbacks=[ckpt])
+        trainer.fit(LinearRegressor(), _loader(), _loader())  # SGD optimizer
+        assert trainer.global_step == 6
+        return os.path.join(tmpdir, 'last.ckpt')
+
+    def test_resume_runs_remaining_epochs_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._train_three_epochs(tmpdir)
+            model = LinearRegressor()
+            rec = _EpochRecorder()
+            trainer = _quiet_trainer(max_epochs=5, callbacks=[rec])
+            trainer.fit(model, _loader(), _loader(), ckpt_path=path)
+            assert rec.epochs == [(3, 3), (4, 4)]
+            assert rec.batches == 4
+            assert trainer.current_epoch == 4
+            assert model.current_epoch == 4
+            assert trainer.global_step == 10
+            assert model.global_step == 10
+
+    def test_resume_checkpoint_carries_continued_counters(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._train_three_epochs(tmpdir)
+            out = os.path.join(tmpdir, 'resumed')
+            ckpt = braintools.trainer.ModelCheckpoint(
+                dirpath=out, filename='e{epoch}-s{step}', monitor='val_loss',
+                save_top_k=-1)
+            _quiet_trainer(max_epochs=5, callbacks=[ckpt]).fit(
+                LinearRegressor(), _loader(), _loader(), ckpt_path=path)
+            assert _ckpt_files(out) == ['e3-s8.ckpt', 'e4-s10.ckpt', 'last.ckpt']
+
+    def test_resume_past_max_epochs_trains_nothing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = self._train_three_epochs(tmpdir)
+            model = LinearRegressor()
+            rec = _EpochRecorder()
+            trainer = _quiet_trainer(max_epochs=3, callbacks=[rec])
+            with pytest.warns(UserWarning, match='max_epochs'):
+                trainer.fit(model, _loader(), ckpt_path=path)
+            assert rec.epochs == []
+            assert rec.batches == 0
+            assert trainer.current_epoch == 2
+            assert trainer.global_step == 6
+
+    def test_resume_without_epoch_key_starts_at_zero(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, 'weights.ckpt')
+            save_checkpoint({'model_state_dict': LinearRegressor().state_dict()}, path)
+            rec = _EpochRecorder()
+            trainer = _quiet_trainer(max_epochs=2, callbacks=[rec])
+            trainer.fit(LinearRegressor(), _loader(), ckpt_path=path)
+            assert [e for e, _ in rec.epochs] == [0, 1]
+            assert trainer.global_step == 4
+
+
+class _StepLRRegressor(LinearRegressor):
+    """``LinearRegressor`` with plain SGD driven by an epoch-wise ``StepLR``."""
+
+    def configure_optimizers(self):
+        sched = braintools.optim.StepLR(base_lr=0.1, step_size=1, gamma=0.5)
+        return braintools.optim.SGD(lr=sched), sched
+
+
+class _LRRecorder(braintools.trainer.Callback):
+    """Record the learning rate each training epoch runs with."""
+
+    def __init__(self):
+        super().__init__()
+        self.lrs = {}
+
+    def on_train_epoch_start(self, trainer, module):
+        self.lrs[trainer.current_epoch] = float(trainer.schedulers[0].get_last_lr()[0])
+
+
+def _steplr_model(seed=1):
+    brainstate.random.seed(seed)
+    return _StepLRRegressor()
+
+
+def _weights(model):
+    return {k: np.asarray(v) for k, v in model.lin.weight.value.items()}
+
+
+class TestResumeRestoresLRScheduler:
+    """``fit(ckpt_path=...)`` continues the LR schedule, not restarts it."""
+
+    def _continuous(self):
+        rec = _LRRecorder()
+        model = _steplr_model()
+        _quiet_trainer(max_epochs=5, callbacks=[rec]).fit(model, _loader(), _loader())
+        return rec.lrs, _weights(model)
+
+    def _three_epochs(self, tmpdir):
+        ckpt = braintools.trainer.ModelCheckpoint(
+            dirpath=tmpdir, filename='e{epoch}', monitor='val_loss', save_top_k=-1)
+        _quiet_trainer(max_epochs=3, callbacks=[ckpt]).fit(
+            _steplr_model(), _loader(), _loader())
+
+    @pytest.mark.parametrize('name', ['last.ckpt', 'e2.ckpt'])
+    def test_resume_matches_continuous_run(self, name):
+        # ``last.ckpt`` is written after the epoch's scheduler step, the
+        # per-epoch ``e2.ckpt`` before it; both must resume at the epoch-3 LR.
+        lrs, weights = self._continuous()
+        assert lrs == pytest.approx({0: 0.1, 1: 0.05, 2: 0.025, 3: 0.0125, 4: 0.00625})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._three_epochs(tmpdir)
+            rec = _LRRecorder()
+            model = _steplr_model(seed=7)
+            trainer = _quiet_trainer(max_epochs=5, callbacks=[rec])
+            with warnings.catch_warnings():
+                warnings.simplefilter('error')
+                trainer.fit(model, _loader(), _loader(),
+                            ckpt_path=os.path.join(tmpdir, name))
+        assert rec.lrs == pytest.approx({3: lrs[3], 4: lrs[4]})
+        assert int(trainer.schedulers[0].last_epoch.value) == 5
+        for key, value in weights.items():
+            np.testing.assert_allclose(_weights(model)[key], value, rtol=1e-5, atol=1e-6)
+
+    def test_checkpoint_stores_scheduler_state(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._three_epochs(tmpdir)
+            mid = braintools.trainer.load_checkpoint(os.path.join(tmpdir, 'e2.ckpt'))
+            last = braintools.trainer.load_checkpoint(os.path.join(tmpdir, 'last.ckpt'))
+        assert int(mid['lr_schedulers']['0']['last_epoch']) == 2
+        assert not mid['lr_schedulers_stepped']
+        assert int(last['lr_schedulers']['0']['last_epoch']) == 3
+        assert last['lr_schedulers_stepped']
+
+    def test_legacy_checkpoint_fast_forwards_with_warning(self):
+        # A checkpoint written before scheduler state was saved: the schedule
+        # is rebuilt by stepping it once per completed epoch.
+        lrs, weights = self._continuous()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._three_epochs(tmpdir)
+            state = braintools.trainer.load_checkpoint(os.path.join(tmpdir, 'e2.ckpt'))
+            del state['lr_schedulers'], state['lr_schedulers_stepped']
+            legacy = os.path.join(tmpdir, 'legacy.ckpt')
+            save_checkpoint(state, legacy)
+            rec = _LRRecorder()
+            model = _steplr_model(seed=7)
+            trainer = _quiet_trainer(max_epochs=5, callbacks=[rec])
+            with pytest.warns(UserWarning, match='no learning-rate scheduler state'):
+                trainer.fit(model, _loader(), _loader(), ckpt_path=legacy)
+        assert rec.lrs == pytest.approx({3: lrs[3], 4: lrs[4]})
+        for key, value in weights.items():
+            np.testing.assert_allclose(_weights(model)[key], value, rtol=1e-5, atol=1e-6)
+
+    def test_checkpoint_without_schedulers_does_not_warn(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, 'w.ckpt')
+            save_checkpoint({'epoch': 0, 'global_step': 2,
+                             'model_state_dict': LinearRegressor().state_dict()}, path)
+            trainer = _quiet_trainer(max_epochs=2)
+            with warnings.catch_warnings():
+                warnings.simplefilter('error')
+                trainer.fit(LinearRegressor(), _loader(), ckpt_path=path)
+        assert trainer.global_step == 4
+
+    def test_eval_ckpt_leaves_scheduler_alone(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._three_epochs(tmpdir)
+            model = _steplr_model()
+            trainer = _quiet_trainer(max_epochs=1)
+            trainer.fit(model, _loader())
+            trainer.validate(model, _loader(), ckpt_path=os.path.join(tmpdir, 'last.ckpt'),
+                             verbose=False)
+        assert int(trainer.schedulers[0].last_epoch.value) == 1
+
+
+class TestRestoreSchedulersHelpers:
+    def test_from_msgpack_lists(self):
+        assert _from_msgpack_lists({'0': 1.0, '1': {'0': 2}}) == [1.0, [2]]
+        assert _from_msgpack_lists({'1': {'0': 3}}) == {'1': [3]}
+        assert _from_msgpack_lists({'a': ({'0': 1},)}) == {'a': [[1]]}
+        assert _from_msgpack_lists({}) == {}
+        assert _from_msgpack_lists(5) == 5
+
+    def test_restore_by_position_skips_none(self):
+        # ``schedulers == [None, sched]`` saves only index '1'.
+        sched = braintools.optim.StepLR(base_lr=1.0, step_size=1, gamma=0.5)
+        trainer = _quiet_trainer()
+        trainer.schedulers = [None, sched]
+        saved = {'1': {'last_epoch': 2, 'base_lrs': {'0': 1.0}, 'current_lrs': {'0': 0.25}}}
+        trainer._restore_schedulers({'lr_schedulers': saved, 'lr_schedulers_stepped': True}, 3)
+        assert int(sched.last_epoch.value) == 2
+        assert sched.base_lrs == [1.0]
+        assert sched.get_last_lr() == pytest.approx([0.25])
+        assert trainer.state.lr_schedulers_stepped
+
+    def test_restore_unstepped_list_state(self):
+        sched = braintools.optim.StepLR(base_lr=1.0, step_size=1, gamma=0.5)
+        trainer = _quiet_trainer()
+        trainer.schedulers = [sched]
+        saved = [{'last_epoch': 2, 'base_lrs': [1.0], 'current_lrs': [0.25]}]
+        trainer._restore_schedulers({'lr_schedulers': saved}, 3)
+        assert int(sched.last_epoch.value) == 3
+        assert sched.get_last_lr() == pytest.approx([0.125])
+
+
+class TestResumeAtMaxSteps:
+    """Resuming a checkpoint that already reached ``max_steps`` trains nothing."""
+
+    def test_no_extra_optimizer_step(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt = braintools.trainer.ModelCheckpoint(dirpath=tmpdir, save_top_k=0)
+            _quiet_trainer(max_epochs=3, callbacks=[ckpt]).fit(LinearRegressor(), _loader())
+            path = os.path.join(tmpdir, 'last.ckpt')
+            model = LinearRegressor()
+            rec = _EpochRecorder()
+            trainer = _quiet_trainer(max_epochs=5, max_steps=6, callbacks=[rec])
+            with pytest.warns(UserWarning, match='max_steps'):
+                trainer.fit(model, _loader(), ckpt_path=path)
+        assert rec.epochs == []
+        assert rec.batches == 0
+        assert rec.optimizer_steps == 0
+        assert trainer.global_step == 6
+        assert model.global_step == 6
+
+    def test_remaining_steps_still_run(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt = braintools.trainer.ModelCheckpoint(dirpath=tmpdir, save_top_k=0)
+            _quiet_trainer(max_epochs=3, callbacks=[ckpt]).fit(LinearRegressor(), _loader())
+            trainer = _quiet_trainer(max_epochs=5, max_steps=7)
+            with warnings.catch_warnings():
+                warnings.simplefilter('error')
+                trainer.fit(LinearRegressor(), _loader(),
+                            ckpt_path=os.path.join(tmpdir, 'last.ckpt'))
+        assert trainer.global_step == 7
+
+
+class TestEvalCkptKeepsProgress:
+    """validate/test/predict with ``ckpt_path`` load weights only."""
+
+    @pytest.mark.parametrize('stage', ['validate', 'test', 'predict'])
+    def test_ckpt_path_loads_weights_not_counters(self, stage):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = LinearRegressor()
+            _quiet_trainer(max_epochs=1).fit(src, _loader())
+            path = os.path.join(tmpdir, 'other.ckpt')
+            save_checkpoint({'epoch': 9, 'global_step': 321,
+                             'model_state_dict': src.state_dict()}, path)
+
+            model = LinearRegressor()
+            trainer = _quiet_trainer(max_epochs=2)
+            trainer.fit(model, _loader())
+            assert (trainer.current_epoch, trainer.global_step) == (1, 4)
+
+            kwargs = {'dataloaders': _loader(), 'ckpt_path': path}
+            if stage != 'predict':
+                kwargs['verbose'] = False
+            getattr(trainer, stage)(**kwargs)
+
+            assert (trainer.current_epoch, trainer.global_step) == (1, 4)
+            assert (model.current_epoch, model.global_step) == (1, 4)
+            for key, value in src.lin.weight.value.items():
+                np.testing.assert_allclose(np.asarray(model.lin.weight.value[key]),
+                                           np.asarray(value))
+
+
+class TestNoStrayCheckpointDir:
+    """The default ``enable_checkpointing=True`` must not litter the cwd."""
+
+    def test_default_fit_leaves_no_empty_dirs(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        trainer = Trainer(max_epochs=1, enable_progress_bar=False)
+        assert trainer.enable_checkpointing is True
+        trainer.fit(LinearRegressor(), _loader())
+        assert not (tmp_path / 'checkpoints').exists()
+        empty = [str(p) for p in tmp_path.rglob('*') if p.is_dir() and not any(p.iterdir())]
+        assert empty == []
+
+    def test_model_checkpoint_still_saves_with_default(self, tmp_path):
+        ckpt = braintools.trainer.ModelCheckpoint(dirpath=str(tmp_path / 'ck'))
+        trainer = Trainer(max_epochs=1, enable_progress_bar=False, logger=False,
+                          default_root_dir=str(tmp_path), callbacks=[ckpt])
+        trainer.fit(LinearRegressor(), _loader())
+        assert 'last.ckpt' in os.listdir(tmp_path / 'ck')
+        assert not (tmp_path / 'checkpoints').exists()
 
 
 if __name__ == '__main__':

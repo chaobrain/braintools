@@ -80,7 +80,7 @@ class TestCheckPlotly(unittest.TestCase):
     def test_raises_when_unavailable(self):
         # Force the "plotly missing" branch regardless of the real environment.
         with mock.patch.object(_interactive, 'PLOTLY_AVAILABLE', False):
-            with self.assertRaises(ImportError):
+            with self.assertRaisesRegex(ImportError, r'braintools\[viz\]'):
                 interactive_heatmap(np.random.randn(4, 4))
 
 

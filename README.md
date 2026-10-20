@@ -93,6 +93,10 @@ The package also ships a registry of canonical tasks: `PerceptualDecisionMaking`
 
 The full documentation is available at https://brainx.chaobrain.com/braintools/
 
+## Upgrading to 1.0
+
+Names that moved since 0.4 (for example the `metric` analysis functions, now in `braintools.analysis`, and the top-level spike encoders, now in `braintools.spike`) still work but emit a `BraintoolsDeprecationWarning`, a `FutureWarning` shown by default. Version 1.0 removes them. The [migration guide](https://brainx.chaobrain.com/braintools/migration.html) lists every deprecated name with its replacement.
+
 ## Ecosystem
 
 `braintools` is one part of our brain simulation ecosystem: https://brainx.chaobrain.com/

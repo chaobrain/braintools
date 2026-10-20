@@ -682,7 +682,7 @@ class ClusteredRandom(PointConnectivity):
 
 def _edge_distances(pre_val: np.ndarray, post_val: np.ndarray, pre: np.ndarray, post: np.ndarray) -> np.ndarray:
     """Euclidean distance of each listed edge, computed in chunks of ``MAX_CHUNK_PAIRS`` edges."""
-    out = np.empty(pre.size, dtype=np.float64)
+    out: np.ndarray = np.empty(pre.size, dtype=np.float64)
     for start in range(0, pre.size, MAX_CHUNK_PAIRS):
         stop = start + MAX_CHUNK_PAIRS
         diff = pre_val[pre[start:stop]] - post_val[post[start:stop]]

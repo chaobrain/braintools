@@ -29,7 +29,7 @@ give the same connections, weights and edge order as the per-neuron loops of
 earlier versions.
 """
 
-from typing import Optional, Callable, Iterator, Tuple
+from typing import Optional, Callable, Iterator, Tuple, Union
 
 import brainunit as u
 import numpy as np
@@ -159,7 +159,7 @@ def _candidate_pairs(
     if not np.isfinite(radius):
         cols = np.arange(n_data, dtype=np.int64)
         for start, stop in row_chunks(n_query, n_data, max_pairs):
-            rows = np.arange(start, stop, dtype=np.int64)
+            rows: np.ndarray = np.arange(start, stop, dtype=np.int64)
             yield np.repeat(rows, n_data), np.tile(cols, stop - start)
         return
     dtype = np.result_type(query, data)
@@ -368,12 +368,15 @@ class Conv2dKernel(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate convolutional kernel connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for kernel connectivity")
@@ -539,12 +542,15 @@ class GaussianKernel(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate Gaussian kernel connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gaussian kernel connectivity")
@@ -700,12 +706,15 @@ class GaborKernel(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate Gabor kernel connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for Gabor kernel connectivity")
@@ -880,12 +889,15 @@ class DoGKernel(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate DoG kernel connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for DoG kernel connectivity")
@@ -1119,7 +1131,14 @@ class SobelKernel(PointConnectivity):
         else:
             raise ValueError(f"Unknown direction: {direction}")
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate Sobel kernel connections."""
         # Delegate to Conv2dKernel. The Sobel kernel has essential negative
         # coefficients, so threshold=0 (magnitude) retains all non-zero weights.
@@ -1133,7 +1152,10 @@ class SobelKernel(PointConnectivity):
                 delay=self.delay_init,
                 seed=self.seed
             )
-            result = conv.generate(**kwargs)
+            result = conv.generate(
+                pre_size=pre_size, post_size=post_size,
+                pre_positions=pre_positions, post_positions=post_positions, **kwargs
+            )
             result.metadata['pattern'] = 'sobel_kernel'
             result.metadata['direction'] = self.direction
             return result
@@ -1160,7 +1182,10 @@ class SobelKernel(PointConnectivity):
             # Union of both
             from ._base import CompositeConnectivity
             composite = CompositeConnectivity(conv_h, conv_v, 'union')
-            result = composite.generate(**kwargs)
+            result = composite.generate(
+                pre_size=pre_size, post_size=post_size,
+                pre_positions=pre_positions, post_positions=post_positions, **kwargs
+            )
             result.metadata['pattern'] = 'sobel_kernel'
             result.metadata['direction'] = 'both'
             return result
@@ -1254,7 +1279,14 @@ class LaplacianKernel(PointConnectivity):
         else:
             raise ValueError(f"Unknown kernel_type: {kernel_type}")
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate Laplacian kernel connections."""
         # Delegate to Conv2dKernel. The Laplacian has an essential negative
         # centre coefficient, so threshold=0 (magnitude) retains all weights.
@@ -1267,7 +1299,10 @@ class LaplacianKernel(PointConnectivity):
             delay=self.delay_init,
             seed=self.seed
         )
-        result = conv.generate(**kwargs)
+        result = conv.generate(
+            pre_size=pre_size, post_size=post_size,
+            pre_positions=pre_positions, post_positions=post_positions, **kwargs
+        )
         result.metadata['pattern'] = 'laplacian_kernel'
         result.metadata['kernel_type'] = self.kernel_type
         return result
@@ -1352,12 +1387,15 @@ class CustomKernel(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate custom kernel connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for custom kernel connectivity")

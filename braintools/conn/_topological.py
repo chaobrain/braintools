@@ -14,7 +14,7 @@
 # ==============================================================================
 
 import numbers
-from typing import Optional, Dict, Sequence, List, Tuple
+from typing import Optional, Dict, Sequence, List, Tuple, Union
 
 import brainunit as u
 import numpy as np
@@ -129,16 +129,16 @@ def _rewire_targets(rng, n: int, sources: np.ndarray, targets: np.ndarray, rewir
     src = sources[idx].astype(np.int64)
     kept = ~np.asarray(rewire, dtype=bool)
     kept_codes = np.sort(sources[kept].astype(np.int64) * n + targets[kept])
-    new_t = np.empty(idx.size, dtype=np.int64)
+    new_t: np.ndarray = np.empty(idx.size, dtype=np.int64)
     pending = np.arange(idx.size)
     while pending.size:
         new_t[pending] = randint(rng, n, pending.size)
         codes = src * n + new_t
-        is_pending = np.zeros(idx.size, dtype=bool)
+        is_pending: np.ndarray = np.zeros(idx.size, dtype=bool)
         is_pending[pending] = True
         # Among equal codes, an already accepted edge keeps its target.
         order = np.lexsort((is_pending, codes))
-        dup = np.zeros(idx.size, dtype=bool)
+        dup: np.ndarray = np.zeros(idx.size, dtype=bool)
         dup[order[1:]] = codes[order[1:]] == codes[order[:-1]]
         bad = is_pending & ((new_t == src) | dup | np.isin(codes, kept_codes))
         pending = np.nonzero(bad)[0]
@@ -156,14 +156,14 @@ def _preferential_attachment(rng, n: int, m: int, m0: int) -> np.ndarray:
     replacement proportional to the weights. The loop over new nodes does
     ``O(m)`` work each, so the total cost is ``O(n * m)``.
     """
-    targets = np.empty((max(n - m0, 0), m), dtype=np.int64)
-    repeated = np.repeat(np.arange(m0), 2 * (m0 - 1)).tolist()
+    targets: np.ndarray = np.empty((max(n - m0, 0), m), dtype=np.int64)
+    repeated: List[int] = np.repeat(np.arange(m0), 2 * (m0 - 1)).tolist()
     block = 4096
     uniforms = rng.random(block).tolist()
     pos = 0
     for row, node in enumerate(range(m0, n)):
         length = len(repeated)
-        chosen = []
+        chosen: List[int] = []
         seen = set()
         while len(chosen) < m:
             if pos == block:
@@ -316,10 +316,15 @@ class SmallWorld(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate small-world network connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -340,7 +345,7 @@ class SmallWorld(PointConnectivity):
 
         # Vectorized generation of regular ring lattice
         k_half = self.k // 2
-        sources = np.repeat(np.arange(n), k_half * 2)
+        sources: np.ndarray = np.repeat(np.arange(n), k_half * 2)
 
         # Create offsets for forward and backward connections
         offsets = np.tile(np.concatenate([np.arange(1, k_half + 1), -np.arange(1, k_half + 1)]), n)
@@ -364,8 +369,8 @@ class SmallWorld(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -374,8 +379,8 @@ class SmallWorld(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -386,8 +391,8 @@ class SmallWorld(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'small_world',
                 'k': self.k,
@@ -496,10 +501,15 @@ class ScaleFree(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate scale-free network using preferential attachment."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -527,7 +537,7 @@ class ScaleFree(PointConnectivity):
         # later nodes once per edge), so a uniform draw from the list picks a node
         # with probability proportional to its weight.
         targets = _preferential_attachment(self.rng, n, self.m, m0)
-        new_nodes = np.repeat(np.arange(m0, n, dtype=np.int64), self.m)
+        new_nodes: np.ndarray = np.repeat(np.arange(m0, n, dtype=np.int64), self.m)
         flat_targets = targets.reshape(-1)
         pre_indices = np.concatenate([init_pre, np.stack([new_nodes, flat_targets], axis=1).reshape(-1)])
         post_indices = np.concatenate([init_post, np.stack([flat_targets, new_nodes], axis=1).reshape(-1)])
@@ -542,8 +552,8 @@ class ScaleFree(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -552,8 +562,8 @@ class ScaleFree(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -563,8 +573,8 @@ class ScaleFree(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'scale_free',
                 'm': self.m,
@@ -664,10 +674,15 @@ class Regular(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate regular network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -683,7 +698,7 @@ class Regular(PointConnectivity):
         post_indices = sample_rows_without_replacement(
             self.rng, n, n, degree, exclude=np.arange(n)
         ).reshape(-1)
-        pre_indices = np.repeat(np.arange(n, dtype=np.int64), degree)
+        pre_indices: np.ndarray = np.repeat(np.arange(n, dtype=np.int64), degree)
 
         n_connections = len(pre_indices)
 
@@ -694,8 +709,8 @@ class Regular(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -704,8 +719,8 @@ class Regular(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -716,8 +731,8 @@ class Regular(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'regular',
                 'degree': self.degree
@@ -865,10 +880,15 @@ class ModularRandom(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate modular network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -903,7 +923,7 @@ class ModularRandom(PointConnectivity):
         # Inter-module pairs: Bernoulli(inter_prob) over the whole matrix, keeping
         # only the pairs in different modules (which stay independent draws).
         if inter_prob > 0 and self.n_modules > 1:
-            modules = np.repeat(np.arange(self.n_modules), mod_sizes)
+            modules: np.ndarray = np.repeat(np.arange(self.n_modules), mod_sizes)
             pre, post = bernoulli_pairs(self.rng, n, n, inter_prob)
             between = modules[pre] != modules[post]
             pre_parts.append(pre[between])
@@ -917,8 +937,8 @@ class ModularRandom(PointConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point'
             )
 
@@ -933,8 +953,8 @@ class ModularRandom(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -943,8 +963,8 @@ class ModularRandom(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -954,8 +974,8 @@ class ModularRandom(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'modular',
                 'n_modules': self.n_modules,
@@ -1082,10 +1102,15 @@ class ModularGeneral(PointConnectivity):
                     f"Length of module_ratios ({len(module_ratios)}) must be n_modules-1 ({self.n_modules - 1})"
                 )
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate modular network with custom intra-module connectivity."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -1147,10 +1172,6 @@ class ModularGeneral(PointConnectivity):
         block_weights = []
         block_delays = []
 
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
-        have_positions = pre_positions is not None and post_positions is not None
-
         def _collect(result, pre_offset, post_offset):
             n_edges = len(result.pre_indices)
             if n_edges == 0:
@@ -1173,7 +1194,7 @@ class ModularGeneral(PointConnectivity):
             conn = self.intra_conn[mod_id]
 
             # Generate connections within this module
-            if have_positions:
+            if pre_positions is not None and post_positions is not None:
                 mod_pre_pos = pre_positions[mod_start:mod_end]
                 mod_post_pos = post_positions[mod_start:mod_end]
             else:
@@ -1223,7 +1244,7 @@ class ModularGeneral(PointConnectivity):
                     continue
 
                 # Generate connections between these two modules
-                if have_positions:
+                if pre_positions is not None and post_positions is not None:
                     pre_mod_pos = pre_positions[pre_start:pre_end]
                     post_mod_pos = post_positions[post_start:post_end]
                 else:
@@ -1250,8 +1271,8 @@ class ModularGeneral(PointConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point'
             )
 
@@ -1271,8 +1292,8 @@ class ModularGeneral(PointConnectivity):
             weights=final_weights,
             delays=final_delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'modular_general',
                 'n_modules': self.n_modules,
@@ -1470,10 +1491,15 @@ class HierarchicalRandom(PointConnectivity):
                     f"Length of level_ratios ({len(level_ratios)}) must be n_levels-1 ({n_levels - 1})"
                 )
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate hierarchical network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -1526,8 +1552,8 @@ class HierarchicalRandom(PointConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point',
                 metadata=metadata
             )
@@ -1543,8 +1569,8 @@ class HierarchicalRandom(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -1553,8 +1579,8 @@ class HierarchicalRandom(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -1564,8 +1590,8 @@ class HierarchicalRandom(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata=metadata
         )
 
@@ -1722,10 +1748,15 @@ class CorePeripheryRandom(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate core-periphery network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -1768,8 +1799,8 @@ class CorePeripheryRandom(PointConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point',
                 metadata=metadata,
             )
@@ -1785,8 +1816,8 @@ class CorePeripheryRandom(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -1795,8 +1826,8 @@ class CorePeripheryRandom(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -1806,7 +1837,7 @@ class CorePeripheryRandom(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata=metadata,
         )

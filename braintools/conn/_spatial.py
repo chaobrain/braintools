@@ -135,7 +135,7 @@ def _pairs_within(
     if len(pre_val) == 0 or n_post == 0:
         return
     post_tree = cKDTree(post_val)
-    counts = post_tree.query_ball_point(pre_val, radius, return_length=True)
+    counts = np.asarray(post_tree.query_ball_point(pre_val, radius, return_length=True))
     for start, stop in _chunks_by_counts(counts, max_pairs):
         if int(np.sum(counts[start:stop])) == 0:
             continue
@@ -159,7 +159,7 @@ def _sorted_unique(values: np.ndarray) -> np.ndarray:
     values = np.sort(np.asarray(values).ravel())
     if values.size == 0:
         return values
-    keep = np.empty(values.size, dtype=bool)
+    keep: np.ndarray = np.empty(values.size, dtype=bool)
     keep[0] = True
     np.not_equal(values[1:], values[:-1], out=keep[1:])
     return values[keep]
@@ -393,16 +393,19 @@ class DistanceDependent(PointConnectivity):
         self.delay_init = delay
         self.allow_self_connections = allow_self_connections
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate distance-dependent connections."""
 
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
         pre_num = _size_num(pre_size)
         post_num = _size_num(post_size)
 
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
         distances = kwargs.get('distances', None)
         if distances is None:
             if pre_positions is None or post_positions is None:
@@ -1103,10 +1106,15 @@ class Ring(PointConnectivity):
         self.delay_init = delay
         self.bidirectional = bidirectional
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate ring connectivity."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -1126,12 +1134,12 @@ class Ring(PointConnectivity):
         # Since 2 * neighbors < n, these targets are distinct and never equal i, so
         # sorting each row gives the edges in (pre, post) order without dedup.
         n = int(n)
-        offsets = np.arange(1, int(self.neighbors) + 1, dtype=np.int64)
+        offsets: np.ndarray = np.arange(1, int(self.neighbors) + 1, dtype=np.int64)
         if self.bidirectional:
             offsets = np.concatenate([offsets, -offsets])
         targets = (np.arange(n, dtype=np.int64)[:, None] + offsets[None, :]) % n
         targets.sort(axis=1)
-        pre_indices = np.repeat(np.arange(n, dtype=np.int64), offsets.size)
+        pre_indices: np.ndarray = np.repeat(np.arange(n, dtype=np.int64), offsets.size)
         post_indices = targets.ravel()
 
         n_connections = len(pre_indices)
@@ -1144,8 +1152,8 @@ class Ring(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -1154,8 +1162,8 @@ class Ring(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -1166,8 +1174,8 @@ class Ring(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'ring',
                 'neighbors': self.neighbors,
@@ -1369,10 +1377,15 @@ class Grid2d(PointConnectivity):
         self.delay_init = delay
         self.periodic = periodic
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate grid connectivity."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
         if not isinstance(pre_size, (tuple, list)):
             raise ValueError("Grid2d networks require pre_size and post_size to be a (rows, cols) tuple")
         if pre_size != post_size:
@@ -1396,7 +1409,7 @@ class Grid2d(PointConnectivity):
         # <= 2) are adjacent and dropped, so rows come out in (pre, post) order.
         rows, cols = int(rows), int(cols)
         offsets = np.asarray(offsets, dtype=np.int64)
-        source = np.arange(rows * cols, dtype=np.int64)
+        source: np.ndarray = np.arange(rows * cols, dtype=np.int64)
         row_of, col_of = np.divmod(source, cols) if cols > 0 else (source, source)
         target_row = row_of[:, None] + offsets[None, :, 0]
         target_col = col_of[:, None] + offsets[None, :, 1]
@@ -1424,8 +1437,8 @@ class Grid2d(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -1434,8 +1447,8 @@ class Grid2d(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -1446,8 +1459,8 @@ class Grid2d(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'grid',
                 'grid_shape': pre_size,
@@ -1724,12 +1737,15 @@ class RadialPatches(PointConnectivity):
         self.delay_init = delay
         self.allow_self_connections = allow_self_connections
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate radial patch connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
 
         if pre_positions is None or post_positions is None:
             raise ValueError("Positions required for radial patch connectivity")
@@ -1802,7 +1818,7 @@ class RadialPatches(PointConnectivity):
             return np.zeros(0, dtype=np.int64)
         centres = sample_rows_without_replacement(self.rng, pre_num, post_num, n_centres)
         post_tree = cKDTree(post_val)
-        degree = post_tree.query_ball_point(post_val, radius, return_length=True)
+        degree = np.asarray(post_tree.query_ball_point(post_val, radius, return_length=True))
         row_load = degree[centres].sum(axis=1)
 
         chunks = []
@@ -1822,7 +1838,7 @@ class RadialPatches(PointConnectivity):
             slot_offset = np.cumsum(counts) - counts
             flat = np.repeat(nbr_start[inverse] - slot_offset, counts) + np.arange(total)
             post = neighbours[flat]
-            pre = np.repeat(np.repeat(np.arange(start, stop, dtype=np.int64), n_centres), counts)
+            pre: np.ndarray = np.repeat(np.repeat(np.arange(start, stop, dtype=np.int64), n_centres), counts)
             if self.prob < 1.0:
                 keep = self.rng.random(total) < self.prob
                 pre, post = pre[keep], post[keep]

@@ -181,7 +181,7 @@ def test_analysis_exposes_only_subpackages():
 
 def test_new_functions_do_not_warn():
     with warnings.catch_warnings():
-        warnings.simplefilter('error', DeprecationWarning)
+        warnings.simplefilter('error', BraintoolsDeprecationWarning)
         braintools.analysis.stats.weighted_correlation(_X, _Y, _W)
 
 

@@ -347,7 +347,7 @@ def load_nwb_units(path: PathLike, *, capacity: Optional[int] = None) -> SpikeTr
         )
 
     flat = np.asarray(flat, dtype=np.float64).ravel()
-    ids = np.repeat(np.arange(n), lengths)
+    ids: np.ndarray = np.repeat(np.arange(n), lengths)
     lows = np.concatenate([intervals[:, 0], flat])
     highs = np.concatenate([intervals[:, 1], flat])
     t_start = float(np.min(lows)) if lows.size else 0.
@@ -576,7 +576,8 @@ def load_nwb_timeseries(path: PathLike, name: str) -> Tuple[Any, Any]:
         rate = ts.rate
         timestamps = None if rate is not None else np.asarray(ts.timestamps[:], dtype=np.float64)
 
-    if rate is not None:
+    # ``timestamps`` is None exactly when the series stores a ``rate``.
+    if timestamps is None:
         dt_s = 1.0 / float(rate)
     else:
         steps = np.diff(timestamps)

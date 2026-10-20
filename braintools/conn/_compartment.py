@@ -37,7 +37,7 @@ full-matrix draw, so those classes give the same output as before.
 """
 
 import warnings
-from typing import Optional, Tuple, Union, Dict, List, Callable
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import brainunit as u
 import numpy as np
@@ -420,7 +420,7 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
 
     def __init__(
         self,
-        compartment_mapping: Dict[Union[int, str], Union[int, str, List[Union[int, str]]]],
+        compartment_mapping: Mapping[Any, Union[int, str, Sequence[Union[int, str]]]],
         connection_prob: Union[float, Dict] = 0.1,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -523,8 +523,8 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
 
         all_pre_indices = []
         all_post_indices = []
-        all_pre_compartments = []
-        all_post_compartments = []
+        all_pre_compartments: List[np.ndarray] = []
+        all_post_compartments: List[np.ndarray] = []
 
         # Pre-filter compartment pairs with non-zero probabilities
         active_pairs = []
@@ -681,7 +681,7 @@ class SomaToDendrite(CompartmentSpecific):
 
     def __init__(
         self,
-        target_dendrites: List[int] = None,
+        target_dendrites: Optional[List[int]] = None,
         prob_per_dendrite: Union[float, Dict[int, float]] = 0.8,
         **kwargs
     ):
@@ -772,7 +772,7 @@ class DendriteToSoma(CompartmentSpecific):
 
     def __init__(
         self,
-        source_dendrites: List[int] = None,
+        source_dendrites: Optional[List[int]] = None,
         **kwargs
     ):
         if source_dendrites is None:
@@ -812,7 +812,7 @@ class AxonToDendrite(CompartmentSpecific):
     """
     __module__ = 'braintools.conn'
 
-    def __init__(self, target_dendrites: List[int] = None, **kwargs):
+    def __init__(self, target_dendrites: Optional[List[int]] = None, **kwargs):
         if target_dendrites is None:
             target_dendrites = [BASAL_DENDRITE, APICAL_DENDRITE]
 
@@ -968,7 +968,7 @@ class MorphologyDistance(MultiCompartmentConnectivity):
         self,
         sigma: Optional[Union[float, u.Quantity]] = None,
         decay_function: Optional[Union[DistanceProfile, str]] = None,
-        compartment_mapping: Dict = None,
+        compartment_mapping: Optional[Dict] = None,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
         allow_self_connections: bool = False,
@@ -1070,8 +1070,8 @@ class MorphologyDistance(MultiCompartmentConnectivity):
 
         all_pre_indices = []
         all_post_indices = []
-        all_pre_compartments = []
-        all_post_compartments = []
+        all_pre_compartments: List[np.ndarray] = []
+        all_post_compartments: List[np.ndarray] = []
 
         # Generate connections for each compartment mapping
         for source_comp, target_comps in self.compartment_mapping.items():
@@ -1247,8 +1247,8 @@ class DendriticTree(MultiCompartmentConnectivity):
 
         all_pre_indices = []
         all_post_indices = []
-        all_pre_compartments = []
-        all_post_compartments = []
+        all_pre_compartments: List[np.ndarray] = []
+        all_post_compartments: List[np.ndarray] = []
 
         # Basal, then apical dendrite connections (binomial edge count, then
         # distinct pairs; autapses are never drawn when excluded).
@@ -1507,7 +1507,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
             )
 
         n_connections = len(pre_indices)
-        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        pre_compartments: np.ndarray = np.full(n_connections, AXON, dtype=np.int64)
         # Randomly assign each connection to one of the target dendritic compartments.
         post_compartments = self.rng.choice(
             self.target_compartments,
@@ -1613,7 +1613,7 @@ class BranchSpecific(MultiCompartmentConnectivity):
 
     def __init__(
         self,
-        branch_indices: List[int] = None,
+        branch_indices: Optional[List[int]] = None,
         connection_prob: float = 0.3,
         weight: Optional[Initializer] = None,
         delay: Optional[Initializer] = None,
@@ -1793,9 +1793,9 @@ class DendriticIntegration(MultiCompartmentConnectivity):
         dendrite_type = np.where(randint(self.rng, 2, n_rows) == 0, BASAL_DENDRITE, APICAL_DENDRITE)
 
         pre_indices = pre_selected.reshape(-1)
-        post_indices = np.repeat(np.arange(post_num, dtype=np.int64), self.n_clusters * k)
-        pre_compartments = np.full(pre_indices.size, AXON, dtype=np.int64)
-        post_compartments = np.repeat(dendrite_type.astype(np.int64), k)
+        post_indices: np.ndarray = np.repeat(np.arange(post_num, dtype=np.int64), self.n_clusters * k)
+        pre_compartments: np.ndarray = np.full(pre_indices.size, AXON, dtype=np.int64)
+        post_compartments: np.ndarray = np.repeat(dendrite_type.astype(np.int64), k)
 
         # Deduplicate (pre, post, pre_comp, post_comp) quads. The same neuron can be
         # sampled into multiple clusters of the same post neuron (replace=False only
@@ -2010,7 +2010,7 @@ class AxonalBranching(MultiCompartmentConnectivity):
 
         n_connections = len(pre_indices)
 
-        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        pre_compartments: np.ndarray = np.full(n_connections, AXON, dtype=np.int64)
         post_compartments = self.rng.choice(
             [BASAL_DENDRITE, APICAL_DENDRITE],
             size=n_connections
@@ -2155,7 +2155,7 @@ class AxonalArborization(MultiCompartmentConnectivity):
             )
 
         n_connections = len(pre_indices)
-        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        pre_compartments: np.ndarray = np.full(n_connections, AXON, dtype=np.int64)
         post_compartments = self.rng.choice(
             [BASAL_DENDRITE, APICAL_DENDRITE],
             size=n_connections
@@ -2394,7 +2394,7 @@ class SynapticPlacement(MultiCompartmentConnectivity):
         n_connections = len(pre_indices)
         compartments = np.array(list(self.compartment_preferences.keys()), dtype=np.int64)
         prefs = np.array(list(self.compartment_preferences.values()), dtype=float)
-        pre_compartments = np.full(n_connections, AXON, dtype=np.int64)
+        pre_compartments: np.ndarray = np.full(n_connections, AXON, dtype=np.int64)
         post_compartments = self.rng.choice(compartments, size=n_connections, p=prefs / prefs.sum())
 
         weights = param(self.weight_init, n_connections, rng=self.rng)
@@ -2528,15 +2528,22 @@ class CustomCompartment(MultiCompartmentConnectivity):
         super().__init__(**kwargs)
         self.connection_func = connection_func
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate custom compartment connections."""
-        # Validate required kwargs
-        if 'pre_size' not in kwargs:
-            raise ValueError("CustomCompartment.generate() requires 'pre_size' parameter")
-        if 'post_size' not in kwargs:
-            raise ValueError("CustomCompartment.generate() requires 'post_size' parameter")
-
-        result_data = self.connection_func(**kwargs)
+        result_data = self.connection_func(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
 
         if not isinstance(result_data, (tuple, list)):
             raise ValueError(
@@ -2565,10 +2572,10 @@ class CustomCompartment(MultiCompartmentConnectivity):
             weights=u.math.array(weights) if weights is not None else None,
             delays=delays,
             model_type='multi_compartment',
-            pre_size=kwargs['pre_size'],
-            post_size=kwargs['post_size'],
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             pre_compartments=np.array(pre_compartments, dtype=np.int64),
             post_compartments=np.array(post_compartments, dtype=np.int64),
             metadata={'pattern': 'custom_compartment'}

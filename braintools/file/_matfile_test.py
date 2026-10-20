@@ -33,6 +33,7 @@ import warnings
 import numpy as np
 from scipy.io import savemat
 
+from braintools._deprecation import BraintoolsDeprecationWarning, registered_deprecations
 from braintools.file import _matfile as MF
 from braintools.file._matfile import load_matfile, save_matfile
 
@@ -271,6 +272,26 @@ class TestSaveMatfile(unittest.TestCase):
                 save_matfile(bad, {"x": np.arange(2)})
             self.assertIn("Failed to save MATLAB file", str(cm.exception))
 
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits")
+    def test_save_matfile_overwrite_keeps_permissions(self):
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, "perm.mat")
+            save_matfile(fn, {"x": np.arange(2)})
+            os.chmod(fn, 0o640)
+            save_matfile(fn, {"x": np.arange(5)})
+            self.assertEqual(os.stat(fn).st_mode & 0o777, 0o640)
+            self.assertEqual(load_matfile(fn)["x"].tolist(), [0, 1, 2, 3, 4])
+
+    def test_save_matfile_unsavable_data_cleans_up_temp_file(self):
+        # scipy rejects a non-string key after the temp file was created; the
+        # temp file must be removed and the error wrapped.
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, "bad.mat")
+            with self.assertRaises(ValueError) as cm:
+                save_matfile(fn, {"x": np.arange(2), "y": object()})
+            self.assertIn("Failed to save MATLAB file", str(cm.exception))
+            self.assertEqual(os.listdir(d), [])
+
 
 class TestLoadMatfileV73AndDeprecation(unittest.TestCase):
     def test_v73_hdf5_detection(self):
@@ -302,7 +323,7 @@ class TestLoadMatfileV73AndDeprecation(unittest.TestCase):
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 out = load_matfile(fn, header_info=True, verbose=False)
-            self.assertTrue(any(issubclass(x.category, DeprecationWarning) for x in w))
+            self.assertTrue(any(issubclass(x.category, BraintoolsDeprecationWarning) for x in w))
             # old header_info=True == include_header=False -> headers excluded
             self.assertNotIn("__header__", out)
             self.assertIn("a", out)
@@ -314,7 +335,7 @@ class TestLoadMatfileV73AndDeprecation(unittest.TestCase):
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 out = load_matfile(fn, header_info=False, verbose=False)
-            self.assertTrue(any(issubclass(x.category, DeprecationWarning) for x in w))
+            self.assertTrue(any(issubclass(x.category, BraintoolsDeprecationWarning) for x in w))
             self.assertIn("__header__", out)
 
     def test_include_header_true(self):
@@ -325,8 +346,41 @@ class TestLoadMatfileV73AndDeprecation(unittest.TestCase):
                 warnings.simplefilter("always")
                 out = load_matfile(fn, include_header=True, verbose=False)
             # No deprecation warning for the new flag.
-            self.assertFalse(any(issubclass(x.category, DeprecationWarning) for x in w))
+            self.assertFalse(any(issubclass(x.category, BraintoolsDeprecationWarning) for x in w))
             self.assertIn("__header__", out)
+
+    def test_header_info_record_registered(self):
+        records = {r.old_name: r for r in registered_deprecations()}
+        record = records["braintools.file.load_matfile(header_info=...)"]
+        self.assertEqual(record.kind, "argument")
+        self.assertEqual(record.since, "0.2.0")
+        self.assertEqual(record.removed_in, "1.0.0")
+        self.assertIn("include_header", record.new_name)
+
+    def test_header_info_warns_once_with_registered_message(self):
+        records = {r.old_name: r for r in registered_deprecations()}
+        record = records["braintools.file.load_matfile(header_info=...)"]
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, "h4.mat")
+            savemat(fn, {"a": np.array([1, 2, 3])})
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                load_matfile(fn, header_info=True, verbose=False)
+        self.assertEqual(len(w), 1)
+        self.assertIs(w[0].category, BraintoolsDeprecationWarning)
+        self.assertEqual(str(w[0].message), record.message)
+        # The message still explains the inverted sense of the old flag.
+        self.assertIn("include_header=not header_info", str(w[0].message))
+        self.assertEqual(w[0].filename, __file__)
+
+    def test_no_warning_without_header_info(self):
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, "h5.mat")
+            savemat(fn, {"a": np.array([1, 2, 3])})
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                load_matfile(fn, verbose=False)
+        self.assertEqual(w, [])
 
 
 if __name__ == "__main__":

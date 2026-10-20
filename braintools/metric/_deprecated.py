@@ -134,7 +134,8 @@ def _raster_plot(
     .. deprecated:: 0.4.0
         ``braintools.metric.raster_plot`` will be removed in 1.0.0. Use
         ``braintools.spike.SpikeTrains.from_dense`` to hold the spikes, or
-        ``numpy.nonzero`` on the spike matrix to get the same index arrays.
+        ``t, i = numpy.nonzero(sp_matrix > 0)`` and return ``i, times[t]``
+        to get the same arrays.
 
     A raster plot displays the spiking activity of a population of neurons over time,
     where each row represents a neuron and each dot or line indicates a spike occurrence.
@@ -188,7 +189,7 @@ def _raster_plot(
         ... ])
         >>> times = np.array([0.0, 0.1, 0.2, 0.3, 0.4])
         >>> with warnings.catch_warnings():
-        ...     warnings.simplefilter('ignore', DeprecationWarning)
+        ...     warnings.simplefilter('ignore', FutureWarning)
         ...     neuron_ids, spike_times = braintools.metric.raster_plot(spikes, times)
         >>> neuron_ids.tolist()
         [1, 0, 2, 1, 2]

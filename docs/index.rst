@@ -50,6 +50,14 @@ Installation
           pip install -U braintools[tpu]
 
 
+Upgrading to 1.0
+^^^^^^^^^^^^^^^^
+
+Names that moved since 0.4 still work but emit a ``BraintoolsDeprecationWarning``
+(a ``FutureWarning``, shown by default); version 1.0 removes them. The
+:doc:`migration guide <migration>` lists every deprecated name with its replacement.
+
+
 ----
 
 See also the ecosystem
@@ -75,9 +83,12 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobr
     metric/index.md
     optim/index.md
     quad/index.md
+    spike/index.md
     surrogate/index.md
+    trainer/index.md
     visualize/index.md
     misc/spike_encoding.md
+    migration.md
 
 
 .. toctree::

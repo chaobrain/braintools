@@ -86,11 +86,18 @@ class Section(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.input import Section
         >>> section = Section(
         ...     values=[0, 1, 0] * u.pA,
         ...     durations=[100, 300, 100] * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = section()  # Generate the array
+        >>> array.shape
+        (5000,)
     
     Multi-channel input:
     
@@ -206,11 +213,17 @@ class Constant(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import Constant
         >>> const = Constant([
         ...     (0 * u.pA, 100 * u.ms),
         ...     (10 * u.pA, 200 * u.ms)
         ... ])
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = const()
+        >>> array.shape
+        (3000,)
     
     Multi-step current injection:
     
@@ -344,12 +357,19 @@ class Step(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.input import Step
         >>> steps = Step(
         ...     amplitudes=[0, 10, 5] * u.pA,
         ...     step_times=[0, 50, 150] * u.ms,
         ...     duration=200 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = steps()
+        >>> array.shape
+        (2000,)
     
     Staircase protocol for I-V curve:
     
@@ -501,12 +521,18 @@ class Ramp(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import Constant, Ramp
         >>> ramp = Ramp(
         ...     c_start=0 * u.pA,
         ...     c_end=10 * u.pA,
         ...     duration=100 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = ramp()
+        >>> array.shape
+        (1000,)
     
     Decreasing ramp (from high to low):
     

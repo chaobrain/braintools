@@ -15,7 +15,7 @@
 
 """Working memory cognitive task classes."""
 
-from typing import Sequence, Tuple, Optional, Callable, Any
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
 import brainunit as u
 import jax.numpy as jnp
@@ -211,9 +211,21 @@ class DelayMatchSample(Task):
 
     Examples
     --------
-    >>> task = DelayMatchSample()
-    >>> task = DelayMatchSample(t_delay=2000*u.ms, num_stimuli=16)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayMatchSample(
+        ...     t_delay=2000 * u.ms, num_stimuli=16, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (17, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((330, 17), (330,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((330, 4, 17), (330, 4))
     """
     def __init__(
         self,
@@ -380,8 +392,20 @@ class DualDelayMatchSample(Task):
 
     Examples
     --------
-    >>> task = DualDelayMatchSample()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DualDelayMatchSample(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((380, 9), (380,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((380, 4, 9), (380, 4))
     """
     def __init__(
         self,
@@ -568,8 +592,20 @@ class DelayComparison(Task):
 
     Examples
     --------
-    >>> task = DelayComparison()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayComparison(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (2, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((250, 2), (250,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((250, 4, 2), (250, 4))
     """
     def __init__(
         self,
@@ -739,8 +775,20 @@ class DelayMatchCategory(Task):
 
     Examples
     --------
-    >>> task = DelayMatchCategory()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayMatchCategory(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((245, 9), (245,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((245, 4, 9), (245, 4))
     """
     def __init__(
         self,
@@ -891,8 +939,20 @@ class DelayPairedAssociation(Task):
 
     Examples
     --------
-    >>> task = DelayPairedAssociation()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayPairedAssociation(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 5)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((230, 9), (230,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((230, 4, 9), (230, 4))
     """
 
     def __init__(
@@ -985,8 +1045,20 @@ class GoNoGo(Task):
 
     Examples
     --------
-    >>> task = GoNoGo()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.GoNoGo(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (3, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((200, 3), (200,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((200, 4, 3), (200, 4))
     """
 
     def __init__(
@@ -1084,8 +1156,20 @@ class IntervalDiscrimination(Task):
 
     Examples
     --------
-    >>> task = IntervalDiscrimination()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.IntervalDiscrimination(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (2, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((310, 2), (310,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((310, 4, 2), (310, 4))
     """
 
     def __init__(
@@ -1204,8 +1288,20 @@ class PostDecisionWager(Task):
 
     Examples
     --------
-    >>> task = PostDecisionWager()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.PostDecisionWager(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 5)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((280, 9), (280,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((280, 4, 9), (280, 4))
     """
 
     def __init__(
@@ -1312,8 +1408,20 @@ class ReadySetGo(Task):
 
     Examples
     --------
-    >>> task = ReadySetGo()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.ReadySetGo(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (3, 2)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((280, 3), (280,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((280, 4, 3), (280, 4))
     """
 
     def __init__(
@@ -1471,8 +1579,20 @@ class DelayDirectionReproduction(Task):
 
     Examples
     --------
-    >>> task = DelayedDirectionReproduction()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayDirectionReproduction(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (10, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((230, 10), (230, 3))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((230, 4, 10), (230, 4, 3))
     """
     def __init__(
         self,
@@ -1656,8 +1776,20 @@ class ImmediateDirectionReproduction(Task):
 
     Examples
     --------
-    >>> task = ImmediateDirectionReproduction()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.ImmediateDirectionReproduction(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (10, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((80, 10), (80, 3))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((80, 4, 10), (80, 4, 3))
     """
     def __init__(
         self,
@@ -2186,7 +2318,7 @@ class OneTwoThreeGo(Task):
         )
 
     def define_phases(self) -> Phase:
-        hold = {'fixation': 1.0, 'target': 1.0}
+        hold: Dict[str, Any] = {'fixation': 1.0, 'target': 1.0}
         pulse = {'fixation': 1.0, 'stimulus': 1.0, 'target': 1.0}
 
         def interval(name):
