@@ -146,31 +146,47 @@ class LightningModule(brainstate.nn.Module):
 
     Examples
     --------
-    Basic usage:
+    Define a model, then train it with :class:`Trainer`:
 
-    >>> import braintools
-    >>> import brainstate
-    >>> import jax.numpy as jnp
-    >>>
-    >>> class MyModel(braintools.trainer.LightningModule):
-    ...     def __init__(self, input_size, hidden_size, output_size):
-    ...         super().__init__()
-    ...         self.linear1 = brainstate.nn.Linear(input_size, hidden_size)
-    ...         self.linear2 = brainstate.nn.Linear(hidden_size, output_size)
-    ...
-    ...     def __call__(self, x):
-    ...         x = jax.nn.relu(self.linear1(x))
-    ...         return self.linear2(x)
-    ...
-    ...     def training_step(self, batch, batch_idx):
-    ...         x, y = batch['x'], batch['y']
-    ...         logits = self(x)
-    ...         loss = jnp.mean((logits - y) ** 2)
-    ...         self.log('train_loss', loss)
-    ...         return {'loss': loss}
-    ...
-    ...     def configure_optimizers(self):
-    ...         return braintools.optim.Adam(lr=1e-3)
+    .. code-block:: python
+
+        >>> import jax
+        >>> import jax.numpy as jnp
+        >>> import numpy as np
+        >>> import brainstate
+        >>> import braintools
+        >>>
+        >>> class MyModel(braintools.trainer.LightningModule):
+        ...     def __init__(self, input_size, hidden_size, output_size):
+        ...         super().__init__()
+        ...         self.linear1 = brainstate.nn.Linear(input_size, hidden_size)
+        ...         self.linear2 = brainstate.nn.Linear(hidden_size, output_size)
+        ...
+        ...     def __call__(self, x):
+        ...         x = jax.nn.relu(self.linear1(x))
+        ...         return self.linear2(x)
+        ...
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch['x'], batch['y']
+        ...         loss = jnp.mean((self(x) - y) ** 2)
+        ...         self.log('mse', loss)
+        ...         return {'loss': loss}
+        ...
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=1e-3)
+        >>>
+        >>> brainstate.random.seed(0)
+        >>> model = MyModel(4, 8, 1)
+        >>> data = {'x': np.ones((16, 4), np.float32), 'y': np.zeros((16, 1), np.float32)}
+        >>> loader = braintools.trainer.DataLoader(data, batch_size=8)
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=2, logger=False, enable_progress_bar=False,
+        ...     enable_checkpointing=False)
+        >>> trainer.fit(model, loader)
+        >>> model.current_epoch, trainer.global_step
+        (1, 4)
+        >>> sorted(trainer.callback_metrics)  # epoch means, prefixed with 'train_'
+        ['train_loss', 'train_mse']
 
     See Also
     --------
@@ -517,12 +533,12 @@ class LightningModule(brainstate.nn.Module):
         """Called at the end of each predict batch."""
         pass
 
-    def on_before_optimizer_step(self, optimizer: Optimizer):
-        """Called before each optimizer step."""
+    def on_before_optimizer_step(self, optimizer: Optional[Optimizer]):
+        """Called before each optimizer step (``optimizer`` is None when none is configured)."""
         pass
 
-    def on_after_optimizer_step(self, optimizer: Optimizer):
-        """Called after each optimizer step."""
+    def on_after_optimizer_step(self, optimizer: Optional[Optimizer]):
+        """Called after each optimizer step (``optimizer`` is None when none is configured)."""
         pass
 
     def on_before_backward(self, loss: Any):
@@ -572,8 +588,19 @@ class LightningModule(brainstate.nn.Module):
 
         Examples
         --------
-        >>> self.log('train_loss', loss, prog_bar=True)
-        >>> self.log('val_acc', accuracy, on_step=False, on_epoch=True)
+        Call it from a step method (``self.log('train_loss', loss)``); here it is
+        called directly to show what gets recorded:
+
+        .. code-block:: python
+
+            >>> import braintools
+            >>> model = braintools.trainer.LightningModule()
+            >>> model.log('train_loss', 0.25, prog_bar=True)
+            >>> model.log('val_acc', 0.75, on_step=False, on_epoch=True)
+            >>> sorted(model.logged_metrics)
+            ['train_loss', 'val_acc']
+            >>> model.logged_metrics['val_acc']['on_epoch']
+            True
         """
         # Note: We do NOT convert to scalar here because this method may be called
         # inside JIT-traced code. The conversion to scalar happens later when
@@ -628,7 +655,13 @@ class LightningModule(brainstate.nn.Module):
 
         Examples
         --------
-        >>> self.log_dict({'val_loss': loss, 'val_acc': acc}, prog_bar=True)
+        .. code-block:: python
+
+            >>> import braintools
+            >>> model = braintools.trainer.LightningModule()
+            >>> model.log_dict({'val_loss': 0.5, 'val_acc': 0.75}, prog_bar=True)
+            >>> {k: v['value'] for k, v in model.logged_metrics.items()}
+            {'val_loss': 0.5, 'val_acc': 0.75}
         """
         for name, value in metrics.items():
             self.log(
@@ -717,10 +750,26 @@ class LightningModule(brainstate.nn.Module):
 
         Examples
         --------
+        Freeze everything, then re-enable the decoder:
+
         .. code-block:: python
 
-            >>> model.freeze()                 # freeze everything
-            >>> model.unfreeze('decoder.bias')  # then re-enable one parameter
+            >>> import brainstate
+            >>> import braintools
+            >>> class AutoEncoder(braintools.trainer.LightningModule):
+            ...     def __init__(self):
+            ...         super().__init__()
+            ...         self.encoder = brainstate.nn.Linear(4, 2)
+            ...         self.decoder = brainstate.nn.Linear(2, 4)
+            >>> model = AutoEncoder()
+            >>> sorted(model.states(brainstate.ParamState).keys())
+            [('decoder', 'weight'), ('encoder', 'weight')]
+            >>> model.freeze()
+            >>> model.unfreeze(('decoder', 'weight'))
+            >>> sorted(model.frozen_parameters)
+            [('encoder', 'weight')]
+            >>> model.is_frozen(('decoder', 'weight'))
+            False
         """
         param_states = self.states(brainstate.ParamState)
         if names is None:

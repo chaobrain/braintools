@@ -26,6 +26,7 @@ from typing import Sequence, Optional, Union
 
 import brainstate
 import brainunit as u
+from brainstate.typing import ArrayLike
 
 from ._composable_base import Input
 from ._functional_pulses import (
@@ -35,8 +36,6 @@ from ._functional_pulses import (
     double_exponential,
     burst
 )
-
-ArrayLike = brainstate.typing.ArrayLike
 
 __all__ = [
     'Spike',
@@ -96,13 +95,19 @@ class Spike(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import Spike
         >>> spikes = Spike(
         ...     sp_times=[10, 20, 30, 200, 300] * u.ms,
         ...     duration=400 * u.ms,
         ...     sp_lens=1 * u.ms,  # All spikes 1ms long
         ...     sp_sizes=0.5 * u.nA  # All spikes 0.5nA amplitude
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = spikes()
+        >>> array.shape
+        (4000,)
     
     Variable spike properties:
     
@@ -177,8 +182,8 @@ class Spike(Input):
     def __init__(self,
                  sp_times: Sequence[ArrayLike],
                  duration: ArrayLike,
-                 sp_lens: Union[float, Sequence[float]] = 1. * u.ms,
-                 sp_sizes: Union[float, Sequence[float]] = 1.):
+                 sp_lens: Union[ArrayLike, Sequence[ArrayLike]] = 1. * u.ms,
+                 sp_sizes: Union[ArrayLike, Sequence[ArrayLike]] = 1.):
         """Initialize spike input.
         
         Parameters
@@ -262,13 +267,19 @@ class GaussianPulse(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import GaussianPulse
         >>> pulse = GaussianPulse(
         ...     amplitude=1.0 * u.nA,
         ...     center=100 * u.ms,
         ...     sigma=20 * u.ms,
         ...     duration=200 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = pulse()
+        >>> array.shape
+        (2000,)
     
     Multiple overlapping pulses:
     
@@ -414,12 +425,18 @@ class ExponentialDecay(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import ExponentialDecay
         >>> decay = ExponentialDecay(
         ...     amplitude=2.0 * u.nA,
         ...     tau=30 * u.ms,
         ...     duration=200 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = decay()
+        >>> array.shape
+        (2000,)
     
     Delayed decay (starts at t=50ms):
     
@@ -577,13 +594,19 @@ class DoubleExponential(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import DoubleExponential
         >>> ampa = DoubleExponential(
         ...     amplitude=1.0 * u.nA,
         ...     tau_rise=0.5 * u.ms,
         ...     tau_decay=5 * u.ms,
         ...     duration=50 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = ampa()
+        >>> array.shape
+        (500,)
     
     NMDA-like synaptic current (slower dynamics):
     
@@ -748,6 +771,9 @@ class Burst(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import Burst
         >>> bursts = Burst(
         ...     n_bursts=5,
         ...     burst_amp=1.0 * u.nA,
@@ -756,7 +782,11 @@ class Burst(Input):
         ...     inter_burst_interval=100 * u.ms,
         ...     duration=500 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = bursts()
+        >>> array.shape
+        (5000,)
+
     Oscillatory bursts (theta-burst stimulation):
     
     .. code-block:: python
@@ -769,6 +799,7 @@ class Burst(Input):
         ...     inter_burst_interval=200 * u.ms,  # 5Hz burst rate
         ...     duration=2000 * u.ms
         ... )
+
     Bursts with ramped amplitude:
     
     .. code-block:: python
@@ -777,6 +808,7 @@ class Burst(Input):
         >>> burst = Burst(5, 1.0, 50 * u.Hz, 30 * u.ms, 100 * u.ms, 500 * u.ms)
         >>> ramp = Ramp(0.5, 1.5, 500 * u.ms)
         >>> modulated_burst = burst * ramp
+
     Burst pattern with noise:
     
     .. code-block:: python
@@ -785,6 +817,7 @@ class Burst(Input):
         >>> bursts = Burst(4, 1.5, 30 * u.Hz, 50 * u.ms, 150 * u.ms, 600 * u.ms)
         >>> noise = WienerProcess(600 * u.ms, sigma=0.1)
         >>> noisy_bursts = bursts + noise
+
     Gamma bursts in theta rhythm:
     
     .. code-block:: python
@@ -798,6 +831,7 @@ class Burst(Input):
         ...     inter_burst_interval=200 * u.ms,  # Theta rhythm (5Hz)
         ...     duration=3000 * u.ms
         ... )
+
     Paired bursts protocol:
     
     .. code-block:: python
@@ -807,6 +841,7 @@ class Burst(Input):
         >>> burst2 = Burst(1, 1.2, 100 * u.Hz, 20 * u.ms, 100 * u.ms, 100 * u.ms).shift(30 * u.ms)
         >>> paired = burst1 + burst2
         >>> protocol = paired.repeat(5)  # Repeat paired bursts
+
     Burst with exponential decay envelope:
     
     .. code-block:: python

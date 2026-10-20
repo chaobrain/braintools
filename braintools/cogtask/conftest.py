@@ -39,6 +39,7 @@ FIXED_DURATION_TASKS = [
     ct.ContextDecisionMaking,
     ct.SingleContextDecisionMaking,
     ct.PulseDecisionMaking,
+    ct.MultiSensoryIntegration,
     ct.DelayMatchSample,
     ct.DualDelayMatchSample,
     ct.DelayComparison,
@@ -67,6 +68,8 @@ VARIABLE_DURATION_TASKS = [
     ct.HierarchicalReasoning,
     ct.IntervalDiscrimination,
     ct.ReadySetGo,
+    ct.OneTwoThreeGo,
+    ct.EconomicDecisionMaking,
 ]
 
 ALL_TASKS = FIXED_DURATION_TASKS + VARIABLE_DURATION_TASKS

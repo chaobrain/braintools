@@ -66,7 +66,7 @@ jobs:
 
       - name: Reject warnings in clean areas
         run: |
-          pattern='braintools[/.](analysis|spike|fit|quad|file)\b|docs/(analysis|fit)/|apis/(analysis|spike|fit|quad|file)\b|specs/'
+          pattern='braintools[/.](analysis|spike|fit|quad|file)\b|docs/(analysis|fit|conn|spike|trainer)/|docs/quad/trajectories|docs/optim/06_|docs/migration|apis/(analysis|spike|fit|quad|file)\b|specs/'
           if grep -E "$pattern" docs/_build/sphinx-warnings.log; then
             echo "::error::Sphinx warnings in the gated packages (analysis, spike, fit, quad, file) or their docs (listed above)."
             exit 1

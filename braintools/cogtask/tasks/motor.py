@@ -67,9 +67,21 @@ class AntiReach(Task):
 
     Examples
     --------
-    >>> task = AntiReach()
-    >>> task = AntiReach(num_locations=4, anti_prob=0.7)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.AntiReach(
+        ...     num_locations=4, anti_prob=0.7, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (7, 5)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((200, 7), (200,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((200, 4, 7), (200, 4))
     """
 
     def __init__(
@@ -179,9 +191,21 @@ class Reaching1D(Task):
 
     Examples
     --------
-    >>> task = Reaching1D()
-    >>> task = Reaching1D(num_targets=4, t_delay=1000*u.ms)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.Reaching1D(
+        ...     num_targets=4, t_delay=1000 * u.ms, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (5, 5)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((250, 5), (250,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((250, 4, 5), (250, 4))
     """
 
     def __init__(
@@ -276,9 +300,21 @@ class EvidenceAccumulation(Task):
 
     Examples
     --------
-    >>> task = EvidenceAccumulation()
-    >>> task = EvidenceAccumulation(num_choices=4, t_evidence=3000*u.ms)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.EvidenceAccumulation(
+        ...     num_choices=4, t_evidence=3000 * u.ms, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (41, 5)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((400, 41), (400,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((400, 4, 41), (400, 4))
     """
 
     def __init__(

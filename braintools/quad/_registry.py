@@ -203,7 +203,8 @@ def register_method(
         >>> from braintools.quad import register_method, get_method
         >>> def forward_euler(f, y, t, *args, **kwargs):
         ...     return y + brainstate.environ.get_dt() * f(y, t, *args, **kwargs)
-        >>> _ = register_method('my_euler', forward_euler)
+        >>> # ``overwrite=True`` lets the example be re-run in the same process.
+        >>> _ = register_method('my_euler', forward_euler, overwrite=True)
         >>> get_method('my_euler') is forward_euler
         True
     """

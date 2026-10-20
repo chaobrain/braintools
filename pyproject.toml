@@ -64,6 +64,7 @@ testing = [
     "scikit-learn",
     "mne",
     "statsmodels",
+    "networkx",
     # Optional I/O backends of braintools.file.
     "h5py",
     "pynwb",
@@ -166,7 +167,7 @@ version = { attr = "braintools._version.__version__" }
 # that class would import braintools while pytest parses its configuration,
 # before pytest-cov starts measuring, and under-report coverage.
 filterwarnings = [
-    'error:`braintools\.[^`]*` is deprecated since:DeprecationWarning',
+    'error:`braintools\.[^`]*` is deprecated since:FutureWarning',
 ]
 
 [tool.coverage.run]
@@ -196,23 +197,15 @@ exclude_lines = [
 [tool.mypy]
 # Keep in sync with the Python version used by .github/workflows/type-check.yml.
 python_version = "3.13"
-# The typed public surface checked in CI (`mypy` with no arguments). Keep this
-# list in sync with TYPED_PUBLIC_MODULES in braintools/__init___test.py.
-files = [
-    "braintools/__init__.py",
-    "braintools/_deprecation.py",
-    "braintools/_misc.py",
-    "braintools/analysis",
-    "braintools/fit",
-    "braintools/spike",
-    "braintools/tree.py",
-]
+# The whole package is type-checked in CI (`mypy` with no arguments); the
+# co-located tests are excluded. braintools/__init___test.py checks this.
+files = ["braintools"]
+exclude = '_test\.py$'
 # Many scientific dependencies (jax, brainunit, optax, scipy, ...) ship partial
 # or no type information; don't fail on their missing stubs.
 ignore_missing_imports = true
-# Incremental typing: modules reached via import (third-party and internal code
-# not yet annotated) are treated as untyped rather than reported. This keeps the
-# explicitly type-checked public surface green while annotation coverage grows.
+# Modules reached only through imports (third-party code) are treated as
+# untyped rather than reported.
 follow_imports = "skip"
 warn_redundant_casts = true
 warn_unused_ignores = false

@@ -69,29 +69,6 @@ class If(_CompoundCond):
     values in ``get_trial_meta`` or downstream phases when batching; gate such
     state on the same condition at the top level instead.
 
-    Examples
-    --------
-    >>> # Match vs non-match response
-    >>> phases = (
-    ...     Sample(500 * u.ms)
-    ...     >> Delay(1000 * u.ms)
-    ...     >> Test(500 * u.ms)
-    ...     >> If(
-    ...         lambda ctx: ctx['match'],
-    ...         then=MatchResponse(500 * u.ms),
-    ...         else_=NonMatchResponse(500 * u.ms)
-    ...     )
-    ... )
-
-    >>> # Go/NoGo with no else branch
-    >>> phases = (
-    ...     Stimulus(500 * u.ms)
-    ...     >> If(
-    ...         lambda ctx: ctx['is_go'],
-    ...         then=Response(500 * u.ms)
-    ...     )
-    ... )
-
     Parameters
     ----------
     condition : Callable[[Context], bool]
@@ -102,6 +79,32 @@ class If(_CompoundCond):
         Phase to execute if condition is False.
     name : str
         Name for this conditional phase.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.cogtask import Feature, Fixation, If, Response, Task
+        >>> # Go / no-go: the response label depends on the trial
+        >>> respond = If(
+        ...     lambda ctx: ctx['is_go'],
+        ...     then=Response(20 * u.ms, outputs={'label': 1}, name='go'),
+        ...     else_=Response(20 * u.ms, outputs={'label': 0}, name='nogo'),
+        ... )
+        >>> respond
+        If(then=go, else=nogo)
+        >>> task = Task(
+        ...     Fixation(20 * u.ms, inputs={'fixation': 1.0}) >> respond,
+        ...     Feature(1, 'fixation'), Feature(2, 'choice'),
+        ...     trial_init=lambda ctx: ctx.update(is_go=ctx['trial_index'] % 2 == 0),
+        ...     dt=10.0 * u.ms,
+        ... )
+        >>> task.is_variable_length
+        True
+        >>> [np.asarray(task.sample_trial(i)[1]).tolist() for i in range(2)]
+        [[0, 0, 1, 1], [0, 0, 0, 0]]
     """
 
     def __init__(
@@ -205,32 +208,6 @@ class Switch(_CompoundCond):
     Evaluates the selector function to get a key, then executes the
     corresponding phase from the cases dictionary.
 
-    Examples
-    --------
-    >>> # Rule-dependent response
-    >>> phases = (
-    ...     Stimulus(500 * u.ms)
-    ...     >> Delay(1000 * u.ms)
-    ...     >> Switch(
-    ...         lambda ctx: ctx['rule'],
-    ...         cases={
-    ...             'pro': ProResponse(500 * u.ms),
-    ...             'anti': AntiResponse(500 * u.ms),
-    ...         },
-    ...         default=DefaultResponse(500 * u.ms)
-    ...     )
-    ... )
-
-    >>> # Multiple choice selection
-    >>> phases = Switch(
-    ...     lambda ctx: ctx['choice'],
-    ...     cases={
-    ...         0: Choice0Response(100 * u.ms),
-    ...         1: Choice1Response(100 * u.ms),
-    ...         2: Choice2Response(100 * u.ms),
-    ...     }
-    ... )
-
     Parameters
     ----------
     selector : Callable[[Context], Any]
@@ -241,6 +218,32 @@ class Switch(_CompoundCond):
         Phase to execute if key not found in cases.
     name : str
         Name for this conditional phase.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.cogtask import Feature, Fixation, Response, Switch, Task
+        >>> # Rule-dependent response: integer keys also work under ``batch_sample``
+        >>> respond = Switch(
+        ...     lambda ctx: ctx['rule'],
+        ...     cases={
+        ...         0: Response(20 * u.ms, outputs={'label': 1}, name='pro'),
+        ...         1: Response(20 * u.ms, outputs={'label': 2}, name='anti'),
+        ...     },
+        ... )
+        >>> respond
+        Switch(cases=[0, 1])
+        >>> task = Task(
+        ...     Fixation(20 * u.ms, inputs={'fixation': 1.0}) >> respond,
+        ...     Feature(1, 'fixation'), Feature(3, 'choice'),
+        ...     trial_init=lambda ctx: ctx.update(rule=ctx['trial_index'] % 2),
+        ...     dt=10.0 * u.ms,
+        ... )
+        >>> [np.asarray(task.sample_trial(i)[1]).tolist() for i in range(2)]
+        [[0, 0, 1, 1], [0, 0, 2, 2]]
     """
 
     def __init__(
@@ -394,26 +397,6 @@ class While(_CompoundCond):
     Note: The duration computed by get_duration uses max_iterations
     as an upper bound, but actual execution may be shorter.
 
-    Examples
-    --------
-    >>> # Evidence accumulation until threshold
-    >>> phases = (
-    ...     Fixation(500 * u.ms)
-    ...     >> While(
-    ...         lambda ctx: ctx.get('accumulated_evidence', 0) < threshold,
-    ...         body=EvidenceSample(50 * u.ms),
-    ...         max_iterations=50
-    ...     )
-    ...     >> Response(500 * u.ms)
-    ... )
-
-    >>> # Repeated sampling with early termination
-    >>> phases = While(
-    ...     lambda ctx: ctx.get('sample_count', 0) < ctx['required_samples'],
-    ...     body=Sample(100 * u.ms),
-    ...     max_iterations=20
-    ... )
-
     Parameters
     ----------
     condition : Callable[[Context], bool]
@@ -424,6 +407,30 @@ class While(_CompoundCond):
         Maximum number of iterations (safety limit).
     name : str
         Name for this loop phase.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> from braintools.cogtask import Feature, Response, Stimulus, Task, While
+        >>> # Present a sample until the trial's required count is reached
+        >>> sample = Stimulus(10 * u.ms, inputs={'stimulus': 1.0},
+        ...                   on_enter=lambda ctx: ctx.update(seen=ctx.get('seen', 0) + 1))
+        >>> loop = While(lambda ctx: ctx.get('seen', 0) < ctx['n_samples'],
+        ...              body=sample, max_iterations=4)
+        >>> task = Task(
+        ...     loop >> Response(10 * u.ms, outputs={'label': 1}),
+        ...     Feature(1, 'stimulus'), Feature(2, 'choice'),
+        ...     trial_init=lambda ctx: ctx.update(n_samples=2 + ctx['trial_index']),
+        ...     dt=10.0 * u.ms,
+        ... )
+        >>> task.max_trial_duration()  # 4 samples + 1 response step
+        5
+        >>> X, Y, info = task.sample_trial(0)  # two samples, then the response
+        >>> np.asarray(X[:, 0]).tolist(), np.asarray(info['mask']).tolist()
+        ([1.0, 1.0, 0.0, 0.0, 0.0], [True, True, True, False, False])
     """
 
     def __init__(

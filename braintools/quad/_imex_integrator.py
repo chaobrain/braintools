@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
+r"""
 Implicit–explicit (IMEX) time integrators for split ODEs.
 
 These steppers solve ODEs split into nonstiff (explicit) and stiff (implicit)
@@ -41,7 +41,7 @@ very stiff implicit parts may need more Newton iterations (``max_iter``).
 """
 
 import math
-from typing import Callable, Any
+from typing import Callable, TypeAlias
 
 import brainstate
 import jax
@@ -56,9 +56,10 @@ __all__ = [
     'imex_cnab_step',
 ]
 
-DT = brainstate.typing.ArrayLike
-PyTree = brainstate.typing.PyTree
-F = Callable[[PyTree, DT, Any], PyTree]
+DT: TypeAlias = brainstate.typing.ArrayLike
+PyTree: TypeAlias = brainstate.typing.PyTree
+# f(y, t, *args, **kwargs) -> contribution to dy/dt
+F: TypeAlias = Callable[..., PyTree]
 
 
 # States with at most this many elements use a dense Jacobian and direct solve;

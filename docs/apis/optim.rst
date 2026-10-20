@@ -263,6 +263,36 @@ never selected as the best. :class:`braintools.fit.Fitter` uses it as its
 
    MultiStartResult
 
+Readout Learning and Regression
+-------------------------------
+
+Learning rules for linear readouts, as used in reservoir computing. :class:`RLS`
+(recursive least squares, also the learning rule of :class:`FORCE`) and
+:class:`LMS` (least mean squares) update registered ``(n_in, n_out)`` weight
+States in place from a batch of inputs, outputs and targets; they are jit-able
+and run inside ``brainstate.transform.for_loop``. The closed-form regressions are
+pure functions returning a :class:`RegressionResult`; ridge and linear
+regression are differentiable, lasso and elastic net are solved with FISTA.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   RLS
+   FORCE
+   LMS
+   linear_regression
+   ridge_regression
+   lasso_regression
+   elastic_net_regression
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   RegressionResult
+
 Utilities
 ---------
 

@@ -359,6 +359,51 @@ class TestDefaultCollate:
         out = default_collate_fn(batch)
         assert out == ['a', 'b']
 
+    @pytest.mark.parametrize('dtype', [np.int8, np.int32, np.uint8, np.float16,
+                                       np.float32, np.bool_, np.complex64])
+    def test_numpy_scalars_stacked_with_dtype(self, dtype):
+        # NumPy scalars (what indexing a 1-D array yields) used to fall through
+        # to the "return as-is" branch, so labels came back as a tuple. Only
+        # float64 worked because ``np.float64`` subclasses Python ``float``.
+        batch = tuple(np.arange(3).astype(dtype))
+        out = default_collate_fn(batch)
+        assert isinstance(out, jnp.ndarray)
+        assert out.shape == (3,)
+        assert out.dtype == jnp.dtype(dtype)
+        np.testing.assert_array_equal(np.asarray(out), np.arange(3).astype(dtype))
+
+    def test_numpy_int64_scalars_use_jax_default_int(self):
+        # Without x64, JAX canonicalises int64 to its default integer dtype,
+        # exactly as it does for stacked int64 arrays.
+        out = default_collate_fn(tuple(np.arange(3, dtype=np.int64)))
+        assert isinstance(out, jnp.ndarray)
+        assert out.dtype == jnp.asarray(np.arange(3, dtype=np.int64)).dtype
+
+    def test_zero_d_arrays_stacked(self):
+        out = default_collate_fn([np.array(1, dtype=np.int32), np.array(2, dtype=np.int32)])
+        assert out.shape == (2,)
+        assert out.dtype == jnp.int32
+
+    def test_python_bool_and_complex_scalars(self):
+        out_b = default_collate_fn([True, False])
+        assert out_b.dtype == jnp.bool_
+        out_c = default_collate_fn([1 + 2j, 3j])
+        assert out_c.shape == (2,)
+        assert jnp.issubdtype(out_c.dtype, jnp.complexfloating)
+
+    def test_numpy_string_scalars_returned_as_is(self):
+        batch = (np.str_('a'), np.str_('b'))
+        assert default_collate_fn(batch) == batch
+
+    def test_dataloader_int32_labels_stacked(self):
+        # Regression: a 1-D int32 label array came back as a tuple of scalars.
+        X = np.zeros((4, 2), np.float32)
+        y = np.arange(4, dtype=np.int32)
+        _, labels = next(iter(DataLoader((X, y), batch_size=2)))
+        assert isinstance(labels, jnp.ndarray)
+        assert labels.dtype == jnp.int32
+        np.testing.assert_array_equal(np.asarray(labels), [0, 1])
+
 
 class TestDataLoader:
     """Tests for DataLoader."""

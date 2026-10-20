@@ -33,7 +33,7 @@ draw Gaussian noise using ``brainstate.random``. Noise is applied per PyTree
 leaf and scaled by ``sqrt(dt)``.
 """
 
-from typing import Callable, Union
+from typing import Callable, TypeAlias, Union
 
 import brainstate
 import brainunit as u
@@ -54,9 +54,10 @@ __all__ = [
     'sde_srk4_step',
 ]
 
-DT = Union[float, u.Quantity]
-DF = Callable[[brainstate.typing.PyTree, DT, ...], brainstate.typing.PyTree]
-DG = Callable[[brainstate.typing.PyTree, DT, ...], brainstate.typing.PyTree]
+DT: TypeAlias = Union[float, u.Quantity]
+# df(y, t, *args, **kwargs) -> drift; dg(y, t, *args, **kwargs) -> diffusion
+DF: TypeAlias = Callable[..., brainstate.typing.PyTree]
+DG: TypeAlias = Callable[..., brainstate.typing.PyTree]
 
 
 @set_module_as('braintools.quad')

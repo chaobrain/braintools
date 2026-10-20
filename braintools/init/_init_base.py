@@ -21,7 +21,7 @@ functions for all initialization strategies (weights, delays, distances).
 """
 
 from abc import ABC, abstractmethod
-from typing import Union, Optional, Callable, Sequence, Tuple
+from typing import Union, Optional, Callable, Sequence, Tuple, cast
 
 import brainunit as u
 import jax
@@ -189,14 +189,14 @@ Initializer = Union[Initialization, float, int, np.ndarray, jax.Array, u.Quantit
 # Helper Functions
 # =============================================================================
 
-def _to_size(x) -> Optional[Tuple[int]]:
+def _to_size(x) -> Optional[Tuple[int, ...]]:
     if isinstance(x, (tuple, list)):
         return tuple(x)
     # ``bool`` is a subclass of ``int``; a boolean is never a valid size.
     if isinstance(x, bool):
         raise ValueError(f'Cannot make a size for {x}')
     if isinstance(x, (int, np.integer)):
-        return (x,)
+        return (cast(int, x),)
     if x is None:
         return x
     raise ValueError(f'Cannot make a size for {x}')
@@ -317,11 +317,11 @@ def param(
             )
 
     # Convert sizes to a tuple
-    sizes = tuple(_to_size(sizes))
+    # ``sizes`` is never None here, so ``_to_size`` returns a tuple.
+    sizes = tuple(cast(Tuple[int, ...], _to_size(sizes)))
 
     # Handle brainstate.nn.Param (must be checked before callable since Param is callable)
-    is_param = isinstance(init, Param)
-    if is_param:
+    if isinstance(init, Param):
         param_value = init.value()
         # Check shape compatibility
         if not _are_broadcastable_shapes(u.math.shape(param_value), sizes):
