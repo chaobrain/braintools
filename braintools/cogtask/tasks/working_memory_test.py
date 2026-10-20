@@ -13,13 +13,15 @@ no-go, time-varying labels for ReadySetGo, …) and how key hyperparameters
 shape the input/output buffers.
 """
 
+import doctest
+
 import brainunit as u
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 import braintools.cogtask as ct
-from braintools.cogtask.tasks.working_memory import make_encoder, build_cues
+from braintools.cogtask.tasks.working_memory import make_encoder, build_cues, OneTwoThreeGo
 
 
 def _phase_window(info, target):
@@ -426,3 +428,181 @@ def test_ddc_custom_category_fn_overrides_default():
     for i in range(4):
         _, _, info = task.sample_trial(i)
         assert int(info['trial_state']['category']) == 0
+
+
+# ---------------------------------------------------------------------------
+# OneTwoThreeGo
+# ---------------------------------------------------------------------------
+
+_DT10 = 10.0 * u.ms
+_123GO_PHASES = ['fixation', 'target', 's1', 'interval1', 's2', 'interval2',
+                 's3', 'interval3', 'response']
+
+
+def _spans(info):
+    return {name: (int(s), int(e)) for name, s, e in info['phase_history']}
+
+
+def test_123go_features_and_buffer_length():
+    task = OneTwoThreeGo(seed=0, dt=_DT10)
+    assert task.num_inputs == 3
+    assert task.num_outputs == 2
+    assert task.num_classes == 2
+    assert task.is_variable_length
+    # max: fixation 800 + target 1500 + 3 * 100 + 3 * 1000 + response 1000 ms.
+    assert task.max_trial_duration() == 660
+    X, Y, info = task.sample_trial(0)
+    assert X.shape == (660, 3)
+    assert Y.shape == (660,)
+    assert info['mask'].shape == (660,)
+
+
+def test_123go_phase_order():
+    task = OneTwoThreeGo(seed=0, dt=_DT10)
+    _, _, info = task.sample_trial(0)
+    names = [n for n, _, _ in info['phase_history'] if n != 'Sequence']
+    assert names == _123GO_PHASES
+
+
+def test_123go_target_response_time_is_one_interval_after_third_pulse():
+    task = OneTwoThreeGo(seed=1, dt=_DT10)
+    for i in range(8):
+        _, Y, info = task.sample_trial(i)
+        sp = _spans(info)
+        interval_steps = int(round(float(info['trial_state']['interval']) / 10.0))
+        for k in (1, 2, 3):
+            assert sp[f's{k}'][1] - sp[f's{k}'][0] == 10
+            assert sp[f'interval{k}'][1] - sp[f'interval{k}'][0] == interval_steps
+        # Pulses are evenly spaced by the interval ...
+        assert sp['s2'][0] - sp['s1'][1] == interval_steps
+        assert sp['s3'][0] - sp['s2'][1] == interval_steps
+        # ... and the go label starts one interval after the third pulse.
+        go_onset = sp['s3'][1] + interval_steps
+        assert sp['response'][0] == go_onset
+        Y = np.asarray(Y)
+        assert (Y[:go_onset] == 0).all()
+        assert (Y[go_onset:sp['response'][1]] == 1).all()
+        assert sp['response'][1] - sp['response'][0] == 100
+        # The mask covers exactly the trial; padding is zero.
+        mask = np.asarray(info['mask'])
+        assert mask.sum() == sp['response'][1]
+        assert (Y[~mask] == 0).all()
+
+
+def test_123go_phase_inputs():
+    task = OneTwoThreeGo(seed=2, dt=_DT10)
+    X, _, info = task.sample_trial(0)
+    X = np.asarray(X)
+    sp = _spans(info)
+    mask = np.asarray(info['mask'])
+    fix, stim, target = X[:, 0], X[:, 1], X[:, 2]
+    # Fixation stays on for the whole trial (no go cue); padding is zero.
+    np.testing.assert_array_equal(fix[mask], 1.0)
+    np.testing.assert_array_equal(X[~mask], 0.0)
+    # Target appears at the target period and stays on.
+    fs, fe = sp['fixation']
+    np.testing.assert_array_equal(target[fs:fe], 0.0)
+    np.testing.assert_array_equal(target[sp['target'][0]:sp['response'][1]], 1.0)
+    # Stimulus is on exactly during the three pulses.
+    pulse = np.zeros(X.shape[0], dtype=bool)
+    for k in (1, 2, 3):
+        s, e = sp[f's{k}']
+        pulse[s:e] = True
+    np.testing.assert_array_equal(stim[pulse], 1.0)
+    np.testing.assert_array_equal(stim[~pulse], 0.0)
+
+
+def test_123go_sampled_durations_statistics():
+    task = OneTwoThreeGo(seed=3, dt=_DT10)
+    _, _, meta = task.batch_sample(400, return_meta=True)
+    intervals = np.asarray(meta['interval'])
+    assert set(np.unique(intervals).tolist()) == {600.0, 700.0, 800.0, 900.0, 1000.0}
+    fix = np.asarray(meta['fixation_duration'])
+    tgt = np.asarray(meta['target_duration'])
+    assert fix.min() >= 100.0 and fix.max() <= 800.0
+    assert tgt.min() >= 500.0 and tgt.max() <= 1500.0
+
+    def trunc_exp_mean(mu, a, b):
+        ea, eb = np.exp(-a / mu), np.exp(-b / mu)
+        return mu + (a * ea - b * eb) / (ea - eb)
+
+    assert fix.mean() == pytest.approx(trunc_exp_mean(400.0, 100.0, 800.0), abs=30.0)
+    assert tgt.mean() == pytest.approx(trunc_exp_mean(1000.0, 500.0, 1500.0), abs=40.0)
+
+
+def test_123go_fixed_periods_and_custom_intervals():
+    task = OneTwoThreeGo(seed=4, dt=_DT10, t_fixation=200 * u.ms, t_target=300 * u.ms,
+                         intervals=(0.5 * u.second,), t_stimulus=50 * u.ms,
+                         t_response=200 * u.ms)
+    _, Y, info = task.sample_trial(0)
+    state = info['trial_state']
+    assert 'fixation_duration' not in state and 'target_duration' not in state
+    assert float(state['interval']) == 500.0
+    sp = _spans(info)
+    assert sp['fixation'] == (0, 20)
+    assert sp['target'] == (20, 50)
+    assert sp['s1'] == (50, 55)
+    assert sp['response'] == (55 + 3 * 50 + 2 * 5, 55 + 3 * 50 + 2 * 5 + 20)
+    # Fully determined trial: every valid step is used.
+    assert task.max_trial_duration() == sp['response'][1]
+    assert int(np.asarray(Y)[sp['response'][0]]) == 1
+
+
+def test_123go_is_independent_of_dt_unit():
+    out = []
+    for dt in (10.0 * u.ms, 0.01 * u.second):
+        X, Y, info = OneTwoThreeGo(seed=5, dt=dt).sample_trial(0)
+        out.append((np.asarray(X), np.asarray(Y), np.asarray(info['mask'])))
+    for a, b in zip(*out):
+        np.testing.assert_array_equal(a, b)
+
+
+def test_123go_seeded_reproducibility_and_batch_consistency():
+    a = OneTwoThreeGo(seed=6, dt=_DT10)
+    b = OneTwoThreeGo(seed=6, dt=_DT10)
+    Xa, Ya, ia = a.sample_trial(1)
+    Xb, Yb, ib = b.sample_trial(1)
+    np.testing.assert_array_equal(np.asarray(Xa), np.asarray(Xb))
+    np.testing.assert_array_equal(np.asarray(Ya), np.asarray(Yb))
+    assert float(ia['trial_state']['interval']) == float(ib['trial_state']['interval'])
+
+    X, Y, M = a.batch_sample(3, return_mask=True)
+    assert X.shape == (660, 3, 3) and Y.shape == (660, 3) and M.shape == (660, 3)
+    for i in range(3):
+        Xi, Yi, info = a.sample_trial(i)
+        np.testing.assert_array_equal(np.asarray(X)[:, i], np.asarray(Xi))
+        np.testing.assert_array_equal(np.asarray(Y)[:, i], np.asarray(Yi))
+        np.testing.assert_array_equal(np.asarray(M)[:, i], np.asarray(info['mask']))
+
+    Xbf, Ybf = a.batch_sample(3, time_first=False)
+    assert Xbf.shape == (3, 660, 3) and Ybf.shape == (3, 660)
+
+
+@pytest.mark.parametrize("kwargs", [
+    dict(t_fixation=(400 * u.ms, 100 * u.ms)),
+    dict(t_fixation=(400 * u.ms, 900 * u.ms, 800 * u.ms)),
+    dict(t_target=(0 * u.ms, 100 * u.ms, 800 * u.ms)),
+    dict(intervals=()),
+    dict(intervals=(0 * u.ms, 600 * u.ms)),
+])
+def test_123go_invalid_arguments(kwargs):
+    with pytest.raises(ValueError):
+        OneTwoThreeGo(**kwargs)
+
+
+@pytest.mark.parametrize("kwargs", [
+    dict(t_fixation=400.0),
+    dict(intervals=(600.0, 700.0)),
+])
+def test_123go_rejects_unitless_durations(kwargs):
+    with pytest.raises(Exception):
+        OneTwoThreeGo(**kwargs)
+
+
+def test_123go_docstring_examples(monkeypatch):
+    monkeypatch.setattr(ct, 'OneTwoThreeGo', OneTwoThreeGo, raising=False)
+    runner = doctest.DocTestRunner(optionflags=doctest.NORMALIZE_WHITESPACE)
+    for test in doctest.DocTestFinder(recurse=False).find(OneTwoThreeGo, globs={}):
+        runner.run(test)
+    assert runner.tries > 0
+    assert runner.failures == 0

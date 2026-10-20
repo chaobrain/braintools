@@ -50,9 +50,17 @@ def label(
 
     Examples
     --------
-    >>> outputs={'label': label(0)}  # Static fixation label
-    >>> outputs={'label': label('ground_truth')}  # From context
-    >>> outputs={'label': label(lambda ctx: ctx['choice'] + 1)}  # Custom
+    .. code-block:: python
+
+        >>> from braintools.cogtask import Context, label
+        >>> ctx = Context()
+        >>> ctx.update(ground_truth=1, choice=2)
+        >>> label(0)(ctx, None)  # static label, e.g. during fixation
+        0
+        >>> label('ground_truth')(ctx, None)  # read from the context
+        1
+        >>> label(lambda ctx: ctx['choice'] + 1)(ctx, None)  # custom rule
+        3
     """
     if isinstance(value, int):
         def get_label(ctx: Context, feature: Optional[Feature]) -> int:
@@ -98,8 +106,19 @@ def match_label(
 
     Examples
     --------
-    >>> outputs={'label': match_label('is_match')}
-    >>> outputs={'label': match_label('is_match', match_label=1, nonmatch_label=2)}
+    .. code-block:: python
+
+        >>> from braintools.cogtask import Context, match_label
+        >>> spec = match_label('is_match')  # e.g. outputs={'label': spec}
+        >>> ctx = Context()
+        >>> ctx['is_match'] = True
+        >>> int(spec(ctx, None))
+        1
+        >>> ctx['is_match'] = False
+        >>> int(spec(ctx, None))
+        2
+        >>> int(match_label('is_match', match_label=3, nonmatch_label=4)(ctx, None))
+        4
     """
 
     def get_label(ctx: Context, feature: Optional[Feature]):
@@ -134,7 +153,17 @@ def comparison_label(
 
     Examples
     --------
-    >>> outputs={'label': comparison_label('test_greater_than_sample')}
+    .. code-block:: python
+
+        >>> from braintools.cogtask import Context, comparison_label
+        >>> spec = comparison_label('test_greater_than_sample')
+        >>> ctx = Context()
+        >>> ctx['test_greater_than_sample'] = True
+        >>> int(spec(ctx, None))
+        1
+        >>> ctx['test_greater_than_sample'] = False
+        >>> int(spec(ctx, None))
+        2
     """
 
     def get_label(ctx: Context, feature: Optional[Feature]):

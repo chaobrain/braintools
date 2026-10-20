@@ -166,6 +166,8 @@ from .tasks import (
     ContextDecisionMaking,
     SingleContextDecisionMaking,
     PulseDecisionMaking,
+    MultiSensoryIntegration,
+    EconomicDecisionMaking,
     # Working Memory
     DelayMatchSample,
     DualDelayMatchSample,
@@ -180,6 +182,7 @@ from .tasks import (
     ImmediateDirectionReproduction,
     DelayDirectionClassification,
     ImmediateDirectionClassification,
+    OneTwoThreeGo,
     # Reasoning
     HierarchicalReasoning,
     ProbabilisticReasoning,
@@ -261,6 +264,8 @@ __all__ = [
     'ContextDecisionMaking',
     'SingleContextDecisionMaking',
     'PulseDecisionMaking',
+    'MultiSensoryIntegration',
+    'EconomicDecisionMaking',
     # Working Memory Tasks
     'DelayMatchSample',
     'DualDelayMatchSample',
@@ -275,6 +280,7 @@ __all__ = [
     'ImmediateDirectionReproduction',
     'DelayDirectionClassification',
     'ImmediateDirectionClassification',
+    'OneTwoThreeGo',
     # Reasoning Tasks
     'HierarchicalReasoning',
     'ProbabilisticReasoning',

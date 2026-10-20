@@ -237,6 +237,62 @@ objectives. These wrappers provide a unified interface to powerful optimization 
   other population-based methods. Excellent for high-dimensional, noisy, or discrete
   optimization problems.
 
+Multi-Start Minimization
+------------------------
+
+:func:`multistart_minimize` minimizes a pure, differentiable function from many
+starting points at once: the starts are stacked on a leading axis and run as one
+compiled, vmapped loop with a per-start convergence mask (L-BFGS, Adam or
+gradient descent via Optax). Box bounds are handled by a sigmoid
+reparameterization; :func:`multistart_init` draws uniform starts inside the
+bounds. Starts whose loss becomes non-finite are marked as not converged and are
+never selected as the best. :class:`braintools.fit.Fitter` uses it as its
+``'grad'`` backend.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   multistart_minimize
+   multistart_init
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   MultiStartResult
+
+Readout Learning and Regression
+-------------------------------
+
+Learning rules for linear readouts, as used in reservoir computing. :class:`RLS`
+(recursive least squares, also the learning rule of :class:`FORCE`) and
+:class:`LMS` (least mean squares) update registered ``(n_in, n_out)`` weight
+States in place from a batch of inputs, outputs and targets; they are jit-able
+and run inside ``brainstate.transform.for_loop``. The closed-form regressions are
+pure functions returning a :class:`RegressionResult`; ridge and linear
+regression are differentiable, lasso and elastic net are solved with FISTA.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   RLS
+   FORCE
+   LMS
+   linear_regression
+   ridge_regression
+   lasso_regression
+   elastic_net_regression
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   RegressionResult
+
 Utilities
 ---------
 

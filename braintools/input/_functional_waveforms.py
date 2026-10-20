@@ -88,6 +88,7 @@ def sinusoidal(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import sinusoidal
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple 10 Hz sinusoid
@@ -286,6 +287,7 @@ def square(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import square
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Symmetric square wave at 2 Hz
@@ -466,6 +468,7 @@ def triangular(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import triangular
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple triangular wave at 5 Hz
@@ -638,6 +641,7 @@ def sawtooth(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import sawtooth
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple sawtooth at 2 Hz
@@ -820,6 +824,7 @@ def chirp(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import chirp
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Linear frequency sweep from 1 to 50 Hz
@@ -1029,6 +1034,7 @@ def noisy_sinusoidal(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import noisy_sinusoidal
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Sinusoid with small noise

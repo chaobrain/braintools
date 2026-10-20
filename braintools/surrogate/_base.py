@@ -94,13 +94,6 @@ class Surrogate(PrettyObject):
     To customize a surrogate gradient function, inherit this class and implement
     the `surrogate_fun` and `surrogate_grad` methods.
 
-    Methods
-    -------
-    surrogate_fun(x)
-        Defines the smooth surrogate function used for visualization and analysis.
-    surrogate_grad(x)
-        Defines the gradient of the surrogate function used during backpropagation.
-
     Examples
     --------
     .. code-block:: python
@@ -128,6 +121,7 @@ class Surrogate(PrettyObject):
         >>> x = jnp.array([-1.0, 0.0, 1.0])
         >>> spikes = my_surrogate(x)  # Forward: step function
         >>> print(spikes)  # [0., 1., 1.]
+        [0. 1. 1.]
 
     Notes
     -----
@@ -195,9 +189,9 @@ class Surrogate(PrettyObject):
             return hash((type(self), tuple(sorted(vars(self)))))
 
     def surrogate_fun(self, x) -> jax.Array:
-        """The surrogate function."""
+        """The smooth surrogate function, used for visualization and analysis."""
         raise NotImplementedError
 
     def surrogate_grad(self, x) -> jax.Array:
-        """The gradient function of the surrogate function."""
+        """The gradient of the surrogate function, used during backpropagation."""
         raise NotImplementedError

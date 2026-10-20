@@ -21,13 +21,12 @@ This module provides orthogonal initialization methods:
 - DeltaOrthogonal: Orthogonal initialization for deep networks
 - Identity: Identity matrix initialization
 """
-import warnings
-
 import brainstate
 import brainunit as u
 import jax.numpy as jnp
 import numpy as np
 
+from braintools._deprecation import register_deprecation, warn_deprecated
 from ._init_base import Initialization
 
 __all__ = [
@@ -35,6 +34,22 @@ __all__ = [
     'DeltaOrthogonal',
     'Identity',
 ]
+
+_ORTHOGONAL_UNIT_DEPRECATION = register_deprecation(
+    'braintools.init.Orthogonal(unit=...)',
+    'braintools.init.Orthogonal(...)(size) * unit',
+    since='0.1.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+
+_DELTA_ORTHOGONAL_UNIT_DEPRECATION = register_deprecation(
+    'braintools.init.DeltaOrthogonal(unit=...)',
+    'braintools.init.DeltaOrthogonal(...)(size) * unit',
+    since='0.1.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
 
 
 class Orthogonal(Initialization):
@@ -75,11 +90,7 @@ class Orthogonal(Initialization):
     def __init__(self, scale: float = 1.0, unit: u.Unit = None):
         self.scale = scale
         if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please handle units separately from initialization.',
-                DeprecationWarning, stacklevel=2,
-            )
+            warn_deprecated(_ORTHOGONAL_UNIT_DEPRECATION)
         else:
             unit = u.UNITLESS
         self.unit = unit
@@ -161,11 +172,7 @@ class DeltaOrthogonal(Initialization):
     def __init__(self, scale: float = 1.0, unit: u.Unit = None):
         self.scale = scale
         if unit is not None:
-            warnings.warn(
-                'The `unit` parameter is deprecated and will be removed in future versions. '
-                'Please handle units separately from initialization.',
-                DeprecationWarning, stacklevel=2,
-            )
+            warn_deprecated(_DELTA_ORTHOGONAL_UNIT_DEPRECATION)
         else:
             unit = u.UNITLESS
         self.unit = unit

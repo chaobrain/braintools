@@ -48,6 +48,39 @@ Simple connectivity patterns including random and deterministic connections.
    AllToAll
    OneToOne
 
+Fixed-Degree Patterns
+~~~~~~~~~~~~~~~~~~~~~
+
+Each neuron has an exact number of connections. The results export directly to
+``brainevent`` fixed-number formats with
+:meth:`ConnectionResult.to_fixed_num_per_pre` /
+:meth:`ConnectionResult.to_fixed_num_per_post`.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   FixedOutDegree
+   FixedInDegree
+   FixedTotalNum
+
+Population Networks
+~~~~~~~~~~~~~~~~~~~
+
+Assemble a block-structured network from named populations and the
+projections between them; the result is one global connectivity in the
+concatenated index space.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   Population
+   Projection
+   Network
+
 Spatial Patterns
 ~~~~~~~~~~~~~~~~
 

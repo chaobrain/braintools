@@ -101,8 +101,10 @@ def _assert_identical(a, b):
 def test_case_table_covers_every_moved_function():
     assert len(CASES) == 22
     for sub in ('spike', 'spectral', 'field', 'population', 'stats'):
+        # Every moved function is exported from its new subpackage (which may
+        # also hold functions added after the move).
         exported = set(getattr(braintools.analysis, sub).__all__)
-        assert exported == {n for n, s in MOVED.items() if s == sub}, sub
+        assert {n for n, s in MOVED.items() if s == sub} <= exported, sub
     # The spec table moves 22 functions; with ``raster_plot`` that is 23 aliases.
     assert set(_deprecated.__all__) == set(MOVED) | {'raster_plot'}
     assert len(_deprecated.__all__) == 23
@@ -172,14 +174,14 @@ def test_metric_all_keeps_names_and_order():
 
 
 def test_analysis_exposes_only_subpackages():
-    assert braintools.analysis.__all__ == ['spike', 'spectral', 'field', 'population', 'stats']
+    assert braintools.analysis.__all__ == ['spike', 'spectral', 'field', 'population', 'stats', 'graph']
     for name in MOVED:
         assert not hasattr(braintools.analysis, name), name
 
 
 def test_new_functions_do_not_warn():
     with warnings.catch_warnings():
-        warnings.simplefilter('error', DeprecationWarning)
+        warnings.simplefilter('error', BraintoolsDeprecationWarning)
         braintools.analysis.stats.weighted_correlation(_X, _Y, _W)
 
 

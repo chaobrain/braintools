@@ -96,6 +96,7 @@ def wiener_process(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import wiener_process
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple Wiener process
@@ -251,6 +252,7 @@ def ou_process(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import ou_process
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple OU process
@@ -426,6 +428,7 @@ def poisson(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import poisson
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple Poisson spike train

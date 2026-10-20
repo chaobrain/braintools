@@ -64,8 +64,20 @@ def save_checkpoint(
 
     Examples
     --------
-    >>> state = {'model': model.state_dict(), 'epoch': 10}
-    >>> save_checkpoint(state, 'checkpoint.ckpt')
+    .. code-block:: python
+
+        >>> import os, shutil, tempfile
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tmp = tempfile.mkdtemp()
+        >>> state = {'weights': jnp.ones((2, 3)), 'epoch': 10}
+        >>> path = braintools.trainer.save_checkpoint(
+        ...     state, os.path.join(tmp, 'run', 'checkpoint.ckpt'))
+        >>> os.path.relpath(path, tmp)
+        'run/checkpoint.ckpt'
+        >>> os.path.exists(path)
+        True
+        >>> shutil.rmtree(tmp)
     """
     from braintools.file import msgpack_save
 
@@ -113,8 +125,21 @@ def load_checkpoint(
 
     Examples
     --------
-    >>> state = load_checkpoint('checkpoint.ckpt')
-    >>> model.load_state_dict(state['model'])
+    .. code-block:: python
+
+        >>> import os, shutil, tempfile
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> tmp = tempfile.mkdtemp()
+        >>> path = os.path.join(tmp, 'checkpoint.ckpt')
+        >>> _ = braintools.trainer.save_checkpoint(
+        ...     {'weights': jnp.arange(3.0), 'epoch': 10}, path)
+        >>> state = braintools.trainer.load_checkpoint(path)
+        >>> state['epoch']
+        10
+        >>> state['weights']
+        Array([0., 1., 2.], dtype=float32)
+        >>> shutil.rmtree(tmp)
     """
     from braintools.file import msgpack_load
 
@@ -162,8 +187,20 @@ def find_checkpoint(
 
     Examples
     --------
-    >>> checkpoint = find_checkpoint('checkpoints/', best=True)
-    >>> checkpoint = find_checkpoint('checkpoints/', last=True)
+    .. code-block:: python
+
+        >>> import os, shutil, tempfile
+        >>> import braintools
+        >>> tmp = tempfile.mkdtemp()
+        >>> for name in ['epoch=1.ckpt', 'best.ckpt', 'last.ckpt']:
+        ...     _ = braintools.trainer.save_checkpoint({'x': 0}, os.path.join(tmp, name))
+        >>> os.path.basename(braintools.trainer.find_checkpoint(tmp, best=True))
+        'best.ckpt'
+        >>> os.path.basename(braintools.trainer.find_checkpoint(tmp, last=True))
+        'last.ckpt'
+        >>> braintools.trainer.find_checkpoint(os.path.join(tmp, 'missing')) is None
+        True
+        >>> shutil.rmtree(tmp)
     """
     if not os.path.exists(dirpath):
         return None
@@ -215,9 +252,18 @@ def list_checkpoints(
 
     Examples
     --------
-    >>> checkpoints = list_checkpoints('checkpoints/')
-    >>> for ckpt in checkpoints:
-    ...     print(ckpt)
+    .. code-block:: python
+
+        >>> import os, shutil, tempfile
+        >>> import braintools
+        >>> tmp = tempfile.mkdtemp()
+        >>> for epoch in [10, 2, 1]:
+        ...     _ = braintools.trainer.save_checkpoint(
+        ...         {'epoch': epoch}, os.path.join(tmp, f'epoch={epoch}.ckpt'))
+        >>> ckpts = braintools.trainer.list_checkpoints(tmp, sort_by='epoch')
+        >>> [os.path.basename(c) for c in ckpts]
+        ['epoch=1.ckpt', 'epoch=2.ckpt', 'epoch=10.ckpt']
+        >>> shutil.rmtree(tmp)
     """
     if not os.path.exists(dirpath):
         return []
@@ -271,14 +317,28 @@ class CheckpointManager:
 
     Examples
     --------
-    >>> manager = CheckpointManager(
-    ...     'checkpoints/',
-    ...     max_to_keep=3,
-    ...     monitor='val_loss',
-    ...     mode='min',
-    ... )
-    >>> manager.save(model, optimizer, epoch=10, metrics={'val_loss': 0.5})
-    >>> state = manager.load_best()
+    Keep the two most recent checkpoints and track the best ``val_loss``:
+
+    .. code-block:: python
+
+        >>> import os, shutil, tempfile
+        >>> import brainstate
+        >>> import braintools
+        >>> brainstate.random.seed(0)
+        >>> model = brainstate.nn.Linear(3, 2)
+        >>> tmp = tempfile.mkdtemp()
+        >>> manager = braintools.trainer.CheckpointManager(
+        ...     tmp, max_to_keep=2, monitor='val_loss', mode='min', verbose=False)
+        >>> for epoch, loss in enumerate([0.9, 0.5, 0.7, 0.8]):
+        ...     _ = manager.save(model, epoch=epoch, metrics={'val_loss': loss})
+        >>> [os.path.basename(c['path']) for c in manager.checkpoints]
+        ['checkpoint-epoch=0001.ckpt', 'checkpoint-epoch=0003.ckpt']
+        >>> manager.best_score
+        0.5
+        >>> state = manager.load_best()
+        >>> state['epoch'], state['metrics']
+        (1, {'val_loss': 0.5})
+        >>> shutil.rmtree(tmp)
     """
     __module__ = 'braintools.trainer'
 
@@ -386,7 +446,18 @@ class CheckpointManager:
 
         Examples
         --------
-        >>> path = manager.save(model, optimizer, epoch=10)
+        .. code-block:: python
+
+            >>> import os, shutil, tempfile
+            >>> import brainstate
+            >>> import braintools
+            >>> model = brainstate.nn.Linear(3, 2)
+            >>> tmp = tempfile.mkdtemp()
+            >>> manager = braintools.trainer.CheckpointManager(tmp, verbose=False)
+            >>> path = manager.save(model, epoch=10, step=200)
+            >>> os.path.basename(path)
+            'checkpoint-epoch=0010.ckpt'
+            >>> shutil.rmtree(tmp)
         """
         # Check if we should save
         if self.save_best_only and self.monitor and metrics:
@@ -510,7 +581,26 @@ class CheckpointManager:
 
         Examples
         --------
-        >>> state = manager.load('checkpoint.ckpt', model=model)
+        Restore saved parameters into a fresh model:
+
+        .. code-block:: python
+
+            >>> import shutil, tempfile
+            >>> import jax.numpy as jnp
+            >>> import brainstate
+            >>> import braintools
+            >>> brainstate.random.seed(0)
+            >>> model = brainstate.nn.Linear(3, 2)
+            >>> tmp = tempfile.mkdtemp()
+            >>> manager = braintools.trainer.CheckpointManager(tmp, verbose=False)
+            >>> path = manager.save(model, epoch=3)
+            >>> fresh = brainstate.nn.Linear(3, 2)
+            >>> state = manager.load(path, model=fresh)
+            >>> state['epoch']
+            3
+            >>> bool(jnp.allclose(fresh.weight.value['weight'], model.weight.value['weight']))
+            True
+            >>> shutil.rmtree(tmp)
         """
         if filepath is None:
             filepath = self.latest

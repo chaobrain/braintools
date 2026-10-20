@@ -26,6 +26,9 @@ specifically designed for neuroscience and machine learning workflows.
 - **Async Saving**: Non-blocking checkpoint saves for better performance
 - **Type Safety**: Proper handling of BrainUnit quantities and BrainState objects
 - **Flexible Loading**: Support for mismatch handling between saved and current model structures
+- **Neuro data formats** (optional extras): HDF5 with unit metadata
+  (``pip install braintools[hdf5]``), NWB units tables and time series
+  (``braintools[nwb]``), and NEO spike-train interoperability (``braintools[neo]``)
 
 **Quick Start:**
 
@@ -90,6 +93,28 @@ specifically designed for neuroscience and machine learning workflows.
 
     msgpack_register_serialization(MyType, my_type_to_dict, my_type_from_dict)
 
+**Neuro data formats:**
+
+.. code-block:: python
+
+    import brainunit as u
+    import jax.numpy as jnp
+    from braintools.spike import SpikeTrains
+    from braintools.file import save_hdf5, load_hdf5, save_nwb_units, load_nwb_units, to_neo
+
+    trains = SpikeTrains.from_list([jnp.array([1.0, 5.0]) * u.ms, jnp.array([2.0]) * u.ms])
+
+    # Nested pytrees of arrays, Quantities and SpikeTrains (needs h5py)
+    save_hdf5('run.h5', {'v': jnp.zeros(3) * u.mV, 'spikes': trains})
+    restored = load_hdf5('run.h5')
+
+    # NWB units table (needs pynwb); times are stored in seconds
+    save_nwb_units('session.nwb', trains, session_description='demo', identifier='run-1')
+    trains_s = load_nwb_units('session.nwb')
+
+    # NEO spike trains (needs neo and quantities)
+    neo_trains = to_neo(trains)
+
 """
 
 # MATLAB file I/O
@@ -110,6 +135,22 @@ from ._msg_checkpoint import (
     InvalidCheckpointPath,
 )
 
+# Optional neuro data formats (the backends are imported lazily)
+from ._hdf5 import (
+    save_hdf5,
+    load_hdf5,
+)
+from ._neo import (
+    to_neo,
+    from_neo,
+)
+from ._nwb import (
+    save_nwb_units,
+    load_nwb_units,
+    save_nwb_timeseries,
+    load_nwb_timeseries,
+)
+
 __all__ = [
     # MATLAB I/O
     'load_matfile',
@@ -124,4 +165,14 @@ __all__ = [
     'AsyncManager',
     'AlreadyExistsError',
     'InvalidCheckpointPath',
+
+    # HDF5, NEO and NWB
+    'save_hdf5',
+    'load_hdf5',
+    'to_neo',
+    'from_neo',
+    'save_nwb_units',
+    'load_nwb_units',
+    'save_nwb_timeseries',
+    'load_nwb_timeseries',
 ]

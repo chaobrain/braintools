@@ -18,16 +18,351 @@
 
 import math
 import unittest
+from typing import Optional
 
 import brainstate
 import brainunit as u
+import jax
 import jax.numpy as jnp
 import numpy as np
+import numpy as onp
+import pytest
 
 import braintools
-from braintools.analysis.spike import victor_purpura_distance
+from braintools.analysis.spike._firings import (
+    _floor_ratio,
+    _in_unit,
+    _steps,
+    burst_synchrony_index,
+    correlation_index,
+    spike_time_tiling_coefficient,
+    spike_train_synchrony,
+    van_rossum_distance,
+    victor_purpura_distance,
+)
+from braintools.spike import SpikeTrains
 
 brainstate.environ.set(dt=0.1)
+
+
+# ----------------------------------------------------------------------------
+# Reference copies of the implementations before version 0.5 (Python loops,
+# Python ``float`` results). The rewritten functions must reproduce them.
+# ----------------------------------------------------------------------------
+
+def _legacy_victor_purpura_distance(
+    spike_times_1: brainstate.typing.ArrayLike,
+    spike_times_2: brainstate.typing.ArrayLike,
+    cost_factor: float = 1.0
+):
+    spikes1 = onp.asarray(u.get_magnitude(spike_times_1), dtype=float)
+    spikes2 = onp.asarray(u.get_magnitude(spike_times_2), dtype=float)
+    cost_factor = float(u.get_magnitude(cost_factor))
+
+    n1, n2 = spikes1.shape[0], spikes2.shape[0]
+
+    # Handle empty spike trains
+    if n1 == 0:
+        return float(n2)
+    if n2 == 0:
+        return float(n1)
+
+    # Dynamic programming on host (NumPy) arrays with plain Python arithmetic.
+    # dp[i, j] = minimum cost to transform spikes1[:i] into spikes2[:j].
+    # Using JAX arrays here would force a host<->device round-trip for every
+    # ``.at[].set`` and ``dp[...]`` read, making the routine O(n^2) *device*
+    # operations; NumPy keeps it a fast in-memory fill.
+    dp = onp.empty((n1 + 1, n2 + 1), dtype=float)
+    dp[0, 0] = 0.0
+    for i in range(1, n1 + 1):
+        dp[i, 0] = i  # Delete all spikes in train 1
+    for j in range(1, n2 + 1):
+        dp[0, j] = j  # Insert all spikes in train 2
+
+    for i in range(1, n1 + 1):
+        s1 = spikes1[i - 1]
+        for j in range(1, n2 + 1):
+            # Match spike i with spike j (temporal shift), delete, or insert.
+            match_cost = dp[i - 1, j - 1] + cost_factor * abs(s1 - spikes2[j - 1])
+            delete_cost = dp[i - 1, j] + 1.0
+            insert_cost = dp[i, j - 1] + 1.0
+            dp[i, j] = min(match_cost, delete_cost, insert_cost)
+
+    return float(dp[n1, n2])
+
+
+def _legacy_van_rossum_distance(
+    spike_times_1: brainstate.typing.ArrayLike,
+    spike_times_2: brainstate.typing.ArrayLike,
+    tau: float = 1.0,
+    t_max: Optional[float] = None
+):
+    spikes1 = jnp.asarray(spike_times_1)
+    spikes2 = jnp.asarray(spike_times_2)
+
+    # Determine time window (unchanged: default is max spike time + 5*tau)
+    if t_max is None:
+        all_spikes = jnp.concatenate([spikes1, spikes2])
+        if all_spikes.size == 0:
+            return 0.0
+        t_max = float(jnp.max(all_spikes)) + 5.0 * tau
+
+    def pair_integral(times_a, times_b):
+        r"""Exact ``\int_0^{T} f_a(t) f_b(t)\, dt`` for the exponential kernel.
+
+        With :math:`f_a(t) = \frac{1}{\tau}\sum_k e^{-(t-a_k)/\tau} H(t-a_k)`,
+        the product of two such responses integrates in closed form to one term
+        per spike pair:
+
+        .. math::
+
+            \frac{1}{2\tau}\left[
+                e^{(a+b-2m)/\tau} - e^{(a+b-2T)/\tau}
+            \right], \qquad m = \max(0, a, b),
+
+        for :math:`m < T` (a pair contributes nothing once :math:`m \ge T`, since
+        the integrand vanishes on :math:`[0, T]`).
+
+        This replaces the former left-endpoint rectangle rule on a grid of step
+        ``tau / 20``, which biased every result high by ~2.5% (an O(h) error:
+        ``h / (1 - e^{-2h/tau})`` vs the exact ``tau/2``, i.e. 1.0508 in the
+        squared distance for ``h = tau/20``).
+        """
+        if times_a.size == 0 or times_b.size == 0:
+            return 0.0
+        a = times_a[:, None]
+        b = times_b[None, :]
+        m = jnp.maximum(jnp.maximum(0.0, a), b)
+        terms = (
+            jnp.exp((a + b - 2.0 * m) / tau)
+            - jnp.exp((a + b - 2.0 * t_max) / tau)
+        )
+        return jnp.sum(jnp.where(m < t_max, terms, 0.0))
+
+    distance_squared = (1.0 / (2.0 * tau)) * (
+        pair_integral(spikes1, spikes1)
+        + pair_integral(spikes2, spikes2)
+        - 2.0 * pair_integral(spikes1, spikes2)
+    )
+    # Round-off can push an exactly-zero distance marginally negative.
+    return float(jnp.sqrt(jnp.maximum(distance_squared, 0.0)))
+
+
+def _legacy_spike_train_synchrony(
+    spike_matrix: brainstate.typing.ArrayLike,
+    window_size: float,
+    dt: Optional[float] = None
+):
+    dt = brainstate.environ.get_dt() if dt is None else dt
+    spikes = onp.asarray(u.get_magnitude(spike_matrix))
+    n_time, n_neurons = spikes.shape
+
+    if n_neurons < 2:
+        return 0.0
+
+    # Half-coincidence window in samples (Quantities converted, floats in ms).
+    half_steps = _steps(window_size, dt, u.ms) / 2.0
+
+    # Spike sample indices for each neuron.
+    spike_idx_list = [onp.where(spikes[:, i] > 0)[0] for i in range(n_neurons)]
+
+    total_synchrony = 0.0
+    n_pairs = 0
+    for i in range(n_neurons):
+        for j in range(i + 1, n_neurons):
+            idx_i = spike_idx_list[i]
+            idx_j = spike_idx_list[j]
+            n_i, n_j = len(idx_i), len(idx_j)
+            if n_i == 0 or n_j == 0:
+                continue
+
+            # A spike is "coincident" if the *other* train has any spike within the
+            # half-window. Counting coincidences symmetrically in both directions and
+            # normalizing by the total spike count bounds the ratio to [0, 1] (the
+            # earlier ``min(N_i, N_j)`` normalization with one-directional counting
+            # could exceed 1).
+            within = onp.abs(idx_i[:, None] - idx_j[None, :]) <= half_steps
+            coin_i = int(onp.any(within, axis=1).sum())
+            coin_j = int(onp.any(within, axis=0).sum())
+            total_synchrony += (coin_i + coin_j) / (n_i + n_j)
+            n_pairs += 1
+
+    return float(total_synchrony / n_pairs) if n_pairs > 0 else 0.0
+
+
+def _legacy_burst_synchrony_index(
+    spike_matrix: brainstate.typing.ArrayLike,
+    burst_threshold: int = 3,
+    max_isi: float = 100.0,
+    dt: Optional[float] = None
+):
+    dt = brainstate.environ.get_dt() if dt is None else dt
+    spikes = onp.asarray(u.get_magnitude(spike_matrix))
+    n_time, n_neurons = spikes.shape
+    dt_m = _in_unit(dt, u.ms)
+    max_isi_m = _in_unit(max_isi, u.ms)
+
+    def detect_bursts(spike_train):
+        """Detect burst events in a single spike train."""
+        spike_times = onp.where(spike_train > 0)[0] * dt_m
+        if len(spike_times) < burst_threshold:
+            return []
+
+        bursts = []
+        current_burst = [spike_times[0]]
+
+        for i in range(1, len(spike_times)):
+            isi = spike_times[i] - spike_times[i - 1]
+            if isi <= max_isi_m:
+                current_burst.append(spike_times[i])
+            else:
+                if len(current_burst) >= burst_threshold:
+                    bursts.append((current_burst[0], current_burst[-1]))
+                current_burst = [spike_times[i]]
+
+        # Check final burst
+        if len(current_burst) >= burst_threshold:
+            bursts.append((current_burst[0], current_burst[-1]))
+
+        return bursts
+
+    # Detect bursts for all neurons
+    all_bursts = []
+    for i in range(n_neurons):
+        bursts = detect_bursts(spikes[:, i])
+        for start, end in bursts:
+            all_bursts.append((i, start, end))
+
+    if len(all_bursts) == 0:
+        return 0.0
+
+    # Count synchronized bursts
+    synchronous_bursts = 0
+    total_bursts = len(all_bursts)
+
+    for i, (neuron1, start1, end1) in enumerate(all_bursts):
+        overlapping_neurons = {neuron1}
+
+        for j, (neuron2, start2, end2) in enumerate(all_bursts):
+            if i != j and neuron1 != neuron2:
+                # Check for temporal overlap. ``>= 0`` (inclusive) counts bursts
+                # that touch at a single instant -- the strongest possible
+                # synchrony -- which a strict ``> 0`` would wrongly exclude.
+                overlap = min(end1, end2) - max(start1, start2)
+                if overlap >= 0:
+                    overlapping_neurons.add(neuron2)
+
+        # If burst involves multiple neurons, it's synchronous
+        if len(overlapping_neurons) > 1:
+            synchronous_bursts += 1
+
+    return float(synchronous_bursts / total_bursts) if total_bursts > 0 else 0.0
+
+
+def _legacy_spike_time_tiling_coefficient(
+    spike_matrix: brainstate.typing.ArrayLike,
+    dt: Optional[float] = None,
+    tau: float = 5.0
+):
+    dt = brainstate.environ.get_dt() if dt is None else dt
+    spikes = onp.asarray(u.get_magnitude(spike_matrix))
+    n_time, n_neurons = spikes.shape
+
+    # Coincidence half-window in samples (Quantities converted, floats in ms).
+    tau_steps = int(round(_steps(tau, dt, u.ms)))
+
+    def covered_fraction(idx):
+        # Fraction of the recording covered by the *union* of [s - tau, s + tau]
+        # windows around each spike. Summing per-spike window lengths (the previous
+        # behaviour) double-counts overlapping windows and inflates T; the union is
+        # the quantity defined by Cutts & Eglen (2014).
+        covered = onp.zeros(n_time, dtype=bool)
+        for s in idx:
+            lo = max(0, s - tau_steps)
+            hi = min(n_time, s + tau_steps + 1)
+            covered[lo:hi] = True
+        return covered.sum() / n_time
+
+    sttc_matrix = onp.eye(n_neurons)  # Diagonal is 1 by definition
+    for i in range(n_neurons):
+        for j in range(i + 1, n_neurons):
+            idx_i = onp.where(spikes[:, i] > 0)[0]
+            idx_j = onp.where(spikes[:, j] > 0)[0]
+            n_i, n_j = len(idx_i), len(idx_j)
+
+            if n_i == 0 or n_j == 0:
+                sttc_matrix[i, j] = sttc_matrix[j, i] = 0.0
+                continue
+
+            within = onp.abs(idx_i[:, None] - idx_j[None, :]) <= tau_steps
+            P_A = onp.any(within, axis=1).sum() / n_i  # spikes in i near a j spike
+            P_B = onp.any(within, axis=0).sum() / n_j  # spikes in j near an i spike
+            T_A = covered_fraction(idx_i)
+            T_B = covered_fraction(idx_j)
+
+            # Guard each term independently: a single degenerate denominator should
+            # zero only its own term, not the whole coefficient.
+            term1 = (P_A - T_B) / (1.0 - P_A * T_B) if (1.0 - P_A * T_B) != 0 else 0.0
+            term2 = (P_B - T_A) / (1.0 - P_B * T_A) if (1.0 - P_B * T_A) != 0 else 0.0
+            sttc_value = 0.5 * (term1 + term2)
+
+            sttc_matrix[i, j] = sttc_matrix[j, i] = sttc_value
+
+    return jnp.asarray(sttc_matrix)
+
+
+def _legacy_correlation_index(
+    spike_matrix: brainstate.typing.ArrayLike,
+    window_size: float,
+    dt: Optional[float] = None
+):
+    dt = brainstate.environ.get_dt() if dt is None else dt
+    spikes = jnp.asarray(u.get_magnitude(spike_matrix))
+    n_time, n_neurons = spikes.shape
+
+    if n_neurons < 2:
+        return 0.0
+
+    # Bin size in samples (``window_size`` and ``dt`` must share a time unit).
+    bin_size = max(1, _floor_ratio(_steps(window_size, dt, u.ms)))
+    # Only whole bins are used; any trailing samples that do not fill a complete
+    # bin are discarded so every bin has the same width.
+    n_bins = n_time // bin_size
+
+    if n_bins < 2:
+        return 0.0
+
+    # Bin spike counts
+    binned_spikes = jnp.zeros((n_bins, n_neurons))
+    for i in range(n_bins):
+        start_idx = i * bin_size
+        end_idx = (i + 1) * bin_size
+        binned_spikes = binned_spikes.at[i, :].set(jnp.sum(spikes[start_idx:end_idx, :], axis=0))
+
+    # Calculate pairwise correlations
+    correlations = []
+    for i in range(n_neurons):
+        for j in range(i + 1, n_neurons):
+            # Compute Pearson correlation
+            x, y = binned_spikes[:, i], binned_spikes[:, j]
+
+            # Handle case where one or both series have zero variance
+            x_var = jnp.var(x)
+            y_var = jnp.var(y)
+
+            if x_var == 0 or y_var == 0:
+                corr = 0.0
+            else:
+                corr = jnp.corrcoef(x, y)[0, 1]
+                # Handle NaN case
+                corr = jnp.where(jnp.isnan(corr), 0.0, corr)
+
+            correlations.append(corr)
+
+    # Clamp to the documented [-1, 1] range (guards against float round-off in
+    # ``corrcoef`` pushing the mean marginally outside the interval).
+    return float(jnp.clip(jnp.mean(jnp.array(correlations)), -1.0, 1.0))
+
 
 
 class TestFiringRate(unittest.TestCase):
@@ -604,6 +939,296 @@ class TestFIR6CorrelationIndexBounds(unittest.TestCase):
         ci = braintools.analysis.spike.correlation_index(spikes, window_size=50.0, dt=1.0)
         self.assertGreaterEqual(float(ci), -1.0)
         self.assertLessEqual(float(ci), 1.0)
+
+
+# ----------------------------------------------------------------------------
+# Version 0.5: jittable / loop-free rewrites, compared with the previous
+# implementations (copied above as ``_legacy_*``) on concrete inputs.
+# ----------------------------------------------------------------------------
+
+@pytest.fixture
+def x64():
+    # Importing braintools resets the flag, so it is enabled here, after import.
+    previous = jax.config.jax_enable_x64
+    jax.config.update('jax_enable_x64', True)
+    try:
+        yield
+    finally:
+        jax.config.update('jax_enable_x64', previous)
+
+
+def _random_train(rng, n_max=8, integer=False):
+    n = int(rng.integers(0, n_max + 1))
+    if integer:  # ties between and within trains
+        return np.sort(rng.integers(0, 10, n).astype(float))
+    return np.sort(rng.uniform(0., 10., n))
+
+
+def _random_raster(rng, n_time, n_neurons, p=None, silent=()):
+    p = rng.uniform(0.01, 0.2) if p is None else p
+    spikes = (rng.random((n_time, n_neurons)) < p).astype(float)
+    for k in silent:
+        spikes[:, k] = 0.
+    return spikes
+
+
+def _bursty_raster(rng, n_time, n_neurons):
+    spikes = np.zeros((n_time, n_neurons))
+    for n in range(n_neurons):
+        for start in rng.integers(0, n_time - 6, rng.integers(0, 6)):
+            length = int(rng.integers(1, 6))
+            step = int(rng.integers(1, 3))
+            spikes[start:start + length * step:step, n] = 1.
+        spikes[rng.random(n_time) < 0.01, n] = 1.
+    return spikes
+
+
+class TestVictorPurpuraJittable:
+    def test_matches_legacy_exactly_float64(self, x64):
+        rng = np.random.default_rng(0)
+        for k in range(40):
+            a = _random_train(rng, integer=k % 2 == 0)
+            b = _random_train(rng, integer=k % 2 == 0)
+            if k % 5 == 0:
+                rng.shuffle(a)  # unsorted input follows the same DP
+            q = float(rng.choice([0., 0.3, 1., 5., 50.]))
+            new = victor_purpura_distance(jnp.asarray(a), jnp.asarray(b), q)
+            assert isinstance(new, jax.Array) and new.shape == () and new.dtype == jnp.float64
+            assert float(new) == _legacy_victor_purpura_distance(a, b, q)
+
+    def test_matches_legacy_float32(self):
+        rng = np.random.default_rng(1)
+        for _ in range(20):
+            a = _random_train(rng).astype(np.float32)
+            b = _random_train(rng).astype(np.float32)
+            q = float(rng.choice([0.3, 1., 5.]))
+            new = victor_purpura_distance(jnp.asarray(a), jnp.asarray(b), q)
+            assert new.dtype == jnp.float32
+            np.testing.assert_allclose(float(new), _legacy_victor_purpura_distance(a, b, q), rtol=1e-6)
+
+    def test_empty_trains_return_arrays(self):
+        empty = jnp.array([])
+        d = victor_purpura_distance(empty, empty)
+        assert isinstance(d, jax.Array) and d.shape == () and float(d) == 0.0
+        assert float(victor_purpura_distance(empty, jnp.array([1., 2.]))) == 2.0
+        assert float(victor_purpura_distance(jnp.array([1., 2., 3.]), empty)) == 3.0
+
+    def test_inf_padding_is_absent(self):
+        a = jnp.array([1., 2.5, 4.])
+        b = jnp.array([1.2, 3.])
+        ref = float(victor_purpura_distance(a, b, 2.))
+        pad = jnp.inf
+        assert float(victor_purpura_distance(jnp.array([1., 2.5, 4., pad, pad]), b, 2.)) == ref
+        assert float(victor_purpura_distance(a, jnp.array([1.2, pad, 3., pad]), 2.)) == ref
+        assert float(victor_purpura_distance(jnp.full(3, pad), jnp.full(2, pad), 2.)) == 0.0
+        assert float(victor_purpura_distance(jnp.full(3, pad), b, 2.)) == 2.0
+
+    def test_jit_and_vmap_over_padded_rows(self):
+        st = SpikeTrains.from_list([[1., 2., 3.], [], [0.5]], t_start=0., t_stop=4.)
+        other = SpikeTrains.from_list([[1.1, 2.9], [2.], []], t_start=0., t_stop=4.)
+        f = jax.jit(jax.vmap(lambda x, y: victor_purpura_distance(x, y, 2.)))
+        got = np.asarray(f(st.times, other.times))
+        expected = [_legacy_victor_purpura_distance(r, s, 2.)
+                    for r, s in zip(st.to_list(), other.to_list())]
+        np.testing.assert_allclose(got, expected, rtol=1e-6)
+        traced_q = jax.jit(victor_purpura_distance)(jnp.array([1.]), jnp.array([1.1]), 5.)
+        np.testing.assert_allclose(float(traced_q), 0.5, rtol=1e-5)
+
+    def test_grad(self):
+        # d = q |s1 - s2| when shifting is cheaper than delete + insert.
+        g_q = jax.grad(lambda q: victor_purpura_distance(jnp.array([1.]), jnp.array([1.1]), q))(5.)
+        np.testing.assert_allclose(float(g_q), 0.1, rtol=1e-5)
+        g_s = jax.grad(lambda s: victor_purpura_distance(s, jnp.array([1.1, jnp.inf]), 5.))(jnp.array([1., jnp.inf]))
+        np.testing.assert_allclose(np.asarray(g_s), [-5., 0.], rtol=1e-6)
+
+    @pytest.mark.parametrize('b', [[1.2, 2.5, 3.], [1.2, 2.5, jnp.inf]])
+    def test_grad_finite_with_padding(self, x64, b):
+        # Regression: q * |s - inf| made d/dq = 0 * inf = nan whenever padding was present.
+        a = jnp.array([1., 2., jnp.inf])
+        b = jnp.array(b)
+        f = lambda q, s, t: victor_purpura_distance(s, t, q)
+        np.testing.assert_allclose(float(f(2., a, jnp.array([1.2, 2.5, 3.]))), 2.4, rtol=1e-12)
+        g_q, g_a, g_b = jax.grad(f, argnums=(0, 1, 2))(2., a, b)
+        for g in (g_q, g_a, g_b):
+            assert np.all(np.isfinite(np.asarray(g)))
+        h = 1e-6
+        np.testing.assert_allclose(float(g_q), (float(f(2. + h, a, b)) - float(f(2. - h, a, b))) / (2 * h),
+                                   rtol=1e-6)
+        for k in range(2):  # valid spikes of ``a``
+            e = jnp.zeros(3).at[k].set(h)
+            fd = (float(f(2., a + e, b)) - float(f(2., a - e, b))) / (2 * h)
+            np.testing.assert_allclose(float(g_a[k]), fd, rtol=1e-6, atol=1e-9)
+        assert float(g_a[2]) == 0.0
+
+    def test_quantity_magnitudes(self):
+        a = jnp.array([1., 2.]) * u.ms
+        b = jnp.array([1.5]) * u.ms
+        assert float(victor_purpura_distance(a, b, 1.)) == float(victor_purpura_distance(a.mantissa, b.mantissa, 1.))
+
+    def test_rejects_2d(self):
+        with pytest.raises(ValueError):
+            victor_purpura_distance(jnp.ones((2, 2)), jnp.ones(2))
+
+
+class TestVanRossumJittable:
+    @pytest.mark.parametrize('use_x64', [False, True])
+    def test_matches_legacy(self, use_x64, request):
+        if use_x64:
+            request.getfixturevalue('x64')
+        rng = np.random.default_rng(2)
+        for k in range(25):
+            a = jnp.asarray(_random_train(rng))
+            b = jnp.asarray(_random_train(rng))
+            tau = float(rng.choice([0.2, 1., 3.]))
+            t_max = None if k % 2 else float(rng.choice([5., 12., 30.]))
+            new = van_rossum_distance(a, b, tau=tau, t_max=t_max)
+            old = _legacy_van_rossum_distance(a, b, tau=tau, t_max=t_max)
+            assert isinstance(new, jax.Array) and new.shape == ()
+            np.testing.assert_allclose(float(new), old, rtol=1e-12 if use_x64 else 1e-6, atol=1e-12)
+
+    def test_empty_returns_zero_array(self):
+        d = van_rossum_distance(jnp.array([]), jnp.array([]))
+        assert isinstance(d, jax.Array) and float(d) == 0.0
+        assert float(van_rossum_distance(jnp.full(3, jnp.inf), jnp.full(2, jnp.inf))) == 0.0
+
+    def test_inf_padding_is_masked(self):
+        a = jnp.array([1., 3.])
+        b = jnp.array([1.5])
+        ref = float(van_rossum_distance(a, b, tau=0.5))
+        pad = van_rossum_distance(jnp.array([1., jnp.inf, 3.]), jnp.array([1.5, jnp.inf]), tau=0.5)
+        np.testing.assert_allclose(float(pad), ref, rtol=1e-6)
+        assert np.isfinite(float(pad))
+
+    def test_jit_requires_t_max(self):
+        a, b = jnp.array([1., 3.]), jnp.array([1.5])
+        with pytest.raises(ValueError, match='t_max'):
+            jax.jit(van_rossum_distance)(a, b)
+        with pytest.raises(ValueError, match='t_max'):
+            jax.vmap(van_rossum_distance)(a[None], b[None])
+        f = jax.jit(lambda x, y: van_rossum_distance(x, y, tau=0.5, t_max=10.))
+        np.testing.assert_allclose(float(f(a, b)), float(van_rossum_distance(a, b, tau=0.5, t_max=10.)), rtol=1e-6)
+
+    def test_vmap_over_padded_rows(self):
+        st = SpikeTrains.from_list([[1., 2., 3.], [], [0.5]], t_start=0., t_stop=4.)
+        other = SpikeTrains.from_list([[1.1, 2.9], [2.], []], t_start=0., t_stop=4.)
+        got = jax.vmap(lambda x, y: van_rossum_distance(x, y, tau=1., t_max=20.))(st.times, other.times)
+        expected = [_legacy_van_rossum_distance(jnp.asarray(r), jnp.asarray(s), tau=1., t_max=20.)
+                    for r, s in zip(st.to_list(), other.to_list())]
+        np.testing.assert_allclose(np.asarray(got), expected, rtol=1e-6)
+
+    def test_grad(self):
+        a = jnp.array([1., 3., jnp.inf])
+        b = jnp.array([1.5, jnp.inf])
+        f = lambda tau: van_rossum_distance(a, b, tau=tau, t_max=30.)
+        g = float(jax.grad(f)(1.))
+        h = 1e-3
+        np.testing.assert_allclose(g, (float(f(1. + h)) - float(f(1. - h))) / (2 * h), rtol=1e-2)
+        g_s = jax.grad(lambda s: van_rossum_distance(s, b, tau=1., t_max=30.))(a)
+        assert np.all(np.isfinite(np.asarray(g_s)))
+        assert float(g_s[2]) == 0.0
+
+
+class TestSpikeTrainSynchronyJittable:
+    @pytest.mark.parametrize('use_x64', [False, True])
+    def test_matches_legacy(self, use_x64, request):
+        if use_x64:
+            request.getfixturevalue('x64')
+        rng = np.random.default_rng(3)
+        for k, window in enumerate([0., 1., 3., 4.5, 10., 1e6]):
+            spikes = _random_raster(rng, 120, 6, silent=(k % 6,) if k % 2 else ())
+            new = spike_train_synchrony(jnp.asarray(spikes), window_size=window, dt=1.)
+            old = _legacy_spike_train_synchrony(spikes, window_size=window, dt=1.)
+            assert isinstance(new, jax.Array) and new.shape == ()
+            np.testing.assert_allclose(float(new), old, rtol=1e-12 if use_x64 else 1e-6)
+
+    def test_degenerate_inputs(self):
+        rng = np.random.default_rng(4)
+        one = _random_raster(rng, 50, 1)
+        silent = np.zeros((50, 4))
+        lonely = silent.copy()
+        lonely[10, 2] = 1.
+        for spikes in (one, silent, lonely):
+            new = spike_train_synchrony(jnp.asarray(spikes), window_size=4., dt=1.)
+            assert isinstance(new, jax.Array) and float(new) == 0.0
+            assert _legacy_spike_train_synchrony(spikes, window_size=4., dt=1.) == 0.0
+        # Negative window: no coincidences at all (as before).
+        spikes = _random_raster(rng, 50, 3, p=0.3)
+        assert float(spike_train_synchrony(jnp.asarray(spikes), window_size=-2., dt=1.)) == \
+               _legacy_spike_train_synchrony(spikes, window_size=-2., dt=1.)
+
+    def test_jit_and_vmap_over_trials(self):
+        rng = np.random.default_rng(5)
+        trials = np.stack([_random_raster(rng, 80, 4, silent=(k,)) for k in range(3)])
+        f = jax.jit(lambda s: spike_train_synchrony(s, window_size=6., dt=1.))
+        np.testing.assert_allclose(float(f(trials[0])), _legacy_spike_train_synchrony(trials[0], 6., 1.), rtol=1e-6)
+        got = jax.vmap(f)(jnp.asarray(trials))
+        expected = [_legacy_spike_train_synchrony(t, 6., 1.) for t in trials]
+        np.testing.assert_allclose(np.asarray(got), expected, rtol=1e-6)
+
+
+class TestLoopFreeRewrites:
+    @pytest.mark.parametrize('dt', [1., 0.1, 1. * u.ms])
+    def test_burst_synchrony_matches_legacy_exactly(self, dt):
+        rng = np.random.default_rng(6)
+        for k in range(12):
+            spikes = _bursty_raster(rng, 200, 5) if k % 3 else _random_raster(rng, 200, 5, silent=(k % 5,))
+            for threshold in (1, 2, 3, 4):
+                for max_isi in (0.5, 1., 2., 3., 100.):
+                    max_isi = max_isi * u.ms if isinstance(dt, u.Quantity) else max_isi
+                    new = burst_synchrony_index(jnp.asarray(spikes), threshold, max_isi, dt)
+                    old = _legacy_burst_synchrony_index(jnp.asarray(spikes), threshold, max_isi, dt)
+                    assert type(new) is float
+                    assert new == old, (k, threshold, max_isi)
+
+    def test_burst_synchrony_degenerate(self):
+        assert burst_synchrony_index(np.zeros((30, 3)), dt=1.) == 0.0
+        spikes = np.zeros((30, 2))
+        spikes[[2, 9, 20], 0] = 1.  # isolated spikes, no burst
+        assert burst_synchrony_index(spikes, burst_threshold=2, max_isi=1., dt=1.) == 0.0
+        assert _legacy_burst_synchrony_index(spikes, burst_threshold=2, max_isi=1., dt=1.) == 0.0
+
+    @pytest.mark.parametrize('use_x64', [False, True])
+    def test_sttc_matches_legacy_exactly(self, use_x64, request):
+        if use_x64:
+            request.getfixturevalue('x64')
+        rng = np.random.default_rng(7)
+        for k, tau in enumerate([0., 1., 2.5, 5., 40., 1e4]):
+            spikes = _random_raster(rng, 150, 5, silent=(k % 5,) if k % 2 else ())
+            new = spike_time_tiling_coefficient(jnp.asarray(spikes), dt=1., tau=tau)
+            old = _legacy_spike_time_tiling_coefficient(spikes, dt=1., tau=tau)
+            assert new.dtype == old.dtype and new.shape == (5, 5)
+            np.testing.assert_array_equal(np.asarray(new), np.asarray(old))
+
+    def test_sttc_negative_tau_covers_nothing(self):
+        # The legacy loop sliced ``covered[s + 3:s - 2]``, which wraps around for
+        # spikes in the first samples; a negative window now covers nothing.
+        spikes = np.zeros((30, 2))
+        spikes[[0, 10], 0] = 1.
+        spikes[[5, 20], 1] = 1.
+        sttc = np.asarray(spike_time_tiling_coefficient(spikes, dt=1., tau=-3.))
+        np.testing.assert_array_equal(sttc, np.eye(2))
+
+    def test_sttc_dense_and_degenerate(self):
+        # Every sample covered (T_A = T_B = 1, P = 1): denominators vanish -> 0.
+        spikes = np.ones((20, 3))
+        np.testing.assert_array_equal(np.asarray(spike_time_tiling_coefficient(spikes, dt=1., tau=3.)),
+                                      np.asarray(_legacy_spike_time_tiling_coefficient(spikes, dt=1., tau=3.)))
+        single = np.asarray(spike_time_tiling_coefficient(np.ones((20, 1)), dt=1., tau=3.))
+        np.testing.assert_array_equal(single, [[1.]])
+
+    @pytest.mark.parametrize('use_x64', [False, True])
+    def test_correlation_index_matches_legacy(self, use_x64, request):
+        if use_x64:
+            request.getfixturevalue('x64')
+        rng = np.random.default_rng(8)
+        for k, window in enumerate([1., 5., 7.5, 20., 50.]):
+            spikes = _random_raster(rng, 300, 5, silent=(k % 5,) if k % 2 else ())
+            if k == 2:
+                spikes[:, 1] = 1.  # constant column: zero variance
+            new = correlation_index(jnp.asarray(spikes), window_size=window, dt=1.)
+            old = _legacy_correlation_index(jnp.asarray(spikes), window_size=window, dt=1.)
+            assert type(new) is float
+            np.testing.assert_allclose(new, old, rtol=1e-12 if use_x64 else 1e-6, atol=1e-12)
 
 
 if __name__ == '__main__':

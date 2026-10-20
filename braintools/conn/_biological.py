@@ -20,6 +20,7 @@ import numpy as np
 
 from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
+from ._sampling import bernoulli_pairs
 
 __all__ = [
     'ExcitatoryInhibitory',
@@ -37,6 +38,12 @@ class ExcitatoryInhibitory(PointConnectivity):
     The connectivity is generated probabilistically: for each potential connection from
     a presynaptic neuron to a postsynaptic neuron, a connection is formed with probability
     ``exc_prob`` (for excitatory neurons) or ``inh_prob`` (for inhibitory neurons).
+
+    .. versionchanged:: 0.7.0
+       Each block is sampled without a dense mask: its edge count is drawn
+       from a binomial and that many distinct pairs are drawn uniformly, the
+       same distribution as one Bernoulli draw per pair. The edges a given
+       ``seed`` produces differ from earlier versions.
 
     Parameters
     ----------
@@ -74,6 +81,11 @@ class ExcitatoryInhibitory(PointConnectivity):
     - Similarly, both ``exc_delay`` and ``inh_delay`` must be either both None or both specified.
     - Typical cortical networks have an exc_ratio of ~0.8 (80% excitatory, 20% inhibitory).
     - Inhibitory connections often have higher connection probabilities than excitatory ones.
+    - Self-connections are not removed.
+    - Time and memory are ``O(number of edges)``; edges are returned sorted by
+      ``(pre, post)`` (excitatory rows first, then inhibitory rows).
+    - This is host-side NumPy build-time code; it is not traceable by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples
     --------
@@ -156,29 +168,17 @@ class ExcitatoryInhibitory(PointConnectivity):
         **kwargs
     ) -> ConnectionResult:
         """Generate excitatory-inhibitory network."""
-        if isinstance(pre_size, tuple):
-            pre_num = int(np.prod(pre_size))
-        else:
-            pre_num = pre_size
+        pre_num = int(np.prod(pre_size)) if isinstance(pre_size, (tuple, list)) else int(pre_size)
+        post_num = int(np.prod(post_size)) if isinstance(post_size, (tuple, list)) else int(post_size)
 
-        if isinstance(post_size, tuple):
-            post_num = int(np.prod(post_size))
-        else:
-            post_num = post_size
-
-        # Determine which neurons are excitatory vs inhibitory
+        # The first n_exc pre neurons are excitatory, the rest inhibitory. Each
+        # block is an independent Bernoulli draw per pair, sampled as a binomial
+        # edge count plus distinct uniform pairs (no dense mask); both come back
+        # sorted by (pre, post).
         n_exc = int(pre_num * self.exc_ratio)
-
-        # Vectorized generation for excitatory connections
-        exc_random = self.rng.random((n_exc, post_num))
-        exc_mask = exc_random < self.exc_prob
-        exc_pre, exc_post = np.where(exc_mask)
-
-        # Vectorized generation for inhibitory connections
         n_inh = pre_num - n_exc
-        inh_random = self.rng.random((n_inh, post_num))
-        inh_mask = inh_random < self.inh_prob
-        inh_pre, inh_post = np.where(inh_mask)
+        exc_pre, exc_post = bernoulli_pairs(self.rng, n_exc, post_num, self.exc_prob)
+        inh_pre, inh_post = bernoulli_pairs(self.rng, n_inh, post_num, self.inh_prob)
         inh_pre = inh_pre + n_exc  # Offset to correct neuron indices
 
         # Combine excitatory and inhibitory connections
@@ -304,8 +304,8 @@ class ExcitatoryInhibitory(PointConnectivity):
             delays = u.maybe_decimal(delays_array * delay_unit)
 
         return ConnectionResult(
-            np.array(pre_indices, dtype=np.int64),
-            np.array(post_indices, dtype=np.int64),
+            pre_indices,
+            post_indices,
             weights=weights,
             delays=delays,
             pre_size=pre_size,

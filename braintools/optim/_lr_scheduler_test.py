@@ -1194,8 +1194,9 @@ class TestWarmupScheduler:
         model = brainstate.nn.Linear(10, 5)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        # Check initial lr (base_lr before stepping)
-        assert np.isclose(optimizer.current_lr, 0.1)
+        # The reported initial lr is the scheduled epoch-0 value (the warmup start),
+        # matching the lr actually applied by the first optimizer step.
+        assert np.isclose(optimizer.current_lr, 0.01)
 
         # After 5 steps, should reach base_lr
         for _ in range(5):
@@ -1600,6 +1601,12 @@ class TestOneCycleLR:
         for _ in range(70):
             scheduler.step()
         assert scheduler.current_lrs.value[0] < 0.05
+
+    @pytest.mark.parametrize('kwargs', [dict(epochs=10), dict(steps_per_epoch=10)])
+    def test_onecycle_lr_partial_epoch_args_raise_value_error(self, kwargs):
+        """Only one of ``epochs``/``steps_per_epoch`` (no ``total_steps``) is a ValueError."""
+        with pytest.raises(ValueError, match="total_steps or both epochs and steps_per_epoch"):
+            braintools.optim.OneCycleLR(max_lr=0.1, **kwargs)
 
     def test_onecycle_lr_with_epochs(self):
         """Test OneCycleLR with epochs and steps_per_epoch"""
@@ -2017,8 +2024,8 @@ class TestLinearLR:
         model = brainstate.nn.Linear(10, 5)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        # Initial (before stepping, scheduler is at base_lr)
-        assert np.isclose(optimizer.current_lr, 0.01)
+        # Initial: the reported lr is the scheduled epoch-0 value, start_factor * base_lr
+        assert np.isclose(optimizer.current_lr, 0.001)
 
         # After 1 step, should be lower (at start_factor)
         scheduler.step()
@@ -2199,8 +2206,8 @@ class TestConstantLR:
         model = brainstate.nn.Linear(10, 5)
         optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-        # Initial
-        assert np.isclose(optimizer.current_lr, 0.1)
+        # Initial: the reported lr is the scheduled epoch-0 value, factor * base_lr
+        assert np.isclose(optimizer.current_lr, 0.05)
 
         # During factor period
         for _ in range(3):
@@ -3004,6 +3011,26 @@ class TestSchedulerAppliedLR:
         assert applied[1] < applied[0]            # decaying within the cycle
         assert applied[3] == pytest.approx(1.0, abs=1e-5)  # restart back to base
 
+    @pytest.mark.parametrize('make_sched, expected', [
+        (lambda: O.WarmupScheduler(base_lr=0.1, warmup_epochs=10, warmup_start_lr=0.0), 0.0),
+        (lambda: O.LinearLR(base_lr=1.0, start_factor=0.1, end_factor=1.0, total_iters=5), 0.1),
+        (lambda: O.ConstantLR(base_lr=1.0, factor=0.5, total_iters=3), 0.5),
+    ])
+    def test_optimizer_current_lr_reports_epoch0_scheduled_lr(self, make_sched, expected):
+        # The optimizer's reported ``current_lr`` must match the scheduled (applied)
+        # LR at epoch 0, not the raw ``base_lr``, before any ``scheduler.step()``.
+        sched = make_sched()
+        opt = O.SGD(lr=sched)
+        assert float(opt.current_lr) == pytest.approx(expected, abs=1e-6)
+        assert float(opt.current_lr) == pytest.approx(float(sched.get_last_lr()[0]), abs=1e-6)
+
+    def test_attach_optimizer_syncs_reported_lr(self):
+        # Re-attaching a scheduler to an existing optimizer updates the reported LR.
+        opt = O.SGD(lr=0.5)
+        warm = O.WarmupScheduler(base_lr=1.0, warmup_epochs=4, warmup_start_lr=0.25)
+        warm.attach_optimizer(opt)
+        assert float(opt.current_lr) == pytest.approx(0.25, abs=1e-6)
+
     def test_S6_onecycle_starts_at_initial_lr(self):
         # S-6: at epoch 0 OneCycleLR yields initial_lr = max_lr / div_factor.
         sch = O.OneCycleLR(max_lr=1.0, total_steps=100, div_factor=25.0)
@@ -3184,6 +3211,80 @@ class TestDocExamplesRunnable:
         assert 0.0 < sch.pct_start < 1.0
         with pytest.raises(ValueError):
             O.OneCycleLR(max_lr=10.0, total_steps=100, pct_start=1.0)
+
+
+class TestSequentialLRResume:
+    def test_load_state_dict_restores_applied_lr(self):
+        # After resuming, the applied LR (get_last_lr / current_lrs, which the
+        # optimizer scales by) must match the restored phase, not the base LR.
+        def make():
+            return O.SequentialLR(
+                schedulers=[O.LinearLR(base_lr=0.1, start_factor=0.1, total_iters=5),
+                            O.ExponentialLR(base_lr=0.1, gamma=0.5)],
+                milestones=[5],
+            )
+
+        sched = make()
+        for _ in range(8):
+            sched.step()
+        expected = float(sched.get_last_lr()[0])
+        assert expected == pytest.approx(0.1 * 0.5 ** 3, rel=1e-5)
+
+        resumed = make()
+        opt = O.SGD(lr=resumed)
+        resumed.load_state_dict(sched.state_dict())
+        assert float(resumed.get_last_lr()[0]) == pytest.approx(expected, rel=1e-5)
+        assert float(opt.current_lr) == pytest.approx(expected, rel=1e-5)
+
+    def test_load_state_dict_with_different_milestones_continues_saved_schedule(self):
+        # Regression: load_state_dict restored ``milestones`` (used to pick the
+        # active phase) but not ``_milestones_list`` (used for the phase-relative
+        # epoch offsets in step()), so a scheduler built with milestones [5] and
+        # loaded from one saved with [3] stepped the decay phase from the wrong
+        # epoch and diverged from the saved scheduler's continuation.
+        def make(milestones):
+            return O.SequentialLR(
+                schedulers=[O.LinearLR(base_lr=0.1, start_factor=0.1, total_iters=3),
+                            O.ExponentialLR(base_lr=0.1, gamma=0.5)],
+                milestones=milestones,
+            )
+
+        saved = make([3])
+        for _ in range(4):
+            saved.step()
+        resumed = make([5])
+        resumed.load_state_dict(saved.state_dict())
+        assert float(resumed.get_last_lr()[0]) == pytest.approx(float(saved.get_last_lr()[0]), rel=1e-6)
+        assert [int(m) for m in resumed.milestones] == [3]
+        assert resumed._milestones_list == [3]
+
+        expected, got = [], []
+        for _ in range(5):
+            saved.step()
+            resumed.step()
+            expected.append(float(saved.get_last_lr()[0]))
+            got.append(float(resumed.get_last_lr()[0]))
+        # Epochs 5..9 are decay-phase epochs 2..6 of the saved schedule.
+        assert expected == pytest.approx([0.1 * 0.5 ** k for k in range(2, 7)], rel=1e-5)
+        assert got == pytest.approx(expected, rel=1e-6)
+
+    def test_load_state_dict_rejects_milestone_count_mismatch(self):
+        saved = O.SequentialLR(
+            schedulers=[O.ConstantLR(base_lr=0.1, factor=1.0),
+                        O.ConstantLR(base_lr=0.1, factor=1.0),
+                        O.ConstantLR(base_lr=0.1, factor=1.0)],
+            milestones=[2, 4],
+        )
+        target = O.SequentialLR(
+            schedulers=[O.ConstantLR(base_lr=0.1, factor=1.0),
+                        O.ConstantLR(base_lr=0.1, factor=1.0)],
+            milestones=[3],
+        )
+        with pytest.raises(ValueError, match='milestones'):
+            target.load_state_dict(saved.state_dict())
+        # The failed load leaves the target untouched.
+        assert target._milestones_list == [3]
+        assert [int(m) for m in target.milestones] == [3]
 
 
 if __name__ == '__main__':

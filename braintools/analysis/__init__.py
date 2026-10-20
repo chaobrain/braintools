@@ -16,20 +16,27 @@
 """Neuroscience data analysis.
 
 ``braintools.analysis`` groups the measures used to analyse recorded or
-simulated neural activity. Functions live in five subpackages and are always
+simulated neural activity. Functions live in six subpackages and are always
 accessed through them (they are not re-exported at this level):
 
-=========================================  =====================================================
+=========================================  ==========================================================================
 Subpackage                                 Contents
-=========================================  =====================================================
-:mod:`braintools.analysis.spike`           firing rates, spike-train distances, spike synchrony
-:mod:`braintools.analysis.spectral`        power spectra, coherence, cross-frequency coupling
+=========================================  ==========================================================================
+:mod:`braintools.analysis.spike`           ISI statistics (CV, CV2, LV, Fano), PSTH, correlograms, spike-triggered
+                                           average, firing rates, spike-train distances, synchrony
+:mod:`braintools.analysis.spectral`        Welch and multitaper spectra, spectrograms, Morlet wavelets, band-pass
+                                           filtering, band power, PLV/PLI/wPLI, coherence, cross-frequency coupling
 :mod:`braintools.analysis.field`           LFP forward model, current source density
-:mod:`braintools.analysis.population`      voltage synchrony, functional connectivity (dynamics)
-:mod:`braintools.analysis.stats`           matrix correlation, weighted correlation
-=========================================  =====================================================
+:mod:`braintools.analysis.population`      PCA, CCA, RSA, decoding, mutual information, Kuramoto order, Granger
+                                           causality, avalanches, branching ratio, functional connectivity
+:mod:`braintools.analysis.stats`           correlation helpers, spike jitter, ISI shuffling, phase randomisation,
+                                           bootstrap confidence intervals
+:mod:`braintools.analysis.graph`           structural graph measures of connectivity: degree distribution,
+                                           clustering, path length, modularity, motifs, spectral radius,
+                                           small-world index
+=========================================  ==========================================================================
 
-These functions were previously part of :mod:`braintools.metric`. The old names
+Apart from ``graph``, these functions were previously part of :mod:`braintools.metric`. The old names
 (for example ``braintools.metric.firing_rate``) still work in 0.4 but emit a
 ``BraintoolsDeprecationWarning`` when called and
 will be removed in 1.0.
@@ -56,7 +63,7 @@ Spike-train analysis on a spike matrix of shape ``(n_time, n_neurons)``:
     >>> rate.shape
     (200,)
     >>> sync = spike.spike_train_synchrony(spikes, window_size=5 * u.ms, dt=1 * u.ms)
-    >>> round(sync, 3)
+    >>> round(float(sync), 3)
     1.0
 
 Spectral analysis of an LFP sampled every millisecond:
@@ -84,6 +91,7 @@ Population and statistics helpers:
 """
 
 from . import field
+from . import graph
 from . import population
 from . import spectral
 from . import spike
@@ -95,4 +103,5 @@ __all__ = [
     'field',
     'population',
     'stats',
+    'graph',
 ]

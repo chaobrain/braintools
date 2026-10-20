@@ -7,6 +7,36 @@
 Time-stepping schemes for deterministic, stochastic, and implicit-explicit
 equations used in neural simulations.
 
+Trajectories and Method Registry
+--------------------------------
+
+:func:`odeint` drives any registered ODE stepper over a fixed time grid as one
+compiled ``scan`` (``checkpoint=True`` bounds memory for backpropagation through
+time). :func:`solve_ivp` integrates with an adaptive step size, using the
+embedded error estimate of ``dopri5`` / ``rk45`` / ``rkf45`` / ``rk23`` /
+``bs32`` / ``dopri8`` and a PI step-size controller; its bounded loop is
+reverse-mode differentiable. Steppers are looked up by short name through the
+registry (``'euler'``, ``'rk4'``, ``'dopri5'``, ``'milstein'``, ...), which also
+accepts user-defined methods.
+
+.. autosummary::
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
+
+    odeint
+    solve_ivp
+    register_method
+    get_method
+    list_methods
+
+.. autosummary::
+    :toctree: generated/
+    :nosignatures:
+
+    ODESolution
+
+
 ODE Numerical Integrators
 -------------------------
 

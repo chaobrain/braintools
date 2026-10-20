@@ -20,6 +20,7 @@ API carries usable type annotations consumable by static type checkers."""
 
 import importlib.util
 import inspect
+import re
 import sys
 import tomllib
 import typing
@@ -27,17 +28,6 @@ import unittest
 from pathlib import Path
 
 import braintools
-
-# Top-level public files whose annotations are actively maintained and are
-# verified to be clean under mypy (see ``test_mypy_clean_public_surface``).
-TYPED_PUBLIC_MODULES = (
-    '__init__.py',
-    '_deprecation.py',
-    '_misc.py',
-    'analysis',
-    'spike',
-    'tree.py',
-)
 
 SPIKE_OPERATIONS = (
     'spike_bitwise_or',
@@ -153,22 +143,148 @@ class TestPublicApiAnnotations(unittest.TestCase):
             self.assertIn('return', hints, f'{func.__name__} missing resolved return type')
 
 
-class TestStaticTypeChecker(unittest.TestCase):
-    """Run mypy on the maintained public surface when it is installed."""
+def _public_modules():
+    """Yield ``(dotted_name, module)`` for every public module reachable through ``__all__``."""
+    seen = set()
+    stack = [('braintools', braintools)]
+    while stack:
+        name, mod = stack.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        yield name, mod
+        for attr in getattr(mod, '__all__', ()):
+            obj = getattr(mod, attr, None)
+            if inspect.ismodule(obj) and obj.__name__.startswith('braintools.'):
+                stack.append((obj.__name__, obj))
 
-    def test_mypy_clean_public_surface(self):
+
+_RST_DIRECTIVE = re.compile(
+    r'^\.\. (?:py:)?(currentmodule|module|autosummary|autofunction|autoclass|autodata|data|class|function)'
+    r'::\s*(\S*)'
+)
+
+
+def _documented_names(text: str) -> set:
+    """Return the fully qualified names an API page documents.
+
+    Entries of ``autosummary`` blocks and ``auto*``/``data``/``class``/``function``
+    directives are qualified with the ``currentmodule`` in effect, so a name is
+    only counted for the module whose section lists it.
+    """
+    current = None
+    in_summary = False
+    names = set()
+    for line in text.splitlines():
+        match = _RST_DIRECTIVE.match(line)
+        if match:
+            kind, arg = match.groups()
+            in_summary = kind == 'autosummary'
+            if kind in ('currentmodule', 'module'):
+                current = arg
+            elif arg:
+                names.add(arg if arg.startswith('braintools.') or current is None else f'{current}.{arg}')
+            continue
+        if in_summary:
+            entry = line.strip()
+            if not entry or entry.startswith(':'):
+                continue  # blank line or directive option
+            if not line[:1].isspace():
+                in_summary = False  # dedent ends the block
+                continue
+            names.add(entry if entry.startswith('braintools.') else f'{current}.{entry}')
+    return names
+
+
+def _undocumented_public_names(documented: set) -> list:
+    """Public names (deprecated aliases excluded) missing from ``documented``."""
+    from braintools._deprecation import registered_deprecations
+
+    # Deprecated aliases are documented in docs/migration.md instead.
+    deprecated = {record.old_name for record in registered_deprecations()}
+    missing = []
+    for mod_name, mod in _public_modules():
+        for attr in getattr(mod, '__all__', ()):
+            qualified = f'{mod_name}.{attr}'
+            if attr.startswith('__') or inspect.ismodule(getattr(mod, attr, None)) or qualified in deprecated:
+                continue
+            if qualified not in documented:
+                missing.append(qualified)
+    return missing
+
+
+class TestApiDocsCoverage(unittest.TestCase):
+    """Every name a public module exports appears in the API reference (``docs/apis``)."""
+
+    def _documented(self) -> set:
+        apis = _package_dir().parent / 'docs' / 'apis'
+        if not apis.is_dir():
+            self.skipTest('docs/apis not available (installed distribution)')
+        documented = set()
+        for page in apis.glob('*.rst'):
+            documented |= _documented_names(page.read_text(encoding='utf-8'))
+        return documented
+
+    def test_every_public_name_is_documented(self):
+        missing = _undocumented_public_names(self._documented())
+        self.assertEqual(missing, [], f'public names missing from docs/apis/*.rst: {missing}')
+
+    def test_names_are_qualified_by_their_section(self):
+        text = (
+            '.. currentmodule:: braintools.init\n\n'
+            '.. autosummary::\n   :toctree: generated/\n\n   Clipped\n   Normal\n\n'
+            'Clipped values are described in the prose below.\n'
+            '    Indented\n\n'
+            '.. currentmodule:: braintools.input\n\n'
+            '.. autofunction:: ramp\n'
+            '.. autoclass:: braintools.conn.Ring\n'
+        )
+        self.assertEqual(
+            _documented_names(text),
+            {'braintools.init.Clipped', 'braintools.init.Normal',
+             'braintools.input.ramp', 'braintools.conn.Ring'},
+        )
+
+    def test_name_listed_under_another_module_is_missing(self):
+        # ``Clipped`` is exported by both ``init`` and ``input``; dropping it
+        # from the input page must be detected even though init lists it.
+        documented = self._documented()
+        self.assertIn('braintools.input.Clipped', documented)
+        self.assertIn('braintools.init.Clipped', documented)
+        self.assertIn('braintools.input.Clipped', _undocumented_public_names(documented - {'braintools.input.Clipped'}))
+
+
+class TestStaticTypeChecker(unittest.TestCase):
+    """The whole package (tests excluded) is configured for, and clean under, mypy."""
+
+    def _mypy_config(self) -> dict:
+        with open(_package_dir().parent / 'pyproject.toml', 'rb') as f:
+            return tomllib.load(f)['tool']['mypy']
+
+    def test_mypy_configured_for_whole_package(self):
+        config = self._mypy_config()
+        self.assertEqual(config['files'], ['braintools'])
+        exclude = re.compile(config['exclude'])
+        self.assertTrue(exclude.search('braintools/conn/_base_test.py'))
+        self.assertTrue(exclude.search('braintools/__init___test.py'))
+        self.assertIsNone(exclude.search('braintools/conn/_base.py'))
+        self.assertIsNone(exclude.search('braintools/conn/_test_utils.py'))
+
+    def test_mypy_clean_whole_package(self):
         if importlib.util.find_spec('mypy') is None:
             self.skipTest('mypy is not installed')
         from mypy import api
 
-        pkg = _package_dir()
-        files = [str(pkg / name) for name in TYPED_PUBLIC_MODULES]
-        stdout, stderr, exit_status = api.run(
-            files + ['--follow-imports=skip', '--ignore-missing-imports', '--no-error-summary']
-        )
+        config = self._mypy_config()
+        stdout, stderr, exit_status = api.run([
+            str(_package_dir()),
+            '--exclude', config['exclude'],
+            '--config-file', str(_package_dir().parent / 'pyproject.toml'),
+            '--no-error-summary',
+        ])
         self.assertEqual(
             exit_status, 0,
-            f'mypy reported issues on the public surface:\n{stdout}\n{stderr}',
+            f'mypy reported issues:\n{stdout}\n{stderr}',
         )
 
 

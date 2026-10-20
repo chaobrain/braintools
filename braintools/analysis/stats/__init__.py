@@ -18,6 +18,10 @@
 - :func:`matrix_correlation`: Pearson correlation between the upper triangles
   of two square matrices (for example, two connectivity matrices).
 - :func:`weighted_correlation`: weighted Pearson correlation of two series.
+- **Resampling** (building blocks for significance tests, often called
+  "surrogate data" in the literature): :func:`jitter_spikes`,
+  :func:`shuffle_isi`, :func:`phase_randomize`.
+- :func:`bootstrap_ci`: bootstrap confidence intervals of any statistic.
 
 Examples
 --------
@@ -35,8 +39,18 @@ from ._correlation import (
     matrix_correlation,
     weighted_correlation,
 )
+from ._resampling import (
+    jitter_spikes,
+    shuffle_isi,
+    phase_randomize,
+    bootstrap_ci,
+)
 
 __all__ = [
     'matrix_correlation',
     'weighted_correlation',
+    'jitter_spikes',
+    'shuffle_isi',
+    'phase_randomize',
+    'bootstrap_ci',
 ]

@@ -15,7 +15,7 @@
 
 import inspect
 import warnings
-from typing import Dict, Optional, Union, Callable, Any, List, Tuple, NamedTuple
+from typing import Dict, Hashable, Optional, Union, Callable, Any, List, Tuple, NamedTuple
 
 import jax.numpy as jnp
 import jax.tree
@@ -23,7 +23,8 @@ import optax
 from brainstate import State, maybe_state
 from brainstate.typing import PyTree
 
-from braintools.file import msgpack_from_state_dict
+from braintools._deprecation import register_deprecation, warn_deprecated
+from braintools.file import msgpack_from_state_dict, msgpack_to_state_dict
 from ._base import Optimizer, OptimState
 from ._lr_scheduler import LRScheduler, ConstantLR
 from ._state_uniquifier import UniqueStateManager
@@ -59,6 +60,19 @@ __all__ = [
     'Fromage',
 
 ]
+
+
+def _restore_opt_state(template: Any, saved: Any) -> Any:
+    """Restore a saved optax state onto the structure of ``template``.
+
+    A checkpoint that went through msgpack holds the optax state as nested plain
+    dicts (NamedTuples become ``{field: value}``, tuples become ``{'0': ...}``).
+    Normalizing ``saved`` to that state-dict form and restoring it against the live
+    ``template`` rebuilds the original NamedTuple/tuple structure, so a resumed
+    optimizer can keep stepping. An in-memory ``state_dict()`` round trip goes
+    through the same path and is returned with an unchanged structure.
+    """
+    return msgpack_from_state_dict(template, msgpack_to_state_dict(saved))
 
 
 class OptaxOptimizer(Optimizer):
@@ -137,7 +151,7 @@ class OptaxOptimizer(Optimizer):
         ...
         >>> model = Model()
         >>> optimizer = braintools.optim.Adam(lr=0.001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Using learning rate scheduler:
 
@@ -149,13 +163,21 @@ class OptaxOptimizer(Optimizer):
         >>> model = Model()
         >>> scheduler = braintools.optim.StepLR(base_lr=0.01, step_size=10, gamma=0.1)
         >>> optimizer = braintools.optim.Adam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>>
+        >>> # Gradients of a toy loss w.r.t. the registered weights
+        >>> import jax.numpy as jnp
+        >>> x = jnp.ones((4, 10))
+        >>> def loss_fn():
+        ...     return jnp.sum(model.linear(x) ** 2)
+        >>> grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         >>>
         >>> # Training loop
         >>> for epoch in range(100):
-        ...     # ... compute gradients
         ...     optimizer.step(grads)
         ...     scheduler.step()
+        >>> print(f"{optimizer.current_lr:.0e}")
+        1e-12
 
     Multiple parameter groups with different learning rates:
 
@@ -163,16 +185,19 @@ class OptaxOptimizer(Optimizer):
 
         >>> import brainstate
         >>> import braintools
+        >>> import jax.numpy as jnp
         >>>
         >>> model = Model()
         >>> optimizer = braintools.optim.Adam(lr=0.001)
         >>>
         >>> # Register main parameters
-        >>> optimizer.register_trainable_weights(model.linear.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.linear.states(brainstate.ParamState))
         >>>
         >>> # Add another group with different lr
         >>> special_params = {'special': brainstate.ParamState(jnp.zeros(5))}
-        >>> optimizer.add_param_group(special_params, lr=0.0001)
+        >>> _ = optimizer.add_param_group(special_params, lr=0.0001)
+        >>> len(optimizer.param_groups)
+        2
 
     See Also
     --------
@@ -186,11 +211,8 @@ class OptaxOptimizer(Optimizer):
     param_states: UniqueStateManager  # Container for PyTree of brainstate.State objects
     opt_state: Optional[OptimState]
     step_count: OptimState
-    base_lr: float
-    current_lr: float
     param_groups: List[Dict[str, Any]]
     param_groups_opt_states: List[OptimState]
-    schedulers: List[LRScheduler]
 
     def __init__(
         self,
@@ -236,7 +258,7 @@ class OptaxOptimizer(Optimizer):
         self.step_count = OptimState(0)
         self.param_groups = []
         self.param_groups_opt_states = []  # Changed to list
-        self._schedulers = []
+        self._schedulers: List[LRScheduler] = []
 
         # Handle lr as either float or scheduler
         # Convert float to ConstantLR for unified handling
@@ -275,7 +297,7 @@ class OptaxOptimizer(Optimizer):
         return optax.chain(*transforms)
 
     @property
-    def schedulers(self):
+    def schedulers(self) -> List[LRScheduler]:
         return self._schedulers
 
     @property
@@ -292,7 +314,7 @@ class OptaxOptimizer(Optimizer):
         return self._base_lr
 
     @property
-    def current_lr(self):
+    def current_lr(self) -> float:
         """Get current learning rate."""
         return self._current_lr.value
 
@@ -455,11 +477,11 @@ class OptaxOptimizer(Optimizer):
 
         return self
 
-    def update(self, grads: Dict[str, Any], **extra_args):
+    def update(self, grads: Dict[Hashable, Any], **extra_args):
         """Update the model states with gradients (backward compatibility)."""
         return self.step(grads, **extra_args)
 
-    def step(self, grads: Optional[Dict[str, Any]], **extra_args):
+    def step(self, grads: Dict[Hashable, Any], **extra_args):
         """
         Perform a single optimization step.
 
@@ -479,7 +501,7 @@ class OptaxOptimizer(Optimizer):
 
             # Process each parameter group separately with its own hyperparameters
             all_updates = {}
-            processed_params = set()
+            processed_params: set = set()
 
             # First, handle the default group (index 0) which uses the main optimizer state
             if self.param_groups:
@@ -633,7 +655,8 @@ class OptaxOptimizer(Optimizer):
                 str(i): s.value
                 for i, s in enumerate(self.param_groups_opt_states)
             },
-            'opt_state': self.opt_state.value
+            # ``None`` until ``register_trainable_weights`` builds the optax state.
+            'opt_state': None if self.opt_state is None else self.opt_state.value
         }
         return state_dict
 
@@ -665,11 +688,11 @@ class OptaxOptimizer(Optimizer):
             if 'weight_decay' in saved:
                 group['weight_decay'] = saved['weight_decay']
 
-        if 'opt_state' in state_dict:
+        if state_dict.get('opt_state') is not None:
             if self.opt_state is None:
                 self.opt_state = OptimState(state_dict['opt_state'])
             else:
-                self.opt_state.value = state_dict['opt_state']
+                self.opt_state.value = _restore_opt_state(self.opt_state.value, state_dict['opt_state'])
 
         # Load param group optimizer states. ``state_dict`` stores these as a
         # ``{str(i): value}`` mapping, so iterate by index to bind the value (not the
@@ -679,7 +702,9 @@ class OptaxOptimizer(Optimizer):
             for i in range(len(saved_states)):
                 s = saved_states[str(i)]
                 if i < len(self.param_groups_opt_states):
-                    self.param_groups_opt_states[i].value = s
+                    self.param_groups_opt_states[i].value = _restore_opt_state(
+                        self.param_groups_opt_states[i].value, s
+                    )
                 else:
                     self.param_groups_opt_states.append(OptimState(s))
 
@@ -756,21 +781,21 @@ class SGD(OptaxOptimizer):
         >>> # Create model
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.SGD(lr=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     SGD with momentum:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.SGD(lr=0.01, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     SGD with Nesterov momentum:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.SGD(lr=0.01, momentum=0.9, nesterov=True)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     SGD with learning rate scheduling:
 
@@ -778,13 +803,21 @@ class SGD(OptaxOptimizer):
 
         >>> scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
         >>> optimizer = braintools.optim.SGD(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> for epoch in range(100):
-        ...     # Training code here
+        >>> # Gradients of a toy loss w.r.t. the registered weights
+        >>> import jax.numpy as jnp
+        >>> x = jnp.ones((4, 10))
+        >>> def loss_fn():
+        ...     return jnp.sum(model(x) ** 2)
+        >>> grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
+        >>> steps_per_epoch = 10
+        >>> for step in range(100):
         ...     optimizer.step(grads)
-        ...     if (epoch + 1) % epoch_size == 0:
+        ...     if (step + 1) % steps_per_epoch == 0:  # advance the schedule once per epoch
         ...         scheduler.step()
+        >>> int(scheduler.last_epoch.value)
+        10
 
     See Also
     --------
@@ -891,14 +924,14 @@ class Momentum(OptaxOptimizer):
         >>> # Create model
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.Momentum(lr=0.01, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Momentum with weight decay:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Momentum(lr=0.01, momentum=0.9, weight_decay=0.0001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Momentum with learning rate scheduling:
 
@@ -906,13 +939,21 @@ class Momentum(OptaxOptimizer):
 
         >>> scheduler = braintools.optim.StepLR(base_lr=0.1, step_size=30, gamma=0.1)
         >>> optimizer = braintools.optim.Momentum(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> for epoch in range(100):
-        ...     # Training code here
+        >>> # Gradients of a toy loss w.r.t. the registered weights
+        >>> import jax.numpy as jnp
+        >>> x = jnp.ones((4, 10))
+        >>> def loss_fn():
+        ...     return jnp.sum(model(x) ** 2)
+        >>> grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
+        >>> steps_per_epoch = 10
+        >>> for step in range(100):
         ...     optimizer.step(grads)
-        ...     if (epoch + 1) % epoch_size == 0:
+        ...     if (step + 1) % steps_per_epoch == 0:  # advance the schedule once per epoch
         ...         scheduler.step()
+        >>> int(scheduler.last_epoch.value)
+        10
 
     See Also
     --------
@@ -1021,14 +1062,14 @@ class MomentumNesterov(OptaxOptimizer):
         >>> # Create model
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.MomentumNesterov(lr=0.01, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Nesterov Momentum with weight decay:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.MomentumNesterov(lr=0.01, momentum=0.9, weight_decay=0.0001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Nesterov Momentum with gradient clipping:
 
@@ -1039,7 +1080,7 @@ class MomentumNesterov(OptaxOptimizer):
         ...     momentum=0.9,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Nesterov Momentum with learning rate scheduling:
 
@@ -1047,8 +1088,14 @@ class MomentumNesterov(OptaxOptimizer):
 
         >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.01, gamma=0.95)
         >>> optimizer = braintools.optim.MomentumNesterov(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
+        >>> # Gradients of a toy loss w.r.t. the registered weights
+        >>> import jax.numpy as jnp
+        >>> x = jnp.ones((4, 10))
+        >>> def loss_fn():
+        ...     return jnp.sum(model(x) ** 2)
+        >>> grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         >>> for epoch in range(100):
         ...     # Training code here
         ...     optimizer.step(grads)
@@ -1103,6 +1150,23 @@ class MomentumNesterov(OptaxOptimizer):
         transforms.append(optax.scale_by_schedule(self._lr_scheduler))
 
         return optax.chain(*transforms)
+
+
+# ``Adam(beta1=..., beta2=...)`` predates the ``betas`` tuple (deprecated in 0.1.0).
+_ADAM_BETA1_DEPRECATION = register_deprecation(
+    'braintools.optim.Adam(beta1=...)',
+    'braintools.optim.Adam(betas=(beta1, beta2))',
+    since='0.1.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+_ADAM_BETA2_DEPRECATION = register_deprecation(
+    'braintools.optim.Adam(beta2=...)',
+    'braintools.optim.Adam(betas=(beta1, beta2))',
+    since='0.1.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
 
 
 class Adam(OptaxOptimizer):
@@ -1168,21 +1232,21 @@ class Adam(OptaxOptimizer):
         >>>
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.Adam(lr=0.001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adam with custom beta values:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Adam(lr=0.001, betas=(0.9, 0.99))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adam with AMSGrad:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Adam(lr=0.001, amsgrad=True)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adam with learning rate scheduler:
 
@@ -1190,8 +1254,14 @@ class Adam(OptaxOptimizer):
 
         >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.001, gamma=0.95)
         >>> optimizer = braintools.optim.Adam(lr=scheduler, betas=(0.9, 0.999))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
+        >>> # Gradients of a toy loss w.r.t. the registered weights
+        >>> import jax.numpy as jnp
+        >>> x = jnp.ones((4, 10))
+        >>> def loss_fn():
+        ...     return jnp.sum(model(x) ** 2)
+        >>> grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         >>> for epoch in range(100):
         ...     # Training code
         ...     optimizer.step(grads)
@@ -1202,7 +1272,7 @@ class Adam(OptaxOptimizer):
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Adam(lr=0.001, grad_clip_norm=1.0)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -1217,8 +1287,8 @@ class Adam(OptaxOptimizer):
         self,
         lr: Union[float, LRScheduler] = 1e-3,
         betas: Tuple[float, float] = (0.9, 0.999),
-        beta1: float = None,
-        beta2: float = None,
+        beta1: Optional[float] = None,
+        beta2: Optional[float] = None,
         eps: float = 1e-8,
         weight_decay: float = 0.0,
         amsgrad: bool = False,
@@ -1226,20 +1296,14 @@ class Adam(OptaxOptimizer):
         grad_clip_value: Optional[float] = None,
     ):
         # Store Adam-specific parameters
-        betas = list(betas)
+        betas_list = list(betas)
         if beta1 is not None:
-            betas[0] = beta1
-            warnings.warn(
-                'The `beta1` parameter is deprecated, please use `betas=(beta1, beta2)` instead.',
-                DeprecationWarning
-            )
+            betas_list[0] = beta1
+            warn_deprecated(_ADAM_BETA1_DEPRECATION)
         if beta2 is not None:
-            betas[1] = beta2
-            warnings.warn(
-                'The `beta2` parameter is deprecated, please use `betas=(beta1, beta2)` instead.',
-                DeprecationWarning
-            )
-        self.betas = tuple(betas)
+            betas_list[1] = beta2
+            warn_deprecated(_ADAM_BETA2_DEPRECATION)
+        self.betas = tuple(betas_list)
         self.eps = eps
         self.amsgrad = amsgrad
 
@@ -1328,7 +1392,7 @@ class AdamW(OptaxOptimizer):
         >>>
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.AdamW(lr=0.001, weight_decay=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     AdamW with scheduler:
 
@@ -1336,7 +1400,7 @@ class AdamW(OptaxOptimizer):
 
         >>> scheduler = braintools.optim.CosineAnnealingLR(base_lr=0.001, T_max=100)
         >>> optimizer = braintools.optim.AdamW(lr=scheduler, weight_decay=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -1447,21 +1511,21 @@ class Adagrad(OptaxOptimizer):
         >>>
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.Adagrad(lr=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adagrad with custom epsilon for stability:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Adagrad(lr=0.01, eps=1e-8)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adagrad with weight decay:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Adagrad(lr=0.01, weight_decay=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -1584,21 +1648,21 @@ class Adadelta(OptaxOptimizer):
         >>>
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.Adadelta()
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adadelta with custom rho:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Adadelta(rho=0.95)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adadelta with explicit learning rate:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Adadelta(lr=0.5, rho=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -1717,28 +1781,28 @@ class RMSprop(OptaxOptimizer):
         >>>
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.RMSprop(lr=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     RMSprop with momentum:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.RMSprop(lr=0.01, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Centered RMSprop:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.RMSprop(lr=0.01, centered=True)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     RMSprop with custom alpha:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.RMSprop(lr=0.01, alpha=0.95)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -1858,14 +1922,14 @@ class Adamax(OptaxOptimizer):
         >>>
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.Adamax(lr=0.002)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adamax with custom betas:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Adamax(lr=0.002, betas=(0.9, 0.99))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -2032,21 +2096,21 @@ class Nadam(OptaxOptimizer):
         >>> # Create model
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.Nadam(lr=0.002)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Nadam with custom betas:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Nadam(lr=0.002, betas=(0.9, 0.99))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Nadam with weight decay:
 
     .. code-block:: python
 
         >>> optimizer = braintools.optim.Nadam(lr=0.002, weight_decay=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Nadam with learning rate scheduler:
 
@@ -2054,8 +2118,14 @@ class Nadam(OptaxOptimizer):
 
         >>> scheduler = braintools.optim.ExponentialLR(gamma=0.95)
         >>> optimizer = braintools.optim.Nadam(lr=scheduler, betas=(0.9, 0.999))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
+        >>> # Gradients of a toy loss w.r.t. the registered weights
+        >>> import jax.numpy as jnp
+        >>> x = jnp.ones((4, 10))
+        >>> def loss_fn():
+        ...     return jnp.sum(model(x) ** 2)
+        >>> grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         >>> for epoch in range(100):
         ...     # Training code
         ...     optimizer.step(grads)
@@ -2070,7 +2140,7 @@ class Nadam(OptaxOptimizer):
         ...     grad_clip_norm=1.0,
         ...     grad_clip_value=0.5
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Comparison with Adam - Nadam often converges faster:
 
@@ -2083,8 +2153,8 @@ class Nadam(OptaxOptimizer):
         >>> adam = braintools.optim.Adam(lr=0.002)
         >>> nadam = braintools.optim.Nadam(lr=0.002)
         >>>
-        >>> adam.register_trainable_weights(model1.states(brainstate.ParamState))
-        >>> nadam.register_trainable_weights(model2.states(brainstate.ParamState))
+        >>> _ = adam.register_trainable_weights(model1.states(brainstate.ParamState))
+        >>> _ = nadam.register_trainable_weights(model2.states(brainstate.ParamState))
         >>> # Nadam typically shows faster initial convergence
 
     See Also
@@ -2211,7 +2281,7 @@ class RAdam(OptaxOptimizer):
         >>>
         >>> # Initialize RAdam optimizer
         >>> optimizer = braintools.optim.RAdam(lr=0.001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Using custom beta values for different convergence behavior:
 
@@ -2219,7 +2289,7 @@ class RAdam(OptaxOptimizer):
 
         >>> # Slower first moment decay for more stable updates
         >>> optimizer = braintools.optim.RAdam(lr=0.001, betas=(0.8, 0.999))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With learning rate scheduler for training dynamics:
 
@@ -2228,7 +2298,7 @@ class RAdam(OptaxOptimizer):
         >>> # Exponential learning rate decay
         >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.001, gamma=0.95)
         >>> optimizer = braintools.optim.RAdam(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Using gradient clipping for stability:
 
@@ -2239,7 +2309,7 @@ class RAdam(OptaxOptimizer):
         ...     lr=0.001,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With weight decay for regularization:
 
@@ -2250,7 +2320,7 @@ class RAdam(OptaxOptimizer):
         ...     lr=0.001,
         ...     weight_decay=0.01
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete training loop example:
 
@@ -2261,7 +2331,7 @@ class RAdam(OptaxOptimizer):
         >>> # Setup
         >>> model = brainstate.nn.Linear(10, 5)
         >>> optimizer = braintools.optim.RAdam(lr=0.001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Training step
         >>> @brainstate.transform.jit
@@ -2408,7 +2478,7 @@ class Lamb(OptaxOptimizer):
         >>>
         >>> # Initialize LAMB optimizer for large batch training
         >>> optimizer = braintools.optim.Lamb(lr=0.002)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Using LAMB with large learning rate for big batch sizes:
 
@@ -2416,21 +2486,27 @@ class Lamb(OptaxOptimizer):
 
         >>> # LAMB can handle larger learning rates due to trust ratio
         >>> optimizer = braintools.optim.Lamb(lr=0.01, betas=(0.9, 0.999))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With learning rate scheduler for warmup and decay:
 
     .. code-block:: python
 
-        >>> # Polynomial decay with warmup (common for BERT training)
-        >>> scheduler = braintools.optim.PolynomialLR(
+        >>> # Linear warmup followed by polynomial decay (common for BERT training)
+        >>> warmup = braintools.optim.LinearLR(
         ...     base_lr=0.002,
-        ...     warmup_steps=1000,
-        ...     total_steps=10000,
+        ...     start_factor=0.01,
+        ...     end_factor=1.0,
+        ...     total_iters=1000
+        ... )
+        >>> decay = braintools.optim.PolynomialLR(
+        ...     base_lr=0.002,
+        ...     total_iters=10000,
         ...     power=1.0
         ... )
+        >>> scheduler = braintools.optim.ChainedScheduler([warmup, decay])
         >>> optimizer = braintools.optim.Lamb(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With weight decay for regularization:
 
@@ -2441,7 +2517,7 @@ class Lamb(OptaxOptimizer):
         ...     lr=0.002,
         ...     weight_decay=0.01
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Using gradient clipping for stability:
 
@@ -2452,19 +2528,21 @@ class Lamb(OptaxOptimizer):
         ...     lr=0.002,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete training example for large batch:
 
     .. code-block:: python
 
+        >>> import jax
         >>> import jax.numpy as jnp
         >>>
+        >>> brainstate.random.seed(0)
         >>> # Setup for large batch training
         >>> model = brainstate.nn.Sequential(
-        ...     brainstate.nn.Linear(784, 256),
+        ...     brainstate.nn.Linear(20, 64),
         ...     brainstate.nn.ReLU(),
-        ...     brainstate.nn.Linear(256, 10)
+        ...     brainstate.nn.Linear(64, 10)
         ... )
         >>>
         >>> # LAMB with settings for large batch
@@ -2473,24 +2551,26 @@ class Lamb(OptaxOptimizer):
         ...     betas=(0.9, 0.999),
         ...     weight_decay=0.01
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> # Simulate large batch training
-        >>> def train_step(batch_x, batch_y):
-        ...     def loss_fn():
-        ...         logits = model(batch_x)
-        ...         return jnp.mean(
-        ...             braintools.metric.softmax_cross_entropy(logits, batch_y)
-        ...         )
-        ...
+        >>> # A toy classification batch
+        >>> x = brainstate.random.randn(256, 20)
+        >>> y = jax.nn.one_hot(brainstate.random.randint(0, 10, (256,)), 10)
+        >>>
+        >>> def loss_fn():
+        ...     logits = model(x)
+        ...     return jnp.mean(braintools.metric.softmax_cross_entropy(logits, y))
+        >>>
+        >>> @brainstate.transform.jit
+        ... def train_step():
         ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
         ...     return loss_fn()
         >>>
-        >>> # Large batch size
-        >>> x = jnp.ones((1024, 784))  # Large batch
-        >>> y = jnp.zeros((1024, 10))
-        >>> # loss = train_step(x, y)
+        >>> # Run 50 training steps as one compiled loop
+        >>> losses = brainstate.transform.for_loop(lambda i: train_step(), jnp.arange(50))
+        >>> bool(losses[-1] < losses[0])
+        True
 
     See Also
     --------
@@ -2631,7 +2711,7 @@ class Lars(OptaxOptimizer):
         >>>
         >>> # Initialize LARS optimizer
         >>> optimizer = braintools.optim.Lars(lr=0.1, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With custom trust coefficient for fine-tuning:
 
@@ -2643,7 +2723,7 @@ class Lars(OptaxOptimizer):
         ...     momentum=0.9,
         ...     trust_coefficient=0.0001
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Using learning rate scheduler:
 
@@ -2655,7 +2735,7 @@ class Lars(OptaxOptimizer):
         ...     T_max=100
         ... )
         >>> optimizer = braintools.optim.Lars(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With weight decay for regularization:
 
@@ -2667,7 +2747,7 @@ class Lars(OptaxOptimizer):
         ...     momentum=0.9,
         ...     weight_decay=5e-4
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Large batch training configuration:
 
@@ -2686,51 +2766,49 @@ class Lars(OptaxOptimizer):
         ...     weight_decay=5e-4,
         ...     trust_coefficient=0.001
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete training example with CNN:
 
     .. code-block:: python
 
+        >>> import jax
         >>> import jax.numpy as jnp
         >>>
-        >>> # Setup CNN model
+        >>> brainstate.random.seed(0)
         >>> model = brainstate.nn.Sequential(
-        ...     brainstate.nn.Conv2d(3, 64, kernel_size=3, padding=1),
+        ...     brainstate.nn.Linear(20, 64),
         ...     brainstate.nn.ReLU(),
-        ...     brainstate.nn.MaxPool2d(2),
-        ...     brainstate.nn.Conv2d(64, 128, kernel_size=3, padding=1),
-        ...     brainstate.nn.ReLU(),
-        ...     brainstate.nn.AdaptiveAvgPool2d((1, 1)),
-        ...     brainstate.nn.Flatten(),
-        ...     brainstate.nn.Linear(128, 10)
+        ...     brainstate.nn.Linear(64, 10)
         ... )
         >>>
-        >>> # LARS for large batch CNN training
+        >>> # LARS for large batch training
         >>> optimizer = braintools.optim.Lars(
-        ...     lr=1.6,  # Large lr for batch size 4096
+        ...     lr=0.1,
         ...     momentum=0.9,
         ...     weight_decay=1e-4,
         ...     trust_coefficient=0.001
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> # Training step
-        >>> def train_step(images, labels):
-        ...     def loss_fn():
-        ...         logits = model(images)
-        ...         return jnp.mean(
-        ...             braintools.metric.softmax_cross_entropy(logits, labels)
-        ...         )
-        ...
+        >>> # A toy classification batch
+        >>> x = brainstate.random.randn(256, 20)
+        >>> y = jax.nn.one_hot(brainstate.random.randint(0, 10, (256,)), 10)
+        >>>
+        >>> def loss_fn():
+        ...     logits = model(x)
+        ...     return jnp.mean(braintools.metric.softmax_cross_entropy(logits, y))
+        >>>
+        >>> @brainstate.transform.jit
+        ... def train_step():
         ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
         ...     return loss_fn()
         >>>
-        >>> # Large batch training
-        >>> x = jnp.ones((256, 3, 32, 32))  # Large batch
-        >>> y = jnp.zeros((256, 10))
-        >>> # loss = train_step(x, y)
+        >>> # Run 50 training steps as one compiled loop
+        >>> losses = brainstate.transform.for_loop(lambda i: train_step(), jnp.arange(50))
+        >>> bool(losses[-1] < losses[0])
+        True
 
     See Also
     --------
@@ -2944,7 +3022,7 @@ class Lookahead(OptaxOptimizer):
         ...     sync_period=5,
         ...     alpha=0.5
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With Adam as base optimizer:
 
@@ -2957,7 +3035,7 @@ class Lookahead(OptaxOptimizer):
         ...     sync_period=6,
         ...     alpha=0.5
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Custom synchronization period:
 
@@ -2970,7 +3048,7 @@ class Lookahead(OptaxOptimizer):
         ...     sync_period=10,  # Synchronize every 10 steps
         ...     alpha=0.5
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Adjusting slow weights step size:
 
@@ -2983,7 +3061,7 @@ class Lookahead(OptaxOptimizer):
         ...     sync_period=5,
         ...     alpha=0.3  # More conservative than default 0.5
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With learning rate scheduler:
 
@@ -2998,19 +3076,20 @@ class Lookahead(OptaxOptimizer):
         ...     sync_period=5,
         ...     alpha=0.5
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete training example:
 
     .. code-block:: python
 
+        >>> import jax
         >>> import jax.numpy as jnp
         >>>
-        >>> # Setup
+        >>> brainstate.random.seed(0)
         >>> model = brainstate.nn.Sequential(
-        ...     brainstate.nn.Linear(784, 128),
+        ...     brainstate.nn.Linear(20, 64),
         ...     brainstate.nn.ReLU(),
-        ...     brainstate.nn.Linear(128, 10)
+        ...     brainstate.nn.Linear(64, 10)
         ... )
         >>>
         >>> # Lookahead with SGD + momentum
@@ -3020,19 +3099,26 @@ class Lookahead(OptaxOptimizer):
         ...     sync_period=5,
         ...     alpha=0.5
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> # Training loop
-        >>> for epoch in range(10):
-        ...     for batch_x, batch_y in data_loader:
-        ...         def loss_fn():
-        ...             logits = model(batch_x)
-        ...             return jnp.mean(
-        ...                 braintools.metric.softmax_cross_entropy(logits, batch_y)
-        ...             )
-        ...
-        ...         grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
-        ...         optimizer.update(grads)
+        >>> # A toy classification batch
+        >>> x = brainstate.random.randn(256, 20)
+        >>> y = jax.nn.one_hot(brainstate.random.randint(0, 10, (256,)), 10)
+        >>>
+        >>> def loss_fn():
+        ...     logits = model(x)
+        ...     return jnp.mean(braintools.metric.softmax_cross_entropy(logits, y))
+        >>>
+        >>> @brainstate.transform.jit
+        ... def train_step():
+        ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
+        ...     optimizer.update(grads)
+        ...     return loss_fn()
+        >>>
+        >>> # Run 50 training steps as one compiled loop
+        >>> losses = brainstate.transform.for_loop(lambda i: train_step(), jnp.arange(50))
+        >>> bool(losses[-1] < losses[0])
+        True
 
     See Also
     --------
@@ -3168,7 +3254,7 @@ class Yogi(OptaxOptimizer):
         >>>
         >>> # Initialize Yogi optimizer
         >>> optimizer = braintools.optim.Yogi(lr=0.001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With custom beta values:
 
@@ -3179,7 +3265,7 @@ class Yogi(OptaxOptimizer):
         ...     lr=0.001,
         ...     betas=(0.9, 0.99)  # Faster second moment decay
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With larger epsilon for increased stability:
 
@@ -3190,7 +3276,7 @@ class Yogi(OptaxOptimizer):
         ...     lr=0.001,
         ...     eps=1e-2  # Even larger epsilon for more stability
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With learning rate scheduler:
 
@@ -3199,7 +3285,7 @@ class Yogi(OptaxOptimizer):
         >>> # Combine with exponential decay
         >>> scheduler = braintools.optim.ExponentialLR(base_lr=0.01, gamma=0.95)
         >>> optimizer = braintools.optim.Yogi(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With weight decay for regularization:
 
@@ -3210,45 +3296,47 @@ class Yogi(OptaxOptimizer):
         ...     lr=0.001,
         ...     weight_decay=0.01
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-    Complete training example for NLP tasks:
+    Complete training example:
 
     .. code-block:: python
 
+        >>> import jax
         >>> import jax.numpy as jnp
         >>>
-        >>> # Setup language model
+        >>> brainstate.random.seed(0)
         >>> model = brainstate.nn.Sequential(
-        ...     brainstate.nn.Embedding(10000, 256),
-        ...     brainstate.nn.LSTM(256, 512),
-        ...     brainstate.nn.Linear(512, 10000)
+        ...     brainstate.nn.Linear(20, 64),
+        ...     brainstate.nn.ReLU(),
+        ...     brainstate.nn.Linear(64, 10)
         ... )
         >>>
-        >>> # Yogi works well for NLP with sparse gradients
         >>> optimizer = braintools.optim.Yogi(
         ...     lr=0.001,
         ...     betas=(0.9, 0.999),
         ...     eps=1e-3
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> # Training step
-        >>> def train_step(tokens, targets):
-        ...     def loss_fn():
-        ...         logits = model(tokens)
-        ...         return jnp.mean(
-        ...             braintools.metric.softmax_cross_entropy(logits, targets)
-        ...         )
-        ...
+        >>> # A toy classification batch
+        >>> x = brainstate.random.randn(256, 20)
+        >>> y = jax.nn.one_hot(brainstate.random.randint(0, 10, (256,)), 10)
+        >>>
+        >>> def loss_fn():
+        ...     logits = model(x)
+        ...     return jnp.mean(braintools.metric.softmax_cross_entropy(logits, y))
+        >>>
+        >>> @brainstate.transform.jit
+        ... def train_step():
         ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
         ...     return loss_fn()
         >>>
-        >>> # Train
-        >>> tokens = jnp.ones((32, 50), dtype=jnp.int32)
-        >>> targets = jnp.zeros((32, 10000))
-        >>> # loss = train_step(tokens, targets)
+        >>> # Run 50 training steps as one compiled loop
+        >>> losses = brainstate.transform.for_loop(lambda i: train_step(), jnp.arange(50))
+        >>> bool(losses[-1] < losses[0])
+        True
 
     See Also
     --------
@@ -3384,6 +3472,17 @@ class LBFGS(OptaxOptimizer):
 
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import braintools
+        >>> import jax.numpy as jnp
+        >>>
+        >>> brainstate.random.seed(0)
+        >>> model = brainstate.nn.Linear(3, 1)
+        >>> x = brainstate.random.randn(16, 3)
+        >>> def loss_fn():
+        ...     return jnp.mean(model(x) ** 2)
+        >>> optimizer = braintools.optim.LBFGS()
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>> grads = brainstate.transform.grad(
         ...     loss_fn, model.states(brainstate.ParamState)
         ... )()
@@ -3399,15 +3498,18 @@ class LBFGS(OptaxOptimizer):
 
         >>> params = {'w': brainstate.ParamState(jnp.array([-1.5, 2.0]))}
         >>> optimizer = braintools.optim.LBFGS(linesearch='zoom')
-        >>> optimizer.register_trainable_weights(params)
+        >>> _ = optimizer.register_trainable_weights(params)
         >>> def objective(values):  # pure function of the parameter values
         ...     w = values['w']
         ...     return (1 - w[0]) ** 2 + 100 * (w[1] - w[0] ** 2) ** 2
-        >>> for _ in range(40):
-        ...     grads = brainstate.transform.grad(
-        ...         lambda: objective({'w': params['w'].value}), grad_states=params)()
-        ...     optimizer.update(grads, value=objective({'w': params['w'].value}),
-        ...                      value_fn=objective)
+        >>> def step(i):
+        ...     grads, value = brainstate.transform.grad(
+        ...         lambda: objective({'w': params['w'].value}),
+        ...         grad_states=params, return_value=True)()
+        ...     optimizer.update(grads, value=value, value_fn=objective)
+        >>> _ = brainstate.transform.for_loop(step, jnp.arange(40))  # 40 compiled iterations
+        >>> print(jnp.round(params['w'].value, 3))  # the Rosenbrock minimum
+        [1. 1.]
 
     References
     ----------
@@ -3438,7 +3540,7 @@ class LBFGS(OptaxOptimizer):
         >>>
         >>> # Initialize L-BFGS optimizer
         >>> optimizer = braintools.optim.LBFGS(lr=1.0)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With custom memory size:
 
@@ -3449,7 +3551,7 @@ class LBFGS(OptaxOptimizer):
         ...     lr=1.0,
         ...     memory_size=20
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With smaller memory for efficiency:
 
@@ -3460,7 +3562,7 @@ class LBFGS(OptaxOptimizer):
         ...     lr=1.0,
         ...     memory_size=5
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Disabling initial Hessian scaling:
 
@@ -3472,19 +3574,20 @@ class LBFGS(OptaxOptimizer):
         ...     memory_size=10,
         ...     scale_init_precond=False
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Fine-tuning example with full-batch training:
 
     .. code-block:: python
 
+        >>> import jax
         >>> import jax.numpy as jnp
         >>>
-        >>> # Setup for fine-tuning
+        >>> brainstate.random.seed(0)
         >>> model = brainstate.nn.Sequential(
-        ...     brainstate.nn.Linear(784, 128),
+        ...     brainstate.nn.Linear(20, 64),
         ...     brainstate.nn.ReLU(),
-        ...     brainstate.nn.Linear(128, 10)
+        ...     brainstate.nn.Linear(64, 10)
         ... )
         >>>
         >>> # L-BFGS for fine-tuning with full batch
@@ -3492,79 +3595,126 @@ class LBFGS(OptaxOptimizer):
         ...     lr=1.0,
         ...     memory_size=10
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> # Full-batch training step
-        >>> def train_step(data_x, data_y):
-        ...     def loss_fn():
-        ...         logits = model(data_x)
-        ...         return jnp.mean(
-        ...             braintools.metric.softmax_cross_entropy(logits, data_y)
-        ...         )
-        ...
-        ...     # Compute gradients on full dataset
+        >>> # Use the entire dataset (not mini-batches)
+        >>> x_full = brainstate.random.randn(256, 20)
+        >>> y_full = jax.nn.one_hot(brainstate.random.randint(0, 10, (256,)), 10)
+        >>>
+        >>> def loss_fn():
+        ...     logits = model(x_full)
+        ...     return jnp.mean(braintools.metric.softmax_cross_entropy(logits, y_full))
+        >>>
+        >>> @brainstate.transform.jit
+        ... def train_step():
         ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
         ...     return loss_fn()
         >>>
-        >>> # Use entire dataset (not mini-batch)
-        >>> x_full = jnp.ones((1000, 784))
-        >>> y_full = jnp.zeros((1000, 10))
-        >>> # loss = train_step(x_full, y_full)
+        >>> # Run 50 full-batch steps as one compiled loop
+        >>> losses = brainstate.transform.for_loop(lambda i: train_step(), jnp.arange(50))
+        >>> bool(losses[-1] < losses[0])
+        True
 
     Convex optimization example:
 
     .. code-block:: python
 
-        >>> # L-BFGS excels at convex problems
-        >>> model = brainstate.nn.Linear(50, 1)  # Linear regression
+        >>> # L-BFGS excels at convex problems: least-squares linear regression
+        >>> brainstate.random.seed(0)
+        >>> x = brainstate.random.randn(200, 50)
+        >>> y = x @ brainstate.random.randn(50)
+        >>> params = {'w': brainstate.ParamState(jnp.zeros(50))}
         >>> optimizer = braintools.optim.LBFGS(
         ...     lr=1.0,
-        ...     memory_size=15
+        ...     memory_size=15,
+        ...     linesearch='zoom'
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(params)
+        >>>
+        >>> def objective(values):
+        ...     return jnp.mean((x @ values['w'] - y) ** 2)
+        >>> def step(i):
+        ...     grads, value = brainstate.transform.grad(
+        ...         lambda: objective({'w': params['w'].value}),
+        ...         grad_states=params, return_value=True)()
+        ...     optimizer.update(grads, value=value, value_fn=objective)
         >>>
         >>> # Typically converges in fewer iterations than first-order methods
-        >>> for epoch in range(100):
-        ...     # Full-batch gradient computation
-        ...     pass  # training code here
+        >>> _ = brainstate.transform.for_loop(step, jnp.arange(30))
+        >>> bool(objective({'w': params['w'].value}) < 1e-6)
+        True
 
 
     **Scientific computing - parameter fitting:**
 
     .. code-block:: python
 
-        >>> # Fitting exponential decay model
+        >>> # Fitting an exponential decay model A * exp(-k t) + C
         >>> def exponential_model(params, t):
         ...     return params['A'] * jnp.exp(-params['k'] * t) + params['C']
         >>>
+        >>> time_points = jnp.linspace(0.0, 5.0, 50)
+        >>> observations = exponential_model({'A': 2.0, 'k': 1.5, 'C': 0.5}, time_points)
         >>> def loss_fn(params):
         ...     predictions = exponential_model(params, time_points)
         ...     return jnp.mean((predictions - observations) ** 2)
+        >>>
+        >>> params = {'A': brainstate.ParamState(jnp.array(1.0)),
+        ...           'k': brainstate.ParamState(jnp.array(1.0)),
+        ...           'C': brainstate.ParamState(jnp.array(0.0))}
         >>>
         >>> # L-BFGS for precise parameter estimation
         >>> optimizer = braintools.optim.LBFGS(
         ...     lr=1.0,
         ...     memory_size=20,  # Higher accuracy for scientific computing
-        ...     scale_init_precond=True
+        ...     scale_init_precond=True,
+        ...     linesearch='zoom'
         ... )
+        >>> _ = optimizer.register_trainable_weights(params)
+        >>> def fit_step(i):
+        ...     grads, value = brainstate.transform.grad(
+        ...         lambda: loss_fn({k: v.value for k, v in params.items()}),
+        ...         grad_states=params, return_value=True)()
+        ...     optimizer.update(grads, value=value, value_fn=loss_fn)
+        >>> _ = brainstate.transform.for_loop(fit_step, jnp.arange(50))
+        >>> print({k: round(float(v.value), 3) for k, v in params.items()})
+        {'A': 2.0, 'k': 1.5, 'C': 0.5}
 
     **Hybrid optimization strategy:**
 
     .. code-block:: python
 
-        >>> # Stage 1: Adam for exploration (stochastic)
-        >>> adam_opt = braintools.optim.Adam(lr=0.001)
-        >>> for epoch in range(50):
-        ...     for batch in dataloader:
-        ...         grads = compute_batch_gradients(batch)
-        ...         adam_opt.update(grads)
+        >>> brainstate.random.seed(0)
+        >>> x = brainstate.random.randn(512, 10)
+        >>> y = x @ brainstate.random.randn(10)
+        >>> params = {'w': brainstate.ParamState(jnp.zeros(10))}
+        >>> def objective(values, xb, yb):
+        ...     return jnp.mean((xb @ values['w'] - yb) ** 2)
         >>>
-        >>> # Stage 2: L-BFGS for refinement (deterministic)
-        >>> lbfgs_opt = braintools.optim.LBFGS(lr=1.0, memory_size=20)
-        >>> for epoch in range(20):
-        ...     grads = compute_full_gradients(full_dataset)
-        ...     lbfgs_opt.update(grads)
+        >>> # Stage 1: Adam for exploration on mini-batches (stochastic)
+        >>> adam_opt = braintools.optim.Adam(lr=0.01)
+        >>> _ = adam_opt.register_trainable_weights(params)
+        >>> def adam_step(batch):
+        ...     xb, yb = batch
+        ...     grads = brainstate.transform.grad(
+        ...         lambda: objective({'w': params['w'].value}, xb, yb), grad_states=params)()
+        ...     adam_opt.update(grads)
+        >>> batches = (x.reshape(8, 64, 10), y.reshape(8, 64))
+        >>> _ = brainstate.transform.for_loop(adam_step, batches)
+        >>>
+        >>> # Stage 2: L-BFGS for refinement on the full dataset (deterministic)
+        >>> lbfgs_opt = braintools.optim.LBFGS(lr=1.0, memory_size=20, linesearch='zoom')
+        >>> _ = lbfgs_opt.register_trainable_weights(params)
+        >>> full_objective = lambda values: objective(values, x, y)
+        >>> def lbfgs_step(i):
+        ...     grads, value = brainstate.transform.grad(
+        ...         lambda: full_objective({'w': params['w'].value}),
+        ...         grad_states=params, return_value=True)()
+        ...     lbfgs_opt.update(grads, value=value, value_fn=full_objective)
+        >>> _ = brainstate.transform.for_loop(lbfgs_step, jnp.arange(20))
+        >>> bool(full_objective({'w': params['w'].value}) < 1e-6)
+        True
 
     **Memory size comparison:**
 
@@ -3816,7 +3966,7 @@ class Rprop(OptaxOptimizer):
         >>>
         >>> # Initialize Rprop optimizer
         >>> optimizer = braintools.optim.Rprop(lr=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With custom eta values for step size adjustment:
 
@@ -3827,7 +3977,7 @@ class Rprop(OptaxOptimizer):
         ...     lr=0.01,
         ...     etas=(0.3, 1.5)  # Faster decrease, faster increase
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With custom step size bounds:
 
@@ -3838,7 +3988,7 @@ class Rprop(OptaxOptimizer):
         ...     lr=0.01,
         ...     step_sizes=(1e-5, 10.0)
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete configuration:
 
@@ -3850,15 +4000,17 @@ class Rprop(OptaxOptimizer):
         ...     etas=(0.5, 1.2),
         ...     step_sizes=(1e-6, 50.0)
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Batch training example:
 
     .. code-block:: python
 
+        >>> import jax
         >>> import jax.numpy as jnp
         >>>
-        >>> # Setup for batch learning
+        >>> brainstate.random.seed(0)
+        >>> # Setup for full-batch learning
         >>> model = brainstate.nn.Sequential(
         ...     brainstate.nn.Linear(100, 50),
         ...     brainstate.nn.Tanh(),
@@ -3870,24 +4022,26 @@ class Rprop(OptaxOptimizer):
         ...     lr=0.01,
         ...     etas=(0.5, 1.2)
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> # Full-batch training step
-        >>> def train_step(batch_x, batch_y):
-        ...     def loss_fn():
-        ...         logits = model(batch_x)
-        ...         return jnp.mean(
-        ...             braintools.metric.softmax_cross_entropy(logits, batch_y)
-        ...         )
-        ...
+        >>> # A toy classification batch
+        >>> x = brainstate.random.randn(500, 100)
+        >>> y = jax.nn.one_hot(brainstate.random.randint(0, 10, (500,)), 10)
+        >>>
+        >>> def loss_fn():
+        ...     logits = model(x)
+        ...     return jnp.mean(braintools.metric.softmax_cross_entropy(logits, y))
+        >>>
+        >>> @brainstate.transform.jit
+        ... def train_step():
         ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
         ...     return loss_fn()
         >>>
-        >>> # Use full batch or large batches
-        >>> x = jnp.ones((500, 100))
-        >>> y = jnp.zeros((500, 10))
-        >>> # loss = train_step(x, y)
+        >>> # Full-batch training: 50 steps as one compiled loop
+        >>> losses = brainstate.transform.for_loop(lambda i: train_step(), jnp.arange(50))
+        >>> bool(losses[-1] < losses[0])
+        True
 
     Classification task example:
 
@@ -3901,7 +4055,7 @@ class Rprop(OptaxOptimizer):
         ... )
         >>>
         >>> optimizer = braintools.optim.Rprop(lr=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
         >>> # Rprop adapts step sizes automatically
         >>> # Works well even with varying gradient scales
@@ -4053,7 +4207,7 @@ class Adafactor(OptaxOptimizer):
         >>>
         >>> # Initialize Adafactor with auto learning rate
         >>> optimizer = braintools.optim.Adafactor()
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With explicit learning rate:
 
@@ -4061,7 +4215,7 @@ class Adafactor(OptaxOptimizer):
 
         >>> # Explicit learning rate
         >>> optimizer = braintools.optim.Adafactor(lr=1e-3)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With momentum for better convergence:
 
@@ -4072,7 +4226,7 @@ class Adafactor(OptaxOptimizer):
         ...     lr=1e-3,
         ...     beta1=0.9
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Non-factored mode for better accuracy:
 
@@ -4083,47 +4237,49 @@ class Adafactor(OptaxOptimizer):
         ...     lr=1e-3,
         ...     factored=False
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
-    For large transformer training:
+    Complete training example:
 
     .. code-block:: python
 
+        >>> import jax
         >>> import jax.numpy as jnp
         >>>
-        >>> # Setup large transformer model
+        >>> brainstate.random.seed(0)
         >>> model = brainstate.nn.Sequential(
-        ...     brainstate.nn.Embedding(50000, 512),  # Large vocabulary
-        ...     brainstate.nn.Linear(512, 512),
+        ...     brainstate.nn.Linear(64, 256),
         ...     brainstate.nn.ReLU(),
-        ...     brainstate.nn.Linear(512, 50000)
+        ...     brainstate.nn.Linear(256, 10)
         ... )
         >>>
-        >>> # Adafactor with factored mode for memory efficiency
+        >>> # Adafactor with factored second moments for memory efficiency
         >>> optimizer = braintools.optim.Adafactor(
-        ...     lr=None,  # Adaptive learning rate
+        ...     lr=0.01,
         ...     beta1=0.9,
         ...     factored=True,
         ...     clip_threshold=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
         >>>
-        >>> # Training step
-        >>> def train_step(tokens, targets):
-        ...     def loss_fn():
-        ...         logits = model(tokens)
-        ...         return jnp.mean(
-        ...             braintools.metric.softmax_cross_entropy(logits, targets)
-        ...         )
-        ...
+        >>> # A toy classification batch
+        >>> x = brainstate.random.randn(256, 64)
+        >>> y = jax.nn.one_hot(brainstate.random.randint(0, 10, (256,)), 10)
+        >>>
+        >>> def loss_fn():
+        ...     logits = model(x)
+        ...     return jnp.mean(braintools.metric.softmax_cross_entropy(logits, y))
+        >>>
+        >>> @brainstate.transform.jit
+        ... def train_step():
         ...     grads = brainstate.transform.grad(loss_fn, model.states(brainstate.ParamState))()
         ...     optimizer.update(grads)
         ...     return loss_fn()
         >>>
-        >>> # Train with large batches
-        >>> tokens = jnp.ones((128, 512), dtype=jnp.int32)
-        >>> targets = jnp.zeros((128, 50000))
-        >>> # loss = train_step(tokens, targets)
+        >>> # Run 50 training steps as one compiled loop
+        >>> losses = brainstate.transform.for_loop(lambda i: train_step(), jnp.arange(50))
+        >>> bool(losses[-1] < losses[0])
+        True
 
     With weight decay and custom parameters:
 
@@ -4139,7 +4295,7 @@ class Adafactor(OptaxOptimizer):
         ...     weight_decay=0.01,
         ...     factored=True
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -4295,7 +4451,7 @@ class AdaBelief(OptaxOptimizer):
         >>>
         >>> # Initialize AdaBelief
         >>> optimizer = braintools.optim.AdaBelief(lr=0.001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Custom betas for different momentum and variance decay:
 
@@ -4308,7 +4464,7 @@ class AdaBelief(OptaxOptimizer):
         >>>
         >>> # Faster momentum decay, slower variance decay
         >>> optimizer = braintools.optim.AdaBelief(lr=0.001, betas=(0.8, 0.999))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With learning rate scheduler for gradual decay:
 
@@ -4322,7 +4478,7 @@ class AdaBelief(OptaxOptimizer):
         >>> # Learning rate decays every 30 epochs
         >>> scheduler = braintools.optim.StepLR(base_lr=0.001, step_size=30, gamma=0.5)
         >>> optimizer = braintools.optim.AdaBelief(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With weight decay for regularization:
 
@@ -4335,7 +4491,7 @@ class AdaBelief(OptaxOptimizer):
         >>>
         >>> # Add L2 regularization
         >>> optimizer = braintools.optim.AdaBelief(lr=0.001, weight_decay=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With gradient clipping for stable training:
 
@@ -4351,7 +4507,7 @@ class AdaBelief(OptaxOptimizer):
         ...     lr=0.001,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete configuration for deep learning:
 
@@ -4374,7 +4530,7 @@ class AdaBelief(OptaxOptimizer):
         ...     weight_decay=0.0001,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -4521,7 +4677,7 @@ class Lion(OptaxOptimizer):
         >>>
         >>> # Initialize Lion with small lr (3-10x smaller than Adam)
         >>> optimizer = braintools.optim.Lion(lr=1e-4)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With larger weight decay (recommended for Lion):
 
@@ -4534,7 +4690,7 @@ class Lion(OptaxOptimizer):
         >>>
         >>> # Lion typically uses larger weight decay than Adam
         >>> optimizer = braintools.optim.Lion(lr=1e-4, weight_decay=0.1)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With custom betas:
 
@@ -4547,7 +4703,7 @@ class Lion(OptaxOptimizer):
         >>>
         >>> # Custom interpolation coefficients
         >>> optimizer = braintools.optim.Lion(lr=1e-4, betas=(0.95, 0.98))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With learning rate scheduler:
 
@@ -4565,7 +4721,7 @@ class Lion(OptaxOptimizer):
         ...     gamma=0.5
         ... )
         >>> optimizer = braintools.optim.Lion(lr=scheduler, weight_decay=0.1)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With gradient clipping for stable training:
 
@@ -4582,7 +4738,7 @@ class Lion(OptaxOptimizer):
         ...     weight_decay=0.1,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete configuration for large model training:
 
@@ -4608,7 +4764,7 @@ class Lion(OptaxOptimizer):
         ...     weight_decay=0.1,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -4763,7 +4919,7 @@ class SM3(OptaxOptimizer):
         >>>
         >>> # Initialize SM3 with default lr=1.0
         >>> optimizer = braintools.optim.SM3(lr=1.0)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With custom learning rate:
 
@@ -4776,7 +4932,7 @@ class SM3(OptaxOptimizer):
         >>>
         >>> # Use smaller learning rate
         >>> optimizer = braintools.optim.SM3(lr=0.1)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With momentum for better convergence:
 
@@ -4789,7 +4945,7 @@ class SM3(OptaxOptimizer):
         >>>
         >>> # Higher momentum for smoother updates
         >>> optimizer = braintools.optim.SM3(lr=1.0, momentum=0.95)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Without momentum (pure adaptive):
 
@@ -4802,7 +4958,7 @@ class SM3(OptaxOptimizer):
         >>>
         >>> # Disable momentum
         >>> optimizer = braintools.optim.SM3(lr=1.0, momentum=0.0)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With learning rate scheduler:
 
@@ -4820,7 +4976,7 @@ class SM3(OptaxOptimizer):
         ...     gamma=0.9
         ... )
         >>> optimizer = braintools.optim.SM3(lr=scheduler, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete configuration for large embedding model:
 
@@ -4846,7 +5002,7 @@ class SM3(OptaxOptimizer):
         ...     eps=1e-8,
         ...     weight_decay=0.0001
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -5006,7 +5162,7 @@ class Novograd(OptaxOptimizer):
         >>>
         >>> # Initialize Novograd
         >>> optimizer = braintools.optim.Novograd(lr=0.001)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With custom betas:
 
@@ -5019,7 +5175,7 @@ class Novograd(OptaxOptimizer):
         >>>
         >>> # Higher beta1 for more momentum
         >>> optimizer = braintools.optim.Novograd(lr=0.001, betas=(0.95, 0.999))
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With weight decay:
 
@@ -5032,7 +5188,7 @@ class Novograd(OptaxOptimizer):
         >>>
         >>> # Add L2 regularization
         >>> optimizer = braintools.optim.Novograd(lr=0.001, weight_decay=0.01)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With learning rate scheduler:
 
@@ -5050,7 +5206,7 @@ class Novograd(OptaxOptimizer):
         ...     gamma=0.5
         ... )
         >>> optimizer = braintools.optim.Novograd(lr=scheduler)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With gradient clipping for stable training:
 
@@ -5066,7 +5222,7 @@ class Novograd(OptaxOptimizer):
         ...     lr=0.001,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete configuration for speech recognition:
 
@@ -5093,7 +5249,7 @@ class Novograd(OptaxOptimizer):
         ...     weight_decay=0.001,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
@@ -5253,7 +5409,7 @@ class Fromage(OptaxOptimizer):
         >>>
         >>> # Initialize Fromage with default lr=1.0 (no tuning needed)
         >>> optimizer = braintools.optim.Fromage(lr=1.0)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With momentum for smoother updates:
 
@@ -5266,7 +5422,7 @@ class Fromage(OptaxOptimizer):
         >>>
         >>> # Enable momentum for better convergence
         >>> optimizer = braintools.optim.Fromage(lr=1.0, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Without momentum (pure adaptive):
 
@@ -5279,7 +5435,7 @@ class Fromage(OptaxOptimizer):
         >>>
         >>> # Pure gradient-based updates
         >>> optimizer = braintools.optim.Fromage(lr=1.0, momentum=0.0)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With global learning rate scaling:
 
@@ -5292,7 +5448,7 @@ class Fromage(OptaxOptimizer):
         >>>
         >>> # Scale automatic step sizes by 0.5
         >>> optimizer = braintools.optim.Fromage(lr=0.5, momentum=0.9)
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     With gradient clipping:
 
@@ -5309,7 +5465,7 @@ class Fromage(OptaxOptimizer):
         ...     momentum=0.9,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     Complete configuration for prototyping:
 
@@ -5327,7 +5483,7 @@ class Fromage(OptaxOptimizer):
         ...     momentum=0.9,
         ...     grad_clip_norm=1.0
         ... )
-        >>> optimizer.register_trainable_weights(model.states(brainstate.ParamState))
+        >>> _ = optimizer.register_trainable_weights(model.states(brainstate.ParamState))
 
     See Also
     --------
