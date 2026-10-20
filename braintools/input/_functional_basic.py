@@ -29,7 +29,6 @@ import brainunit as u
 import numpy as np
 
 from braintools._misc import set_module_as
-from ._deprecation import create_deprecated_function
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -86,6 +85,7 @@ def section(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import section
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple step protocol
@@ -118,6 +118,7 @@ def section(
         ...     return_length=True
         ... )
         >>> print(f"Total duration: {duration}")
+        Total duration: 120 ms
     
     Complex protocol with different phases
 
@@ -206,6 +207,7 @@ def constant(I_and_duration):
         >>> import brainunit as u
         >>> import brainstate
         >>> import numpy as np
+        >>> from braintools.input import constant
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple two-phase protocol
@@ -240,6 +242,7 @@ def constant(I_and_duration):
         ... ]
         >>> current, total_time = constant(phases)
         >>> print(f"Total stimulation time: {total_time}")
+        Total stimulation time: 250 ms
     
     Using arrays for spatial patterns
 
@@ -341,6 +344,7 @@ def step(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import step
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple three-level step function
@@ -492,6 +496,7 @@ def ramp(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import ramp
         >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Simple linear ramp from 0 to 10 pA over 100 ms
@@ -598,11 +603,3 @@ def ramp(
     cc = np.linspace(c_start, c_end, p2 - p1)
     current[p1: p2] = cc
     return u.maybe_decimal(current * c_unit)
-
-
-section_input = create_deprecated_function(section, 'section_input', 'section')
-constant_input = create_deprecated_function(constant, 'constant_input', 'constant')
-step_input = create_deprecated_function(step, 'step_input', 'step')
-ramp_input = create_deprecated_function(ramp, 'ramp_input', 'ramp')
-
-__all__.extend(['section', 'constant', 'step', 'ramp'])

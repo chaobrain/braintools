@@ -37,6 +37,7 @@ from typing import Optional, Callable, Any
 
 import jax.numpy as jnp
 
+from braintools.spike._tuning import gaussian_tuning
 from .context import Context
 from .feature import Feature
 
@@ -152,8 +153,17 @@ def one_hot(
 
     Examples
     --------
-    >>> inputs={'stimulus': one_hot('sample_idx')}
-    >>> inputs={'stimulus': one_hot('sample_idx', num_classes=8)}
+    .. code-block:: python
+
+        >>> from braintools.cogtask import Context, Feature, one_hot
+        >>> ctx = Context()
+        >>> ctx['sample_idx'] = 2
+        >>> encode = one_hot('sample_idx')  # e.g. inputs={'stimulus': encode}
+        >>> encode(ctx, Feature(4, 'stimulus'))
+        Array([0., 0., 1., 0.], dtype=float32)
+        >>>
+        >>> one_hot('sample_idx', num_classes=3, active_value=0.5)(ctx, Feature(3, 'stimulus'))
+        Array([0. , 0. , 0.5], dtype=float32)
     """
 
     def encode(ctx: Context, feature: Feature) -> jnp.ndarray:
@@ -208,8 +218,21 @@ def circular(
 
     Examples
     --------
-    >>> inputs={'motion': circular('direction', 'coherence')}
-    >>> inputs={'stimulus': circular('sample_idx', as_index=True, num_dirs=8)}
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import numpy as np
+        >>> from braintools.cogtask import Context, Feature, circular
+        >>> ctx = Context()
+        >>> ctx.update(direction=jnp.pi / 2, coherence=50.0, sample_idx=1)
+        >>> encode = circular('direction', 'coherence')  # angle in radians
+        >>> np.asarray(encode(ctx, Feature(4, 'motion')), dtype=float).round(3)
+        array([0.5 , 0.75, 0.5 , 0.25])
+        >>>
+        >>> # Discrete direction index 1 of 4, i.e. pi / 2, at full coherence
+        >>> enc = circular('sample_idx', as_index=True)
+        >>> np.asarray(enc(ctx, Feature(4, 'stimulus')), dtype=float).round(3)
+        array([0.5, 1. , 0.5, 0. ])
     """
 
     def encode(ctx: Context, feature: Feature) -> jnp.ndarray:
@@ -256,8 +279,17 @@ def scalar(
 
     Examples
     --------
-    >>> inputs={'intensity': scalar('stimulus_value')}
-    >>> inputs={'intensity': scalar('stimulus_value', scale=0.5, offset=0.25)}
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> from braintools.cogtask import Context, Feature, scalar
+        >>> ctx = Context()
+        >>> ctx['stimulus_value'] = 0.8
+        >>> np.asarray(scalar('stimulus_value')(ctx, Feature(3, 'intensity')), dtype=float).round(3)
+        array([0.8, 0.8, 0.8])
+        >>> enc = scalar('stimulus_value', scale=0.5, offset=0.25)
+        >>> np.asarray(enc(ctx, Feature(3, 'intensity')), dtype=float).round(3)
+        array([0.65, 0.65, 0.65])
     """
 
     def encode(ctx: Context, feature: Feature) -> jnp.ndarray:
@@ -289,7 +321,16 @@ def ctx_value(
 
     Examples
     --------
-    >>> inputs={'fixation': ctx_value('fixation_strength', default=1.0)}
+    .. code-block:: python
+
+        >>> from braintools.cogtask import Context, Feature, ctx_value
+        >>> spec = ctx_value('fixation_strength', default=1.0)
+        >>> ctx = Context()
+        >>> spec(ctx, Feature(1, 'fixation'))  # key missing: default
+        1.0
+        >>> ctx['fixation_strength'] = 0.3
+        >>> spec(ctx, Feature(1, 'fixation'))
+        0.3
     """
 
     def get_value(ctx: Context, feature: Feature) -> Any:
@@ -343,8 +384,20 @@ def von_mises(
 
     Examples
     --------
-    >>> inputs={'motion': von_mises('direction', 'coherence', as_index=False)}
-    >>> inputs={'stimulus': von_mises('sample_idx', num_dirs=8)}
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import numpy as np
+        >>> from braintools.cogtask import Context, Feature, von_mises
+        >>> ctx = Context()
+        >>> ctx.update(sample_idx=2, direction=jnp.pi, coherence=25.0)
+        >>> # Direction index 2 of 4: the third unit responds maximally
+        >>> np.asarray(von_mises('sample_idx')(ctx, Feature(4, 'stimulus')), dtype=float).round(3)
+        array([0.5 , 0.56, 1.  , 0.56])
+        >>> # Angle in radians; lower coherence flattens the tuning curve
+        >>> enc = von_mises('direction', 'coherence', as_index=False)
+        >>> np.asarray(enc(ctx, Feature(4, 'motion')), dtype=float).round(3)
+        array([0.5  , 0.689, 1.   , 0.689])
     """
 
     def encode(ctx: Context, feature: Feature) -> jnp.ndarray:
@@ -406,10 +459,21 @@ def gaussian(
 
     Examples
     --------
-    >>> inputs={'value': gaussian('stimulus_value', sigma=0.15)}
-    >>> # Custom centers
-    >>> centers = np.array([0.2, 0.4, 0.6, 0.8])
-    >>> inputs={'value': gaussian('stimulus_value', centers=centers, sigma=0.1)}
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> from braintools.cogtask import Context, Feature, gaussian
+        >>> ctx = Context()
+        >>> ctx['stimulus_value'] = 0.5
+        >>> # Centres evenly spaced in [0, 1]
+        >>> enc = gaussian('stimulus_value', sigma=0.25)
+        >>> np.asarray(enc(ctx, Feature(5, 'value')), dtype=float).round(3)
+        array([0.135, 0.607, 1.   , 0.607, 0.135])
+        >>> # Custom centres
+        >>> centers = np.array([0.2, 0.4, 0.6, 0.8])
+        >>> enc = gaussian('stimulus_value', centers=centers, sigma=0.1)
+        >>> np.asarray(enc(ctx, Feature(4, 'value')), dtype=float).round(3)
+        array([0.011, 0.607, 0.607, 0.011])
     """
 
     def encode(ctx: Context, feature: Feature) -> jnp.ndarray:
@@ -429,7 +493,7 @@ def gaussian(
                 )
 
         # Gaussian tuning: exp(-0.5 * ((x - mu) / sigma)^2)
-        response = jnp.exp(-0.5 * ((value - center_vals) / sigma) ** 2)
+        response = gaussian_tuning(value, center_vals, sigma)
 
         # Add baseline
         response = response * (1.0 - base_value) + base_value
@@ -464,9 +528,17 @@ def identity(
 
     Examples
     --------
-    >>> # Context contains pre-computed encoding
-    >>> ctx['custom_encoding'] = np.array([0.1, 0.5, 0.8, 0.3])
-    >>> inputs={'stimulus': identity('custom_encoding')}
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> from braintools.cogtask import Context, Feature, identity
+        >>> ctx = Context()
+        >>> # The context holds a pre-computed encoding
+        >>> ctx['custom_encoding'] = np.array([0.1, 0.5, 0.8, 0.3])
+        >>> identity('custom_encoding')(ctx, Feature(4, 'stimulus'))
+        Array([0.1, 0.5, 0.8, 0.3], dtype=float32)
+        >>> identity('missing')(ctx, Feature(2, 'stimulus'))  # absent key: zeros
+        Array([0., 0.], dtype=float32)
     """
 
     def encode(ctx: Context, feature: Feature) -> jnp.ndarray:

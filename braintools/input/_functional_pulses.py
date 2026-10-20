@@ -26,7 +26,6 @@ import brainunit as u
 import numpy as np
 
 from braintools._misc import set_module_as
-from ._deprecation import create_deprecated_function
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -41,8 +40,8 @@ __all__ = [
 @set_module_as('braintools.input')
 def spike(
     sp_times: Sequence,
-    sp_lens: Union[float, Sequence],
-    sp_sizes: Union[float, Sequence],
+    sp_lens: Union[brainstate.typing.ArrayLike, Sequence],
+    sp_sizes: Union[brainstate.typing.ArrayLike, Sequence],
     duration: brainstate.typing.ArrayLike,
 ):
     """Format current input like a series of short-time spikes.
@@ -83,6 +82,7 @@ def spike(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import spike
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple spike train with uniform properties
@@ -209,6 +209,7 @@ def gaussian_pulse(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import gaussian_pulse
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Single Gaussian pulse
@@ -324,6 +325,7 @@ def exponential_decay(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import exponential_decay
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple exponential decay
@@ -455,6 +457,7 @@ def double_exponential(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import double_exponential
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     AMPA-like synaptic current
@@ -606,6 +609,7 @@ def burst(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import burst
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Theta burst stimulation
@@ -713,9 +717,3 @@ def burst(
         currents[start_i:end_i] = burst[:actual_length]
 
     return u.maybe_decimal(currents * c_unit)
-
-
-spike_input = create_deprecated_function(spike, 'spike_input', 'spike')
-burst_input = create_deprecated_function(burst, 'burst_input', 'burst')
-
-__all__.extend(['spike', 'burst'])

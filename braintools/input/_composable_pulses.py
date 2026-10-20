@@ -26,9 +26,9 @@ from typing import Sequence, Optional, Union
 
 import brainstate
 import brainunit as u
+from brainstate.typing import ArrayLike
 
 from ._composable_base import Input
-from ._deprecation import create_deprecated_class
 from ._functional_pulses import (
     spike,
     gaussian_pulse,
@@ -36,8 +36,6 @@ from ._functional_pulses import (
     double_exponential,
     burst
 )
-
-ArrayLike = brainstate.typing.ArrayLike
 
 __all__ = [
     'Spike',
@@ -97,13 +95,19 @@ class Spike(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import Spike
         >>> spikes = Spike(
         ...     sp_times=[10, 20, 30, 200, 300] * u.ms,
         ...     duration=400 * u.ms,
         ...     sp_lens=1 * u.ms,  # All spikes 1ms long
         ...     sp_sizes=0.5 * u.nA  # All spikes 0.5nA amplitude
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = spikes()
+        >>> array.shape
+        (4000,)
     
     Variable spike properties:
     
@@ -178,8 +182,8 @@ class Spike(Input):
     def __init__(self,
                  sp_times: Sequence[ArrayLike],
                  duration: ArrayLike,
-                 sp_lens: Union[float, Sequence[float]] = 1. * u.ms,
-                 sp_sizes: Union[float, Sequence[float]] = 1.):
+                 sp_lens: Union[ArrayLike, Sequence[ArrayLike]] = 1. * u.ms,
+                 sp_sizes: Union[ArrayLike, Sequence[ArrayLike]] = 1.):
         """Initialize spike input.
         
         Parameters
@@ -263,13 +267,19 @@ class GaussianPulse(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import GaussianPulse
         >>> pulse = GaussianPulse(
         ...     amplitude=1.0 * u.nA,
         ...     center=100 * u.ms,
         ...     sigma=20 * u.ms,
         ...     duration=200 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = pulse()
+        >>> array.shape
+        (2000,)
     
     Multiple overlapping pulses:
     
@@ -415,12 +425,18 @@ class ExponentialDecay(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import ExponentialDecay
         >>> decay = ExponentialDecay(
         ...     amplitude=2.0 * u.nA,
         ...     tau=30 * u.ms,
         ...     duration=200 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = decay()
+        >>> array.shape
+        (2000,)
     
     Delayed decay (starts at t=50ms):
     
@@ -578,13 +594,19 @@ class DoubleExponential(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import DoubleExponential
         >>> ampa = DoubleExponential(
         ...     amplitude=1.0 * u.nA,
         ...     tau_rise=0.5 * u.ms,
         ...     tau_decay=5 * u.ms,
         ...     duration=50 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = ampa()
+        >>> array.shape
+        (500,)
     
     NMDA-like synaptic current (slower dynamics):
     
@@ -749,6 +771,9 @@ class Burst(Input):
     
     .. code-block:: python
 
+        >>> import brainstate
+        >>> import brainunit as u
+        >>> from braintools.input import Burst
         >>> bursts = Burst(
         ...     n_bursts=5,
         ...     burst_amp=1.0 * u.nA,
@@ -757,7 +782,10 @@ class Burst(Input):
         ...     inter_burst_interval=100 * u.ms,
         ...     duration=500 * u.ms
         ... )
+        >>> brainstate.environ.set(dt=0.1 * u.ms)
         >>> array = bursts()
+        >>> array.shape
+        (5000,)
 
     Oscillatory bursts (theta-burst stimulation):
     
@@ -868,9 +896,3 @@ class Burst(Input):
             n_bursts=self.n_bursts,
             duration=self.duration
         )
-
-
-SpikeInput = create_deprecated_class(Spike, 'SpikeInput', 'Spike')
-BurstInput = create_deprecated_class(Burst, 'BurstInput', 'Burst')
-
-__all__.extend(['SpikeInput', 'BurstInput'])

@@ -17,6 +17,7 @@
 import math
 
 import brainstate
+import brainunit as u
 import jax.numpy as jnp
 import jax.tree
 import numpy as np
@@ -233,3 +234,49 @@ def test_imex_newton_krylov_large_state():
     with brainstate.environ.context(dt=dt):
         y1 = braintools.quad.imex_euler_step(lambda y, t: jnp.zeros_like(y), lap, y0, 0.0)
     np.testing.assert_allclose(y1, y0 / (1 - dt * lam), atol=1e-5)
+
+
+# ==============================================================================
+# Edge-case / branch / unit-invariance tests. A recurring invariant is *scale
+# invariance*: integrating ``dy/dt = -y / tau`` with units (mV, ms) must give a
+# mantissa identical to the dimensionless version (same RNG seed for SDEs).
+# ==============================================================================
+
+
+# ===========================================================================
+# IMEX: scale invariance + structure
+# ===========================================================================
+def test_imex_euler_unit_scale_invariance():
+    def fe_d(y, t):
+        return -y / 50.0
+
+    def fi_d(y, t):
+        return -y / 10.0
+
+    def fe_u(v, t):
+        return -v / (50.0 * u.ms)
+
+    def fi_u(v, t):
+        return -v / (10.0 * u.ms)
+
+    with brainstate.environ.context(dt=0.1):
+        yd = braintools.quad.imex_euler_step(fe_d, fi_d, -65.0, 0.0, max_iter=10)
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        yu = braintools.quad.imex_euler_step(fe_u, fi_u, -65.0 * u.mV, 0.0 * u.ms, max_iter=10)
+    assert u.get_unit(yu) == u.mV
+    assert np.allclose(u.get_mantissa(yu), float(yd), rtol=1e-6)
+
+
+def test_imex_ars222_and_cnab_with_units_finite():
+    def fe(v, t):
+        return (-65.0 * u.mV) / (20.0 * u.ms)
+
+    def fi(v, t):
+        return -v / (20.0 * u.ms)
+
+    v = -60.0 * u.mV
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        v_ars = braintools.quad.imex_ars222_step(fe, fi, v, 0.0 * u.ms, max_iter=5)
+        v_cnab = braintools.quad.imex_cnab_step(fe, fi, v, v, 0.0 * u.ms, max_iter=5)
+    assert u.get_unit(v_ars) == u.mV and np.isfinite(u.get_mantissa(v_ars))
+    assert u.get_unit(v_cnab) == u.mV and np.isfinite(u.get_mantissa(v_cnab))

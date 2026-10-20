@@ -315,7 +315,7 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
 
     if len(str_keys) != len(xs):
         # Provide detailed error showing which keys collide
-        str_to_keys = {}
+        str_to_keys: Dict[str, List[Any]] = {}
         for k in xs.keys():
             sk = str(k)
             if sk in str_to_keys:
@@ -729,7 +729,7 @@ def _msgpack_serialize(pytree, in_place: bool = False) -> bytes:
     return msgpack.packb(pytree, default=_msgpack_ext_pack, strict_types=True)
 
 
-def _msgpack_restore(encoded_pytree: bytes, max_size: Optional[int] = None):
+def _msgpack_restore(encoded_pytree: Union[bytes, bytearray], max_size: Optional[int] = None):
     """Restore data structure from bytes in msgpack format.
 
     Low-level function that only supports python trees with array leaves,
@@ -1113,6 +1113,7 @@ def msgpack_load(
     file_size = os.path.getsize(filename)
 
     buf_size = PARALLEL_READ_BUF_SIZE
+    checkpoint_contents: Union[bytes, bytearray]
     with open(filename, 'rb') as fp:
         # Only use the parallel path for files large enough to benefit; for small
         # files the extra per-chunk file opens are pure overhead.

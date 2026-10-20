@@ -15,7 +15,7 @@
 
 
 import warnings
-from typing import Callable, Optional, Union, Sequence, Dict, List
+from typing import Any, Callable, Optional, Union, Sequence, Dict, List
 
 import brainunit as u
 import jax
@@ -24,14 +24,21 @@ from brainstate._compatible_import import safe_zip
 
 from ._base import Optimizer
 
-try:
-    import nevergrad as ng
-except (ImportError, ModuleNotFoundError):
-    ng = None
-
 __all__ = [
     'NevergradOptimizer',
 ]
+
+
+def _import_nevergrad():
+    """Import ``nevergrad`` on first use; it is an optional extra."""
+    try:
+        import nevergrad
+    except ImportError as exc:
+        raise ImportError(
+            'NevergradOptimizer requires the optional package `nevergrad`. '
+            'Install it with `pip install braintools[nevergrad]`.'
+        ) from exc
+    return nevergrad
 
 
 def concat_parameters(*parameters):
@@ -154,26 +161,32 @@ class NevergradOptimizer(Optimizer):
     --------
     Optimize two scalars with tuple bounds and a simple quadratic loss:
 
-    >>> import jax.numpy as jnp
-    >>> def batched_loss_fun(x, y):
-    ...     # x, y have shape (n_sample,)
-    ...     return (x**2 + y**2)
-    >>> bounds = [(-5.0, 5.0), (-3.0, 3.0)]
-    >>> opt = NevergradOptimizer(batched_loss_fun, bounds, n_sample=8, method='OnePlusOne')
-    >>> best = opt.minimize(n_iter=5, verbose=False)
-    >>> len(best) == 2
-    True
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> from braintools.optim import NevergradOptimizer
+        >>> def batched_loss_fun(x, y):
+        ...     # x, y have shape (n_sample,)
+        ...     return (x**2 + y**2)
+        >>> bounds = [(-5.0, 5.0), (-3.0, 3.0)]
+        >>> opt = NevergradOptimizer(batched_loss_fun, bounds, n_sample=8,
+        ...                          method='OnePlusOne', seed=0)
+        >>> best = opt.minimize(n_iter=5, verbose=False)
+        >>> len(best) == 2
+        True
 
     Optimize named parameters using dict bounds:
 
-    >>> def batched_loss_fun(**p):
-    ...     # p['a'], p['b'] have shape (n_sample,)
-    ...     return p['a']**2 + (p['b']-1.0)**2
-    >>> bounds = {"a": (-5.0, 5.0), "b": (-3.0, 3.0)}
-    >>> opt = NevergradOptimizer(batched_loss_fun, bounds, n_sample=8, method='DE')
-    >>> best = opt.minimize(n_iter=3, verbose=False)
-    >>> set(best.keys()) == {"a", "b"}
-    True
+    .. code-block:: python
+
+        >>> def batched_loss_fun(**p):
+        ...     # p['a'], p['b'] have shape (n_sample,)
+        ...     return p['a']**2 + (p['b']-1.0)**2
+        >>> bounds = {"a": (-5.0, 5.0), "b": (-3.0, 3.0)}
+        >>> opt = NevergradOptimizer(batched_loss_fun, bounds, n_sample=8, method='DE', seed=0)
+        >>> best = opt.minimize(n_iter=3, verbose=False)
+        >>> set(best.keys()) == {"a", "b"}
+        True
     """
     __module__ = 'braintools.optim'
 
@@ -192,8 +205,7 @@ class NevergradOptimizer(Optimizer):
         method_params: Optional[Dict] = None,
         seed: Optional[int] = None,
     ):
-        if ng is None:
-            raise ImportError("Nevergrad is not installed. Please install it using 'pip install nevergrad'.")
+        ng = _import_nevergrad()
 
         # loss function to evaluate
         assert callable(batched_loss_fun), "'batched_loss_fun' must be a callable function."
@@ -205,13 +217,15 @@ class NevergradOptimizer(Optimizer):
 
         # optimization method
         self.method = method
-        self.optimizer: ng.optimizers.base.ConfiguredOptimizer | ng.optimizers.base.Optimizer
+        # A nevergrad optimizer; nevergrad is imported lazily, so it is untyped here.
+        self.optimizer: Any
 
         # bounds
         if bounds is None:
             raise ValueError("'bounds' must be provided as a dict or a sequence of (min, max) pairs.")
         bounds = bounds
         self.bounds = bounds
+        bound_units: Union[Dict, List]
         if isinstance(self.bounds, dict):
             bound_units = dict()
             parameters = dict()
@@ -237,29 +251,30 @@ class NevergradOptimizer(Optimizer):
                     )
             parametrization = ng.p.Dict(**parameters)
         elif isinstance(self.bounds, (list, tuple)):
-            parameters = list()
-            bound_units = list()
+            param_list: List = []
+            unit_list: List = []
             for i, bound in enumerate(self.bounds):
                 assert len(bound) == 2, f'Each bound must be a tuple of two elements (min, max), got {bound}.'
                 bound = (u.Quantity(bound[0]), u.Quantity(bound[1]))
                 u.fail_for_unit_mismatch(bound[0], bound[1])
                 bound = (bound[0], bound[1].in_unit(bound[0].unit))
-                bound_units.append(bound[0].unit)
+                unit_list.append(bound[0].unit)
                 # treat only true 0-d arrays as scalars; (1,) remains an Array
                 if np.ndim(np.asarray(bound[0].mantissa)) == 0 and np.ndim(np.asarray(bound[1].mantissa)) == 0:
-                    parameters.append(
+                    param_list.append(
                         ng.p.Scalar(lower=float(np.asarray(bound[0].mantissa)),
                                     upper=float(np.asarray(bound[1].mantissa)))
                     )
                 else:
                     assert bound[0].shape == bound[1].shape, (f"Shape of the bounds must be the same, "
                                                               f"got {bound[0].shape} and {bound[1].shape}.")
-                    parameters.append(
+                    param_list.append(
                         ng.p.Array(shape=bound[0].shape,
                                    lower=np.asarray(bound[0].mantissa),
                                    upper=np.asarray(bound[1].mantissa))
                     )
-            parametrization = ng.p.Tuple(*parameters)
+            parametrization = ng.p.Tuple(*param_list)
+            bound_units = unit_list
         else:
             raise ValueError(f"Unknown type of 'bounds': {type(self.bounds)}")
         self.parametrization = parametrization
@@ -273,6 +288,7 @@ class NevergradOptimizer(Optimizer):
         self.seed = seed
 
     def initialize(self):
+        ng = _import_nevergrad()
         # initialize optimizer
         parameters = dict(
             budget=self.budget,
@@ -311,6 +327,7 @@ class NevergradOptimizer(Optimizer):
         self.errors: np.ndarray = None
 
     def _add_unit(self, parameters):
+        ng = _import_nevergrad()
         if isinstance(self.parametrization, ng.p.Tuple):
             parameters = [(param if unit.dim.is_dimensionless else u.Quantity(param, unit))
                           for unit, param in zip(self._bound_units, parameters)]
@@ -325,6 +342,7 @@ class NevergradOptimizer(Optimizer):
         return parameters
 
     def _one_trial(self, choice_best: bool = False):
+        ng = _import_nevergrad()
         # draw parameters
         candidates = [self.optimizer.ask() for _ in range(self.n_sample)]
         parameters = [c.value for c in candidates]

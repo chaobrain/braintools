@@ -15,7 +15,6 @@
 
 import os
 import tempfile
-import warnings
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -24,7 +23,11 @@ from scipy.io import loadmat, savemat
 try:  # SciPy >= 1.8 exposes ``mat_struct`` from the public namespace.
     from scipy.io.matlab import mat_struct
 except ImportError:  # pragma: no cover - fallback for very old SciPy releases
-    from scipy.io.matlab.mio5_params import mat_struct
+    # Old SciPy only has the private module; its stub type differs from the
+    # public one, which is what mypy checks against.
+    from scipy.io.matlab.mio5_params import mat_struct  # type: ignore[assignment]
+
+from braintools._deprecation import register_deprecation, warn_deprecated
 
 __all__ = [
     'load_matfile',
@@ -35,6 +38,14 @@ __all__ = [
 _HDF5_MAGIC = b'\x89HDF\r\n\x1a\n'
 
 PathLike = Union[str, os.PathLike]
+
+_HEADER_INFO_DEPRECATION = register_deprecation(
+    'braintools.file.load_matfile(header_info=...)',
+    'braintools.file.load_matfile(include_header=not header_info)',
+    since='0.2.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
 
 
 def _is_hdf5(filename: PathLike) -> bool:
@@ -90,10 +101,10 @@ def load_matfile(
     verbose : bool, optional
         If True, print loading information. Defaults to False.
     header_info : bool, optional
-        .. deprecated::
-            Use ``include_header`` instead. Note that ``header_info`` had the
-            *inverse* meaning of its name: the old ``header_info=True``
-            corresponds to ``include_header=False``.
+        .. deprecated:: 0.2.0
+            Will be removed in 1.0.0; use ``include_header`` instead. Note
+            that ``header_info`` had the *inverse* meaning of its name: the
+            old ``header_info=True`` corresponds to ``include_header=False``.
     **kwargs
         Additional keyword arguments passed to scipy.io.loadmat.
 
@@ -121,23 +132,31 @@ def load_matfile(
 
     Examples
     --------
-    >>> data = load_matfile('experiment_data.mat')
-    >>> print(data.keys())
-    dict_keys(['trial_data', 'timestamps', 'spike_times'])
+    .. code-block:: python
+
+        >>> import os
+        >>> import tempfile
+        >>> import numpy as np
+        >>> from braintools.file import load_matfile, save_matfile
+        >>> path = os.path.join(tempfile.mkdtemp(), 'data.mat')
+        >>> save_matfile(path, {'spike_times': np.array([0.1, 0.5]), 'label': 'trial-1'})
+        >>> data = load_matfile(path)
+        >>> sorted(data.keys())
+        ['label', 'spike_times']
 
     Include the MATLAB metadata headers:
 
-    >>> data = load_matfile('experiment_data.mat', include_header=True)
+    .. code-block:: python
+
+        >>> data = load_matfile(path, include_header=True)
+        >>> '__header__' in data
+        True
     """
     # Backward-compatible handling of the deprecated, inverted ``header_info`` flag.
     if header_info is not None:
-        warnings.warn(
-            "`header_info` is deprecated and its sense was the inverse of its name; "
-            "use `include_header` instead (the old `header_info=True` corresponds to "
-            "`include_header=False`).",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        # The old flag's sense was the inverse of its name: the registered
+        # replacement spells out ``include_header=not header_info``.
+        warn_deprecated(_HEADER_INFO_DEPRECATION)
         include_header = not header_info
 
     # Input validation
@@ -186,7 +205,7 @@ def load_matfile(
 
         # MATLAB structs → Python dictionaries
         if isinstance(element, mat_struct):
-            return {fn: parse_mat(getattr(element, fn)) for fn in element._fieldnames}
+            return {fn: parse_mat(getattr(element, fn)) for fn in getattr(element, '_fieldnames')}
 
         # Regular numeric arrays, scalars, or other types → return as-is
         return element
@@ -251,8 +270,16 @@ def save_matfile(
 
     Examples
     --------
-    >>> import numpy as np
-    >>> save_matfile('out.mat', {'x': np.arange(3), 'label': 'trial-1'})
+    .. code-block:: python
+
+        >>> import os
+        >>> import tempfile
+        >>> import numpy as np
+        >>> from braintools.file import save_matfile
+        >>> path = os.path.join(tempfile.mkdtemp(), 'out.mat')
+        >>> save_matfile(path, {'x': np.arange(3), 'label': 'trial-1'})
+        >>> os.path.exists(path)
+        True
     """
     if not isinstance(filename, (str, os.PathLike)):
         raise TypeError(

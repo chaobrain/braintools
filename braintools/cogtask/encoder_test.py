@@ -174,6 +174,38 @@ def test_gaussian_baseline_floor():
     np.testing.assert_allclose(out, np.full(5, 0.3), atol=1e-5)
 
 
+def _gaussian_pre_0_4_reference(value, center_vals, sigma, base_value):
+    """Frozen closed form of ``gaussian`` before the shared tuning refactor."""
+    response = jnp.exp(-0.5 * ((value - center_vals) / sigma) ** 2)
+    return response * (1.0 - base_value) + base_value
+
+
+@pytest.mark.parametrize('value', [0.0, 0.3, 0.5, 1, -0.7, 2.5, jnp.float32(0.41), jnp.array(0.66)])
+@pytest.mark.parametrize('sigma, base_value', [(0.1, 0.0), (0.25, 0.2), (1, 0.0)])
+def test_gaussian_matches_pre_refactor_output_default_centers(value, sigma, base_value):
+    out = gaussian('v', sigma=sigma, base_value=base_value)(_ctx(v=value), Feature(6, 'x'))
+    expected = _gaussian_pre_0_4_reference(value, jnp.linspace(0, 1, 6), sigma, base_value)
+    assert out.dtype == expected.dtype
+    np.testing.assert_array_equal(np.asarray(out), np.asarray(expected))
+
+
+def test_gaussian_matches_pre_refactor_output_custom_centers():
+    centers = np.array([0.2, 0.4, 0.6, 0.8])
+    for value in [0.0, 0.33, 0.8, 5.0]:
+        out = gaussian('v', centers=centers, sigma=0.15)(_ctx(v=value), Feature(4, 'x'))
+        expected = _gaussian_pre_0_4_reference(value, jnp.asarray(centers), 0.15, 0.0)
+        np.testing.assert_array_equal(np.asarray(out), np.asarray(expected))
+
+
+def test_gaussian_matches_pre_refactor_output_under_jit():
+    import jax
+    enc = gaussian('v', sigma=0.2, base_value=0.1)
+    feat = Feature(8, 'x')
+    out = jax.jit(lambda v: enc(_ctx(v=v), feat))(jnp.asarray(0.37))
+    expected = _gaussian_pre_0_4_reference(jnp.asarray(0.37), jnp.linspace(0, 1, 8), 0.2, 0.1)
+    np.testing.assert_allclose(np.asarray(out), np.asarray(expected), rtol=1e-6, atol=0)
+
+
 # ---------------------------------------------------------------------------
 # identity
 # ---------------------------------------------------------------------------

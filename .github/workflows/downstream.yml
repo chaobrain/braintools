@@ -1,0 +1,64 @@
+name: Downstream
+
+# Run the test suites of packages that depend on braintools against the
+# braintools in this checkout, to catch breaking changes before release.
+#
+# braintools deprecation warnings (BraintoolsDeprecationWarning, a
+# DeprecationWarning subclass) are EXPECTED here: downstream packages still use
+# names that braintools has moved and deprecated. They are reported in the
+# pytest warnings summary and must not be turned into errors. Only real test
+# failures fail this workflow.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'  # weekly, Monday 03:00 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  downstream:
+    name: ${{ matrix.package }} tests
+    runs-on: ubuntu-latest
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [brainpy, brainmass, brainpy_state]
+    env:
+      JAX_PLATFORMS: cpu
+      XLA_PYTHON_CLIENT_PREALLOCATE: 'false'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install ${{ matrix.package }} and braintools from this checkout
+        run: |
+          python -m pip install --upgrade pip
+          # Install the downstream package (this pulls braintools from PyPI),
+          # then replace braintools with the checkout and resolve its deps.
+          python -m pip install "${{ matrix.package }}" pytest
+          python -m pip install --force-reinstall --no-deps .
+          python -m pip install .
+          python -m pip check || true
+          python -c "import braintools; print('braintools', braintools.__version__, braintools.__file__)"
+          python -c "import ${{ matrix.package }} as m; print(m.__name__, getattr(m, '__version__', '?'))"
+
+      - name: Run ${{ matrix.package }} test suite
+        # Run from an empty directory so braintools' own pytest configuration
+        # (pyproject.toml, which turns BraintoolsDeprecationWarning into an
+        # error) is not picked up.
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m pytest --pyargs "${{ matrix.package }}" -q --maxfail=20 \
+            -p no:cacheprovider -o python_files="*_test.py test_*.py"

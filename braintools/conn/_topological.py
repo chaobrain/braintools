@@ -14,13 +14,14 @@
 # ==============================================================================
 
 import numbers
-from typing import Optional, Dict, Sequence
+from typing import Optional, Dict, Sequence, List, Tuple, Union
 
 import brainunit as u
 import numpy as np
 
 from braintools.init._init_base import param, Initializer
 from ._base import PointConnectivity, ConnectionResult
+from ._sampling import bernoulli_pairs, randint, sample_rows_without_replacement
 
 __all__ = [
     'SmallWorld',
@@ -69,6 +70,148 @@ def _combine_block_params(blocks):
     return u.maybe_decimal(combined * unit)
 
 
+def _check_prob(value, name: str) -> float:
+    """Validate a connection probability in ``[0, 1]``."""
+    value = float(value)
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f'{name} must be in [0, 1], got {value}.')
+    return value
+
+
+def _block_bernoulli(
+    rng: np.random.RandomState,
+    blocks: Sequence[Tuple[int, int, int, int, float]],
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Sample independent Bernoulli connections block by block.
+
+    Each block is ``(pre_start, pre_stop, post_start, post_stop, p)`` in a
+    square (recurrent) index space; pairs ``(i, i)`` are never drawn. Every
+    block draws its edge count from a binomial and then that many distinct
+    pairs (:func:`~braintools.conn._sampling.bernoulli_pairs`), so nothing of
+    size ``N_pre * N_post`` is built. The result is sorted by ``(pre, post)``.
+    """
+    pre_parts: List[np.ndarray] = []
+    post_parts: List[np.ndarray] = []
+    for pre_start, pre_stop, post_start, post_stop, p in blocks:
+        n_pre, n_post = pre_stop - pre_start, post_stop - post_start
+        if n_pre <= 0 or n_post <= 0 or p <= 0:
+            continue
+        diagonal = pre_start == post_start and pre_stop == post_stop
+        pre, post = bernoulli_pairs(rng, n_pre, n_post, p, allow_self_connections=not diagonal)
+        pre_parts.append(pre + pre_start)
+        post_parts.append(post + post_start)
+    return _sorted_pairs(pre_parts, post_parts)
+
+
+def _sorted_pairs(pre_parts, post_parts) -> Tuple[np.ndarray, np.ndarray]:
+    """Concatenate edge lists and sort them by ``(pre, post)``."""
+    if not pre_parts:
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
+    pre = np.concatenate(pre_parts).astype(np.int64, copy=False)
+    post = np.concatenate(post_parts).astype(np.int64, copy=False)
+    order = np.lexsort((post, pre))
+    return pre[order], post[order]
+
+
+def _rewire_targets(rng, n: int, sources: np.ndarray, targets: np.ndarray, rewire: np.ndarray) -> np.ndarray:
+    """Give the rewired edges new targets, vectorised over all edges.
+
+    For every source, the rewired edges receive distinct targets drawn
+    uniformly from the nodes that are neither the source itself nor one of its
+    kept (not rewired) targets. Candidates are drawn for all pending edges at
+    once; a candidate equal to the source, to a kept target, or to a target
+    already taken by another rewired edge of the same source is redrawn.
+    """
+    targets = np.array(targets, dtype=np.int64)
+    idx = np.nonzero(rewire)[0]
+    if idx.size == 0:
+        return targets
+    src: np.ndarray = sources[idx].astype(np.int64)
+    kept = ~np.asarray(rewire, dtype=bool)
+    kept_codes = np.sort(sources[kept].astype(np.int64) * n + targets[kept])
+    new_t: np.ndarray = np.empty(idx.size, dtype=np.int64)
+    pending = np.arange(idx.size)
+    while pending.size:
+        new_t[pending] = randint(rng, n, pending.size)
+        codes = src * n + new_t
+        is_pending: np.ndarray = np.zeros(idx.size, dtype=bool)
+        is_pending[pending] = True
+        # Among equal codes, an already accepted edge keeps its target.
+        order = np.lexsort((is_pending, codes))
+        dup: np.ndarray = np.zeros(idx.size, dtype=bool)
+        dup[order[1:]] = codes[order[1:]] == codes[order[:-1]]
+        bad = is_pending & ((new_t == src) | dup | np.isin(codes, kept_codes))
+        pending = np.nonzero(bad)[0]
+    targets[idx] = new_t
+    return targets
+
+
+def _preferential_attachment(rng, n: int, m: int, m0: int) -> np.ndarray:
+    """Barabási–Albert target selection with the repeated-nodes list.
+
+    Returns an ``(n - m0, m)`` array: row ``v - m0`` holds the ``m`` distinct
+    existing nodes that node ``v`` attaches to. Each target is drawn uniformly
+    from the repeated-nodes list (probability proportional to the attachment
+    weight) and repeats are redrawn, which is successive sampling without
+    replacement proportional to the weights. The loop over new nodes does
+    ``O(m)`` work each, so the total cost is ``O(n * m)``.
+    """
+    targets: np.ndarray = np.empty((max(n - m0, 0), m), dtype=np.int64)
+    repeated: List[int] = np.repeat(np.arange(m0), 2 * (m0 - 1)).tolist()
+    block = 4096
+    uniforms = rng.random(block).tolist()
+    pos = 0
+    for row, node in enumerate(range(m0, n)):
+        length = len(repeated)
+        chosen: List[int] = []
+        seen = set()
+        while len(chosen) < m:
+            if pos == block:
+                uniforms = rng.random(block).tolist()
+                pos = 0
+            candidate = repeated[int(uniforms[pos] * length)]
+            pos += 1
+            if candidate not in seen:
+                seen.add(candidate)
+                chosen.append(candidate)
+        targets[row] = chosen
+        repeated.extend(chosen)
+        repeated.extend([node] * m)
+    return targets
+
+
+def _group_sizes(n: int, n_groups: int, ratios, label: str) -> List[int]:
+    """Split ``n`` neurons into ``n_groups`` consecutive groups.
+
+    ``ratios`` (length ``n_groups - 1``) gives fixed sizes (integers) or
+    proportions (floats) of the first groups, the last group taking the rest;
+    ``None`` splits evenly (the first ``n % n_groups`` groups get one extra).
+    """
+    if ratios is None:
+        base_size, remainder = divmod(n, n_groups)
+        return [base_size + (1 if i < remainder else 0) for i in range(n_groups)]
+    sizes = []
+    remaining = n
+    for ratio in ratios:
+        # Integral values (incl. numpy ints, but not bool) are fixed sizes;
+        # everything else is treated as a proportion of the total size.
+        if isinstance(ratio, numbers.Integral) and not isinstance(ratio, bool):
+            size = int(ratio)
+        else:
+            size = round(ratio * n)
+        if size < 0:
+            raise ValueError(f"{label} size cannot be negative: {size}")
+        if size > remaining:
+            raise ValueError(
+                f"{label} size {size} exceeds remaining neurons {remaining}. "
+                f"Check your {label.lower()}_ratios configuration."
+            )
+        sizes.append(size)
+        remaining -= size
+    sizes.append(remaining)
+    return sizes
+
+
 class SmallWorld(PointConnectivity):
     """Watts-Strogatz small-world network topology.
 
@@ -111,6 +254,18 @@ class SmallWorld(PointConnectivity):
     - Self-connections are avoided during rewiring; duplicate edges are also rejected
     - The resulting network maintains exactly n*k directed edges (rewiring preserves the
       edge count), where n is the network size. Edges are directed (a→b does not imply b→a).
+    - Based on the Watts-Strogatz model [1]_.
+    - Generation runs on the host with NumPy and cannot be traced by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Rewiring is vectorised. The edges to rewire are chosen with the
+       same draw as in 0.6, but their new targets are drawn in bulk:
+       the rewired edges of a source get distinct targets, uniform over
+       the nodes that are neither the source nor one of its kept targets
+       (self-connections and duplicates are redrawn). For ``p > 0`` the
+       edges for a given ``seed`` therefore differ from 0.6. ``p = 0``
+       gives the same ring lattice as before.
 
     References
     ----------
@@ -125,8 +280,10 @@ class SmallWorld(PointConnectivity):
 
         >>> import brainunit as u
         >>> from braintools.conn import SmallWorld
-        >>> sw = SmallWorld(k=6, p=0.3, weight=0.8 * u.nS)
+        >>> sw = SmallWorld(k=6, p=0.3, weight=0.8 * u.nS, seed=0)
         >>> result = sw(pre_size=1000, post_size=1000)
+        >>> result.n_connections
+        6000
 
     Create a small-world network with higher rewiring probability:
 
@@ -159,10 +316,15 @@ class SmallWorld(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate small-world network connections."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -183,29 +345,17 @@ class SmallWorld(PointConnectivity):
 
         # Vectorized generation of regular ring lattice
         k_half = self.k // 2
-        sources = np.repeat(np.arange(n), k_half * 2)
+        sources: np.ndarray = np.repeat(np.arange(n), k_half * 2)
 
         # Create offsets for forward and backward connections
         offsets = np.tile(np.concatenate([np.arange(1, k_half + 1), -np.arange(1, k_half + 1)]), n)
         targets = (sources + offsets) % n
 
-        # Track existing edges per source so rewiring never creates self-loops or
-        # duplicate edges (preserves the exact n*k edge count).
-        existing = [set() for _ in range(n)]
-        for s, t in zip(sources, targets):
-            existing[s].add(int(t))
-
-        # Vectorized rewiring decision; resolve target conflicts per edge.
+        # Rewiring: each edge is rewired with probability p; the rewired edges of a
+        # source get distinct new targets that are neither the source nor one of
+        # its kept targets (no self-loops or duplicates, exactly n*k edges).
         rewire_mask = self.rng.random(len(sources)) < self.p
-        for idx in np.nonzero(rewire_mask)[0]:
-            s = int(sources[idx])
-            old_t = int(targets[idx])
-            existing[s].discard(old_t)
-            new_t = self.rng.randint(0, n)
-            while new_t == s or new_t in existing[s]:
-                new_t = self.rng.randint(0, n)
-            targets[idx] = new_t
-            existing[s].add(new_t)
+        targets = _rewire_targets(self.rng, n, sources, targets, rewire_mask)
 
         pre_indices = sources
         post_indices = targets
@@ -219,8 +369,8 @@ class SmallWorld(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -229,8 +379,8 @@ class SmallWorld(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -241,8 +391,8 @@ class SmallWorld(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'small_world',
                 'k': self.k,
@@ -289,8 +439,18 @@ class ScaleFree(PointConnectivity):
     - The algorithm starts with a complete graph of max(m, 2) nodes
     - Connections are bidirectional (undirected network)
     - The resulting degree distribution follows approximately P(k) ~ k^(-3)
-    - Average degree increases logarithmically with network size
+    - The mean total degree is close to 2 * m for large networks
     - The algorithm complexity is O(n*m) where n is the network size
+    - Based on the Barabási-Albert model [1]_; see [2]_ for a review.
+    - Generation runs on the host with NumPy and cannot be traced by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Attachment targets are drawn from a list of edge endpoints, in
+       which every node appears once per incident edge, instead of by
+       normalising the full degree vector at each step. The attachment
+       rule is unchanged, the cost is O(n * m), and the edges for a
+       given ``seed`` differ from 0.6.
 
     References
     ----------
@@ -307,8 +467,10 @@ class ScaleFree(PointConnectivity):
 
         >>> import brainunit as u
         >>> from braintools.conn import ScaleFree
-        >>> sf = ScaleFree(m=3, weight=1.0 * u.nS)
+        >>> sf = ScaleFree(m=3, weight=1.0 * u.nS, seed=0)
         >>> result = sf(pre_size=1000, post_size=1000)
+        >>> result.n_connections
+        5988
 
     Create a denser scale-free network with more attachments:
 
@@ -322,7 +484,7 @@ class ScaleFree(PointConnectivity):
     .. code-block:: python
 
         >>> from braintools.init import Uniform
-        >>> sf = ScaleFree(m=4, weight=Uniform(min=0.5, max=2.0))
+        >>> sf = ScaleFree(m=4, weight=Uniform(low=0.5, high=2.0))
         >>> result = sf(pre_size=1000, post_size=1000)
     """
     __module__ = 'braintools.conn'
@@ -339,10 +501,15 @@ class ScaleFree(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate scale-free network using preferential attachment."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -359,38 +526,23 @@ class ScaleFree(PointConnectivity):
         if self.m >= n:
             raise ValueError(f"m ({self.m}) must be less than the network size ({n})")
 
-        # Start with a small complete graph
+        # Start with a small complete graph; each pair is stored in both directions.
         m0 = max(self.m, 2)
-        pre_indices = []
-        post_indices = []
+        init_i, init_j = np.triu_indices(m0, 1)
+        init_pre = np.stack([init_i, init_j], axis=1).reshape(-1)
+        init_post = np.stack([init_j, init_i], axis=1).reshape(-1)
 
-        # Initial complete graph
-        for i in range(m0):
-            for j in range(i + 1, m0):
-                pre_indices.extend([i, j])
-                post_indices.extend([j, i])
-
-        # Track degree for preferential attachment
-        degree = np.zeros(n, dtype=np.int64)
-        degree[:m0] = 2 * (m0 - 1)
-
-        # Add remaining nodes with preferential attachment
-        for new_node in range(m0, n):
-            # Probability proportional to degree
-            prob = degree[:new_node] / np.sum(degree[:new_node])
-
-            # Select m targets without replacement
-            targets = self.rng.choice(new_node, size=min(self.m, new_node), replace=False, p=prob)
-
-            # Add bidirectional connections
-            for target in targets:
-                pre_indices.extend([new_node, target])
-                post_indices.extend([target, new_node])
-                degree[new_node] += 1
-                degree[target] += 1
-
-        pre_indices = np.array(pre_indices, dtype=np.int64)
-        post_indices = np.array(post_indices, dtype=np.int64)
+        # Preferential attachment with the repeated-nodes list: every node appears
+        # once per unit of attachment weight (the initial nodes 2 * (m0 - 1) times,
+        # later nodes once per edge), so a uniform draw from the list picks a node
+        # with probability proportional to its weight.
+        targets = _preferential_attachment(self.rng, n, self.m, m0)
+        new_nodes: np.ndarray = np.repeat(np.arange(m0, n, dtype=np.int64), self.m)
+        flat_targets = targets.reshape(-1)
+        pre_indices = np.concatenate([init_pre, np.stack([new_nodes, flat_targets], axis=1).reshape(-1)])
+        post_indices = np.concatenate([init_post, np.stack([flat_targets, new_nodes], axis=1).reshape(-1)])
+        pre_indices = pre_indices.astype(np.int64)
+        post_indices = post_indices.astype(np.int64)
         n_connections = len(pre_indices)
 
         weights = param(
@@ -400,8 +552,8 @@ class ScaleFree(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -410,8 +562,8 @@ class ScaleFree(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -421,8 +573,8 @@ class ScaleFree(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'scale_free',
                 'm': self.m,
@@ -469,6 +621,13 @@ class Regular(PointConnectivity):
     - Self-connections are automatically excluded
     - The total number of connections is exactly n * degree, where n is the network size
     - Targets are selected randomly without replacement for each source neuron
+    - Generation runs on the host with NumPy and cannot be traced by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       The targets of all sources are sampled in one vectorised call, so
+       the edges for a given ``seed`` differ from 0.6 (same
+       distribution). Edges are sorted by pre, then post index.
 
     Examples
     --------
@@ -478,8 +637,13 @@ class Regular(PointConnectivity):
 
         >>> import brainunit as u
         >>> from braintools.conn import Regular
-        >>> reg = Regular(degree=10, weight=1.0 * u.nS)
+        >>> import numpy as np
+        >>> reg = Regular(degree=10, weight=1.0 * u.nS, seed=0)
         >>> result = reg(pre_size=1000, post_size=1000)
+        >>> result.n_connections
+        10000
+        >>> bool(np.all(np.bincount(result.pre_indices) == 10))
+        True
 
     Create a regular network with delays:
 
@@ -510,10 +674,15 @@ class Regular(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate regular network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -523,15 +692,13 @@ class Regular(PointConnectivity):
         if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Regular networks require pre_size == post_size")
 
-        # Each neuron connects to 'degree' random targets
-        pre_indices = np.repeat(np.arange(n), self.degree)
-        post_indices = np.zeros(n * self.degree, dtype=np.int64)
-
-        for i in range(n):
-            # Select random targets excluding self
-            targets = self.rng.choice(n - 1, size=self.degree, replace=False)
-            targets = np.where(targets >= i, targets + 1, targets)  # Adjust for excluded self
-            post_indices[i * self.degree:(i + 1) * self.degree] = targets
+        # Each neuron connects to 'degree' distinct random targets, self excluded,
+        # sampled for all rows at once (each row is sorted).
+        degree = int(self.degree)
+        post_indices = sample_rows_without_replacement(
+            self.rng, n, n, degree, exclude=np.arange(n)
+        ).reshape(-1)
+        pre_indices: np.ndarray = np.repeat(np.arange(n, dtype=np.int64), degree)
 
         n_connections = len(pre_indices)
 
@@ -542,8 +709,8 @@ class Regular(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -552,8 +719,8 @@ class Regular(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -564,8 +731,8 @@ class Regular(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'regular',
                 'degree': self.degree
@@ -625,6 +792,18 @@ class ModularRandom(PointConnectivity):
     - For module-specific connectivity patterns, use ModularGeneral instead
     - Expected number of connections: n² * ((intra_prob + (n_modules-1)*inter_prob) / n_modules)
     - Modularity strength can be quantified by the Q-statistic (Newman, 2006)
+    - See [1]_ and [2]_ for modular structure in networks and brains.
+    - Generation runs on the host with NumPy and cannot be traced by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Each block of neuron pairs is sampled by drawing a binomial edge
+       count and then that many distinct pairs, without a dense
+       ``pre_size x post_size`` matrix, so time and memory grow with the
+       number of edges. The edge set for a given ``seed`` differs from 0.6
+       (same distribution); edges are sorted by pre, then post index.
+       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.6
+       treated them as 0 or 1).
 
     References
     ----------
@@ -645,8 +824,10 @@ class ModularRandom(PointConnectivity):
 
         >>> import brainunit as u
         >>> from braintools.conn import ModularRandom
-        >>> mod = ModularRandom(n_modules=5, intra_prob=0.3, inter_prob=0.01)
+        >>> mod = ModularRandom(n_modules=5, intra_prob=0.3, inter_prob=0.01, seed=0)
         >>> result = mod(pre_size=1000, post_size=1000)
+        >>> result.n_connections
+        67881
 
     Create a strongly modular network with sparse inter-module connections:
 
@@ -699,10 +880,15 @@ class ModularRandom(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate modular network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -717,28 +903,33 @@ class ModularRandom(PointConnectivity):
                 f"n_modules ({self.n_modules}) must not exceed the network size ({n})"
             )
 
+        intra_prob = _check_prob(self.intra_prob, 'intra_prob')
+        inter_prob = _check_prob(self.inter_prob, 'inter_prob')
+
         # Assign neurons to modules using a balanced distribution so every module
         # receives at least one neuron (the first ``remainder`` modules get one extra).
-        base_size = n // self.n_modules
-        remainder = n % self.n_modules
-        mod_sizes = [base_size + (1 if i < remainder else 0) for i in range(self.n_modules)]
-        modules = np.repeat(np.arange(self.n_modules), mod_sizes)
+        mod_sizes = _group_sizes(n, self.n_modules, None, 'Module')
+        bounds = np.concatenate([[0], np.cumsum(mod_sizes)]).astype(int)
 
-        # Generate connections with module-dependent probabilities
-        pre_indices = []
-        post_indices = []
+        # Intra-module blocks (one per module, self-connections excluded).
+        pre_parts, post_parts = [], []
+        intra_pre, intra_post = _block_bernoulli(
+            self.rng, [(bounds[i], bounds[i + 1], bounds[i], bounds[i + 1], intra_prob)
+                       for i in range(self.n_modules)]
+        )
+        pre_parts.append(intra_pre)
+        post_parts.append(intra_post)
 
-        for i in range(n):
-            for j in range(n):
-                if i == j:
-                    continue
+        # Inter-module pairs: Bernoulli(inter_prob) over the whole matrix, keeping
+        # only the pairs in different modules (which stay independent draws).
+        if inter_prob > 0 and self.n_modules > 1:
+            modules: np.ndarray = np.repeat(np.arange(self.n_modules), mod_sizes)
+            pre, post = bernoulli_pairs(self.rng, n, n, inter_prob)
+            between = modules[pre] != modules[post]
+            pre_parts.append(pre[between])
+            post_parts.append(post[between])
 
-                # Determine probability based on modules
-                prob = self.intra_prob if modules[i] == modules[j] else self.inter_prob
-
-                if self.rng.random() < prob:
-                    pre_indices.append(i)
-                    post_indices.append(j)
+        pre_indices, post_indices = _sorted_pairs(pre_parts, post_parts)
 
         if len(pre_indices) == 0:
             return ConnectionResult(
@@ -746,8 +937,8 @@ class ModularRandom(PointConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point'
             )
 
@@ -762,8 +953,8 @@ class ModularRandom(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -772,8 +963,8 @@ class ModularRandom(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -783,8 +974,8 @@ class ModularRandom(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'modular',
                 'n_modules': self.n_modules,
@@ -911,10 +1102,15 @@ class ModularGeneral(PointConnectivity):
                     f"Length of module_ratios ({len(module_ratios)}) must be n_modules-1 ({self.n_modules - 1})"
                 )
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate modular network with custom intra-module connectivity."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -976,10 +1172,6 @@ class ModularGeneral(PointConnectivity):
         block_weights = []
         block_delays = []
 
-        pre_positions = kwargs.get('pre_positions', None)
-        post_positions = kwargs.get('post_positions', None)
-        have_positions = pre_positions is not None and post_positions is not None
-
         def _collect(result, pre_offset, post_offset):
             n_edges = len(result.pre_indices)
             if n_edges == 0:
@@ -1002,7 +1194,7 @@ class ModularGeneral(PointConnectivity):
             conn = self.intra_conn[mod_id]
 
             # Generate connections within this module
-            if have_positions:
+            if pre_positions is not None and post_positions is not None:
                 mod_pre_pos = pre_positions[mod_start:mod_end]
                 mod_post_pos = post_positions[mod_start:mod_end]
             else:
@@ -1052,7 +1244,7 @@ class ModularGeneral(PointConnectivity):
                     continue
 
                 # Generate connections between these two modules
-                if have_positions:
+                if pre_positions is not None and post_positions is not None:
                     pre_mod_pos = pre_positions[pre_start:pre_end]
                     post_mod_pos = post_positions[post_start:post_end]
                 else:
@@ -1079,8 +1271,8 @@ class ModularGeneral(PointConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point'
             )
 
@@ -1100,8 +1292,8 @@ class ModularGeneral(PointConnectivity):
             weights=final_weights,
             delays=final_delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata={
                 'pattern': 'modular_general',
                 'n_modules': self.n_modules,
@@ -1183,6 +1375,18 @@ class HierarchicalRandom(PointConnectivity):
     - Skip connections: level i → level i+k where k > 1
     - The same weight and delay initialization is used for all connection types
     - Expected connectivity follows a hierarchical pattern with stronger feedforward flow
+    - Cortical hierarchies are reviewed in [1]_, [2]_ and [3]_.
+    - Generation runs on the host with NumPy and cannot be traced by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Each block of neuron pairs is sampled by drawing a binomial edge
+       count and then that many distinct pairs, without a dense
+       ``pre_size x post_size`` matrix, so time and memory grow with the
+       number of edges. The edge set for a given ``seed`` differs from 0.6
+       (same distribution); edges are sorted by pre, then post index.
+       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.6
+       treated them as 0 or 1).
 
     References
     ----------
@@ -1206,9 +1410,12 @@ class HierarchicalRandom(PointConnectivity):
         ...     feedforward_prob=0.3,
         ...     feedback_prob=0.1,
         ...     recurrent_prob=0.2,
-        ...     weight=1.0 * u.nS
+        ...     weight=1.0 * u.nS,
+        ...     seed=0,
         ... )
         >>> result = hier(pre_size=900, post_size=900)
+        >>> result.n_connections
+        125653
 
     Create a deep hierarchy with skip connections:
 
@@ -1285,10 +1492,15 @@ class HierarchicalRandom(PointConnectivity):
                     f"Length of level_ratios ({len(level_ratios)}) must be n_levels-1 ({n_levels - 1})"
                 )
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate hierarchical network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -1298,93 +1510,31 @@ class HierarchicalRandom(PointConnectivity):
         if int(np.prod(pre_size)) != int(np.prod(post_size)):
             raise ValueError("Hierarchical networks require pre_size == post_size")
 
-        # Determine level sizes and boundaries
-        if self.level_ratios is not None:
-            level_sizes = []
-            remaining = n
+        recurrent_prob = _check_prob(self.recurrent_prob, 'recurrent_prob')
+        feedforward_prob = _check_prob(self.feedforward_prob, 'feedforward_prob')
+        feedback_prob = _check_prob(self.feedback_prob, 'feedback_prob')
+        skip_prob = _check_prob(self.skip_prob, 'skip_prob')
 
-            # Process first n_levels-1 sizes
-            for ratio in self.level_ratios:
-                # Integral values (incl. numpy ints, but not bool) are fixed sizes;
-                # everything else is treated as a proportion of the total size.
-                if isinstance(ratio, numbers.Integral) and not isinstance(ratio, bool):
-                    # Fixed size
-                    size = int(ratio)
-                else:
-                    # Proportional size (round to nearest neuron count)
-                    size = round(ratio * n)
+        # Level sizes and boundaries
+        level_sizes = _group_sizes(n, self.n_levels, self.level_ratios, 'Level')
+        bounds = np.concatenate([[0], np.cumsum(level_sizes)]).astype(int)
 
-                if size < 0:
-                    raise ValueError(f"Level size cannot be negative: {size}")
-                if size > remaining:
-                    raise ValueError(
-                        f"Level size {size} exceeds remaining neurons {remaining}. "
-                        f"Check your level_ratios configuration."
-                    )
-
-                level_sizes.append(size)
-                remaining -= size
-
-            # Last level gets all remaining neurons
-            if remaining < 0:
-                raise ValueError(
-                    f"Level sizes exceed total size: sum={n - remaining}, total={n}"
-                )
-            level_sizes.append(remaining)
-        else:
-            # Evenly divide neurons across levels
-            base_size = n // self.n_levels
-            remainder = n % self.n_levels
-            level_sizes = [base_size + (1 if i < remainder else 0) for i in range(self.n_levels)]
-
-        # Calculate level boundaries for fast indexing
-        level_boundaries = [0]
-        for size in level_sizes:
-            level_boundaries.append(level_boundaries[-1] + size)
-
-        # Generate connections
-        pre_indices = []
-        post_indices = []
-
-        for i in range(n):
-            # Determine which level neuron i belongs to
-            i_level = 0
-            for level_idx in range(self.n_levels):
-                if level_boundaries[level_idx] <= i < level_boundaries[level_idx + 1]:
-                    i_level = level_idx
-                    break
-
-            for j in range(n):
-                if i == j:
-                    continue
-
-                # Determine which level neuron j belongs to
-                j_level = 0
-                for level_idx in range(self.n_levels):
-                    if level_boundaries[level_idx] <= j < level_boundaries[level_idx + 1]:
-                        j_level = level_idx
-                        break
-
-                # Determine connection probability based on level relationship
-                prob = 0.0
-
+        # One Bernoulli block per (pre level, post level) pair.
+        blocks = []
+        for i_level in range(self.n_levels):
+            for j_level in range(self.n_levels):
                 if i_level == j_level:
-                    # Recurrent connections within the same level
-                    prob = self.recurrent_prob
+                    prob = recurrent_prob  # recurrent connections within a level
                 elif j_level == i_level + 1:
-                    # Feedforward connections (i → i+1)
-                    prob = self.feedforward_prob
+                    prob = feedforward_prob  # feedforward (i -> i+1)
                 elif j_level == i_level - 1:
-                    # Feedback connections (i+1 → i)
-                    prob = self.feedback_prob
+                    prob = feedback_prob  # feedback (i+1 -> i)
                 elif j_level > i_level + 1:
-                    # Skip connections (forward, skipping levels)
-                    prob = self.skip_prob
-                # Note: backward skip connections are not included by default
-
-                if prob > 0 and self.rng.random() < prob:
-                    pre_indices.append(i)
-                    post_indices.append(j)
+                    prob = skip_prob  # forward skip connections
+                else:
+                    continue  # backward skip connections are not included
+                blocks.append((bounds[i_level], bounds[i_level + 1], bounds[j_level], bounds[j_level + 1], prob))
+        pre_indices, post_indices = _block_bernoulli(self.rng, blocks)
 
         metadata = {
             'pattern': 'hierarchical',
@@ -1403,8 +1553,8 @@ class HierarchicalRandom(PointConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point',
                 metadata=metadata
             )
@@ -1420,8 +1570,8 @@ class HierarchicalRandom(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -1430,8 +1580,8 @@ class HierarchicalRandom(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -1441,8 +1591,8 @@ class HierarchicalRandom(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata=metadata
         )
 
@@ -1499,6 +1649,18 @@ class CorePeripheryRandom(PointConnectivity):
     - Typical parameter regime: core_core_prob >> core_periphery_prob ≈ periphery_core_prob > periphery_periphery_prob
     - Unlike the previous bidirectional parameter, now core→periphery and periphery→core
       probabilities are controlled independently for more flexibility
+    - Core-periphery models follow [1]_; the rich club of the connectome is described in [2]_.
+    - Generation runs on the host with NumPy and cannot be traced by
+      ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
+
+    .. versionchanged:: 0.7.0
+       Each block of neuron pairs is sampled by drawing a binomial edge
+       count and then that many distinct pairs, without a dense
+       ``pre_size x post_size`` matrix, so time and memory grow with the
+       number of edges. The edge set for a given ``seed`` differs from 0.6
+       (same distribution); edges are sorted by pre, then post index.
+       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.6
+       treated them as 0 or 1).
 
     References
     ----------
@@ -1518,9 +1680,12 @@ class CorePeripheryRandom(PointConnectivity):
         >>> cp = CorePeripheryRandom(
         ...     core_size=0.2,
         ...     core_core_prob=0.5,
-        ...     periphery_periphery_prob=0.05
+        ...     periphery_periphery_prob=0.05,
+        ...     seed=0,
         ... )
         >>> result = cp(pre_size=1000, post_size=1000)
+        >>> result.n_connections
+        115661
 
     Create a network with fixed core size and asymmetric core-periphery connections:
 
@@ -1584,10 +1749,15 @@ class CorePeripheryRandom(PointConnectivity):
         self.weight_init = weight
         self.delay_init = delay
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate core-periphery network."""
-        pre_size = kwargs['pre_size']
-        post_size = kwargs['post_size']
 
         if isinstance(pre_size, tuple):
             n = int(np.prod(pre_size))
@@ -1607,36 +1777,14 @@ class CorePeripheryRandom(PointConnectivity):
             if n_core >= n:
                 raise ValueError(f"core_size ({n_core}) must be less than network size ({n})")
 
-        # Generate connections
-        pre_indices = []
-        post_indices = []
-
-        for i in range(n):
-            is_i_core = i < n_core
-
-            for j in range(n):
-                if i == j:
-                    continue
-
-                is_j_core = j < n_core
-
-                # Determine connection probability
-                if is_i_core and is_j_core:
-                    # Core to core
-                    prob = self.core_core_prob
-                elif is_i_core and not is_j_core:
-                    # Core to periphery
-                    prob = self.core_periphery_prob
-                elif not is_i_core and is_j_core:
-                    # Periphery to core
-                    prob = self.periphery_core_prob
-                else:
-                    # Periphery to periphery
-                    prob = self.periphery_periphery_prob
-
-                if self.rng.random() < prob:
-                    pre_indices.append(i)
-                    post_indices.append(j)
+        # Four Bernoulli blocks: core -> core, core -> periphery,
+        # periphery -> core and periphery -> periphery.
+        pre_indices, post_indices = _block_bernoulli(self.rng, [
+            (0, n_core, 0, n_core, _check_prob(self.core_core_prob, 'core_core_prob')),
+            (0, n_core, n_core, n, _check_prob(self.core_periphery_prob, 'core_periphery_prob')),
+            (n_core, n, 0, n_core, _check_prob(self.periphery_core_prob, 'periphery_core_prob')),
+            (n_core, n, n_core, n, _check_prob(self.periphery_periphery_prob, 'periphery_periphery_prob')),
+        ])
 
         metadata = {
             'pattern': 'core_periphery',
@@ -1652,8 +1800,8 @@ class CorePeripheryRandom(PointConnectivity):
                 np.array([], dtype=np.int64),
                 pre_size=pre_size,
                 post_size=post_size,
-                pre_positions=kwargs.get('pre_positions', None),
-                post_positions=kwargs.get('post_positions', None),
+                pre_positions=pre_positions,
+                post_positions=post_positions,
                 model_type='point',
                 metadata=metadata,
             )
@@ -1669,8 +1817,8 @@ class CorePeripheryRandom(PointConnectivity):
             param_type='weight',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
         delays = param(
             self.delay_init,
@@ -1679,8 +1827,8 @@ class CorePeripheryRandom(PointConnectivity):
             param_type='delay',
             pre_size=pre_size,
             post_size=post_size,
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None)
+            pre_positions=pre_positions,
+            post_positions=post_positions
         )
 
         return ConnectionResult(
@@ -1690,7 +1838,7 @@ class CorePeripheryRandom(PointConnectivity):
             weights=weights,
             delays=delays,
             model_type='point',
-            pre_positions=kwargs.get('pre_positions', None),
-            post_positions=kwargs.get('post_positions', None),
+            pre_positions=pre_positions,
+            post_positions=post_positions,
             metadata=metadata,
         )

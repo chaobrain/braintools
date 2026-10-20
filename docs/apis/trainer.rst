@@ -65,12 +65,27 @@ callbacks.
    ModelCheckpoint
    EarlyStopping
    LearningRateMonitor
-   GradientClipCallback
    Timer
    RichProgressBar
    TQDMProgressBar
    LambdaCallback
    PrintCallback
+
+.. note::
+
+   ``trainer`` is frozen since 0.4.0: it gets fixes but no new features.
+   :class:`GradientClipCallback` never clipped gradients and is deprecated
+   (removal in 1.0.0); use ``Trainer(gradient_clip_val=...)`` instead. The
+   ``Trainer`` arguments ``precision`` (other than 32), ``deterministic``,
+   ``benchmark`` and ``strategy`` are likewise deprecated, because they were
+   never implemented.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+   :template: classtemplate.rst
+
+   GradientClipCallback
 
 Loggers
 -------

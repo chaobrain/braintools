@@ -15,7 +15,7 @@
 
 """Reasoning cognitive task classes."""
 
-from typing import Sequence, Tuple
+from typing import Any, Dict, Sequence, Tuple
 
 import brainunit as u
 import jax.numpy as jnp
@@ -64,9 +64,21 @@ class HierarchicalReasoning(Task):
 
     Examples
     --------
-    >>> task = HierarchicalReasoning()
-    >>> task = HierarchicalReasoning(delay_threshold=400.0)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.HierarchicalReasoning(
+        ...     delay_threshold=400.0, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (5, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((200, 5), (200,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((200, 4, 5), (200, 4))
     """
 
     def __init__(
@@ -116,7 +128,7 @@ class HierarchicalReasoning(Task):
             name='delay',
         )
 
-        fixation_inputs = {'fixation': 1.0}
+        fixation_inputs: Dict[str, Any] = {'fixation': 1.0}
         if self.show_rule_cue:
             fixation_inputs['rule'] = one_hot('rule', num_classes=2)
 
@@ -213,9 +225,21 @@ class ProbabilisticReasoning(Task):
 
     Examples
     --------
-    >>> task = ProbabilisticReasoning()
-    >>> task = ProbabilisticReasoning(num_cues=12, t_cue=150*u.ms)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.ProbabilisticReasoning(
+        ...     num_cues=12, t_cue=150 * u.ms, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((400, 9), (400,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((400, 4, 9), (400, 4))
     """
 
     def __init__(

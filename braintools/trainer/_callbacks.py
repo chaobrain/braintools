@@ -28,6 +28,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import jax.numpy as jnp
 
+from braintools._deprecation import register_deprecation, warn_deprecated
+from ._progress import RichProgressBarWrapper, TQDMProgressBarWrapper
+
 __all__ = [
     # Base class
     'Callback',
@@ -43,6 +46,26 @@ __all__ = [
     'LambdaCallback',
     'PrintCallback',
 ]
+
+
+_GRADIENT_CLIP_CALLBACK_DEPRECATION = register_deprecation(
+    'braintools.trainer.GradientClipCallback',
+    'Trainer(gradient_clip_val=...)',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='feature',
+)
+
+
+def _epoch_total(trainer: Any) -> Optional[int]:
+    """Number of training batches per epoch, or ``None`` when unknown."""
+    loader = getattr(trainer, 'train_dataloader', None)
+    if loader is None:
+        return None
+    try:
+        return len(loader)
+    except TypeError:
+        return None
 
 
 def _format_metrics(metrics: Dict[str, Any]) -> str:
@@ -70,11 +93,41 @@ class Callback(ABC):
 
     Examples
     --------
-    >>> class MyCallback(Callback):
-    ...     def on_train_epoch_end(self, trainer, module):
-    ...         print(f"Epoch {module.current_epoch} finished!")
-    ...
-    >>> trainer = Trainer(callbacks=[MyCallback()])
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> class EpochPrinter(braintools.trainer.Callback):
+        ...     def on_train_epoch_end(self, trainer, module):
+        ...         print(f"Epoch {module.current_epoch} finished")
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=2, callbacks=[EpochPrinter()],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader)
+        Epoch 0 finished
+        Epoch 1 finished
     """
     __module__ = 'braintools.trainer'
 
@@ -462,14 +515,52 @@ class ModelCheckpoint(Callback):
 
     Examples
     --------
-    >>> checkpoint_callback = ModelCheckpoint(
-    ...     dirpath='checkpoints/',
-    ...     filename='model-{epoch:02d}-{val_loss:.4f}',
-    ...     monitor='val_loss',
-    ...     mode='min',
-    ...     save_top_k=3,
-    ... )
-    >>> trainer = Trainer(callbacks=[checkpoint_callback])
+    Keep the two epochs with the lowest validation loss, plus ``last.ckpt``:
+
+    .. code-block:: python
+
+        >>> import os, shutil, tempfile
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> tmp = tempfile.mkdtemp()
+        >>> checkpoint = braintools.trainer.ModelCheckpoint(
+        ...     dirpath=tmp,
+        ...     filename='model-{epoch:02d}',
+        ...     monitor='val_loss',
+        ...     mode='min',
+        ...     save_top_k=2,
+        ... )
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=4, callbacks=[checkpoint],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader, loader)
+        >>> sorted(os.listdir(tmp))
+        ['last.ckpt', 'model-02.ckpt', 'model-03.ckpt']
+        >>> os.path.basename(checkpoint.best_model_path)
+        'model-03.ckpt'
+        >>> shutil.rmtree(tmp)
     """
     __module__ = 'braintools.trainer'
 
@@ -525,7 +616,7 @@ class ModelCheckpoint(Callback):
         metrics: Dict[str, Any],
     ) -> str:
         """Format the checkpoint filename."""
-        format_dict = {'epoch': epoch, 'step': step}
+        format_dict: Dict[str, Any] = {'epoch': epoch, 'step': step}
         # Coerce metric values to plain floats so numeric format specs such as
         # ``{val_loss:.4f}`` work even when the value is a 0-d JAX/numpy array.
         for key, value in metrics.items():
@@ -561,6 +652,22 @@ class ModelCheckpoint(Callback):
                     opt_states.append(opt.state_dict())
             checkpoint['optimizer_state_dict'] = opt_states
 
+        # Save the state of the LR schedulers the trainer steps each epoch,
+        # keyed by their position in ``trainer.schedulers``, and whether they
+        # have already been stepped for the checkpoint's epoch (epoch-end
+        # checkpoints are written before the step, ``last.ckpt`` after it).
+        schedulers = getattr(trainer, 'schedulers', None) or []
+        sched_states = {
+            str(i): sched.state_dict()
+            for i, sched in enumerate(schedulers)
+            if sched is not None and hasattr(sched, 'state_dict')
+        }
+        if sched_states:
+            checkpoint['lr_schedulers'] = sched_states
+            checkpoint['lr_schedulers_stepped'] = bool(
+                getattr(getattr(trainer, 'state', None), 'lr_schedulers_stepped', False)
+            )
+
         # Save logged metrics
         if hasattr(trainer, 'logged_metrics'):
             checkpoint['metrics'] = trainer.logged_metrics
@@ -592,9 +699,9 @@ class ModelCheckpoint(Callback):
         if self.save_top_k > 0 and len(self.best_k_models) > self.save_top_k:
             # Find the worst model to remove
             if self.mode == 'min':
-                worst_path = max(self.best_k_models, key=self.best_k_models.get)
+                worst_path = max(self.best_k_models, key=self.best_k_models.__getitem__)
             else:
-                worst_path = min(self.best_k_models, key=self.best_k_models.get)
+                worst_path = min(self.best_k_models, key=self.best_k_models.__getitem__)
 
             self._remove_checkpoint(worst_path)
             del self.best_k_models[worst_path]
@@ -680,7 +787,9 @@ class ModelCheckpoint(Callback):
             return
 
         step = module.global_step
-        if step == self._last_global_step_saved:
+        # Step 0 means no optimizer update has happened yet (e.g. the first
+        # micro-batch of a gradient-accumulation window): nothing to save.
+        if step == 0 or step == self._last_global_step_saved:
             return
 
         if step % self.every_n_train_steps == 0:
@@ -739,12 +848,47 @@ class EarlyStopping(Callback):
 
     Examples
     --------
-    >>> early_stop = EarlyStopping(
-    ...     monitor='val_loss',
-    ...     patience=5,
-    ...     mode='min',
-    ... )
-    >>> trainer = Trainer(callbacks=[early_stop])
+    With a large ``min_delta`` no epoch counts as an improvement, so training
+    stops once ``patience`` epochs have passed without one:
+
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> early_stop = braintools.trainer.EarlyStopping(
+        ...     monitor='val_loss',
+        ...     patience=2,
+        ...     mode='min',
+        ...     min_delta=100.0,
+        ... )
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=50, callbacks=[early_stop],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader, loader)
+        >>> early_stop.should_stop, early_stop.stopped_epoch, trainer.current_epoch
+        (True, 2, 2)
     """
     __module__ = 'braintools.trainer'
 
@@ -874,8 +1018,39 @@ class LearningRateMonitor(Callback):
 
     Examples
     --------
-    >>> lr_monitor = LearningRateMonitor(logging_interval='epoch')
-    >>> trainer = Trainer(callbacks=[lr_monitor])
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> lr_monitor = braintools.trainer.LearningRateMonitor(logging_interval='epoch')
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=2, callbacks=[lr_monitor],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader)
+        >>> [round(h['lr-opt0'], 6) for h in lr_monitor.lr_history]
+        [0.1, 0.1]
     """
     __module__ = 'braintools.trainer'
 
@@ -961,6 +1136,11 @@ class GradientClipCallback(Callback):
     """
     Placeholder callback for gradient clipping configuration.
 
+    .. deprecated:: 0.4.0
+       ``GradientClipCallback`` has never clipped gradients and will be removed
+       in 1.0.0. Use ``Trainer(gradient_clip_val=...)`` instead. Constructing
+       it emits a :class:`~braintools._deprecation.BraintoolsDeprecationWarning`.
+
     .. warning::
 
        This callback does **not** itself clip gradients or log gradient norms.
@@ -984,6 +1164,16 @@ class GradientClipCallback(Callback):
     log_grad_norm : bool, default=False
         Reserved for gradient-norm logging, which is not yet implemented.
 
+    Raises
+    ------
+    ValueError
+        If ``clip_algorithm`` is not ``'norm'`` or ``'value'``.
+
+    Warns
+    -----
+    BraintoolsDeprecationWarning
+        Always, because the callback is deprecated.
+
     See Also
     --------
     Trainer : Set ``gradient_clip_val`` / ``gradient_clip_algorithm`` there to
@@ -991,8 +1181,16 @@ class GradientClipCallback(Callback):
 
     Examples
     --------
-    >>> # Real clipping is configured on the Trainer, not via this callback:
-    >>> trainer = Trainer(gradient_clip_val=1.0, gradient_clip_algorithm='norm')
+    Real clipping is configured on the Trainer, not via this callback:
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> trainer = braintools.trainer.Trainer(
+        ...     gradient_clip_val=1.0, gradient_clip_algorithm='norm',
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.gradient_clip_val, trainer.gradient_clip_algorithm
+        (1.0, 'norm')
     """
     __module__ = 'braintools.trainer'
 
@@ -1002,6 +1200,7 @@ class GradientClipCallback(Callback):
         clip_algorithm: str = 'norm',
         log_grad_norm: bool = False,
     ):
+        warn_deprecated(_GRADIENT_CLIP_CALLBACK_DEPRECATION)
         super().__init__()
         self.clip_val = clip_val
         self.clip_algorithm = clip_algorithm
@@ -1038,8 +1237,41 @@ class Timer(Callback):
 
     Examples
     --------
-    >>> timer = Timer(duration={'hours': 2})  # Stop after 2 hours
-    >>> trainer = Trainer(callbacks=[timer])
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> timer = braintools.trainer.Timer(duration={'hours': 2}, verbose=False)
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=2, callbacks=[timer],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader)
+        >>> timer.should_stop  # far below the two-hour budget
+        False
+        >>> 0.0 < timer.time_remaining < 2 * 3600
+        True
     """
     __module__ = 'braintools.trainer'
 
@@ -1152,19 +1384,56 @@ class RichProgressBar(Callback):
     """
     Rich progress bar for training visualization.
 
-    Requires the 'rich' package to be installed.
+    Rendering is delegated to :class:`RichProgressBarWrapper`, the same
+    progress bar the :class:`Trainer` uses. If the 'rich' package is not
+    installed, a warning is emitted and the wrapper falls back to
+    :class:`SimpleProgressBar`.
 
     Parameters
     ----------
     refresh_rate : int, default=1
         Number of batches between progress bar updates.
     leave : bool, default=False
-        Whether to leave the progress bar after completion.
+        Whether to leave the progress bar after completion. ``False`` makes the
+        rich bar transient, so it is removed when the epoch ends.
 
     Examples
     --------
-    >>> progress = RichProgressBar()
-    >>> trainer = Trainer(callbacks=[progress], enable_progress_bar=False)
+    Disable the trainer's built-in bar so the callback is the only one shown:
+
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> progress = braintools.trainer.RichProgressBar()
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=2, callbacks=[progress],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader)
+        >>> trainer.global_step
+        4
     """
     __module__ = 'braintools.trainer'
 
@@ -1172,28 +1441,16 @@ class RichProgressBar(Callback):
         super().__init__()
         self.refresh_rate = refresh_rate
         self.leave = leave
-        self._progress = None
-        self._task_id = None
+        self._progress: Optional[RichProgressBarWrapper] = None
 
     def on_train_epoch_start(self, trainer: Any, module: Any):
         """Create progress bar for epoch."""
         try:
-            from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
-            self._progress = Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeElapsedColumn(),
-            )
-            self._progress.start()
-
-            total = len(trainer.train_dataloader) if hasattr(trainer, 'train_dataloader') else None
-            self._task_id = self._progress.add_task(
-                f"Epoch {module.current_epoch}", total=total
-            )
+            import rich  # noqa: F401
         except ImportError:
             warnings.warn("rich package not installed. Using simple progress.")
+        self._progress = RichProgressBarWrapper(transient=not self.leave)
+        self._progress.start(total=_epoch_total(trainer), desc=f"Epoch {module.current_epoch}")
 
     def on_train_batch_end(
         self,
@@ -1204,23 +1461,23 @@ class RichProgressBar(Callback):
         batch_idx: int,
     ):
         """Update progress bar."""
-        if self._progress and self._task_id is not None:
-            if batch_idx % self.refresh_rate == 0:
-                self._progress.update(self._task_id, advance=self.refresh_rate)
+        if self._progress is not None and batch_idx % self.refresh_rate == 0:
+            self._progress.update(self.refresh_rate)
 
     def on_train_epoch_end(self, trainer: Any, module: Any):
         """Complete progress bar."""
-        if self._progress:
-            self._progress.stop()
+        if self._progress is not None:
+            self._progress.close()
             self._progress = None
-            self._task_id = None
 
 
 class TQDMProgressBar(Callback):
     """
     TQDM progress bar for training visualization.
 
-    Requires the 'tqdm' package to be installed.
+    Rendering is delegated to :class:`TQDMProgressBarWrapper`, the same
+    progress bar the :class:`Trainer` uses. Requires the 'tqdm' package; if it
+    is not installed, a warning is emitted and no bar is shown.
 
     Parameters
     ----------
@@ -1233,8 +1490,42 @@ class TQDMProgressBar(Callback):
 
     Examples
     --------
-    >>> progress = TQDMProgressBar()
-    >>> trainer = Trainer(callbacks=[progress], enable_progress_bar=False)
+    Disable the trainer's built-in bar so the callback is the only one shown
+    (tqdm draws on standard error):
+
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> progress = braintools.trainer.TQDMProgressBar(leave=False)
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=2, callbacks=[progress],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader)
+        >>> trainer.global_step
+        4
     """
     __module__ = 'braintools.trainer'
 
@@ -1248,21 +1539,17 @@ class TQDMProgressBar(Callback):
         self.refresh_rate = refresh_rate
         self.process_position = process_position
         self.leave = leave
-        self._pbar = None
+        self._pbar: Optional[TQDMProgressBarWrapper] = None
 
     def on_train_epoch_start(self, trainer: Any, module: Any):
         """Create progress bar for epoch."""
         try:
-            from tqdm import tqdm
-            total = len(trainer.train_dataloader) if hasattr(trainer, 'train_dataloader') else None
-            self._pbar = tqdm(
-                total=total,
-                desc=f"Epoch {module.current_epoch}",
-                position=self.process_position,
-                leave=self.leave,
-            )
+            import tqdm  # noqa: F401
         except ImportError:
             warnings.warn("tqdm package not installed. Progress bar disabled.")
+            return
+        self._pbar = TQDMProgressBarWrapper(position=self.process_position, leave=self.leave)
+        self._pbar.start(total=_epoch_total(trainer), desc=f"Epoch {module.current_epoch}")
 
     def on_train_batch_end(
         self,
@@ -1273,17 +1560,16 @@ class TQDMProgressBar(Callback):
         batch_idx: int,
     ):
         """Update progress bar."""
-        if self._pbar:
-            if batch_idx % self.refresh_rate == 0:
-                # Update postfix with metrics
-                metrics = module._get_prog_bar_metrics()
-                if metrics:
-                    self._pbar.set_postfix(metrics)
-                self._pbar.update(self.refresh_rate)
+        if self._pbar is not None and batch_idx % self.refresh_rate == 0:
+            # Update postfix with metrics
+            metrics = module._get_prog_bar_metrics()
+            if metrics:
+                self._pbar.set_postfix(metrics)
+            self._pbar.update(self.refresh_rate)
 
     def on_train_epoch_end(self, trainer: Any, module: Any):
         """Close progress bar."""
-        if self._pbar:
+        if self._pbar is not None:
             self._pbar.close()
             self._pbar = None
 
@@ -1299,10 +1585,42 @@ class LambdaCallback(Callback):
 
     Examples
     --------
-    >>> callback = LambdaCallback(
-    ...     on_train_epoch_end=lambda trainer, module: print(f"Epoch {module.current_epoch} done!")
-    ... )
-    >>> trainer = Trainer(callbacks=[callback])
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> callback = braintools.trainer.LambdaCallback(
+        ...     on_train_epoch_end=lambda trainer, module: print(
+        ...         f"Epoch {module.current_epoch} done!")
+        ... )
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=2, callbacks=[callback],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader)
+        Epoch 0 done!
+        Epoch 1 done!
     """
     __module__ = 'braintools.trainer'
 
@@ -1325,8 +1643,45 @@ class PrintCallback(Callback):
 
     Examples
     --------
-    >>> callback = PrintCallback(print_freq=50)
-    >>> trainer = Trainer(callbacks=[callback])
+    Metrics logged with ``prog_bar=True`` are printed every ``print_freq``
+    batches:
+
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self.linear(x) - y) ** 2)
+        ...         self.log('loss', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> callback = braintools.trainer.PrintCallback(print_freq=1)
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=1, callbacks=[callback],
+        ...     logger=False, enable_progress_bar=False, enable_checkpointing=False)
+        >>> trainer.fit(model, loader)
+        <BLANKLINE>
+        --- Epoch 0 ---
+          Step 0: loss: ...
+          Step 1: loss: ...
+        Epoch 0 completed.
     """
     __module__ = 'braintools.trainer'
 

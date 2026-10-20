@@ -15,7 +15,7 @@
 
 """Working memory cognitive task classes."""
 
-from typing import Sequence, Tuple, Optional, Callable, Any
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
 import brainunit as u
 import jax.numpy as jnp
@@ -29,7 +29,7 @@ from ..phase import (concat, Phase, Fixation, Stimulus, Delay, Response, Sample,
 from ..task import Task
 from ..phase import _dt_in_ms, _duration_in_ms
 from .._typing import Duration, Data
-from ..utils import choice
+from ..utils import choice, TruncExp
 
 __all__ = [
     'DelayMatchSample',
@@ -45,6 +45,7 @@ __all__ = [
     'ImmediateDirectionReproduction',
     'DelayDirectionClassification',
     'ImmediateDirectionClassification',
+    'OneTwoThreeGo',
 ]
 
 
@@ -210,9 +211,21 @@ class DelayMatchSample(Task):
 
     Examples
     --------
-    >>> task = DelayMatchSample()
-    >>> task = DelayMatchSample(t_delay=2000*u.ms, num_stimuli=16)
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayMatchSample(
+        ...     t_delay=2000 * u.ms, num_stimuli=16, seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (17, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((330, 17), (330,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((330, 4, 17), (330, 4))
     """
     def __init__(
         self,
@@ -379,8 +392,20 @@ class DualDelayMatchSample(Task):
 
     Examples
     --------
-    >>> task = DualDelayMatchSample()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DualDelayMatchSample(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((380, 9), (380,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((380, 4, 9), (380, 4))
     """
     def __init__(
         self,
@@ -567,8 +592,20 @@ class DelayComparison(Task):
 
     Examples
     --------
-    >>> task = DelayComparison()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayComparison(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (2, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((250, 2), (250,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((250, 4, 2), (250, 4))
     """
     def __init__(
         self,
@@ -738,8 +775,20 @@ class DelayMatchCategory(Task):
 
     Examples
     --------
-    >>> task = DelayMatchCategory()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayMatchCategory(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((245, 9), (245,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((245, 4, 9), (245, 4))
     """
     def __init__(
         self,
@@ -890,8 +939,20 @@ class DelayPairedAssociation(Task):
 
     Examples
     --------
-    >>> task = DelayPairedAssociation()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayPairedAssociation(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 5)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((230, 9), (230,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((230, 4, 9), (230, 4))
     """
 
     def __init__(
@@ -984,8 +1045,20 @@ class GoNoGo(Task):
 
     Examples
     --------
-    >>> task = GoNoGo()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.GoNoGo(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (3, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((200, 3), (200,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((200, 4, 3), (200, 4))
     """
 
     def __init__(
@@ -1083,8 +1156,20 @@ class IntervalDiscrimination(Task):
 
     Examples
     --------
-    >>> task = IntervalDiscrimination()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.IntervalDiscrimination(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (2, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((310, 2), (310,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((310, 4, 2), (310, 4))
     """
 
     def __init__(
@@ -1203,8 +1288,20 @@ class PostDecisionWager(Task):
 
     Examples
     --------
-    >>> task = PostDecisionWager()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.PostDecisionWager(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (9, 5)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((280, 9), (280,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((280, 4, 9), (280, 4))
     """
 
     def __init__(
@@ -1311,8 +1408,20 @@ class ReadySetGo(Task):
 
     Examples
     --------
-    >>> task = ReadySetGo()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.ReadySetGo(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (3, 2)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((280, 3), (280,))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((280, 4, 3), (280, 4))
     """
 
     def __init__(
@@ -1471,8 +1580,20 @@ class DelayDirectionReproduction(Task):
 
     Examples
     --------
-    >>> task = DelayedDirectionReproduction()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.DelayDirectionReproduction(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (10, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((230, 10), (230, 3))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((230, 4, 10), (230, 4, 3))
     """
     def __init__(
         self,
@@ -1657,8 +1778,20 @@ class ImmediateDirectionReproduction(Task):
 
     Examples
     --------
-    >>> task = ImmediateDirectionReproduction()
-    >>> X, Y, info = task.sample_trial(0)
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import braintools
+        >>> task = braintools.cogtask.ImmediateDirectionReproduction(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (10, 3)
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((80, 10), (80, 3))
+        >>>
+        >>> X, Y = task.batch_sample(4)  # time-first: (T, batch, features)
+        >>> X.shape, Y.shape
+        ((80, 4, 10), (80, 4, 3))
     """
     def __init__(
         self,
@@ -2004,3 +2137,224 @@ class ImmediateDirectionClassification(Task):
 
     def get_trial_meta(self, trial_state):
         return trial_state["sample_idx"], trial_state["category"]
+
+
+def _trunc_exp_or_fixed(value, name: str) -> Optional[TruncExp]:
+    """Parse a duration that is either fixed or truncated-exponential.
+
+    Returns ``None`` for a fixed duration (a scalar time Quantity) and a
+    :class:`TruncExp` sampler for a ``(mean, min, max)`` triple of Quantities.
+    """
+    if isinstance(value, (tuple, list)):
+        if len(value) != 3:
+            raise ValueError(
+                f"{name} must be a Quantity or a (mean, min, max) tuple of "
+                f"Quantities, got a sequence of length {len(value)}."
+            )
+        mean, lo, hi = (u.Quantity(v).to_decimal(u.ms) for v in value)
+        if not (0.0 <= lo <= hi and mean > 0.0):
+            raise ValueError(
+                f"{name}=(mean, min, max) needs mean > 0 and 0 <= min <= max, "
+                f"got {value}."
+            )
+        return TruncExp(mean * u.ms, lo * u.ms, hi * u.ms)
+    # Fixed duration: validate that it is a time quantity.
+    u.Quantity(value).to_decimal(u.ms)
+    return None
+
+
+class OneTwoThreeGo(Task):
+    """
+    1-2-3-Go interval reproduction task.
+
+    Three brief pulses ("1", "2", "3") are separated by the same sample
+    interval; the subject must respond ("go") one interval after the third
+    pulse, i.e. reproduce the interval from two samples of it. This is the
+    1-2-3-Go timing paradigm of Egger et al. [1]_, an extension of the
+    Ready-Set-Go interval-production task (see Remington et al. [2]_), as
+    implemented by the ``OneTwoThreeGo`` environment of NeuroGym [3]_.
+
+    Structure: Fixation >> Target >> S1 >> Interval1 >> S2 >> Interval2 >> S3
+    >> Interval3 >> Response
+
+    Parameters
+    ----------
+    t_fixation : Duration or tuple
+        Fixation period. A Quantity gives a fixed duration; a tuple
+        ``(mean, min, max)`` of Quantities samples it per trial from a
+        truncated exponential (default: ``(400, 100, 800)`` ms, as in
+        NeuroGym).
+    t_target : Duration or tuple
+        Period during which the target is shown before the first pulse; same
+        format as ``t_fixation`` (default: ``(1000, 500, 1500)`` ms).
+    t_stimulus : Duration
+        Duration of each of the three pulses (default: 100 ms).
+    intervals : sequence of Duration
+        Sample intervals; one is drawn uniformly per trial and used for the
+        three inter-pulse gaps (default: 600, 700, 800, 900, 1000 ms).
+    t_response : Duration
+        Response period, which starts exactly one interval after the third
+        pulse (default: 1000 ms).
+    **kwargs
+        Forwarded to :class:`~braintools.cogtask.Task` (e.g. ``seed``,
+        ``dt``).
+
+    Raises
+    ------
+    ValueError
+        If ``intervals`` is empty or not positive, or ``t_fixation`` /
+        ``t_target`` is neither a Quantity nor a valid ``(mean, min, max)``
+        tuple.
+
+    See Also
+    --------
+    ReadySetGo : Interval reproduction from a single sample interval.
+
+    Notes
+    -----
+    **Inputs** (3 channels): ``fixation`` (1 for the whole trial; the
+    subject must time the response itself, there is no go cue), ``stimulus``
+    (1 during the three pulses ``s1``, ``s2``, ``s3``) and ``target``
+    (1 from the target period to the end of the trial).
+
+    **Labels** (categorical, 2 classes): 0 (hold) until the end of
+    ``interval3`` and 1 (go) during the response period, whose onset is the
+    target response time ``end(s3) + interval``.
+
+    **Trial state**: ``interval`` (ms) and, when sampled,
+    ``fixation_duration`` and ``target_duration`` (ms).
+
+    The fixation, target and interval periods have per-trial durations, so the
+    task runs in packed (variable-length) mode: buffers have the static
+    length :meth:`~braintools.cogtask.Task.max_trial_duration` and
+    ``info['mask']`` (or ``batch_sample(..., return_mask=True)``) marks the
+    valid steps. ``batch_sample`` runs under ``jax.jit`` and ``vmap``.
+
+    **Differences from NeuroGym.** NeuroGym trains the response with a reward
+    that decays with the error between produced and true interval (margin
+    ``prod_margin``); here the task is supervised through the labels, and the
+    go label covers the whole response period.
+
+    References
+    ----------
+    .. [1] Egger, S. W., Remington, E. D., Chang, C.-J., & Jazayeri, M.
+       (2019). Internal models of sensorimotor integration regulate cortical
+       dynamics. *Nature Neuroscience*, 22(11), 1871-1882.
+    .. [2] Remington, E. D., Narain, D., Hosseini, E. A., & Jazayeri, M.
+       (2018). Flexible sensorimotor computations through rapid
+       reconfiguration of cortical dynamics. *Neuron*, 98(5), 1005-1019.
+    .. [3] Molano-Mazon, M., et al. (2022). NeuroGym: An open resource for
+       developing and sharing neuroscience tasks. *PsyArXiv*.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> import numpy as np
+        >>> import braintools
+        >>> task = braintools.cogtask.OneTwoThreeGo(seed=0, dt=10.0 * u.ms)
+        >>> task.num_inputs, task.num_outputs
+        (3, 2)
+        >>> task.max_trial_duration()
+        660
+        >>> X, Y, info = task.sample_trial(0)
+        >>> X.shape, Y.shape
+        ((660, 3), (660,))
+        >>> spans = {name: (int(s), int(e)) for name, s, e in info['phase_history']}
+        >>> interval_steps = int(info['trial_state']['interval'] / 10.0)
+        >>> spans['response'][0] == spans['s3'][1] + interval_steps
+        True
+        >>> np.unique(np.asarray(Y)[spans['response'][0]:spans['response'][1]])
+        array([1], dtype=int32)
+        >>>
+        >>> X, Y, mask = task.batch_sample(4, return_mask=True)
+        >>> X.shape, mask.shape
+        ((660, 4, 3), (660, 4))
+    """
+
+    def __init__(
+        self,
+        t_fixation: Any = (400.0 * u.ms, 100.0 * u.ms, 800.0 * u.ms),
+        t_target: Any = (1000.0 * u.ms, 500.0 * u.ms, 1500.0 * u.ms),
+        t_stimulus: Duration = 100.0 * u.ms,
+        intervals: Sequence[Duration] = (600.0 * u.ms, 700.0 * u.ms, 800.0 * u.ms,
+                                         900.0 * u.ms, 1000.0 * u.ms),
+        t_response: Duration = 1000.0 * u.ms,
+        **kwargs
+    ):
+        self._fixation_sampler = _trunc_exp_or_fixed(t_fixation, 't_fixation')
+        self._target_sampler = _trunc_exp_or_fixed(t_target, 't_target')
+        intervals_ms = [float(u.Quantity(v).to_decimal(u.ms)) for v in intervals]
+        if len(intervals_ms) == 0:
+            raise ValueError("intervals must contain at least one duration.")
+        if min(intervals_ms) <= 0.0:
+            raise ValueError(f"intervals must be positive, got {intervals}.")
+        self.t_fixation = t_fixation
+        self.t_target = t_target
+        self.t_stimulus = t_stimulus
+        self.intervals = intervals
+        self._intervals_ms = jnp.asarray(intervals_ms, dtype=jnp.float32)
+        self._interval_bounds = (min(intervals_ms) * u.ms, max(intervals_ms) * u.ms)
+        self.t_response = t_response
+        super().__init__(**kwargs)
+
+    def define_features(self) -> Tuple:
+        fix_feat = Feature(1, 'fixation')
+        input_features = fix_feat + Feature(1, 'stimulus') + Feature(1, 'target')
+        output_features = fix_feat + Feature(1, 'go')
+        return input_features, output_features
+
+    @staticmethod
+    def _period(spec, sampler, ctx_key: str, name: str, inputs: dict) -> Phase:
+        """A fixed ``Delay`` or a per-trial ``VariableDuration`` period."""
+        if sampler is None:
+            return Delay(duration=spec, name=name, inputs=inputs, outputs={'label': 0})
+        return VariableDuration(
+            min_duration=sampler.min_value(),
+            max_duration=sampler.max_value(),
+            ctx_key=ctx_key,
+            name=name,
+            inputs=inputs,
+            outputs={'label': 0},
+        )
+
+    def define_phases(self) -> Phase:
+        hold: Dict[str, Any] = {'fixation': 1.0, 'target': 1.0}
+        pulse = {'fixation': 1.0, 'stimulus': 1.0, 'target': 1.0}
+
+        def interval(name):
+            return VariableDuration(
+                min_duration=self._interval_bounds[0],
+                max_duration=self._interval_bounds[1],
+                ctx_key='interval',
+                name=name,
+                inputs=hold,
+                outputs={'label': 0},
+            )
+
+        def stim(name):
+            return Cue(duration=self.t_stimulus, name=name, inputs=pulse, outputs={'label': 0})
+
+        return concat([
+            self._period(self.t_fixation, self._fixation_sampler, 'fixation_duration',
+                         'fixation', {'fixation': 1.0}),
+            self._period(self.t_target, self._target_sampler, 'target_duration',
+                         'target', hold),
+            stim('s1'), interval('interval1'),
+            stim('s2'), interval('interval2'),
+            stim('s3'), interval('interval3'),
+            Response(
+                duration=self.t_response,
+                name='response',
+                inputs=hold,
+                outputs={'label': 1}
+            ),
+        ])
+
+    def trial_init(self, ctx: Context) -> None:
+        if self._fixation_sampler is not None:
+            ctx['fixation_duration'] = _duration_in_ms(self._fixation_sampler(ctx))
+        if self._target_sampler is not None:
+            ctx['target_duration'] = _duration_in_ms(self._target_sampler(ctx))
+        ctx['interval'] = self._intervals_ms[ctx.rng.choice(self._intervals_ms.shape[0])]

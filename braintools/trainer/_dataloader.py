@@ -21,7 +21,7 @@ supporting shuffling, batching, prefetching, and distributed training.
 """
 
 import math
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -70,12 +70,18 @@ class ArrayDataset(Dataset):
 
     Examples
     --------
-    >>> X = jnp.ones((100, 10))
-    >>> y = jnp.zeros((100,))
-    >>> dataset = ArrayDataset(X, y)
-    >>> len(dataset)
-    100
-    >>> x_sample, y_sample = dataset[0]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> X = jnp.ones((100, 10))
+        >>> y = jnp.zeros((100,))
+        >>> dataset = braintools.trainer.ArrayDataset(X, y)
+        >>> len(dataset)
+        100
+        >>> x_sample, y_sample = dataset[0]
+        >>> x_sample.shape, y_sample.shape
+        ((10,), ())
     """
     __module__ = 'braintools.trainer'
 
@@ -117,13 +123,17 @@ class DictDataset(Dataset):
 
     Examples
     --------
-    >>> data = {'x': jnp.ones((100, 10)), 'y': jnp.zeros((100,))}
-    >>> dataset = DictDataset(data)
-    >>> len(dataset)
-    100
-    >>> sample = dataset[0]
-    >>> sample['x'].shape
-    (10,)
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> data = {'x': jnp.ones((100, 10)), 'y': jnp.zeros((100,))}
+        >>> dataset = braintools.trainer.DictDataset(data)
+        >>> len(dataset)
+        100
+        >>> sample = dataset[0]
+        >>> sample['x'].shape
+        (10,)
     """
     __module__ = 'braintools.trainer'
 
@@ -167,10 +177,19 @@ class IterableDataset(Dataset):
 
     Examples
     --------
-    >>> def data_generator():
-    ...     for i in range(100):
-    ...         yield {'x': np.random.randn(10), 'y': i}
-    >>> dataset = IterableDataset(data_generator(), length=100)
+    .. code-block:: python
+
+        >>> import numpy as np
+        >>> import braintools
+        >>> rng = np.random.default_rng(0)
+        >>> def data_generator():
+        ...     for i in range(100):
+        ...         yield {'x': rng.standard_normal(10), 'y': i}
+        >>> dataset = braintools.trainer.IterableDataset(data_generator(), length=100)
+        >>> len(dataset)
+        100
+        >>> dataset[3]['y']
+        3
     """
     __module__ = 'braintools.trainer'
 
@@ -233,9 +252,14 @@ class SequentialSampler(Sampler):
 
     Examples
     --------
-    >>> sampler = SequentialSampler(dataset)
-    >>> list(sampler)
-    [0, 1, 2, ..., n-1]
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> dataset = braintools.trainer.ArrayDataset(jnp.arange(5))
+        >>> sampler = braintools.trainer.SequentialSampler(dataset)
+        >>> list(sampler)
+        [0, 1, 2, 3, 4]
     """
     __module__ = 'braintools.trainer'
 
@@ -266,8 +290,18 @@ class RandomSampler(Sampler):
 
     Examples
     --------
-    >>> sampler = RandomSampler(dataset, seed=42)
-    >>> indices = list(sampler)  # Random permutation
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> dataset = braintools.trainer.ArrayDataset(jnp.arange(5))
+        >>> sampler = braintools.trainer.RandomSampler(dataset, seed=42)
+        >>> sorted(sampler)  # a random permutation of every index
+        [0, 1, 2, 3, 4]
+        >>> sampler = braintools.trainer.RandomSampler(
+        ...     dataset, replacement=True, num_samples=3, seed=42)
+        >>> len(list(sampler))
+        3
     """
     __module__ = 'braintools.trainer'
 
@@ -325,10 +359,19 @@ class BatchSampler(Sampler):
 
     Examples
     --------
-    >>> base_sampler = SequentialSampler(dataset)
-    >>> batch_sampler = BatchSampler(base_sampler, batch_size=32)
-    >>> for batch_indices in batch_sampler:
-    ...     print(len(batch_indices))  # 32 (or less for last batch)
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> dataset = braintools.trainer.ArrayDataset(jnp.arange(10))
+        >>> base_sampler = braintools.trainer.SequentialSampler(dataset)
+        >>> batch_sampler = braintools.trainer.BatchSampler(base_sampler, batch_size=4)
+        >>> list(batch_sampler)
+        [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9]]
+        >>> batch_sampler = braintools.trainer.BatchSampler(
+        ...     base_sampler, batch_size=4, drop_last=True)
+        >>> len(batch_sampler)
+        2
     """
     __module__ = 'braintools.trainer'
 
@@ -345,7 +388,9 @@ class BatchSampler(Sampler):
         self.batch_size = batch_size
         self.drop_last = drop_last
 
-    def __iter__(self) -> Iterator[List[int]]:
+    # Yields lists of indices rather than single indices: a documented
+    # deviation from ``Sampler.__iter__`` that the DataLoader relies on.
+    def __iter__(self) -> Iterator[List[int]]:  # type: ignore[override]
         batch = []
         for idx in self.sampler:
             batch.append(idx)
@@ -384,8 +429,17 @@ class DistributedSampler(Sampler):
 
     Examples
     --------
-    >>> sampler = DistributedSampler(dataset, num_replicas=4, rank=0)
-    >>> # Each replica gets 1/4 of the data
+    Each replica gets an interleaved 1/4 of the data:
+
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> dataset = braintools.trainer.ArrayDataset(jnp.arange(8))
+        >>> sampler = braintools.trainer.DistributedSampler(
+        ...     dataset, num_replicas=4, rank=1, shuffle=False)
+        >>> list(sampler)
+        [1, 5]
     """
     __module__ = 'braintools.trainer'
 
@@ -442,14 +496,20 @@ class DistributedSampler(Sampler):
         self.epoch = epoch
 
 
-def default_collate_fn(batch: List[Any]) -> Any:
+def default_collate_fn(batch: Sequence[Any]) -> Any:
     """
     Default collate function for batching samples.
 
+    Dicts, tuples and lists are collated field by field. Arrays (including
+    0-d arrays), NumPy numeric/bool scalars and Python ``int``/``float``/
+    ``complex``/``bool`` values are stacked into a JAX array along a new
+    leading axis, keeping their dtype (subject to JAX's x64 setting). Anything
+    else (e.g. strings) is returned unchanged.
+
     Parameters
     ----------
-    batch : List[Any]
-        List of samples to collate.
+    batch : Sequence[Any]
+        Samples to collate.
 
     Returns
     -------
@@ -473,12 +533,14 @@ def default_collate_fn(batch: List[Any]) -> Any:
     if isinstance(elem, list):
         return [default_collate_fn(samples) for samples in zip(*batch)]
 
-    # Handle arrays
-    if isinstance(elem, (np.ndarray, jnp.ndarray)):
+    # Handle arrays (including 0-d arrays) and NumPy numeric/bool scalars, which
+    # is what indexing a 1-D array yields. ``jnp.stack`` keeps their dtype
+    # (subject to JAX's usual x64 canonicalisation).
+    if isinstance(elem, (np.ndarray, jnp.ndarray, np.number, np.bool_)):
         return jnp.stack(batch)
 
-    # Handle scalars
-    if isinstance(elem, (int, float)):
+    # Handle Python scalars
+    if isinstance(elem, (int, float, complex)):
         return jnp.array(batch)
 
     # Default: return as-is
@@ -514,21 +576,32 @@ class DataLoader:
 
     Examples
     --------
-    Basic usage with arrays:
+    Basic usage with a tuple of arrays:
 
-    >>> X = jnp.ones((1000, 784))
-    >>> y = jnp.zeros((1000,))
-    >>> loader = DataLoader((X, y), batch_size=32, shuffle=True)
-    >>> for batch in loader:
-    ...     x_batch, y_batch = batch
-    ...     print(x_batch.shape)  # (32, 784)
+    .. code-block:: python
 
-    With a dataset:
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> X = jnp.ones((100, 8))
+        >>> y = jnp.zeros((100,))
+        >>> loader = braintools.trainer.DataLoader((X, y), batch_size=32, shuffle=True, seed=0)
+        >>> len(loader)
+        4
+        >>> for x_batch, y_batch in loader:
+        ...     print(x_batch.shape, y_batch.shape)
+        (32, 8) (32,)
+        (32, 8) (32,)
+        (32, 8) (32,)
+        (4, 8) (4,)
 
-    >>> dataset = DictDataset({'x': X, 'y': y})
-    >>> loader = DataLoader(dataset, batch_size=32)
-    >>> for batch in loader:
-    ...     print(batch['x'].shape)  # (32, 784)
+    With a dictionary dataset, dropping the incomplete last batch:
+
+    .. code-block:: python
+
+        >>> dataset = braintools.trainer.DictDataset({'x': X, 'y': y})
+        >>> loader = braintools.trainer.DataLoader(dataset, batch_size=32, drop_last=True)
+        >>> [batch['x'].shape for batch in loader]
+        [(32, 8), (32, 8), (32, 8)]
     """
     __module__ = 'braintools.trainer'
 
@@ -662,8 +735,19 @@ class DistributedDataLoader(DataLoader):
 
     Examples
     --------
-    >>> loader = DistributedDataLoader(dataset, batch_size=32)
-    >>> # Data is automatically split across devices
+    Each replica iterates over its own shard of the data:
+
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> X = jnp.arange(16.0).reshape(8, 2)
+        >>> loader = braintools.trainer.DistributedDataLoader(
+        ...     X, batch_size=2, num_replicas=2, rank=0, shuffle=False)
+        >>> len(loader)
+        2
+        >>> [batch[0][:, 0].tolist() for batch in loader]
+        [[0.0, 4.0], [8.0, 12.0]]
     """
     __module__ = 'braintools.trainer'
 
@@ -750,9 +834,21 @@ def create_distributed_batches(
 
     Examples
     --------
-    >>> for batch in create_distributed_batches(X, batch_size=32):
-    ...     # batch.shape == (num_devices, 32, ...)
-    ...     outputs = pmap_train_step(batch)
+    Batches carry a leading device axis, ready for ``jax.pmap``:
+
+    .. code-block:: python
+
+        >>> import jax
+        >>> import jax.numpy as jnp
+        >>> import braintools
+        >>> X = jnp.ones((10, 3))
+        >>> devices = jax.devices()[:1]
+        >>> batches = list(braintools.trainer.create_distributed_batches(
+        ...     X, batch_size=4, devices=devices))
+        >>> len(batches)  # the trailing 2 samples cannot fill a block
+        2
+        >>> batches[0].shape
+        (1, 4, 3)
     """
     if devices is None:
         devices = jax.devices()
@@ -761,13 +857,10 @@ def create_distributed_batches(
     # Handle different data types
     if isinstance(data, dict):
         n_samples = len(next(iter(data.values())))
-        get_item = lambda i: {k: v[i] for k, v in data.items()}
     elif isinstance(data, tuple):
         n_samples = len(data[0])
-        get_item = lambda i: tuple(arr[i] for arr in data)
     else:
         n_samples = len(data)
-        get_item = lambda i: data[i]
 
     # Create indices
     indices = np.arange(n_samples)
@@ -783,6 +876,7 @@ def create_distributed_batches(
         batch_indices = indices[start:start + total_batch_size]
 
         # Get batch data
+        batch: Any
         if isinstance(data, dict):
             batch = {
                 k: jnp.stack([v[i] for i in batch_indices])

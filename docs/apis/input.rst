@@ -7,8 +7,7 @@
 
 The input toolkit offers both functional helpers and composable classes for
 constructing stimulation protocols. The tables below group the public API by
-category. Legacy names ending with ``Input``/``_input`` remain available as
-deprecated aliases and emit ``DeprecationWarning`` when used.
+category.
 
 Functional API
 --------------

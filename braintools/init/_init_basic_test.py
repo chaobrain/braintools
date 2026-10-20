@@ -24,6 +24,7 @@ import brainstate
 import brainunit as u
 import numpy as np
 
+from braintools._deprecation import BraintoolsDeprecationWarning, registered_deprecations
 from braintools.init import (
     Constant,
     ZeroInit,
@@ -405,14 +406,27 @@ class TestParameterValidation(unittest.TestCase):
 class TestDeprecatedUnit(unittest.TestCase):
     """Behaviour of the deprecated ``unit=`` argument (bug M2)."""
 
+    # One constructor call per initializer that still accepts ``unit=``.
+    FACTORIES = {
+        'Constant': lambda **kw: Constant(0.5, **kw),
+        'Uniform': lambda **kw: Uniform(0.0, 1.0, **kw),
+        'Normal': lambda **kw: Normal(0.0, 1.0, **kw),
+        'LogNormal': lambda **kw: LogNormal(1.0, 0.5, **kw),
+        'Gamma': lambda **kw: Gamma(2.0, 1.0, **kw),
+        'Exponential': lambda **kw: Exponential(1.0, **kw),
+        'TruncatedNormal': lambda **kw: TruncatedNormal(0.0, 1.0, **kw),
+        'Beta': lambda **kw: Beta(2.0, 2.0, 0.0, 1.0, **kw),
+        'Weibull': lambda **kw: Weibull(1.5, 0.5, **kw),
+    }
+
     def test_deprecated_unit_with_bare_value_warns_and_applies(self):
         """A bare value plus deprecated unit still works, with a warning."""
         with warnings.catch_warnings():
-            warnings.simplefilter('error', DeprecationWarning)
-            with self.assertRaises(DeprecationWarning):
+            warnings.simplefilter('error', BraintoolsDeprecationWarning)
+            with self.assertRaises(BraintoolsDeprecationWarning):
                 Constant(0.5, unit=u.nS)
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore', DeprecationWarning)
+            warnings.simplefilter('ignore', BraintoolsDeprecationWarning)
             init = Constant(0.5, unit=u.nS)
             weights = init(10)
         self.assertEqual(weights.unit, u.nS)
@@ -421,14 +435,56 @@ class TestDeprecatedUnit(unittest.TestCase):
     def test_deprecated_unit_with_united_value_raises(self):
         """Combining a deprecated unit with an already-united value raises."""
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore', DeprecationWarning)
+            warnings.simplefilter('ignore', BraintoolsDeprecationWarning)
             with self.assertRaises(ValueError):
                 Constant(0.5 * u.mS, unit=u.nS)
+
+    def test_records_registered(self):
+        """Every ``unit=`` deprecation goes through the library registry."""
+        records = {r.old_name: r for r in registered_deprecations()}
+        for name in self.FACTORIES:
+            with self.subTest(name=name):
+                record = records[f'braintools.init.{name}(unit=...)']
+                self.assertEqual(record.kind, 'argument')
+                self.assertEqual(record.since, '0.1.0')
+                self.assertEqual(record.removed_in, '1.0.0')
+
+    def test_warns_once_with_registered_message_at_caller(self):
+        records = {r.old_name: r for r in registered_deprecations()}
+        for name, factory in self.FACTORIES.items():
+            with self.subTest(name=name):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter('always')
+                    init = factory(unit=u.nS)
+                self.assertEqual(len(caught), 1)
+                self.assertIs(caught[0].category, BraintoolsDeprecationWarning)
+                self.assertEqual(
+                    str(caught[0].message),
+                    records[f'braintools.init.{name}(unit=...)'].message,
+                )
+                self.assertIn('unit attached to the value arguments', str(caught[0].message))
+                self.assertEqual(caught[0].filename, __file__)
+                self.assertEqual(init.unit, u.nS)
+
+    def test_no_warning_without_unit(self):
+        for name, factory in self.FACTORIES.items():
+            with self.subTest(name=name):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter('always')
+                    init = factory()
+                self.assertEqual(caught, [])
+                self.assertEqual(init.unit, u.UNITLESS)
+
+    def test_zero_init_unit_is_not_deprecated(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            ZeroInit(unit=u.mV)
+        self.assertEqual(caught, [])
 
     def test_weibull_accepts_unit_kwarg(self):
         """Weibull supports the deprecated ``unit=`` like its siblings (bug L6)."""
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore', DeprecationWarning)
+            warnings.simplefilter('ignore', BraintoolsDeprecationWarning)
             init = Weibull(shape=1.5, scale=0.5, unit=u.nS)
             weights = init(100, rng=np.random.default_rng(0))
         self.assertEqual(weights.unit, u.nS)

@@ -22,6 +22,10 @@ collectives, which require hardware not present in CI.
 """
 
 import functools
+import os
+import subprocess
+import sys
+import textwrap
 
 import jax
 import jax.numpy as jnp
@@ -216,3 +220,86 @@ class TestAllReduce:
         s = DataParallelStrategy()
         with pytest.raises(ValueError, match='Unknown reduction'):
             s.reduce(jnp.asarray(1.0), op='bogus')
+
+
+# ---------------------------------------------------------------------------
+# T-D / T-H: distributed collectives on multiple (fake CPU) devices.
+# Run in a subprocess so XLA can be configured with >1 host device before
+# JAX initialises in this process.
+# ---------------------------------------------------------------------------
+
+def _run_multidevice(snippet: str, n_devices: int = 4):
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    env = dict(os.environ)
+    env['XLA_FLAGS'] = f"--xla_force_host_platform_device_count={n_devices}"
+    env['JAX_PLATFORMS'] = 'cpu'
+    env['PYTHONPATH'] = repo_root + os.pathsep + env.get('PYTHONPATH', '')
+    proc = subprocess.run(
+        [sys.executable, '-c', textwrap.dedent(snippet)],
+        capture_output=True, text=True, env=env, timeout=300,
+    )
+    return proc
+
+
+class TestDistributedCollectivesMultiDevice:
+    def test_broadcast_valid_on_multiple_devices(self):
+        snippet = """
+            import jax, jax.numpy as jnp
+            from braintools.trainer import broadcast
+            assert jax.device_count() >= 2, jax.device_count()
+            x = jnp.arange(jax.device_count() * 1.0)
+            g = jax.pmap(lambda v: broadcast(v, src=0, axis_name='batch'), axis_name='batch')
+            out = g(x)
+            # Every replica must hold device 0's value (x[0] == 0.0).
+            assert jnp.allclose(out, x[0]), out
+            print('BROADCAST_OK')
+        """
+        proc = _run_multidevice(snippet)
+        assert 'BROADCAST_OK' in proc.stdout, (
+            f"stdout={proc.stdout!r}\nstderr={proc.stderr[-2000:]!r}"
+        )
+
+    def test_sync_batch_norm_matches_global_stats(self):
+        snippet = """
+            import jax, jax.numpy as jnp
+            from braintools.trainer._distributed import sync_batch_norm
+            nd = jax.device_count()
+            assert nd >= 2, nd
+            # Per-device data with DIFFERENT means so pooled var != mean of vars.
+            data = jnp.stack([jnp.arange(4.0) + 10.0 * i for i in range(nd)])  # (nd, 4)
+            mean, var = jax.pmap(lambda x: sync_batch_norm(x, axis_name='batch'),
+                                 axis_name='batch')(data)
+            flat = data.reshape(-1)
+            exp_mean = jnp.mean(flat)
+            exp_var = jnp.var(flat)
+            assert jnp.allclose(mean[0], exp_mean, atol=1e-4), (mean[0], exp_mean)
+            assert jnp.allclose(var[0], exp_var, atol=1e-4), (var[0], exp_var)
+            print('SBN_OK')
+        """
+        proc = _run_multidevice(snippet)
+        assert 'SBN_OK' in proc.stdout, (
+            f"stdout={proc.stdout!r}\nstderr={proc.stderr[-2000:]!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# T-G: FSDP auto-mesh must give the model axis a real size when devices allow.
+# ---------------------------------------------------------------------------
+
+class TestFSDPMeshBalancing:
+    def test_model_axis_gets_real_size(self):
+        snippet = """
+            import jax
+            from braintools.trainer import FullyShardedDataParallelStrategy
+            assert jax.device_count() == 4, jax.device_count()
+            s = FullyShardedDataParallelStrategy(data_axis='data', model_axis='model')
+            shape = s.mesh.shape
+            # 4 devices -> a balanced 2x2 mesh; model axis must be > 1.
+            assert shape['model'] > 1, shape
+            assert shape['data'] * shape['model'] == 4, shape
+            print('FSDP_OK')
+        """
+        proc = _run_multidevice(snippet, n_devices=4)
+        assert 'FSDP_OK' in proc.stdout, (
+            f"stdout={proc.stdout!r}\nstderr={proc.stderr[-2000:]!r}"
+        )

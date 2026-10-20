@@ -27,12 +27,10 @@ from typing import Optional
 
 import brainstate
 import brainunit as u
+from brainstate.typing import ArrayLike
 
 from . import _functional_waveforms as functional
 from ._composable_base import Input
-from ._deprecation import create_deprecated_class
-
-ArrayLike = brainstate.typing.ArrayLike
 
 __all__ = [
     'Sinusoidal',
@@ -96,6 +94,7 @@ class Sinusoidal(Input):
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import Sinusoidal
         >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Create simple sinusoidal input:
@@ -260,6 +259,7 @@ class Square(Input):
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import Square
         >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Create symmetric square wave:
@@ -432,6 +432,7 @@ class Triangular(Input):
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import Triangular
         >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Simple triangular wave:
@@ -600,6 +601,7 @@ class Sawtooth(Input):
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import Sawtooth
         >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Simple sawtooth wave:
@@ -796,6 +798,7 @@ class Chirp(Input):
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import Chirp
         >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Linear frequency sweep:
@@ -1001,6 +1004,7 @@ class NoisySinusoidal(Input):
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import NoisySinusoidal
         >>> brainstate.environ.set(dt=0.1 * u.ms)
 
     Sinusoid with small noise:
@@ -1143,14 +1147,3 @@ class NoisySinusoidal(Input):
             t_end=self.t_end,
             seed=self.seed
         )
-
-
-SinusoidalInput = create_deprecated_class(Sinusoidal, 'SinusoidalInput', 'Sinusoidal')
-SquareInput = create_deprecated_class(Square, 'SquareInput', 'Square')
-TriangularInput = create_deprecated_class(Triangular, 'TriangularInput', 'Triangular')
-SawtoothInput = create_deprecated_class(Sawtooth, 'SawtoothInput', 'Sawtooth')
-ChirpInput = create_deprecated_class(Chirp, 'ChirpInput', 'Chirp')
-NoisySinusoidalInput = create_deprecated_class(NoisySinusoidal, 'NoisySinusoidalInput', 'NoisySinusoidal')
-
-__all__.extend(
-    ['SinusoidalInput', 'SquareInput', 'TriangularInput', 'SawtoothInput', 'ChirpInput', 'NoisySinusoidalInput'])

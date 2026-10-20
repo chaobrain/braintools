@@ -41,6 +41,7 @@ Surrogate Gradient Classes
    :nosignatures:
    :template: classtemplate.rst
 
+   Surrogate
    Sigmoid
    PiecewiseQuadratic
    PiecewiseExp

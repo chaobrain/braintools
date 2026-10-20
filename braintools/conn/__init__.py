@@ -31,6 +31,10 @@ complete decoupling between model types to ensure clean, specialized implementat
 - **Biological Realism**: Realistic parameters and constraints for each model type
 - **Spatial Awareness**: Position-dependent connectivity with proper units
 - **Composable Patterns**: Combine and transform connectivity patterns
+- **Degree Constraints**: Fixed in-degree, out-degree and total-number patterns
+- **Population Networks**: Assemble block connectivity from populations and projections
+- **Scale**: Vectorised, memory-bounded generation for 1e5-neuron networks, with
+  export to ``brainevent`` CSR / CSC / fixed-number formats
 - **Extensible Design**: Easy to add custom patterns for any model type
 
 **Quick Start:**
@@ -168,6 +172,20 @@ from ._kernel import (
     CustomKernel,
 )
 
+# Fixed-degree patterns
+from ._fixed import (
+    FixedOutDegree,
+    FixedInDegree,
+    FixedTotalNum,
+)
+
+# Population networks
+from ._network import (
+    Population,
+    Projection,
+    Network,
+)
+
 # Random connectivity patterns
 from ._random import (
     Random,
@@ -253,6 +271,16 @@ __all__ = [
     'SobelKernel',
     'LaplacianKernel',
     'CustomKernel',
+
+    # Fixed-degree patterns
+    'FixedOutDegree',
+    'FixedInDegree',
+    'FixedTotalNum',
+
+    # Population networks
+    'Population',
+    'Projection',
+    'Network',
 
     # Random patterns
     'Random',

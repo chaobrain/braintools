@@ -23,8 +23,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ['3.13']
+        # Every supported Python on Linux; macOS and Windows only on 3.13.
+        os: [ubuntu-latest]
+        python: ['3.11', '3.12', '3.13', '3.14']
+        include:
+          - os: macos-latest
+            python: '3.13'
+          - os: windows-latest
+            python: '3.13'
+    env:
+      JAX_PLATFORMS: cpu
+      XLA_PYTHON_CLIENT_PREALLOCATE: 'false'
+      MPLBACKEND: Agg
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -35,14 +45,50 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[testing]"
-      - name: Run pytest (POSIX)
-        if: runner.os != 'Windows'
-        run: pytest --maxfail=1 --disable-warnings --cov --cov-report=xml
-      - name: Run pytest (Windows)
-        if: runner.os == 'Windows'
-        run: pytest --maxfail=1 --disable-warnings -p no:faulthandler --cov --cov-report=xml
+      - name: Run pytest (one process per subpackage)
+        # Bound peak memory (hosted Linux runners have 7 GB): run one process
+        # per top-level subpackage (plus one for braintools/*_test.py), append
+        # coverage across processes, and fail if any process fails.
+        shell: bash
+        run: |
+          extra=()
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            extra+=(-p no:faulthandler)
+          fi
+          python -m coverage erase
+          targets=()
+          for dir in braintools/*/; do
+            pkg="${dir%/}"
+            [ "$(basename "$pkg")" = "__pycache__" ] && continue
+            targets+=("$pkg")
+          done
+          failed=()
+          run_pytest() {
+            local name="$1"; shift
+            echo "::group::pytest $name"
+            local status=0
+            # `|| status=$?` keeps the step's `bash -e` from aborting the loop.
+            python -m pytest "$@" --maxfail=1 --disable-warnings "${extra[@]}" \
+              --cov --cov-append --cov-report= || status=$?
+            echo "::endgroup::"
+            # Exit status 5 means "no tests collected", which is not a failure.
+            if [ "$status" -ne 0 ] && [ "$status" -ne 5 ]; then
+              echo "::error::pytest failed for $name (exit status $status)"
+              failed+=("$name")
+            fi
+          }
+          for pkg in "${targets[@]}"; do
+            run_pytest "$pkg" "$pkg"
+          done
+          run_pytest "braintools/*_test.py" braintools/*_test.py
+          python -m coverage xml -o coverage.xml
+          python -m coverage report --skip-covered | tail -n 1
+          if [ "${#failed[@]}" -ne 0 ]; then
+            echo "Failed test groups: ${failed[*]}"
+            exit 1
+          fi
       - name: Upload coverage to Codecov
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.python == '3.13'
         uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml

@@ -24,7 +24,7 @@ import os
 import time
 import warnings
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 import jax
 import jax.numpy as jnp
@@ -33,10 +33,10 @@ import brainstate
 from brainstate import ParamState
 from brainstate.typing import PyTree
 
+from braintools._deprecation import register_deprecation, warn_deprecated
 from braintools.optim import Optimizer, UniqueStateManager
 
 from ._callbacks import Callback, CallbackList, EarlyStopping, ModelCheckpoint
-from ._checkpoint import CheckpointManager
 from ._dataloader import DataLoader
 from ._distributed import Strategy, get_strategy
 from ._loggers import Logger, CSVLogger, CompositeLogger
@@ -49,6 +49,43 @@ __all__ = [
 ]
 
 
+# Trainer arguments that are recorded for API compatibility but have no effect
+# on the training loop. Each warns only when a non-default value is passed.
+_PRECISION_DEPRECATION = register_deprecation(
+    'braintools.trainer.Trainer(precision=...)',
+    'explicit dtype casts of the model and data',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+_DETERMINISTIC_DEPRECATION = register_deprecation(
+    'braintools.trainer.Trainer(deterministic=...)',
+    'Trainer(seed=...)',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+_BENCHMARK_DEPRECATION = register_deprecation(
+    'braintools.trainer.Trainer(benchmark=...)',
+    'the default (XLA autotunes automatically)',
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+_STRATEGY_DEPRECATION = register_deprecation(
+    'braintools.trainer.Trainer(strategy=...)',
+    "the default strategy='auto'",
+    since='0.4.0',
+    removed_in='1.0.0',
+    kind='argument',
+)
+
+
+def _is_default_strategy(strategy: Any) -> bool:
+    """Whether ``strategy`` selects the default automatic strategy."""
+    return strategy is None or (isinstance(strategy, str) and strategy == 'auto')
+
+
 class TrainerState:
     """
     Container for trainer state during training.
@@ -58,18 +95,24 @@ class TrainerState:
     epoch : int
         Current epoch.
     global_step : int
-        Total number of training steps.
+        Number of optimizer steps taken. With ``accumulate_grad_batches=k``
+        one step spans ``k`` training batches.
     stage : str
         Current stage ('train', 'validate', 'test', 'predict').
+    lr_schedulers_stepped : bool
+        Whether the epoch-wise learning-rate schedulers have already been
+        stepped for the current epoch. Saved in checkpoints so a resume knows
+        whether the schedule still has to advance past the checkpoint's epoch.
     """
     __module__ = 'braintools.trainer'
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.epoch: int = 0
         self.global_step: int = 0
         self.stage: str = 'train'
         self.batch_idx: int = 0
         self.should_stop: bool = False
+        self.lr_schedulers_stepped: bool = False
 
 
 class Trainer:
@@ -86,9 +129,8 @@ class Trainer:
     min_epochs : int, default=1
         Minimum number of training epochs.
     max_steps : int, default=-1
-        Maximum number of training steps. -1 means no limit. A "step" is counted
-        per processed batch; when ``accumulate_grad_batches > 1`` this counts
-        micro-batches rather than optimizer updates.
+        Maximum number of optimizer steps. -1 means no limit. When
+        ``accumulate_grad_batches > 1`` one step spans that many batches.
     val_check_interval : int or float, default=1.0
         How often to run validation within a training epoch.
         Integer = every N batches, float = fraction of epoch.
@@ -101,7 +143,9 @@ class Trainer:
     enable_progress_bar : bool, default=True
         Whether to show progress bars.
     enable_checkpointing : bool, default=True
-        Whether to enable automatic checkpointing.
+        Recorded for API compatibility. The trainer saves no checkpoints by
+        itself and creates no checkpoint directory; add a
+        :class:`ModelCheckpoint` callback to save checkpoints.
     default_root_dir : str, optional
         Default root directory for logs and checkpoints.
     gradient_clip_val : float, optional
@@ -118,20 +162,48 @@ class Trainer:
         Distributed training strategy. The active training loop drives a single
         optimizer on the selected device(s); multi-host strategies are provided
         but not exercised by :meth:`fit`.
+
+        .. deprecated:: 0.4.0
+           Passing any value other than ``'auto'`` (or ``None``) is deprecated
+           and the argument will be removed in 1.0.0.
     precision : str, default='32'
         Requested compute precision (``'32'``, ``'16'``, ``'bf16'``, optionally
         with a ``'-mixed'``/``'-true'`` suffix). Recorded for API compatibility;
         the loop currently computes in float32 and emits a warning for any
         non-32 value. Cast your model/data explicitly for reduced precision.
+
+        .. deprecated:: 0.4.0
+           Values other than ``'32'``/``'32-true'`` are deprecated and the
+           argument will be removed in 1.0.0.
     deterministic : bool, default=False
         Recorded for API compatibility. Determinism in JAX is governed by the
         PRNG keys you use and XLA flags; this flag does not itself change
         execution.
+
+        .. deprecated:: 0.4.0
+           Passing ``True`` is deprecated and the argument will be removed in
+           1.0.0. Use ``seed`` instead.
     benchmark : bool, default=False
         Recorded for API compatibility; has no effect (XLA autotunes and there
         is no cuDNN benchmark switch in JAX). A warning is emitted if set.
+
+        .. deprecated:: 0.4.0
+           Passing ``True`` is deprecated and the argument will be removed in
+           1.0.0.
     seed : int, optional
         Random seed for reproducibility. Seeds both NumPy and ``brainstate``.
+
+    Raises
+    ------
+    ValueError
+        If ``gradient_clip_algorithm``, ``accumulate_grad_batches``,
+        ``precision`` or ``strategy`` is invalid.
+
+    Warns
+    -----
+    BraintoolsDeprecationWarning
+        If ``precision``, ``deterministic``, ``benchmark`` or ``strategy`` is
+        given a non-default value.
 
     Notes
     -----
@@ -143,22 +215,85 @@ class Trainer:
 
     Examples
     --------
-    Basic usage:
+    Fit a linear regressor, then evaluate it and predict with it:
 
-    >>> trainer = Trainer(max_epochs=10)
-    >>> trainer.fit(model, train_loader, val_loader)
+    .. code-block:: python
 
-    With callbacks and logging:
+        >>> import numpy as np
+        >>> import jax.numpy as jnp
+        >>> import brainstate
+        >>> import braintools
+        >>> class Regressor(braintools.trainer.LightningModule):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = brainstate.nn.Linear(2, 1)
+        ...     def __call__(self, x):
+        ...         return self.linear(x)
+        ...     def training_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         loss = jnp.mean((self(x) - y) ** 2)
+        ...         self.log('mse', loss, prog_bar=True)
+        ...         return {'loss': loss}
+        ...     def validation_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self(x) - y) ** 2)}
+        ...     def test_step(self, batch, batch_idx):
+        ...         x, y = batch
+        ...         return {'loss': jnp.mean((self(x) - y) ** 2)}
+        ...     def predict_step(self, batch, batch_idx):
+        ...         x, _ = batch
+        ...         return self(x)
+        ...     def configure_optimizers(self):
+        ...         return braintools.optim.Adam(lr=0.1)
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.normal(size=(64, 2)).astype(np.float32)
+        >>> y = X @ np.array([[1.0], [-2.0]], dtype=np.float32) + 0.5
+        >>> train_loader = braintools.trainer.DataLoader((X, y), batch_size=16, shuffle=True, seed=0)
+        >>> val_loader = braintools.trainer.DataLoader((X, y), batch_size=32)
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=30, logger=False, enable_progress_bar=False,
+        ...     enable_checkpointing=False)
+        >>> trainer.fit(model, train_loader, val_loader)
+        >>> trainer.current_epoch, trainer.global_step
+        (29, 120)
+        >>> trainer.callback_metrics['val_loss'] < 1e-3
+        True
+        >>> trainer.test(dataloaders=val_loader, verbose=False)['test_loss'] < 1e-3
+        True
+        >>> predictions = trainer.predict(dataloaders=val_loader)
+        >>> len(predictions), predictions[0].shape
+        (2, (32, 1))
 
-    >>> trainer = Trainer(
-    ...     max_epochs=100,
-    ...     callbacks=[
-    ...         ModelCheckpoint(dirpath='checkpoints/', monitor='val_loss'),
-    ...         EarlyStopping(monitor='val_loss', patience=5),
-    ...     ],
-    ...     logger=TensorBoardLogger('logs/'),
-    ... )
-    >>> trainer.fit(model, train_loader, val_loader)
+    With callbacks and CSV logging under a run directory:
+
+    .. code-block:: python
+
+        >>> import os, shutil, tempfile
+        >>> tmp = tempfile.mkdtemp()
+        >>> brainstate.random.seed(0)
+        >>> model = Regressor()
+        >>> trainer = braintools.trainer.Trainer(
+        ...     max_epochs=100,
+        ...     callbacks=[
+        ...         braintools.trainer.ModelCheckpoint(
+        ...             dirpath=os.path.join(tmp, 'checkpoints'), monitor='val_loss'),
+        ...         braintools.trainer.EarlyStopping(
+        ...             monitor='val_loss', patience=5, min_delta=1e-4),
+        ...     ],
+        ...     logger=braintools.trainer.CSVLogger(tmp, name='run', version='v0'),
+        ...     enable_progress_bar=False,
+        ...     default_root_dir=tmp,
+        ... )
+        >>> trainer.fit(model, train_loader, val_loader)
+        >>> trainer.current_epoch < 99  # early stopping ended the run
+        True
+        >>> sorted(os.listdir(os.path.join(tmp, 'run', 'v0')))
+        ['hparams.yaml', 'metrics.csv']
+        >>> 'last.ckpt' in os.listdir(os.path.join(tmp, 'checkpoints'))
+        True
+        >>> shutil.rmtree(tmp)
     """
     __module__ = 'braintools.trainer'
 
@@ -212,6 +347,7 @@ class Trainer:
                 f"'32', '16', 'bf16' (optionally with a '-mixed'/'-true' suffix)."
             )
         if self.precision not in ('32', '32-true'):
+            warn_deprecated(_PRECISION_DEPRECATION)
             warnings.warn(
                 f"precision={precision!r} is recorded but not yet applied: the "
                 f"trainer currently computes in float32. Cast your model/data "
@@ -220,8 +356,11 @@ class Trainer:
             )
 
         self.deterministic = deterministic
+        if deterministic:
+            warn_deprecated(_DETERMINISTIC_DEPRECATION)
         self.benchmark = benchmark
         if benchmark:
+            warn_deprecated(_BENCHMARK_DEPRECATION)
             warnings.warn(
                 "benchmark=True has no effect: XLA already performs autotuning "
                 "and there is no cuDNN benchmark flag to toggle in JAX.",
@@ -244,6 +383,8 @@ class Trainer:
         # Setup distributed
         self._setup_devices(devices)
         self.strategy = get_strategy(strategy)
+        if not _is_default_strategy(strategy):
+            warn_deprecated(_STRATEGY_DEPRECATION)
 
         # Training state
         self.state = TrainerState()
@@ -263,9 +404,6 @@ class Trainer:
         self.logged_metrics: Dict[str, Any] = {}
         self._epoch_metrics: Dict[str, List[Any]] = {}
 
-        # Checkpoint manager
-        self._checkpoint_manager: Optional[CheckpointManager] = None
-
         # Set random seed across NumPy and brainstate so runs are reproducible.
         if seed is not None:
             import numpy as np
@@ -274,6 +412,7 @@ class Trainer:
 
     def _setup_logger(self, logger: Union[Logger, List[Logger], bool]):
         """Setup logging."""
+        self.loggers: List[Logger]
         if logger is True:
             log_dir = os.path.join(self.default_root_dir, 'logs')
             self.loggers = [CSVLogger(log_dir)]
@@ -387,15 +526,6 @@ class Trainer:
         for opt in self.optimizers:
             opt.register_trainable_weights(self.param_states)
 
-    def _setup_checkpoint_manager(self):
-        """Setup checkpoint manager."""
-        if self.enable_checkpointing:
-            ckpt_dir = os.path.join(self.default_root_dir, 'checkpoints')
-            self._checkpoint_manager = CheckpointManager(
-                dirpath=ckpt_dir,
-                max_to_keep=5,
-            )
-
     def _setup_strategy(self):
         """Setup distributed strategy."""
         if self.model is not None and self.optimizers:
@@ -426,11 +556,54 @@ class Trainer:
         val_dataloaders : DataLoader or List[DataLoader], optional
             Validation data loader(s).
         ckpt_path : str, optional
-            Path to checkpoint to resume from.
+            Path to a checkpoint to resume from. Restored are the model
+            weights, the optimizer state, the epoch and global-step counters,
+            and the state of the LR schedulers returned by
+            ``configure_optimizers`` (the ones the trainer steps once per
+            epoch). Training continues at epoch ``checkpoint_epoch + 1`` up to
+            ``max_epochs`` (the total, not additional, number of epochs), with
+            the schedulers advanced to that epoch, so the LR matches an
+            uninterrupted run. A checkpoint saved mid-epoch also resumes at
+            the next epoch. A checkpoint without scheduler state (older
+            ``ModelCheckpoint`` files, ``CheckpointManager`` or hand-written
+            ones) steps the fresh schedulers once per completed epoch instead
+            and warns. Callback state is not restored. If the checkpoint
+            already reached the last epoch, or ``max_steps`` optimizer steps,
+            a warning is emitted and nothing is trained.
 
         Examples
         --------
-        >>> trainer.fit(model, train_loader, val_loader)
+        .. code-block:: python
+
+            >>> import numpy as np
+            >>> import jax.numpy as jnp
+            >>> import brainstate
+            >>> import braintools
+            >>> class Regressor(braintools.trainer.LightningModule):
+            ...     def __init__(self):
+            ...         super().__init__()
+            ...         self.linear = brainstate.nn.Linear(2, 1)
+            ...     def training_step(self, batch, batch_idx):
+            ...         x, y = batch
+            ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+            ...     def validation_step(self, batch, batch_idx):
+            ...         x, y = batch
+            ...         return {'loss': jnp.mean((self.linear(x) - y) ** 2)}
+            ...     def configure_optimizers(self):
+            ...         return braintools.optim.Adam(lr=0.1)
+            >>> rng = np.random.default_rng(0)
+            >>> X = rng.normal(size=(32, 2)).astype(np.float32)
+            >>> y = X.sum(axis=1, keepdims=True)
+            >>> loader = braintools.trainer.DataLoader((X, y), batch_size=16)
+            >>> brainstate.random.seed(0)
+            >>> trainer = braintools.trainer.Trainer(
+            ...     max_epochs=3, logger=False, enable_progress_bar=False,
+            ...     enable_checkpointing=False)
+            >>> trainer.fit(Regressor(), loader, val_dataloaders=loader)
+            >>> trainer.global_step
+            6
+            >>> sorted(trainer.callback_metrics)
+            ['train_loss', 'val_loss']
         """
         if train_dataloaders is None:
             raise ValueError(
@@ -440,7 +613,6 @@ class Trainer:
         # Setup
         self._setup_model(model)
         self._setup_optimizers()
-        self._setup_checkpoint_manager()
         self._setup_strategy()
 
         # Store data loaders
@@ -451,16 +623,19 @@ class Trainer:
             else:
                 self.val_dataloaders = list(val_dataloaders)
 
-        # Load checkpoint if provided
+        # Load checkpoint if provided; resume after the checkpoint's epoch.
+        start_epoch = 0
         if ckpt_path is not None:
-            self._load_checkpoint(ckpt_path)
+            ckpt_epoch = self._load_checkpoint(ckpt_path)
+            if ckpt_epoch is not None:
+                start_epoch = ckpt_epoch + 1
 
         # Create JIT-compiled gradient computation / application steps
         compute_grads_fn, apply_grads_fn = self._create_train_step()
 
         # Run training
         try:
-            self._run_fit(compute_grads_fn, apply_grads_fn)
+            self._run_fit(compute_grads_fn, apply_grads_fn, start_epoch)
         finally:
             self._cleanup()
 
@@ -527,10 +702,37 @@ class Trainer:
 
         return compute_grads, apply_grads
 
-    def _run_fit(self, compute_grads_fn: Callable, apply_grads_fn: Callable):
-        """Run the fit loop."""
-        model = self.model
+    def _run_fit(
+        self,
+        compute_grads_fn: Callable,
+        apply_grads_fn: Callable,
+        start_epoch: int = 0,
+    ):
+        """Run the fit loop over epochs ``start_epoch .. max_epochs - 1``."""
+        # ``fit`` sets the model up before entering the loop.
+        model = cast(LightningModule, self.model)
         state = self.state
+        model.global_step = state.global_step
+        end_epoch = self.max_epochs
+        if 0 < start_epoch and start_epoch >= self.max_epochs:
+            warnings.warn(
+                f"The checkpoint already reached epoch {start_epoch - 1}, so "
+                f"there is nothing left to train with max_epochs="
+                f"{self.max_epochs}. max_epochs is the total number of epochs; "
+                f"raise it to train further.",
+                stacklevel=3,
+            )
+        elif self.max_steps > 0 and state.global_step >= self.max_steps:
+            # The in-loop check only runs after a batch, so without this guard a
+            # resumed run would take one optimizer step past ``max_steps``.
+            warnings.warn(
+                f"The checkpoint already reached global step {state.global_step}, "
+                f"so there is nothing left to train with max_steps="
+                f"{self.max_steps}. max_steps is the total number of optimizer "
+                f"steps; raise it to train further.",
+                stacklevel=3,
+            )
+            end_epoch = start_epoch
 
         # Callbacks: fit start
         self._callbacks.on_fit_start(self, model)
@@ -561,8 +763,9 @@ class Trainer:
         start_time = time.time()
 
         # Training loop
-        for epoch in range(self.max_epochs):
+        for epoch in range(start_epoch, end_epoch):
             state.epoch = epoch
+            state.lr_schedulers_stepped = False
             model.current_epoch = epoch
 
             # Run training epoch
@@ -573,9 +776,8 @@ class Trainer:
                 self._run_validation_epoch(epoch)
 
             # Update schedulers
-            for scheduler in self.schedulers:
-                if scheduler is not None and hasattr(scheduler, 'step'):
-                    scheduler.step()
+            self._step_schedulers()
+            state.lr_schedulers_stepped = True
 
             # Print epoch summary
             if display:
@@ -614,7 +816,9 @@ class Trainer:
 
     def _run_train_epoch(self, compute_grads_fn: Callable, apply_grads_fn: Callable, epoch: int):
         """Run a single training epoch."""
-        model = self.model
+        # ``fit`` sets the model and train dataloader up before the loop.
+        model = cast(LightningModule, self.model)
+        train_dataloader = cast(DataLoader, self.train_dataloader)
         state = self.state
         optimizer = self.optimizers[0] if self.optimizers else None
         state.stage = 'train'
@@ -646,8 +850,11 @@ class Trainer:
         accum_count = 0
 
         # Training loop
-        for batch_idx, batch in enumerate(self.train_dataloader):
+        for batch_idx, batch in enumerate(train_dataloader):
             state.batch_idx = batch_idx
+            # Metrics of every batch in an accumulation window are logged at
+            # the step count reached before that window's optimizer update.
+            log_step = state.global_step
 
             # Reset logged metrics *before* the batch-start hooks so callbacks
             # never observe the previous batch's stale metrics. (T-11)
@@ -690,6 +897,7 @@ class Trainer:
                 self._callbacks.on_before_optimizer_step(self, model, optimizer)
                 model.on_before_optimizer_step(optimizer)
                 apply_grads_fn(applied)
+                self._count_optimizer_step()
                 self._callbacks.on_after_optimizer_step(self, model, optimizer)
                 model.on_after_optimizer_step(optimizer)
                 accum_grads = None
@@ -706,6 +914,16 @@ class Trainer:
                 outputs[key] = _to_scalar(value)
             for key, value in logger_metrics.items():
                 outputs[key] = _to_scalar(value)
+
+            # Expose the concrete metrics on the module for the batch-end hooks
+            # (e.g. PrintCallback, TQDMProgressBar). Tracing ``training_step``
+            # left JIT tracers in the module's dicts on the first batch, and
+            # cached calls leave them empty afterwards.
+            model._reset_logged_metrics()
+            model._logger_metrics.update(pre_logger_metrics)
+            model._logger_metrics.update(logger_metrics)
+            model._prog_bar_metrics.update(pre_prog_bar_metrics)
+            model._prog_bar_metrics.update(prog_bar_metrics)
 
             # Callbacks: batch end
             self._callbacks.on_train_batch_end(self, model, outputs, batch, batch_idx)
@@ -726,9 +944,7 @@ class Trainer:
                 pbar.set_postfix(pbar_show)
 
             # Log metrics.
-            self._log_metrics(outputs, state.global_step)
-
-            state.global_step += 1
+            self._log_metrics(outputs, log_step)
 
             # Check max steps
             if self.max_steps > 0 and state.global_step >= self.max_steps:
@@ -745,6 +961,7 @@ class Trainer:
             self._callbacks.on_before_optimizer_step(self, model, optimizer)
             model.on_before_optimizer_step(optimizer)
             apply_grads_fn(applied)
+            self._count_optimizer_step()
             self._callbacks.on_after_optimizer_step(self, model, optimizer)
             model.on_after_optimizer_step(optimizer)
 
@@ -761,12 +978,23 @@ class Trainer:
         self._callbacks.on_train_epoch_end(self, model)
         model.on_train_epoch_end()
 
+    def _count_optimizer_step(self):
+        """Count one optimizer update and mirror it onto the model."""
+        self.state.global_step += 1
+        cast(LightningModule, self.model).global_step = self.state.global_step
+
+    def _step_schedulers(self):
+        """Advance every epoch-wise learning-rate scheduler by one epoch."""
+        for scheduler in self.schedulers:
+            if scheduler is not None and hasattr(scheduler, 'step'):
+                scheduler.step()
+
     def _run_validation_epoch(self, epoch: int):
         """Run validation epoch."""
         if self.val_dataloaders is None:
             return
 
-        model = self.model
+        model = cast(LightningModule, self.model)
         state = self.state
         prev_stage = state.stage
         state.stage = 'validate'
@@ -881,7 +1109,8 @@ class Trainer:
             if interval >= 1.0:
                 return False
             try:
-                n_batches = len(self.train_dataloader)
+                # ``len(None)`` raises TypeError, so a missing loader is covered.
+                n_batches = len(cast(DataLoader, self.train_dataloader))
             except (TypeError, AttributeError):
                 return False
             k = max(1, int(n_batches * interval))
@@ -906,19 +1135,33 @@ class Trainer:
         for logger in self.loggers:
             logger.log_metrics(log_metrics, step)
 
-    def _load_checkpoint(self, ckpt_path: str):
+    def _load_checkpoint(
+        self,
+        ckpt_path: str,
+        restore_training_state: bool = True,
+    ) -> Optional[int]:
         """Load checkpoint.
 
         Handles both checkpoint layouts produced in this package: the
         ``ModelCheckpoint`` callback stores ``global_step`` and a *list* of
         optimizer states, while ``CheckpointManager`` stores ``step`` and a
         *single* optimizer-state dict. (T-6, T-29)
+
+        With ``restore_training_state=False`` (validate/test/predict) only the
+        model weights are loaded; the optimizer state and the trainer's
+        epoch/step counters are left untouched.
+
+        Returns the epoch stored in the checkpoint, or ``None`` if it has none
+        (or the training state was not restored).
         """
         from ._checkpoint import load_checkpoint
         state = load_checkpoint(ckpt_path)
 
         if self.model is not None and 'model_state_dict' in state:
             self.model.load_state_dict(state['model_state_dict'])
+
+        if not restore_training_state:
+            return None
 
         if self.optimizers and 'optimizer_state_dict' in state:
             for i, single in enumerate(_normalize_optimizer_states(state['optimizer_state_dict'])):
@@ -929,15 +1172,66 @@ class Trainer:
         # ``step=None`` (and hence no 'global_step'), which would otherwise make
         # ``global_step`` None and crash the loop on ``global_step += 1``. (T-C)
         epoch = state.get('epoch')
+        if epoch is not None:
+            epoch = int(epoch)
         self.state.epoch = epoch if epoch is not None else 0
         # Prefer 'global_step'; fall back to the legacy 'step' key.
         gstep = state.get('global_step')
         if gstep is None:
             gstep = state.get('step')
-        self.state.global_step = gstep if gstep is not None else 0
+        self.state.global_step = int(gstep) if gstep is not None else 0
         if self.model is not None:
             self.model.current_epoch = self.state.epoch
             self.model.global_step = self.state.global_step
+
+        # Restored after the optimizers: an optimizer's ``load_state_dict``
+        # writes its saved LR into its attached scheduler, which the scheduler
+        # state then supersedes.
+        self._restore_schedulers(state, 0 if epoch is None else epoch + 1)
+        return epoch
+
+    def _restore_schedulers(self, state: Dict[str, Any], start_epoch: int):
+        """Bring the LR schedulers to where they stand at ``start_epoch``.
+
+        A checkpoint written by ``ModelCheckpoint`` carries each scheduler's
+        ``state_dict`` and whether it was already stepped for the checkpoint's
+        epoch; the state is loaded and, if needed, stepped once more so the
+        resumed epoch ``start_epoch`` runs with the LR of a continuous run.
+
+        A checkpoint without scheduler state (written by an older version, by
+        ``CheckpointManager`` or by hand) is handled by stepping the freshly
+        configured schedulers ``start_epoch`` times, which reproduces the
+        trainer's once-per-epoch schedule; a warning says so, since manual
+        or metric-driven stepping cannot be reconstructed.
+        """
+        schedulers = [(i, s) for i, s in enumerate(self.schedulers)
+                      if s is not None and hasattr(s, 'step')]
+        if not schedulers:
+            self.state.lr_schedulers_stepped = True
+            return
+
+        saved = state.get('lr_schedulers')
+        if isinstance(saved, (dict, list, tuple)):
+            saved_list = _from_msgpack_lists(saved)
+            if isinstance(saved_list, dict):
+                saved_list = [saved_list.get(str(i)) for i in range(len(self.schedulers))]
+            for i, scheduler in schedulers:
+                if i < len(saved_list) and saved_list[i] is not None:
+                    scheduler.load_state_dict(saved_list[i])
+            if not bool(state.get('lr_schedulers_stepped', False)):
+                self._step_schedulers()
+        else:
+            if start_epoch > 0:
+                warnings.warn(
+                    f"The checkpoint has no learning-rate scheduler state; the "
+                    f"schedulers are stepped {start_epoch} time(s) to reach "
+                    f"epoch {start_epoch}. This is exact only for schedulers "
+                    f"stepped once per epoch by the trainer.",
+                    stacklevel=4,
+                )
+            for _ in range(start_epoch):
+                self._step_schedulers()
+        self.state.lr_schedulers_stepped = True
 
     def _cleanup(self):
         """Release per-fit transient caches.
@@ -969,7 +1263,8 @@ class Trainer:
         dataloaders : DataLoader or List[DataLoader], optional
             Validation data loader(s).
         ckpt_path : str, optional
-            Path to checkpoint to load.
+            Path to a checkpoint whose model weights are loaded first. The
+            trainer's epoch and step counters are left unchanged.
         verbose : bool, default=True
             Whether to print results.
 
@@ -996,7 +1291,7 @@ class Trainer:
             )
 
         if ckpt_path is not None:
-            self._load_checkpoint(ckpt_path)
+            self._load_checkpoint(ckpt_path, restore_training_state=False)
 
         self.state.stage = 'validate'
         self._run_validation_epoch(0)
@@ -1026,7 +1321,8 @@ class Trainer:
         dataloaders : DataLoader or List[DataLoader], optional
             Test data loader(s).
         ckpt_path : str, optional
-            Path to checkpoint to load.
+            Path to a checkpoint whose model weights are loaded first. The
+            trainer's epoch and step counters are left unchanged.
         verbose : bool, default=True
             Whether to print results.
 
@@ -1053,10 +1349,10 @@ class Trainer:
             )
 
         if ckpt_path is not None:
-            self._load_checkpoint(ckpt_path)
+            self._load_checkpoint(ckpt_path, restore_training_state=False)
 
-        # Run test loop (similar to validation)
-        model = self.model
+        # Run test loop (similar to validation). The model was checked above.
+        model = cast(LightningModule, self.model)
         state = self.state
         state.stage = 'test'
 
@@ -1140,7 +1436,8 @@ class Trainer:
         dataloaders : DataLoader or List[DataLoader], optional
             Prediction data loader(s).
         ckpt_path : str, optional
-            Path to checkpoint to load.
+            Path to a checkpoint whose model weights are loaded first. The
+            trainer's epoch and step counters are left unchanged.
 
         Returns
         -------
@@ -1165,9 +1462,9 @@ class Trainer:
             )
 
         if ckpt_path is not None:
-            self._load_checkpoint(ckpt_path)
+            self._load_checkpoint(ckpt_path, restore_training_state=False)
 
-        model = self.model
+        model = cast(LightningModule, self.model)  # checked above
         state = self.state
         state.stage = 'predict'
 
@@ -1229,6 +1526,24 @@ def _normalize_optimizer_states(opt_state: Any) -> List[Any]:
             return [opt_state[k] for k in sorted(opt_state.keys(), key=lambda x: int(x))]
         return [opt_state]
     return []
+
+
+def _from_msgpack_lists(value: Any) -> Any:
+    """Turn the digit-keyed dicts msgpack makes of lists back into lists.
+
+    ``msgpack_save`` stores a list as ``{'0': ..., '1': ...}``. A scheduler's
+    ``load_state_dict`` expects its original lists (``base_lrs``, nested
+    ``schedulers``, ...), so every dict whose keys are exactly ``'0'..'n-1'``
+    is converted back, recursively. Other dicts keep their keys.
+    """
+    if isinstance(value, dict):
+        converted = {k: _from_msgpack_lists(v) for k, v in value.items()}
+        if converted and set(converted) == {str(i) for i in range(len(converted))}:
+            return [converted[str(i)] for i in range(len(converted))]
+        return converted
+    if isinstance(value, (list, tuple)):
+        return [_from_msgpack_lists(v) for v in value]
+    return value
 
 
 def _prefixed(stage: str, key: str) -> str:

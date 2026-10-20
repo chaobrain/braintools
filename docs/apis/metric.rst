@@ -1,11 +1,38 @@
 ``braintools.metric`` module
 ============================
 
-.. currentmodule:: braintools.metric 
-.. automodule:: braintools.metric 
+.. currentmodule:: braintools.metric
+.. automodule:: braintools.metric
 
-Comprehensive metric collection covering spiking activity, statistical
-analysis, and supervised learning objectives for neural modeling.
+Loss functions and metrics for training neural networks: classification,
+regression, ranking, pairwise similarity and label smoothing.
+
+.. note::
+
+   **Moved to** :mod:`braintools.analysis`. In 0.4 the spike-train, LFP and
+   correlation measures moved out of this module (see :doc:`analysis`):
+
+   - ``firing_rate``, ``victor_purpura_distance``, ``van_rossum_distance``,
+     ``spike_train_synchrony``, ``burst_synchrony_index``,
+     ``phase_locking_value``, ``spike_time_tiling_coefficient``,
+     ``correlation_index`` and ``cross_correlation`` are in
+     :mod:`braintools.analysis.spike`;
+   - ``power_spectral_density``, ``coherence_analysis``,
+     ``phase_amplitude_coupling``, ``theta_gamma_coupling``,
+     ``spectral_entropy`` and ``lfp_phase_coherence`` are in
+     :mod:`braintools.analysis.spectral`;
+   - ``unitary_LFP`` and ``current_source_density`` are in
+     :mod:`braintools.analysis.field`;
+   - ``voltage_fluctuation``, ``functional_connectivity`` and
+     ``functional_connectivity_dynamics`` are in
+     :mod:`braintools.analysis.population`;
+   - ``matrix_correlation`` and ``weighted_correlation`` are in
+     :mod:`braintools.analysis.stats`.
+
+   The old ``braintools.metric.<name>`` names still work but emit a
+   ``BraintoolsDeprecationWarning`` when called, and will be removed in 1.0.
+   ``braintools.metric.raster_plot`` is deprecated as well; use
+   ``braintools.spike.SpikeTrains.from_dense`` instead.
 
 Classification Losses
 ---------------------
@@ -34,25 +61,6 @@ Objective functions for training classifiers on neural or behavioral labels.
    nll_loss
 
 
-Correlation
------------
-
-Tools for measuring synchrony, functional connectivity, and aggregated
-correlations between neural signals.
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-   :template: classtemplate.rst
-
-   cross_correlation
-   voltage_fluctuation
-   matrix_correlation
-   weighted_correlation
-   functional_connectivity
-   functional_connectivity_dynamics
-
-
 Fenchel-Young Loss
 ------------------
 
@@ -65,49 +73,6 @@ prediction problems.
    :template: classtemplate.rst
 
    make_fenchel_young_loss
-
-
-Spike Firing
-------------
-
-Descriptive statistics that summarize firing rates, timing variability, and
-spiking reliability.
-
-.. autosummary::
-    :toctree: generated/
-    :nosignatures:
-    :template: classtemplate.rst
-
-    raster_plot
-    firing_rate
-    victor_purpura_distance
-    van_rossum_distance
-    spike_train_synchrony
-    burst_synchrony_index
-    phase_locking_value
-    spike_time_tiling_coefficient
-    correlation_index
-
-
-Local Field Potential
----------------------
-
-Metrics tailored to local field potential (LFP) analysis such as spectral
-characteristics and connectivity.
-
-.. autosummary::
-    :toctree: generated/
-    :nosignatures:
-    :template: classtemplate.rst
-
-    unitary_LFP
-    power_spectral_density
-    coherence_analysis
-    phase_amplitude_coupling
-    theta_gamma_coupling
-    current_source_density
-    spectral_entropy
-    lfp_phase_coherence
 
 
 Ranking Losses
@@ -137,6 +102,7 @@ Continuous-valued error metrics for fitting neural or behavioral signals.
    squared_error
    absolute_error
    l1_loss
+   L1Loss
    l2_loss
    l2_norm
    safe_norm

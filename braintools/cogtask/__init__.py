@@ -95,7 +95,7 @@ Pre-built Tasks:
     - Motor: AntiReach, Reaching1D, EvidenceAccumulation
 """
 
-from ._version import (
+from braintools._version import (
     __version_info__,
     __version__,
 )
@@ -166,6 +166,8 @@ from .tasks import (
     ContextDecisionMaking,
     SingleContextDecisionMaking,
     PulseDecisionMaking,
+    MultiSensoryIntegration,
+    EconomicDecisionMaking,
     # Working Memory
     DelayMatchSample,
     DualDelayMatchSample,
@@ -180,6 +182,7 @@ from .tasks import (
     ImmediateDirectionReproduction,
     DelayDirectionClassification,
     ImmediateDirectionClassification,
+    OneTwoThreeGo,
     # Reasoning
     HierarchicalReasoning,
     ProbabilisticReasoning,
@@ -198,6 +201,7 @@ from .utils import (
     initialize2,
     interval_of,
     period_to_arr,
+    rate_to_prob,
     firing_rate,
 )
 
@@ -260,6 +264,8 @@ __all__ = [
     'ContextDecisionMaking',
     'SingleContextDecisionMaking',
     'PulseDecisionMaking',
+    'MultiSensoryIntegration',
+    'EconomicDecisionMaking',
     # Working Memory Tasks
     'DelayMatchSample',
     'DualDelayMatchSample',
@@ -274,6 +280,7 @@ __all__ = [
     'ImmediateDirectionReproduction',
     'DelayDirectionClassification',
     'ImmediateDirectionClassification',
+    'OneTwoThreeGo',
     # Reasoning Tasks
     'HierarchicalReasoning',
     'ProbabilisticReasoning',
@@ -290,5 +297,6 @@ __all__ = [
     'initialize2',
     'interval_of',
     'period_to_arr',
+    'rate_to_prob',
     'firing_rate',
 ]

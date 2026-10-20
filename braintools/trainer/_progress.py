@@ -116,11 +116,23 @@ class SimpleProgressBar(ProgressBar):
 
     Examples
     --------
-    >>> pbar = SimpleProgressBar()
-    >>> pbar.start(total=100, desc='Training')
-    >>> for i in range(100):
-    ...     pbar.update(1, loss=0.5)
-    >>> pbar.close()
+    The bar redraws itself in place with ``\\r``; here the output is captured
+    and only the final frame is shown:
+
+    .. code-block:: python
+
+        >>> import contextlib, io
+        >>> import braintools
+        >>> buf = io.StringIO()
+        >>> with contextlib.redirect_stdout(buf):
+        ...     pbar = braintools.trainer.SimpleProgressBar(width=10)
+        ...     pbar.start(total=4, desc='Training')
+        ...     for _ in range(4):
+        ...         pbar.update(1)
+        ...     pbar.set_postfix({'loss': 0.25})
+        ...     pbar.close()
+        >>> print(buf.getvalue().split('\\r')[-1].strip())
+        Training: 100.0%|=========>| 4/4 [...] loss=0.2500
     """
     __module__ = 'braintools.trainer'
 
@@ -248,8 +260,19 @@ class TQDMProgressBarWrapper(ProgressBar):
 
     Examples
     --------
-    >>> pbar = TQDMProgressBarWrapper(leave=True)
-    >>> pbar.start(total=100, desc='Training')
+    Keyword arguments go to ``tqdm``; here the bar writes to a buffer:
+
+    .. code-block:: python
+
+        >>> import io
+        >>> import braintools
+        >>> buf = io.StringIO()
+        >>> pbar = braintools.trainer.TQDMProgressBarWrapper(file=buf, leave=True)
+        >>> pbar.start(total=3, desc='Training')
+        >>> pbar.update(3, loss=0.5)
+        >>> pbar.close()
+        >>> 'Training' in buf.getvalue() and '3/3' in buf.getvalue()
+        True
     """
     __module__ = 'braintools.trainer'
 
@@ -306,8 +329,22 @@ class RichProgressBarWrapper(ProgressBar):
 
     Examples
     --------
-    >>> pbar = RichProgressBarWrapper()
-    >>> pbar.start(total=100, desc='Training')
+    Keyword arguments go to ``rich.progress.Progress``; here it renders to an
+    in-memory console:
+
+    .. code-block:: python
+
+        >>> import io
+        >>> from rich.console import Console
+        >>> import braintools
+        >>> buf = io.StringIO()
+        >>> pbar = braintools.trainer.RichProgressBarWrapper(console=Console(file=buf))
+        >>> pbar.start(total=3, desc='Training')
+        >>> pbar.update(3)
+        >>> pbar.set_postfix({'loss': 0.5})
+        >>> pbar.close()
+        >>> 'Training loss=0.5000' in buf.getvalue()
+        True
     """
     __module__ = 'braintools.trainer'
 
@@ -403,8 +440,17 @@ def get_progress_bar(
 
     Examples
     --------
-    >>> pbar = get_progress_bar('tqdm')
-    >>> pbar.start(total=100, desc='Training')
+    ``'auto'`` prefers rich, then tqdm, then the dependency-free bar:
+
+    .. code-block:: python
+
+        >>> import braintools
+        >>> type(braintools.trainer.get_progress_bar('simple')).__name__
+        'SimpleProgressBar'
+        >>> type(braintools.trainer.get_progress_bar('tqdm')).__name__
+        'TQDMProgressBarWrapper'
+        >>> isinstance(braintools.trainer.get_progress_bar(), braintools.trainer.ProgressBar)
+        True
     """
     if backend == 'auto':
         # Try rich first, then tqdm, then simple

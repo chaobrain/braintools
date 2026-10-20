@@ -132,5 +132,34 @@ class TestPairwiseCosineDistance(unittest.TestCase):
         self.assertEqual(pcd(X, Y).shape, (3, 2))
 
 
+class TestPW1PairwiseCosineSmallVectors(unittest.TestCase):
+    """Audit 2026-06-19, PW-1: per-row norm flooring for small vectors."""
+
+    def test_small_identical_rows_have_unit_similarity(self):
+        # PW-1: flooring the *product* of norms corrupted small (non-zero) vectors.
+        X = jnp.array([[3e-5, 0.0], [3e-5, 0.0]])
+        sim = pcs(X)
+        np.testing.assert_allclose(float(sim[0, 0]), 1.0, atol=1e-5)
+        np.testing.assert_allclose(float(sim[0, 1]), 1.0, atol=1e-5)
+
+    def test_orthogonal_small_rows(self):
+        X = jnp.array([[1e-5, 0.0], [0.0, 1e-5]])
+        sim = pcs(X)
+        np.testing.assert_allclose(float(sim[0, 1]), 0.0, atol=1e-5)
+
+    def test_zero_vector_still_yields_zero(self):
+        # The documented zero-vector behaviour must be preserved.
+        X = jnp.array([[0.0, 0.0], [1.0, 2.0]])
+        sim = pcs(X)
+        np.testing.assert_allclose(float(sim[0, 1]), 0.0, atol=1e-6)
+
+    def test_zero_vector_gradient_is_finite(self):
+        def f(x):
+            return jnp.sum(pcs(x))
+
+        g = jax.grad(f)(jnp.array([[0.0, 0.0], [1.0, 2.0]]))
+        self.assertTrue(bool(jnp.all(jnp.isfinite(g))))
+
+
 if __name__ == '__main__':
     unittest.main()

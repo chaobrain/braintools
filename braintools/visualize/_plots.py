@@ -19,12 +19,14 @@
 import logging
 
 import brainstate
+import brainunit as u
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
 from matplotlib.gridspec import GridSpec
 
 from braintools._misc import set_module_as
+from ._utils import is_spike_trains, spike_trains_events
 
 __all__ = [
     'line_plot',
@@ -208,7 +210,7 @@ def line_plot(
 @set_module_as('braintools.visualize')
 def raster_plot(
     ts,
-    sp_matrix,
+    sp_matrix=None,
     ax=None,
     marker='.',
     markersize=2,
@@ -226,10 +228,13 @@ def raster_plot(
 
     Parameters
     ----------
-    ts : np.ndarray
-        The run times.
-    sp_matrix : np.ndarray
-        The spike matrix which records the spike information.
+    ts : np.ndarray or SpikeTrains
+        The run times, or a :class:`braintools.spike.SpikeTrains` (then
+        ``sp_matrix`` must be omitted). Spike times of a ``SpikeTrains`` with
+        time units are plotted in ms, matching the default ``xlabel``.
+    sp_matrix : np.ndarray, optional
+        The spike matrix which records the spike information, with shape
+        ``(len(ts), n_neurons)``. Required unless ``ts`` is a ``SpikeTrains``.
         It can be easily accessed by specifying the ``monitors``
         of NeuGroup by: ``neu = NeuGroup(..., monitors=['spike'])``
     ax : Axes, optional
@@ -265,26 +270,47 @@ def raster_plot(
     Raises
     ------
     ValueError
-        If ts is None or sp_matrix is empty.
+        If ts is None or sp_matrix is empty, or if both a ``SpikeTrains`` and
+        ``sp_matrix`` are given.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax.numpy as jnp
+        >>> import brainunit as u
+        >>> from braintools.spike import SpikeTrains
+        >>> from braintools.visualize import raster_plot
+        >>> spikes = jnp.zeros((100, 5)).at[::10, 2].set(1.)
+        >>> ax = raster_plot(jnp.arange(100) * 0.1, spikes)            # legacy form
+        >>> ax = raster_plot(SpikeTrains.from_dense(spikes, dt=0.1 * u.ms))
     """
 
-    # Input validation
-    if ts is None:
-        raise ValueError('Must provide "ts".')
-    if sp_matrix is None or len(sp_matrix) == 0:
-        raise ValueError('sp_matrix cannot be empty.')
+    if is_spike_trains(ts):
+        if sp_matrix is not None:
+            raise ValueError('Pass either a SpikeTrains as "ts" or "ts" with "sp_matrix", not both.')
+        try:
+            time, index, _ = spike_trains_events(ts, unit=u.ms)
+        except u.UnitMismatchError:
+            time, index, _ = spike_trains_events(ts)
+    else:
+        # Input validation
+        if ts is None:
+            raise ValueError('Must provide "ts".')
+        if sp_matrix is None or len(sp_matrix) == 0:
+            raise ValueError('sp_matrix cannot be empty.')
 
-    sp_matrix = np.asarray(sp_matrix)
-    ts = np.asarray(ts)
+        sp_matrix = np.asarray(sp_matrix)
+        ts = np.asarray(ts)
 
-    # Validate dimensions
-    if len(ts) != sp_matrix.shape[0]:
-        raise ValueError(f"Time array length ({len(ts)}) must match sp_matrix first dimension ({sp_matrix.shape[0]})")
+        # Validate dimensions
+        if len(ts) != sp_matrix.shape[0]:
+            raise ValueError(f"Time array length ({len(ts)}) must match sp_matrix first dimension ({sp_matrix.shape[0]})")
 
-    # get index and time
-    elements = np.where(sp_matrix > 0.)
-    index = elements[1]
-    time = ts[elements[0]]
+        # get index and time
+        elements = np.where(sp_matrix > 0.)
+        index = elements[1]
+        time = ts[elements[0]]
 
     # plot raster
     if ax is None:

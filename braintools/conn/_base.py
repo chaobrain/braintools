@@ -25,9 +25,10 @@ generation across different neuron model types:
 
 import hashlib
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Union, Dict, Any, Sequence
+from typing import Optional, Tuple, Union, Dict, Any, Sequence, cast, overload
 
 import brainevent
+import brainstate
 import brainunit as u
 import numpy as np
 
@@ -179,9 +180,9 @@ class ConnectionResult:
         """Convert to sparse connectivity matrix in CSR format."""
         indices, indptr, order = compute_csr_indices_indptr(self.pre_indices, self.post_indices, self.shape)
         if self.weights is None:
-            weights = 1.0
+            weights = _as_default_float(1.0)
         else:
-            weights = self.weights
+            weights = _as_default_float(self.weights)
             # The CSR ``indices`` are reordered to be row-sorted; per-edge data must
             # follow the exact same permutation or weights land on the wrong columns.
             if u.math.size(weights) == len(self.pre_indices) and len(self.pre_indices) > 0:
@@ -201,14 +202,293 @@ class ConnectionResult:
         """Convert delays to sparse connectivity matrix in CSR format."""
         indices, indptr, order = compute_csr_indices_indptr(self.pre_indices, self.post_indices, self.shape)
         if self.delays is None:
-            delays = 0.0
+            delays = _as_default_float(0.0)
         else:
-            delays = self.delays
+            delays = _as_default_float(self.delays)
             # See weight2csr: per-edge data must follow the row-sorted CSR order.
             if u.math.size(delays) == len(self.pre_indices) and len(self.pre_indices) > 0:
                 delays = delays[order]
         csr = brainevent.CSR((delays, indices, indptr), shape=self.shape)
         return csr
+
+    # ------------------------------------------------------------------
+    # brainevent / scipy exporters
+    # ------------------------------------------------------------------
+
+    def _export_values(self, data: str, cast: bool = True):
+        """Return the per-edge (or size-1) values selected by ``data``.
+
+        With ``cast=True`` floating values are cast to the default float type
+        (for ``brainevent``); host-side exports pass ``cast=False``.
+        """
+        if data == 'weight':
+            values, default = self.weights, 1.0
+        elif data == 'delay':
+            values, default = self.delays, 0.0
+        else:
+            raise ValueError(f"data must be 'weight' or 'delay', got {data!r}.")
+        values = default if values is None else values
+        return _as_default_float(values) if cast else values
+
+    def _fixed_num_layout(self, by: str, data: str):
+        """Group the edges by pre (``by='pre'``) or post (``by='post'``) neuron.
+
+        Returns ``(values, indices)`` where ``indices`` has shape ``(n_rows, k)``
+        and ``values`` is either a 0-d scalar or an ``(n_rows, k)`` array.
+        """
+        values = self._export_values(data)
+        n_pre, n_post = self.shape
+        if by == 'pre':
+            primary, secondary, n_rows = self.pre_indices, self.post_indices, n_pre
+        else:
+            primary, secondary, n_rows = self.post_indices, self.pre_indices, n_post
+        counts = np.bincount(primary, minlength=n_rows)
+        if n_rows > 0 and counts.min() != counts.max():
+            raise ValueError(
+                f'to_fixed_num_per_{by} requires every {by} neuron to have the same number '
+                f'of connections, but the observed range is [{int(counts.min())}, '
+                f'{int(counts.max())}] connections per {by} neuron. Use weight2csr() or '
+                f'to_csc() for irregular connectivity.'
+            )
+        k = int(counts[0]) if n_rows > 0 else 0
+        # Stable sort: within a row the original edge order is kept (sorted
+        # already for the fixed-number generators), and timsort is linear on
+        # edges that are already grouped by ``primary``.
+        order = np.argsort(primary, kind='stable')
+        indices = secondary[order].reshape(n_rows, k)
+        values = _permute_values(values, order)
+        if u.math.size(values) != 1:
+            values = values.reshape((n_rows, k))
+        return values, indices
+
+    def to_fixed_num_per_pre(self, data: str = 'weight') -> 'brainevent.FixedNumPerPre':
+        """Export to a :class:`brainevent.FixedNumPerPre` matrix.
+
+        Every presynaptic neuron must have the same number ``k`` of outgoing
+        connections (as produced by :class:`~braintools.conn.FixedOutDegree`).
+
+        Parameters
+        ----------
+        data : {'weight', 'delay'}, default 'weight'
+            Which edge values to store. Missing weights become ``1.0`` and
+            missing delays ``0.0``.
+
+        Returns
+        -------
+        brainevent.FixedNumPerPre
+            Matrix of shape ``(n_pre, n_post)`` with ``indices`` of shape
+            ``(n_pre, k)`` and ``W[i, indices[i, j]] = data[i, j]``. Homogeneous
+            values (size 1) stay a scalar; units are kept.
+
+        Raises
+        ------
+        ValueError
+            If the out-degrees are not all equal (the message reports the
+            observed range), or ``data`` is not ``'weight'``/``'delay'``.
+
+        See Also
+        --------
+        ConnectionResult.to_fixed_num_per_post, ConnectionResult.weight2csr, ConnectionResult.to_csc
+
+        Notes
+        -----
+        Host-side export (indices must be built outside ``jax.jit``); the
+        resulting brainevent object supports ``jit``/``vmap``/``grad`` in its
+        products. Duplicate edges (from ``with_replacement=True``) are kept as
+        separate slots and are summed by brainevent, whereas
+        :meth:`weight2dense` keeps only one of them. Delays have no brainevent
+        operator semantics; ``data='delay'`` only packs them in the same layout.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            >>> import numpy as np
+            >>> import brainunit as u
+            >>> from braintools.conn import FixedOutDegree
+            >>> result = FixedOutDegree(3, weight=0.5 * u.nS, seed=0)(pre_size=4, post_size=6)
+            >>> w = result.to_fixed_num_per_pre()
+            >>> w.shape, w.indices.shape
+            ((4, 6), (4, 3))
+            >>> w.data
+            Quantity(0.5, "nS")
+            >>> bool(u.math.allclose(w.todense(), result.weight2dense()))
+            True
+        """
+        values, indices = self._fixed_num_layout('pre', data)
+        return brainevent.FixedNumPerPre(values, indices, shape=self.shape)
+
+    def to_fixed_num_per_post(self, data: str = 'weight') -> 'brainevent.FixedNumPerPost':
+        """Export to a :class:`brainevent.FixedNumPerPost` matrix.
+
+        Every postsynaptic neuron must have the same number ``k`` of incoming
+        connections (as produced by :class:`~braintools.conn.FixedInDegree`).
+
+        Parameters
+        ----------
+        data : {'weight', 'delay'}, default 'weight'
+            Which edge values to store. Missing weights become ``1.0`` and
+            missing delays ``0.0``.
+
+        Returns
+        -------
+        brainevent.FixedNumPerPost
+            Matrix of shape ``(n_pre, n_post)`` with ``indices`` of shape
+            ``(n_post, k)`` and ``W[indices[j, i], j] = data[j, i]``.
+            Homogeneous values (size 1) stay a scalar; units are kept.
+
+        Raises
+        ------
+        ValueError
+            If the in-degrees are not all equal (the message reports the
+            observed range), or ``data`` is not ``'weight'``/``'delay'``.
+
+        See Also
+        --------
+        ConnectionResult.to_fixed_num_per_pre, ConnectionResult.weight2csr, ConnectionResult.to_csc
+
+        Notes
+        -----
+        Host-side export; see :meth:`to_fixed_num_per_pre` for duplicate edges
+        and delays.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            >>> import numpy as np
+            >>> import jax.numpy as jnp
+            >>> from braintools.conn import FixedInDegree
+            >>> result = FixedInDegree(2, seed=0)(pre_size=5, post_size=3)
+            >>> w = result.to_fixed_num_per_post()
+            >>> w.shape, w.indices.shape
+            ((5, 3), (3, 2))
+            >>> spikes = jnp.ones(5)
+            >>> np.asarray(spikes @ w)  # every post neuron receives 2 inputs
+            array([2., 2., 2.], dtype=float32)
+        """
+        values, indices = self._fixed_num_layout('post', data)
+        return brainevent.FixedNumPerPost(values, indices, shape=self.shape)
+
+    def to_csc(self, data: str = 'weight') -> 'brainevent.CSC':
+        """Export to a :class:`brainevent.CSC` (compressed sparse column) matrix.
+
+        Parameters
+        ----------
+        data : {'weight', 'delay'}, default 'weight'
+            Which edge values to store. Missing weights become ``1.0`` and
+            missing delays ``0.0``.
+
+        Returns
+        -------
+        brainevent.CSC
+            Matrix of shape ``(n_pre, n_post)``; homogeneous values (size 1)
+            stay a scalar and units are kept.
+
+        Raises
+        ------
+        ValueError
+            If ``data`` is not ``'weight'`` or ``'delay'``.
+
+        See Also
+        --------
+        ConnectionResult.weight2csr, ConnectionResult.to_fixed_num_per_post, ConnectionResult.to_scipy_csr
+
+        Notes
+        -----
+        Host-side export. Works for any connectivity (degrees need not be
+        equal).
+
+        Examples
+        --------
+        .. code-block:: python
+
+            >>> import numpy as np
+            >>> from braintools.conn import ConnectionResult
+            >>> result = ConnectionResult(np.array([0, 1, 1]), np.array([2, 0, 2]), pre_size=2,
+            ...                           post_size=3, weights=np.array([1., 2., 3.]))
+            >>> csc = result.to_csc()
+            >>> np.asarray(csc.indptr)
+            array([0, 1, 1, 3], dtype=int32)
+            >>> np.asarray(csc.todense())
+            array([[0., 0., 1.],
+                   [2., 0., 3.]], dtype=float32)
+        """
+        n_pre, n_post = self.shape
+        order = np.argsort(self.post_indices, kind='stable')
+        indices = self.pre_indices[order]
+        indptr: np.ndarray = np.zeros(n_post + 1, dtype=np.int64)
+        np.cumsum(np.bincount(self.post_indices, minlength=n_post), out=indptr[1:])
+        values = _permute_values(self._export_values(data), order)
+        return brainevent.CSC((values, indices, indptr), shape=self.shape)
+
+    def to_scipy_csr(self, data: str = 'weight', unit: Optional[u.Unit] = None):
+        """Export to a host :class:`scipy.sparse.csr_matrix`.
+
+        Parameters
+        ----------
+        data : {'weight', 'delay'}, default 'weight'
+            Which edge values to store. Missing weights become ``1.0`` and
+            missing delays ``0.0``.
+        unit : brainunit.Unit, optional
+            Unit in which to express the values. SciPy matrices cannot carry
+            units, so the stored numbers are the mantissa in ``unit``; when
+            omitted they are the mantissa in the values' own unit
+            (``u.get_unit(result.weights)``).
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Matrix of shape ``(n_pre, n_post)`` in canonical form (sorted
+            indices, duplicate edges summed).
+
+        Raises
+        ------
+        ValueError
+            If ``data`` is not ``'weight'`` or ``'delay'``.
+        brainunit.UnitMismatchError
+            If ``unit`` has a different dimension than the values.
+
+        See Also
+        --------
+        ConnectionResult.weight2csr, ConnectionResult.to_csc
+
+        Notes
+        -----
+        Host-only (NumPy/SciPy); used by :mod:`braintools.analysis.graph`.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            >>> import numpy as np
+            >>> import brainunit as u
+            >>> from braintools.conn import ConnectionResult
+            >>> result = ConnectionResult(np.array([0, 1]), np.array([1, 0]), pre_size=2,
+            ...                           post_size=2, weights=np.array([1., 2.]) * u.nS)
+            >>> result.to_scipy_csr().toarray()
+            array([[0., 1.],
+                   [2., 0.]])
+            >>> result.to_scipy_csr(unit=u.uS).toarray()
+            array([[0.   , 0.001],
+                   [0.002, 0.   ]])
+        """
+        import scipy.sparse
+
+        values = self._export_values(data, cast=False)
+        if unit is not None:
+            mantissa = u.Quantity(values).to(unit).mantissa
+        else:
+            mantissa = u.get_mantissa(values)
+        mantissa = np.asarray(mantissa)
+        n = self.n_connections
+        if mantissa.size == 1:
+            mantissa = np.full(n, mantissa.reshape(()), dtype=mantissa.dtype)
+        else:
+            mantissa = mantissa.reshape(n)
+        return scipy.sparse.coo_matrix(
+            (mantissa, (self.pre_indices, self.post_indices)), shape=self.shape
+        ).tocsr()
 
     def get_distances(self) -> Optional[u.Quantity]:
         """Calculate distances between connected elements."""
@@ -252,8 +532,8 @@ class Connectivity(ABC):
         # Always use an isolated RandomState (even when seed is None) so generation
         # does not depend on / perturb the global ``np.random`` state.
         self.rng = np.random.RandomState(seed)
-        self._cached_result = None
-        self._cache_key = None
+        self._cached_result: Optional[ConnectionResult] = None
+        self._cache_key: Optional[Tuple[Any, ...]] = None
 
     def __call__(
         self,
@@ -281,16 +561,20 @@ class Connectivity(ABC):
             _positions_key(pre_positions),
             _positions_key(post_positions),
         )
-        if self._cached_result is None or recompute or self._cache_key != cache_key:
-            self._cached_result = self._generate(
-                pre_size=effective_pre_size,
-                post_size=effective_post_size,
+        result = self._cached_result
+        if result is None or recompute or self._cache_key != cache_key:
+            # A size that is still ``None`` here is passed through unchanged; the
+            # concrete ``generate`` reports it, as before.
+            result = self._generate(
+                pre_size=cast(Union[int, Tuple[int, ...]], effective_pre_size),
+                post_size=cast(Union[int, Tuple[int, ...]], effective_post_size),
                 pre_positions=pre_positions,
                 post_positions=post_positions,
                 **kwargs
             )
+            self._cached_result = result
             self._cache_key = cache_key
-        return self._cached_result
+        return result
 
     def _generate(
         self,
@@ -360,14 +644,34 @@ class PointConnectivity(Connectivity):
 
     __module__ = 'braintools.conn'
 
-    def _generate(self, **kwargs) -> ConnectionResult:
+    def _generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate point neuron connectivity."""
-        result = self.generate(**kwargs)
+        result = self.generate(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
         result.model_type = 'point'
         return result
 
     @abstractmethod
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate point neuron specific connections."""
         pass
 
@@ -381,14 +685,34 @@ class MultiCompartmentConnectivity(Connectivity):
 
     __module__ = 'braintools.conn'
 
-    def _generate(self, **kwargs) -> ConnectionResult:
+    def _generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate multi-compartment connectivity."""
-        result = self.generate(**kwargs)
+        result = self.generate(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
         result.model_type = 'multi_compartment'
         return result
 
     @abstractmethod
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate multi-compartment specific connections."""
         pass
 
@@ -415,10 +739,29 @@ class CompositeConnectivity(Connectivity):
         self.conn2 = conn2
         self.operator = operator
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate composite connectivity."""
-        result1 = self.conn1(**kwargs)
-        result2 = self.conn2(**kwargs)
+        result1 = self.conn1(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
+        result2 = self.conn2(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
 
         if self.operator == 'union':
             return self._union(result1, result2)
@@ -475,7 +818,7 @@ class CompositeConnectivity(Connectivity):
             all_post_comp = np.concatenate([post_comp1, post_comp2])
 
         if len(all_pre) == 0:
-            result_kwargs = {
+            result_kwargs: Dict[str, Any] = {
                 'pre_size': result1.pre_size,
                 'post_size': result1.post_size,
                 'pre_positions': result1.pre_positions,
@@ -505,6 +848,7 @@ class CompositeConnectivity(Connectivity):
         )
 
         if is_multicompartment:
+            assert all_pre_comp is not None and all_post_comp is not None
             # Encode with compartment information
             max_comp = 10  # Assume max 10 compartment types
             conn_codes = (all_pre * max_post * max_comp * max_comp +
@@ -658,11 +1002,14 @@ class CompositeConnectivity(Connectivity):
         if isinstance(result1.post_size, tuple):
             max_post = int(np.prod(result1.post_size))
         else:
+            # ``_size_count`` also flattens sizes given as a list.
+            post_count1 = _size_count(result1.post_size)
+            post_count2 = _size_count(result2.post_size)
             max_post = max(
                 np.max(result1.post_indices) + 1 if result1.post_indices.size > 0 else 0,
                 np.max(result2.post_indices) + 1 if result2.post_indices.size > 0 else 0,
-                result1.post_size if result1.post_size is not None else 1,
-                result2.post_size if result2.post_size is not None else 1
+                post_count1 if post_count1 is not None else 1,
+                post_count2 if post_count2 is not None else 1
             )
 
         if is_multicompartment:
@@ -704,7 +1051,7 @@ class CompositeConnectivity(Connectivity):
         common_codes = np.intersect1d(conn_codes1, conn_codes2, assume_unique=False)
 
         if common_codes.size == 0:
-            result_kwargs = {
+            result_kwargs: Dict[str, Any] = {
                 'pre_size': result1.pre_size,
                 'post_size': result1.post_size,
                 'model_type': result1.model_type
@@ -721,12 +1068,12 @@ class CompositeConnectivity(Connectivity):
         # Decode back to (pre, post) pairs and compartments
         if is_multicompartment:
             max_comp = 10
-            pre_indices = common_codes // (max_post * max_comp * max_comp)
-            remainder = common_codes % (max_post * max_comp * max_comp)
-            post_indices = remainder // (max_comp * max_comp)
-            remainder2 = remainder % (max_comp * max_comp)
-            pre_compartments = remainder2 // max_comp
-            post_compartments = remainder2 % max_comp
+            pre_indices: np.ndarray = common_codes // (max_post * max_comp * max_comp)
+            remainder: np.ndarray = common_codes % (max_post * max_comp * max_comp)
+            post_indices: np.ndarray = remainder // (max_comp * max_comp)
+            remainder2: np.ndarray = remainder % (max_comp * max_comp)
+            pre_compartments: np.ndarray = remainder2 // max_comp
+            post_compartments: np.ndarray = remainder2 % max_comp
         else:
             pre_indices = common_codes // max_post
             post_indices = common_codes % max_post
@@ -850,11 +1197,14 @@ class CompositeConnectivity(Connectivity):
         if isinstance(result1.post_size, tuple):
             max_post = int(np.prod(result1.post_size))
         else:
+            # ``_size_count`` also flattens sizes given as a list.
+            post_count1 = _size_count(result1.post_size)
+            post_count2 = _size_count(result2.post_size)
             max_post = max(
                 np.max(result1.post_indices) + 1 if result1.post_indices.size > 0 else 0,
                 np.max(result2.post_indices) + 1 if result2.post_indices.size > 0 else 0,
-                result1.post_size if result1.post_size is not None else 1,
-                result2.post_size if result2.post_size is not None else 1
+                post_count1 if post_count1 is not None else 1,
+                post_count2 if post_count2 is not None else 1
             )
 
         if is_multicompartment:
@@ -897,7 +1247,7 @@ class CompositeConnectivity(Connectivity):
         diff_codes = conn_codes1[mask]
 
         if diff_codes.size == 0:
-            result_kwargs = {
+            result_kwargs: Dict[str, Any] = {
                 'pre_size': result1.pre_size,
                 'post_size': result1.post_size,
                 'model_type': result1.model_type
@@ -998,8 +1348,8 @@ class ScaledConnectivity(Connectivity):
     def __init__(
         self,
         base_connectivity: Connectivity,
-        weight_factor: float = None,
-        delay_factor: float = None
+        weight_factor: Optional[float] = None,
+        delay_factor: Optional[float] = None
     ):
         super().__init__(
             pre_size=base_connectivity.pre_size,
@@ -1009,9 +1359,22 @@ class ScaledConnectivity(Connectivity):
         self.weight_factor = weight_factor
         self.delay_factor = delay_factor
 
-    def generate(self, **kwargs) -> ConnectionResult:
+    def generate(
+        self,
+        pre_size: Union[int, Tuple[int, ...]],
+        post_size: Union[int, Tuple[int, ...]],
+        pre_positions: Optional[np.ndarray] = None,
+        post_positions: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> ConnectionResult:
         """Generate scaled connectivity."""
-        result = self.base_connectivity(**kwargs)
+        result = self.base_connectivity(
+            pre_size=pre_size,
+            post_size=post_size,
+            pre_positions=pre_positions,
+            post_positions=post_positions,
+            **kwargs
+        )
 
         # Compute scaled weights/delays without mutating the base connectivity's
         # (possibly cached) result in place, which would corrupt it on reuse.
@@ -1079,7 +1442,41 @@ def compute_csr_indices_indptr(pre_indices, post_indices, shape):
     return indices, indptr, order
 
 
-def _size_count(size):
+def _as_default_float(values):
+    """Cast floating values (array or Quantity) to ``brainstate.environ.dftype()``.
+
+    Exported matrices feed JAX kernels, which would otherwise receive host
+    float64 data when x64 is disabled.
+    """
+    mantissa, unit = u.split_mantissa_unit(values)
+    mantissa = np.asarray(mantissa)
+    if np.issubdtype(mantissa.dtype, np.floating):
+        mantissa = mantissa.astype(brainstate.environ.dftype())
+    return u.maybe_decimal(u.Quantity(mantissa, unit=unit))
+
+
+def _permute_values(values, order):
+    """Reorder per-edge values by ``order``; size-1 values become a 0-d scalar."""
+    if u.math.size(values) == 1:
+        if isinstance(values, u.Quantity):
+            return values.reshape(())
+        return np.asarray(values).reshape(())
+    return values[order]
+
+
+@overload
+def _size_count(size: None) -> None: ...
+
+
+@overload
+def _size_count(size: Union[int, np.integer, Sequence[int]]) -> int: ...
+
+
+@overload
+def _size_count(size: Optional[Union[int, np.integer, Sequence[int]]]) -> Optional[int]: ...
+
+
+def _size_count(size: Any) -> Optional[int]:
     """Return the scalar element count for a size given as int, tuple/list, or None."""
     if size is None:
         return None

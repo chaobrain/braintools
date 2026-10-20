@@ -291,7 +291,8 @@ Decision Making
 ~~~~~~~~~~~~~~~
 
 Two-alternative and multi-modal perceptual decision tasks with motion
-coherence, context cues, or discrete evidence pulses.
+coherence, context cues, discrete evidence pulses, or multisensory evidence,
+and value-based choice between offers.
 
 .. autosummary::
    :toctree: generated/
@@ -303,6 +304,8 @@ coherence, context cues, or discrete evidence pulses.
    ContextDecisionMaking
    SingleContextDecisionMaking
    PulseDecisionMaking
+   MultiSensoryIntegration
+   EconomicDecisionMaking
 
 Working Memory
 ~~~~~~~~~~~~~~
@@ -328,6 +331,7 @@ category, direction, or interval information across a memory period.
    ImmediateDirectionReproduction
    DelayDirectionClassification
    ImmediateDirectionClassification
+   OneTwoThreeGo
 
 Reasoning
 ~~~~~~~~~
@@ -392,6 +396,7 @@ Helper functions for periods, label arrays, and rate conversion:
    initialize2
    interval_of
    period_to_arr
+   rate_to_prob
    firing_rate
 
 

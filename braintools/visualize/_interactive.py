@@ -13,14 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Optional, Union, Tuple, List
+from typing import Any, Optional, Union, Tuple, List, cast
 
 import numpy as np
 
 from braintools._misc import set_module_as
 from ._neural import _edge_attribute, NEGATIVE_EDGE_COLOR
 from ..tree import as_numpy
-from ._utils import as_array, flatten_spikes, inter_spike_intervals
+from ._utils import as_array, flatten_spikes, inter_spike_intervals, is_spike_trains, spike_trains_events
 
 # Try to import plotly
 try:
@@ -52,7 +52,10 @@ __all__ = [
 def _check_plotly():
     """Check if plotly is available."""
     if not PLOTLY_AVAILABLE:
-        raise ImportError("Plotly is required for interactive plots. Install with: pip install plotly")
+        raise ImportError(
+            "Plotly is required for interactive plots. "
+            "Install with: pip install braintools[viz] (or pip install plotly)"
+        )
 
 
 @set_module_as('braintools.visualize')
@@ -72,10 +75,12 @@ def interactive_spike_raster(
     
     Parameters
     ----------
-    spike_times : array-like or list
-        Array of spike times or list of spike time arrays for each neuron.
+    spike_times : array-like, list or SpikeTrains
+        Array of spike times, list of spike time arrays for each neuron, or a
+        :class:`braintools.spike.SpikeTrains` (times are plotted in its unit).
     neuron_ids : array-like, optional
-        Array of neuron IDs corresponding to spike_times.
+        Array of neuron IDs corresponding to spike_times. Must be None for a
+        ``SpikeTrains``.
     time_range : tuple, optional
         (start, end) time range to display.
     neuron_range : tuple, optional
@@ -96,21 +101,29 @@ def interactive_spike_raster(
     """
     _check_plotly()
 
-    # A list holds one spike train per neuron; a flat array needs neuron_ids.
-    if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
-        raise ValueError("neuron_ids must be provided when spike_times is not a list")
-    spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
+    xaxis_title = "Time"
+    if is_spike_trains(spike_times):
+        spike_times, neuron_ids, unit = spike_trains_events(spike_times, neuron_ids)
+        if unit is not None:
+            xaxis_title = f"Time ({unit})"
+    else:
+        # A list holds one spike train per neuron; a flat array needs neuron_ids.
+        if neuron_ids is None and not isinstance(spike_times, (list, tuple)):
+            raise ValueError("neuron_ids must be provided when spike_times is not a list")
+        spike_times, neuron_ids = flatten_spikes(spike_times, neuron_ids)
+    spike_times = cast(np.ndarray, spike_times)
+    neuron_ids = cast(np.ndarray, neuron_ids)
 
     # Apply filtering
     if time_range is not None:
         mask = (spike_times >= time_range[0]) & (spike_times <= time_range[1])
-        spike_times = spike_times[mask]
-        neuron_ids = neuron_ids[mask]
+        spike_times = cast(np.ndarray, spike_times[mask])
+        neuron_ids = cast(np.ndarray, neuron_ids[mask])
 
     if neuron_range is not None:
         mask = (neuron_ids >= neuron_range[0]) & (neuron_ids <= neuron_range[1])
-        spike_times = spike_times[mask]
-        neuron_ids = neuron_ids[mask]
+        spike_times = cast(np.ndarray, spike_times[mask])
+        neuron_ids = cast(np.ndarray, neuron_ids[mask])
 
     # Set up colors
     color = None
@@ -144,7 +157,7 @@ def interactive_spike_raster(
     # Update layout
     fig.update_layout(
         title=title,
-        xaxis_title="Time",
+        xaxis_title=xaxis_title,
         yaxis_title="Neuron ID",
         width=width,
         height=height,
@@ -857,7 +870,7 @@ def dashboard_neural_activity(
     n_neurons = len(unique_neurons)
     total_spikes = len(spike_times_flat)
     if len(spike_times_flat) > 0:
-        time_span = np.max(spike_times_flat) - np.min(spike_times_flat)
+        time_span: Any = np.max(spike_times_flat) - np.min(spike_times_flat)
         mean_rate = total_spikes / (n_neurons * time_span) if time_span > 0 else 0
     else:
         mean_rate = 0

@@ -30,7 +30,6 @@ import brainstate
 import brainunit as u
 import numpy as np
 
-from ._deprecation import create_deprecated_class
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -242,13 +241,23 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainstate
+            >>> import brainunit as u
+            >>> from braintools.input import Ramp
+            >>> brainstate.environ.set(dt=0.1 * u.ms)
             >>> ramp = Ramp(0, 1, 100 * u.ms)
             >>> # First call generates and caches
             >>> arr1 = ramp()
+            >>> arr1.shape
+            (1000,)
             >>> # Second call uses cache (faster)
             >>> arr2 = ramp()
+            >>> arr2 is arr1
+            True
             >>> # Force regeneration
             >>> arr3 = ramp(recompute=True)
+            >>> arr3 is arr1
+            False
         """
         if self._cached_array is None or recompute:
             self._cached_array = self.generate()
@@ -311,6 +320,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Sinusoidal
             >>> sine1 = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
             >>> sine2 = Sinusoidal(0.5, 20 * u.Hz, 100 * u.ms)
             >>> # Add two inputs
@@ -345,6 +356,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Ramp, Step
             >>> ramp = Ramp(0, 2, 100 * u.ms)
             >>> baseline = Step([0.5], [0], 100 * u.ms)
             >>> # Subtract baseline
@@ -382,6 +395,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Ramp, Sinusoidal
             >>> carrier = Sinusoidal(1.0, 100 * u.Hz, 500 * u.ms)
             >>> envelope = Ramp(0, 1, 500 * u.ms)
             >>> # Amplitude modulation
@@ -416,6 +431,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Ramp, Sinusoidal
             >>> signal = Sinusoidal(2.0, 10 * u.Hz, 100 * u.ms)
             >>> normalizer = Ramp(1, 2, 100 * u.ms)
             >>> # Normalize by varying factor
@@ -453,6 +470,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Step
             >>> baseline = Step([0], [0], 100 * u.ms)
             >>> stimulus = Step([1], [0], 200 * u.ms)
             >>> recovery = Step([0], [0], 100 * u.ms)
@@ -482,6 +501,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Step
             >>> stim1 = Step([0, 1, 0], [0, 100, 300], 400 * u.ms)
             >>> stim2 = Step([0, 0.8, 0], [0, 150, 350], 400 * u.ms)
             >>> # Take maximum at each point
@@ -506,6 +527,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Sinusoidal
             >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
             >>> # Invert the signal
             >>> inverted = -sine
@@ -530,6 +553,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Ramp
             >>> ramp = Ramp(0, 1, 100 * u.ms)
             >>> # Double the amplitude
             >>> doubled = ramp.scale(2.0)
@@ -557,6 +582,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Step
             >>> pulse = Step([1], [100 * u.ms], 200 * u.ms)
             >>> # Delay by 50ms (pulse now at 150ms)
             >>> delayed = pulse.shift(50 * u.ms)
@@ -585,6 +612,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Ramp
             >>> ramp = Ramp(-2, 2, 100 * u.ms)
             >>> # Clip to [0, 1]
             >>> saturated = ramp.clip(0, 1)
@@ -620,6 +649,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Step
             >>> steps = Step([0, 1, 0.5, 1, 0],
             ...                   [0, 50, 100, 150, 200],
             ...                   250 * u.ms)
@@ -648,6 +679,8 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
+            >>> from braintools.input import Sinusoidal, Step
             >>> # Create a burst pattern
             >>> burst = Step([0, 1, 0], [0, 10, 20], 50 * u.ms)
             >>> # Repeat 10 times for 500ms total
@@ -678,7 +711,9 @@ class Input:
 
         .. code-block:: python
 
+            >>> import brainunit as u
             >>> import jax.numpy as jnp
+            >>> from braintools.input import Sinusoidal
             >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
             >>>
             >>> # Rectification
@@ -725,6 +760,8 @@ class Composite(Input):
 
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.input import Composite, Ramp, Sinusoidal
         >>> # Direct construction (usually use operators instead)
         >>> ramp = Ramp(0, 1, 100 * u.ms)
         >>> sine = Sinusoidal(0.5, 10 * u.Hz, 100 * u.ms)
@@ -815,6 +852,8 @@ class ConstantValue(Input):
 
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.input import ConstantValue, Sinusoidal
         >>> # Usually created implicitly
         >>> sine = Sinusoidal(1.0, 10 * u.Hz, 100 * u.ms)
         >>> with_offset = sine + 0.5  # Creates ConstantValue(0.5, 100*u.ms)
@@ -849,6 +888,8 @@ class Sequential(Input):
 
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.input import Ramp, Sequential, Step
         >>> # Three-phase protocol
         >>> baseline = Step([0], [0], 500 * u.ms)
         >>> stimulus = Ramp(0, 1, 1000 * u.ms)
@@ -895,6 +936,8 @@ class TimeShifted(Input):
 
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.input import Step, TimeShifted
         >>> pulse = Step([1], [200 * u.ms], 500 * u.ms)
         >>>
         >>> # Delay by 100ms (pulse now at 300ms)
@@ -960,6 +1003,8 @@ class Clipped(Input):
 
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.input import Clipped, Ramp
         >>> ramp = Ramp(-2, 2, 200 * u.ms)
         >>>
         >>> # Clip to [0, 1] range
@@ -1030,6 +1075,8 @@ class Smoothed(Input):
 
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.input import Smoothed, Step
         >>> # Sharp steps
         >>> steps = Step([0, 1, 0.5, 1, 0],
         ...                   [0, 50, 100, 150, 200],
@@ -1094,6 +1141,8 @@ class Repeated(Input):
 
     .. code-block:: python
 
+        >>> import brainunit as u
+        >>> from braintools.input import Repeated, Sinusoidal, Step
         >>> # Single burst
         >>> burst = Step([0, 1, 0], [0, 10, 30], 50 * u.ms)
         >>>
@@ -1149,7 +1198,9 @@ class Transformed(Input):
 
     .. code-block:: python
 
+        >>> import brainunit as u
         >>> import jax.numpy as jnp
+        >>> from braintools.input import Sinusoidal, Transformed
         >>> sine = Sinusoidal(1.0, 10 * u.Hz, 200 * u.ms)
         >>>
         >>> # Half-wave rectification
@@ -1185,16 +1236,3 @@ class Transformed(Input):
         """Generate the transformed input."""
         arr = self.input_obj()
         return self.func(arr)
-
-
-CompositeInput = create_deprecated_class(Composite, 'CompositeInput', 'Composite')
-SequentialInput = create_deprecated_class(Sequential, 'SequentialInput', 'Sequential')
-TimeShiftedInput = create_deprecated_class(TimeShifted, 'TimeShiftedInput', 'TimeShifted')
-ClippedInput = create_deprecated_class(Clipped, 'ClippedInput', 'Clipped')
-SmoothedInput = create_deprecated_class(Smoothed, 'SmoothedInput', 'Smoothed')
-RepeatedInput = create_deprecated_class(Repeated, 'RepeatedInput', 'Repeated')
-TransformedInput = create_deprecated_class(Transformed, 'TransformedInput', 'Transformed')
-
-__all__.extend(
-    ['CompositeInput', 'SequentialInput', 'TimeShiftedInput', 'ClippedInput', 'SmoothedInput', 'RepeatedInput',
-     'TransformedInput'])

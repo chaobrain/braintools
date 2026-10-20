@@ -32,7 +32,7 @@ Key concepts:
 - Initial conditions: require specification of solution over delay interval
 """
 
-from typing import Callable, Union, Sequence
+from typing import Callable, Sequence, TypeAlias, Union
 
 import brainstate
 
@@ -46,10 +46,11 @@ __all__ = [
     'dde_heun_pc_step',
 ]
 
-DT = brainstate.typing.ArrayLike
-PyTree = brainstate.typing.PyTree
-HistoryFn = Callable[[DT], PyTree]
-DDE = Callable[[DT, PyTree, PyTree, ...], PyTree]
+DT: TypeAlias = brainstate.typing.ArrayLike
+PyTree: TypeAlias = brainstate.typing.PyTree
+HistoryFn: TypeAlias = Callable[[DT], PyTree]
+# f(t, y, *delayed_states, *args, **kwargs) -> dy/dt
+DDE: TypeAlias = Callable[..., PyTree]
 
 
 @set_module_as('braintools.quad')
@@ -66,11 +67,11 @@ def dde_euler_step(
     Explicit Euler step for delay differential equations.
     
     Implements a single forward Euler step for DDEs of the form::
-    
+
         dy/dt = f(t, y(t), y(t-τ), *args)
-        
+
     or with multiple delays::
-    
+
         dy/dt = f(t, y(t), y(t-τ₁), y(t-τ₂), ..., *args)
 
     Parameters
@@ -99,17 +100,31 @@ def dde_euler_step(
         
     Examples
     --------
-    Single delay case:
-    
-    >>> def f(t, y, y_delayed):
-    ...     return -y + y_delayed  # Simple delayed feedback
-    >>> y_next = dde_euler_step(f, y, t, history_fn, delays=1.0)
-    
+    Single delay case, with a constant history ``y(t) = 1`` for ``t <= 0``:
+
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> import jax.numpy as jnp
+        >>> from braintools.quad import dde_euler_step
+        >>> history_fn = lambda t_past: jnp.array(1.0)
+        >>> def f(t, y, y_delayed):
+        ...     return -y + y_delayed  # Simple delayed feedback
+        >>> with brainstate.environ.context(dt=0.1):
+        ...     y_next = dde_euler_step(f, jnp.array(0.0), 0.0, history_fn, delays=1.0)
+        >>> print(f'{float(y_next):.2f}')
+        0.10
+
     Multiple delays case:
-    
-    >>> def f(t, y, y_delay1, y_delay2):
-    ...     return -y + 0.5*y_delay1 + 0.3*y_delay2
-    >>> y_next = dde_euler_step(f, y, t, history_fn, delays=[1.0, 2.0])
+
+    .. code-block:: python
+
+        >>> def f(t, y, y_delay1, y_delay2):
+        ...     return -y + 0.5 * y_delay1 + 0.3 * y_delay2
+        >>> with brainstate.environ.context(dt=0.1):
+        ...     y_next = dde_euler_step(f, jnp.array(0.0), 0.0, history_fn, delays=[1.0, 2.0])
+        >>> print(f'{float(y_next):.2f}')
+        0.08
     """
     dt = brainstate.environ.get_dt()
 

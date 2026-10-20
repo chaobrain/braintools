@@ -41,28 +41,71 @@ dependencies = [
     "jax",
     "numpy>=1.15",
     "brainstate>=0.1.0",
-    "brainunit>=0.0.8",
+    "brainunit>=0.5.2",  # 0.5.2: saiunit einsum works on JAX 0.11
     "typing_extensions",
     "optax",
     "matplotlib",
     "msgpack",
     "scipy",
+    "brainevent",  # imported at module level by braintools.conn
 ]
 
 [project.optional-dependencies]
 testing = [
+    # Everything the CI test suite needs (see .github/workflows/CI.yml).
     "pytest",
     "pytest-cov",
     "absl-py",
     "nevergrad",
     "tqdm",
     "rich",
+    "pyyaml",
+    # Reference implementations used by the analysis and fit tests.
+    "scikit-learn",
+    "mne",
+    "statsmodels",
+    "networkx",
+    # CPU kernels of brainevent's sparse formats (CSR matmul in conn tests).
+    "numba",
+    # Optional I/O backends of braintools.file.
+    "h5py",
+    "pynwb",
+    "neo",
+    "quantities",
+]
+viz = [
+    # Interactive figures in braintools.visualize (plotly backends).
+    "plotly",
+]
+progress = [
+    # Progress bars in braintools.trainer.
+    "tqdm",
+    "rich",
+]
+nevergrad = [
+    # Gradient-free optimization in braintools.optim.NevergradOptimizer.
+    "nevergrad",
+]
+nwb = [
+    # Neurodata Without Borders I/O in braintools.file (save_nwb_units, ...).
+    "pynwb",
+]
+neo = [
+    # NEO interoperability in braintools.file (to_neo, from_neo).
+    "neo",
+    "quantities",
+]
+hdf5 = [
+    # HDF5 I/O with unit metadata in braintools.file (save_hdf5, load_hdf5).
+    "h5py",
 ]
 type-check = [
     "mypy>=1.8",
 ]
 cpu = [
     "jax[cpu]",
+    # numba: brainevent's CPU kernels for the sparse connectivity formats.
+    "brainevent[cpu]",
 ]
 cuda12 = [
     "jax[cuda12]",
@@ -73,9 +116,11 @@ cuda13 = [
 tpu = [
     "jax[tpu]",
 ]
+# Compatibility alias kept so `pip install braintools[cogtask]` keeps working.
+# It only duplicates core dependencies; braintools.cogtask needs no extras.
 cogtask = [
     "brainstate>=0.1.0",
-    "brainunit>=0.0.8",
+    "brainunit>=0.5.2",
 ]
 doc = [
     "pandoc",
@@ -118,6 +163,17 @@ braintools = ["py.typed"]
 [tool.setuptools.dynamic]
 version = { attr = "braintools._version.__version__" }
 
+[tool.pytest.ini_options]
+# braintools' own code and tests must use the new API paths; calling a
+# deprecated braintools alias outside `pytest.warns` fails the test.
+# The filter matches the standard message of braintools._deprecation on the
+# builtin category, instead of naming BraintoolsDeprecationWarning: resolving
+# that class would import braintools while pytest parses its configuration,
+# before pytest-cov starts measuring, and under-report coverage.
+filterwarnings = [
+    'error:`braintools\.[^`]*` is deprecated since:FutureWarning',
+]
+
 [tool.coverage.run]
 # `sysmon` uses CPython's sys.monitoring (3.12+); it is faster and avoids a
 # native-tracer crash when jaxlib is imported under the C tracer.
@@ -143,13 +199,17 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-python_version = "3.14"
+# Keep in sync with the Python version used by .github/workflows/type-check.yml.
+python_version = "3.13"
+# The whole package is type-checked in CI (`mypy` with no arguments); the
+# co-located tests are excluded. braintools/__init___test.py checks this.
+files = ["braintools"]
+exclude = '_test\.py$'
 # Many scientific dependencies (jax, brainunit, optax, scipy, ...) ship partial
 # or no type information; don't fail on their missing stubs.
 ignore_missing_imports = true
-# Incremental typing: modules reached via import (third-party and internal code
-# not yet annotated) are treated as untyped rather than reported. This keeps the
-# explicitly type-checked public surface green while annotation coverage grows.
+# Modules reached only through imports (third-party code) are treated as
+# untyped rather than reported.
 follow_imports = "skip"
 warn_redundant_casts = true
 warn_unused_ignores = false

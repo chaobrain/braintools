@@ -97,6 +97,7 @@ class Sigmoid(Surrogate):
         >>> x = jnp.array([-1.0, 0.0, 1.0])
         >>> spikes = sigmoid(x)
         >>> print(spikes)  # Step function output: [0., 1., 1.]
+        [0. 1. 1.]
         >>>
         >>> # Use in a spiking neural network layer
         >>> import brainstate.nn as nn
@@ -121,10 +122,10 @@ class Sigmoid(Surrogate):
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-2, 2, 1000)
        >>> for alpha in [1., 2., 4.]:
-       >>>   sigmoid = braintools.surrogate.Sigmoid(alpha=alpha)
-       >>>   grads = brainstate.augment.vector_grad(sigmoid)(xs)
-       >>>   plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
-       >>> plt.legend()
+       ...   sigmoid = braintools.surrogate.Sigmoid(alpha=alpha)
+       ...   grads = brainstate.transform.vector_grad(sigmoid)(xs)
+       ...   _ = plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
+       >>> _ = plt.legend()
        >>> plt.show()
 
     Notes
@@ -229,6 +230,7 @@ class PiecewiseQuadratic(Surrogate):
         >>> x = jnp.array([-2.0, -0.5, 0.0, 0.5, 2.0])
         >>> spikes = pq_fn(x)
         >>> print(spikes)  # Binary spike output: [0., 0., 1., 1., 1.]
+        [0. 0. 1. 1. 1.]
         >>>
         >>> # Use in a spiking neural network
         >>> import brainstate.nn as nn
@@ -254,10 +256,10 @@ class PiecewiseQuadratic(Surrogate):
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
        >>> for alpha in [0.5, 1., 2., 4.]:
-       >>>   pq_fn = braintools.surrogate.PiecewiseQuadratic(alpha=alpha)
-       >>>   grads = brainstate.augment.vector_grad(pq_fn)(xs)
-       >>>   plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
-       >>> plt.legend()
+       ...   pq_fn = braintools.surrogate.PiecewiseQuadratic(alpha=alpha)
+       ...   grads = brainstate.transform.vector_grad(pq_fn)(xs)
+       ...   _ = plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
+       >>> _ = plt.legend()
        >>> plt.show()
 
     Notes
@@ -383,6 +385,7 @@ class PiecewiseExp(Surrogate):
         >>> x = jnp.array([-1.0, 0.0, 1.0])
         >>> spikes = pe_fn(x)
         >>> print(spikes)  # [0., 1., 1.]
+        [0. 1. 1.]
         >>>
         >>> # Use in a leaky integrate-and-fire neuron
         >>> import brainstate.nn as nn
@@ -409,10 +412,10 @@ class PiecewiseExp(Surrogate):
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
        >>> for alpha in [0.5, 1., 2., 4.]:
-       >>>   pe_fn = braintools.surrogate.PiecewiseExp(alpha=alpha)
-       >>>   grads = brainstate.augment.vector_grad(pe_fn)(xs)
-       >>>   plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
-       >>> plt.legend()
+       ...   pe_fn = braintools.surrogate.PiecewiseExp(alpha=alpha)
+       ...   grads = brainstate.transform.vector_grad(pe_fn)(xs)
+       ...   _ = plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
+       >>> _ = plt.legend()
        >>> plt.show()
 
     Notes
@@ -562,6 +565,7 @@ class SoftSign(Surrogate):
         >>> x = jnp.array([-1.0, 0.0, 1.0])
         >>> spikes = ss_fn(x)
         >>> print(spikes)  # Binary spike output
+        [0. 1. 1.]
         >>>
         >>> # Use in a spiking layer with adaptive threshold
         >>> class AdaptiveSpikingLayer(brainstate.nn.Module):
@@ -691,6 +695,7 @@ class Arctan(Surrogate):
         >>> x = jnp.array([-1.0, 0.0, 1.0])
         >>> spikes = arctan_fn(x)
         >>> print(spikes)  # Binary spike output
+        [0. 1. 1.]
 
     .. plot::
        :include-source: True
@@ -701,10 +706,10 @@ class Arctan(Surrogate):
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
        >>> for alpha in [0.5, 1., 2., 4.]:
-       >>>   arctan_fn = braintools.surrogate.Arctan(alpha=alpha)
-       >>>   grads = brainstate.augment.vector_grad(arctan_fn)(xs)
-       >>>   plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
-       >>> plt.legend()
+       ...   arctan_fn = braintools.surrogate.Arctan(alpha=alpha)
+       ...   grads = brainstate.transform.vector_grad(arctan_fn)(xs)
+       ...   _ = plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
+       >>> _ = plt.legend()
        >>> plt.show()
 
     Notes
@@ -816,10 +821,10 @@ class NonzeroSignLog(Surrogate):
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
        >>> for alpha in [0.5, 1., 2., 4.]:
-       >>>   nsl_fn = braintools.surrogate.NonzeroSignLog(alpha=alpha)
-       >>>   grads = brainstate.augment.vector_grad(nsl_fn)(xs)
-       >>>   plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
-       >>> plt.legend()
+       ...   nsl_fn = braintools.surrogate.NonzeroSignLog(alpha=alpha)
+       ...   grads = brainstate.transform.vector_grad(nsl_fn)(xs)
+       ...   _ = plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
+       >>> _ = plt.legend()
        >>> plt.show()
 
     """
@@ -910,6 +915,7 @@ class ERF(Surrogate):
         >>> x = jnp.array([-1.0, 0.0, 1.0])
         >>> spikes = erf_fn(x)
         >>> print(spikes)  # [0., 1., 1.]
+        [0. 1. 1.]
 
     .. plot::
        :include-source: True
@@ -920,10 +926,10 @@ class ERF(Surrogate):
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
        >>> for alpha in [0.5, 1., 2., 4.]:
-       >>>   erf_fn = braintools.surrogate.ERF(alpha=alpha)
-       >>>   grads = brainstate.augment.vector_grad(erf_fn)(xs)
-       >>>   plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
-       >>> plt.legend()
+       ...   erf_fn = braintools.surrogate.ERF(alpha=alpha)
+       ...   grads = brainstate.transform.vector_grad(erf_fn)(xs)
+       ...   _ = plt.plot(xs, grads, label=r'$\alpha$=' + str(alpha))
+       >>> _ = plt.legend()
        >>> plt.show()
 
     References
@@ -1027,6 +1033,7 @@ class PiecewiseLeakyRelu(Surrogate):
         >>> x = jnp.array([-2.0, -0.5, 0.0, 0.5, 2.0])
         >>> spikes = plr_fn(x)
         >>> print(spikes)  # [0., 0., 1., 1., 1.]
+        [0. 0. 1. 1. 1.]
 
     .. plot::
        :include-source: True
@@ -1037,11 +1044,11 @@ class PiecewiseLeakyRelu(Surrogate):
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
        >>> for c in [0.01, 0.05, 0.1]:
-       >>>   for w in [1., 2.]:
-       >>>     plr_fn = braintools.surrogate.PiecewiseLeakyRelu(c=c, w=w)
-       >>>     grads = brainstate.augment.vector_grad(plr_fn)(xs)
-       >>>     plt.plot(xs, grads, label=f'c={c}, w={w}')
-       >>> plt.legend()
+       ...   for w in [1., 2.]:
+       ...     plr_fn = braintools.surrogate.PiecewiseLeakyRelu(c=c, w=w)
+       ...     grads = brainstate.transform.vector_grad(plr_fn)(xs)
+       ...     _ = plt.plot(xs, grads, label=f'c={c}, w={w}')
+       >>> _ = plt.legend()
        >>> plt.show()
 
     Notes
@@ -1155,6 +1162,7 @@ class SquarewaveFourierSeries(Surrogate):
         >>> x = jnp.array([-2.0, -1.0, 0.0, 1.0, 2.0])
         >>> spikes = sfs_fn(x)
         >>> print(spikes)  # [0., 0., 1., 1., 1.]
+        [0. 0. 1. 1. 1.]
 
     .. plot::
        :include-source: True
@@ -1165,10 +1173,10 @@ class SquarewaveFourierSeries(Surrogate):
        >>> import matplotlib.pyplot as plt
        >>> xs = jax.numpy.linspace(-3, 3, 1000)
        >>> for n in [2, 4, 8]:
-       >>>   sfs_fn = braintools.surrogate.SquarewaveFourierSeries(n=n)
-       >>>   grads = brainstate.augment.vector_grad(sfs_fn)(xs)
-       >>>   plt.plot(xs, grads, label=f'n={n}')
-       >>> plt.legend()
+       ...   sfs_fn = braintools.surrogate.SquarewaveFourierSeries(n=n)
+       ...   grads = brainstate.transform.vector_grad(sfs_fn)(xs)
+       ...   _ = plt.plot(xs, grads, label=f'n={n}')
+       >>> _ = plt.legend()
        >>> plt.show()
 
     Notes
@@ -1274,26 +1282,26 @@ class S2NN(Surrogate):
        >>>
        >>> # Plot gradients for different parameters
        >>> for alpha, beta in [(4., 1.), (8., 2.), (2., 0.5)]:
-       >>>     s2nn_fn = surrogate.S2NN(alpha=alpha, beta=beta)
-       >>>     grads = jax.vmap(jax.grad(s2nn_fn))(xs)
-       >>>     ax1.plot(xs, grads, label=rf'$\alpha={alpha}, \beta={beta}$')
+       ...     s2nn_fn = surrogate.S2NN(alpha=alpha, beta=beta)
+       ...     grads = jax.vmap(jax.grad(s2nn_fn))(xs)
+       ...     _ = ax1.plot(xs, grads, label=rf'$\alpha={alpha}, \beta={beta}$')
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title('S2NN Surrogate Gradients')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title('S2NN Surrogate Gradients')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
        >>>
        >>> # Plot the original (smooth) function via surrogate_fun
        >>> for alpha, beta in [(4., 1.), (8., 2.)]:
-       >>>     s2nn_fn = surrogate.S2NN(alpha=alpha, beta=beta)
-       >>>     ys = jax.vmap(s2nn_fn.surrogate_fun)(xs)
-       >>>     ax2.plot(xs, ys, label=rf'$\alpha={alpha}, \beta={beta}$')
+       ...     s2nn_fn = surrogate.S2NN(alpha=alpha, beta=beta)
+       ...     ys = jax.vmap(s2nn_fn.surrogate_fun)(xs)
+       ...     _ = ax2.plot(xs, ys, label=rf'$\alpha={alpha}, \beta={beta}$')
        >>>
-       >>> ax2.set_xlabel('Input (x)')
-       >>> ax2.set_ylabel('Output')
-       >>> ax2.set_title('S2NN Original Function')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Input (x)')
+       >>> _ = ax2.set_ylabel('Output')
+       >>> _ = ax2.set_title('S2NN Original Function')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3)
        >>> plt.tight_layout()
        >>> plt.show()
@@ -1328,7 +1336,8 @@ class S2NN(Surrogate):
         >>> # Compute gradients
         >>> grad_fn = jax.grad(lambda x: s2nn_fn(x).sum())
         >>> grads = grad_fn(x)
-        >>> print(grads)
+        >>> print(", ".join(f"{g:.4f}" for g in grads))
+        0.0707, 1.0000, 0.5000
 
     See Also
     --------
@@ -1441,27 +1450,27 @@ class QPseudoSpike(Surrogate):
        >>>
        >>> # Plot gradients for different alpha values
        >>> for alpha in [0.5, 1.0, 2.0, 4.0]:
-       >>>     qps_fn = surrogate.QPseudoSpike(alpha=alpha)
-       >>>     grads = jax.vmap(jax.grad(qps_fn))(xs)
-       >>>     ax1.plot(xs, grads, label=rf'$\alpha={alpha}$')
+       ...     qps_fn = surrogate.QPseudoSpike(alpha=alpha)
+       ...     grads = jax.vmap(jax.grad(qps_fn))(xs)
+       ...     _ = ax1.plot(xs, grads, label=rf'$\alpha={alpha}$')
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title('q-PseudoSpike Surrogate Gradients')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title('q-PseudoSpike Surrogate Gradients')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
-       >>> ax1.set_ylim([0, 1.2])
+       >>> _ = ax1.set_ylim([0, 1.2])
        >>>
        >>> # Plot the original (smooth) function via surrogate_fun
        >>> for alpha in [1.5, 2.0, 3.0]:
-       >>>     qps_fn = surrogate.QPseudoSpike(alpha=alpha)
-       >>>     ys = jax.vmap(qps_fn.surrogate_fun)(xs)
-       >>>     ax2.plot(xs, ys, label=rf'$\alpha={alpha}$')
+       ...     qps_fn = surrogate.QPseudoSpike(alpha=alpha)
+       ...     ys = jax.vmap(qps_fn.surrogate_fun)(xs)
+       ...     _ = ax2.plot(xs, ys, label=rf'$\alpha={alpha}$')
        >>>
-       >>> ax2.set_xlabel('Input (x)')
-       >>> ax2.set_ylabel('Output')
-       >>> ax2.set_title('q-PseudoSpike Original Function')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Input (x)')
+       >>> _ = ax2.set_ylabel('Output')
+       >>> _ = ax2.set_title('q-PseudoSpike Original Function')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3)
        >>> plt.tight_layout()
        >>> plt.show()
@@ -1503,6 +1512,9 @@ class QPseudoSpike(Surrogate):
         ...     grad_fn = jax.grad(lambda x: qps_fn(x).sum())
         ...     grads = grad_fn(jax.numpy.array([0.5]))
         ...     print(f"alpha={alpha}: gradient={grads[0]:.4f}")
+        alpha=0.5: gradient=0.7746
+        alpha=2.0: gradient=0.5625
+        alpha=4.0: gradient=0.4823
 
     See Also
     --------
@@ -1612,27 +1624,27 @@ class LeakyRelu(Surrogate):
        >>>
        >>> # Plot gradients for different parameters
        >>> for alpha, beta in [(0.0, 1.0), (0.1, 1.0), (0.3, 1.0), (0.1, 0.5)]:
-       >>>     lr_fn = surrogate.LeakyRelu(alpha=alpha, beta=beta)
-       >>>     grads = jax.vmap(jax.grad(lr_fn))(xs)
-       >>>     ax1.plot(xs, grads, label=rf'$\alpha={alpha}, \beta={beta}$')
+       ...     lr_fn = surrogate.LeakyRelu(alpha=alpha, beta=beta)
+       ...     grads = jax.vmap(jax.grad(lr_fn))(xs)
+       ...     _ = ax1.plot(xs, grads, label=rf'$\alpha={alpha}, \beta={beta}$')
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title('Leaky ReLU Surrogate Gradients')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title('Leaky ReLU Surrogate Gradients')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
-       >>> ax1.set_ylim([-0.1, 1.2])
+       >>> _ = ax1.set_ylim([-0.1, 1.2])
        >>>
        >>> # Plot the original (smooth) function via surrogate_fun
        >>> for alpha, beta in [(0.1, 1.0), (0.3, 1.0), (0.1, 0.5)]:
-       >>>     lr_fn = surrogate.LeakyRelu(alpha=alpha, beta=beta)
-       >>>     ys = jax.vmap(lr_fn.surrogate_fun)(xs)
-       >>>     ax2.plot(xs, ys, label=rf'$\alpha={alpha}, \beta={beta}$')
+       ...     lr_fn = surrogate.LeakyRelu(alpha=alpha, beta=beta)
+       ...     ys = jax.vmap(lr_fn.surrogate_fun)(xs)
+       ...     _ = ax2.plot(xs, ys, label=rf'$\alpha={alpha}, \beta={beta}$')
        >>>
-       >>> ax2.set_xlabel('Input (x)')
-       >>> ax2.set_ylabel('Output')
-       >>> ax2.set_title('Leaky ReLU Original Function')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Input (x)')
+       >>> _ = ax2.set_ylabel('Output')
+       >>> _ = ax2.set_title('Leaky ReLU Original Function')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3)
        >>> plt.tight_layout()
        >>> plt.show()
@@ -1767,27 +1779,27 @@ class LogTailedRelu(Surrogate):
        >>>
        >>> # Plot gradients for different alpha values
        >>> for alpha in [0.0, 0.1, 0.3]:
-       >>>     ltr_fn = surrogate.LogTailedRelu(alpha=alpha)
-       >>>     grads = jax.vmap(jax.grad(ltr_fn))(xs)
-       >>>     ax1.plot(xs, grads, label=rf'$\alpha={alpha}$')
+       ...     ltr_fn = surrogate.LogTailedRelu(alpha=alpha)
+       ...     grads = jax.vmap(jax.grad(ltr_fn))(xs)
+       ...     _ = ax1.plot(xs, grads, label=rf'$\alpha={alpha}$')
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title('Log-tailed ReLU Surrogate Gradients')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title('Log-tailed ReLU Surrogate Gradients')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
-       >>> ax1.set_ylim([-0.1, 1.2])
+       >>> _ = ax1.set_ylim([-0.1, 1.2])
        >>>
        >>> # Plot the original (smooth) function via surrogate_fun
        >>> for alpha in [0.0, 0.1, 0.3]:
-       >>>     ltr_fn = surrogate.LogTailedRelu(alpha=alpha)
-       >>>     ys = jax.vmap(ltr_fn.surrogate_fun)(xs)
-       >>>     ax2.plot(xs, ys, label=rf'$\alpha={alpha}$')
+       ...     ltr_fn = surrogate.LogTailedRelu(alpha=alpha)
+       ...     ys = jax.vmap(ltr_fn.surrogate_fun)(xs)
+       ...     _ = ax2.plot(xs, ys, label=rf'$\alpha={alpha}$')
        >>>
-       >>> ax2.set_xlabel('Input (x)')
-       >>> ax2.set_ylabel('Output')
-       >>> ax2.set_title('Log-tailed ReLU Original Function')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Input (x)')
+       >>> _ = ax2.set_ylabel('Output')
+       >>> _ = ax2.set_title('Log-tailed ReLU Original Function')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3)
        >>> plt.tight_layout()
        >>> plt.show()
@@ -1821,6 +1833,7 @@ class LogTailedRelu(Surrogate):
         >>> x_test = jax.numpy.array([-1., 0.5, 2.])
         >>> grads = grad_fn(x_test)
         >>> print(grads)  # Shows alpha, 1.0, 1/2 respectively
+        [0.1 1.  0.5]
 
     See Also
     --------
@@ -1932,28 +1945,28 @@ class ReluGrad(Surrogate):
        >>>
        >>> # Plot gradients for different parameter combinations
        >>> for alpha in [0.3, 0.5, 1.0]:
-       >>>     for width in [1.0, 2.0]:
-       >>>         rg_fn = surrogate.ReluGrad(alpha=alpha, width=width)
-       >>>         grads = jax.vmap(jax.grad(rg_fn))(xs)
-       >>>         ax1.plot(xs, grads, label=rf'$\alpha={alpha}, w={width}$')
+       ...     for width in [1.0, 2.0]:
+       ...         rg_fn = surrogate.ReluGrad(alpha=alpha, width=width)
+       ...         grads = jax.vmap(jax.grad(rg_fn))(xs)
+       ...         _ = ax1.plot(xs, grads, label=rf'$\alpha={alpha}, w={width}$')
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title('ReLU Surrogate Gradients')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title('ReLU Surrogate Gradients')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
        >>>
        >>> # Show effect of width parameter
        >>> alpha_fixed = 0.5
        >>> for width in [0.5, 1.0, 1.5, 2.0]:
-       >>>     rg_fn = surrogate.ReluGrad(alpha=alpha_fixed, width=width)
-       >>>     grads = jax.vmap(jax.grad(rg_fn))(xs)
-       >>>     ax2.plot(xs, grads, label=rf'$width={width}$')
+       ...     rg_fn = surrogate.ReluGrad(alpha=alpha_fixed, width=width)
+       ...     grads = jax.vmap(jax.grad(rg_fn))(xs)
+       ...     _ = ax2.plot(xs, grads, label=rf'$width={width}$')
        >>>
-       >>> ax2.set_xlabel('Input (x)')
-       >>> ax2.set_ylabel('Gradient')
-       >>> ax2.set_title(f'Width Effect (α={alpha_fixed})')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Input (x)')
+       >>> _ = ax2.set_ylabel('Gradient')
+       >>> _ = ax2.set_title(f'Width Effect (α={alpha_fixed})')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3)
        >>> plt.tight_layout()
        >>> plt.show()
@@ -1986,7 +1999,8 @@ class ReluGrad(Surrogate):
         >>> # Compute gradients
         >>> grad_fn = jax.grad(lambda x: rg_fn(x).sum())
         >>> grads = grad_fn(x)
-        >>> print(grads)  # Shows 0, 0.15, 0.3, 0.15, 0
+        >>> print(", ".join(f"{g:.4f}" for g in grads))
+        0.0000, 0.1500, 0.3000, 0.1500, 0.0000
 
     See Also
     --------
@@ -2077,27 +2091,27 @@ class GaussianGrad(Surrogate):
        >>> # Plot gradients for different sigma values
        >>> alpha = 0.5
        >>> for sigma in [0.3, 0.5, 1.0, 2.0]:
-       >>>     gg_fn = surrogate.GaussianGrad(sigma=sigma, alpha=alpha)
-       >>>     grads = jax.vmap(jax.grad(gg_fn))(xs)
-       >>>     ax1.plot(xs, grads, label=rf'$\sigma={sigma}$')
+       ...     gg_fn = surrogate.GaussianGrad(sigma=sigma, alpha=alpha)
+       ...     grads = jax.vmap(jax.grad(gg_fn))(xs)
+       ...     _ = ax1.plot(xs, grads, label=rf'$\sigma={sigma}$')
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title(f'Gaussian Gradients (α={alpha})')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title(f'Gaussian Gradients (α={alpha})')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
        >>>
        >>> # Plot gradients for different alpha values
        >>> sigma = 0.5
        >>> for alpha in [0.25, 0.5, 1.0, 2.0]:
-       >>>     gg_fn = surrogate.GaussianGrad(sigma=sigma, alpha=alpha)
-       >>>     grads = jax.vmap(jax.grad(gg_fn))(xs)
-       >>>     ax2.plot(xs, grads, label=rf'$\alpha={alpha}$')
+       ...     gg_fn = surrogate.GaussianGrad(sigma=sigma, alpha=alpha)
+       ...     grads = jax.vmap(jax.grad(gg_fn))(xs)
+       ...     _ = ax2.plot(xs, grads, label=rf'$\alpha={alpha}$')
        >>>
-       >>> ax2.set_xlabel('Input (x)')
-       >>> ax2.set_ylabel('Gradient')
-       >>> ax2.set_title(f'Scaling Effect (σ={sigma})')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Input (x)')
+       >>> _ = ax2.set_ylabel('Gradient')
+       >>> _ = ax2.set_title(f'Scaling Effect (σ={sigma})')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3)
        >>> plt.tight_layout()
        >>> plt.show()
@@ -2130,7 +2144,8 @@ class GaussianGrad(Surrogate):
         >>> # Compute gradients
         >>> grad_fn = jax.grad(lambda x: gg_fn(x).sum())
         >>> grads = grad_fn(x)
-        >>> print(f"Gradients: {grads}")
+        >>> print("Gradients:", ", ".join(f"{g:.4f}" for g in grads))
+        Gradients: 0.0540, 0.3989, 0.0540
 
     See Also
     --------
@@ -2227,32 +2242,32 @@ class MultiGaussianGrad(Surrogate):
        >>> # Plot default multi-Gaussian gradient
        >>> mgg_fn = surrogate.MultiGaussianGrad()
        >>> grads = jax.vmap(jax.grad(mgg_fn))(xs)
-       >>> ax1.plot(xs, grads, label='Multi-Gaussian', linewidth=2)
+       >>> _ = ax1.plot(xs, grads, label='Multi-Gaussian', linewidth=2)
        >>>
        >>> # Compare with single Gaussian
        >>> gg_fn = surrogate.GaussianGrad(sigma=0.5, alpha=0.5)
        >>> grads_single = jax.vmap(jax.grad(gg_fn))(xs)
-       >>> ax1.plot(xs, grads_single, '--', label='Single Gaussian', alpha=0.7)
+       >>> _ = ax1.plot(xs, grads_single, '--', label='Single Gaussian', alpha=0.7)
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title('Multi-Gaussian vs Single Gaussian')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title('Multi-Gaussian vs Single Gaussian')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
-       >>> ax1.axhline(y=0, color='k', linestyle='-', linewidth=0.5)
+       >>> _ = ax1.axhline(y=0, color='k', linestyle='-', linewidth=0.5)
        >>>
        >>> # Show effect of h parameter (side peak weight)
        >>> for h in [0.0, 0.15, 0.3, 0.5]:
-       >>>     mgg_fn = surrogate.MultiGaussianGrad(h=h, s=6.0, sigma=0.5, scale=0.5)
-       >>>     grads = jax.vmap(jax.grad(mgg_fn))(xs)
-       >>>     ax2.plot(xs, grads, label=rf'$h={h}$')
+       ...     mgg_fn = surrogate.MultiGaussianGrad(h=h, s=6.0, sigma=0.5, scale=0.5)
+       ...     grads = jax.vmap(jax.grad(mgg_fn))(xs)
+       ...     _ = ax2.plot(xs, grads, label=rf'$h={h}$')
        >>>
-       >>> ax2.set_xlabel('Input (x)')
-       >>> ax2.set_ylabel('Gradient')
-       >>> ax2.set_title('Effect of h Parameter')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Input (x)')
+       >>> _ = ax2.set_ylabel('Gradient')
+       >>> _ = ax2.set_title('Effect of h Parameter')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3)
-       >>> ax2.axhline(y=0, color='k', linestyle='-', linewidth=0.5)
+       >>> _ = ax2.axhline(y=0, color='k', linestyle='-', linewidth=0.5)
        >>> plt.tight_layout()
        >>> plt.show()
 
@@ -2288,7 +2303,8 @@ class MultiGaussianGrad(Surrogate):
         >>> # Compute gradients showing multi-peak structure
         >>> grad_fn = jax.grad(lambda x: mgg_fn(x).sum())
         >>> grads = grad_fn(x)
-        >>> print(f"Gradients: {grads}")
+        >>> print("Gradients:", ", ".join(f"{g:.4f}" for g in grads))
+        Gradients: 0.0435, 0.2589, 0.4391, 0.2589, 0.0435
 
     See Also
     --------
@@ -2388,14 +2404,14 @@ class InvSquareGrad(Surrogate):
        >>>
        >>> # Plot gradients for different alpha values
        >>> for alpha in [10., 50., 100., 200.]:
-       >>>     isg_fn = surrogate.InvSquareGrad(alpha=alpha)
-       >>>     grads = jax.vmap(jax.grad(isg_fn))(xs)
-       >>>     ax1.plot(xs, grads, label=rf'$\alpha={alpha}$')
+       ...     isg_fn = surrogate.InvSquareGrad(alpha=alpha)
+       ...     grads = jax.vmap(jax.grad(isg_fn))(xs)
+       ...     _ = ax1.plot(xs, grads, label=rf'$\alpha={alpha}$')
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title('Inverse-Square Gradients')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title('Inverse-Square Gradients')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
        >>>
        >>> # Compare with other surrogate gradients on log scale
@@ -2407,13 +2423,13 @@ class InvSquareGrad(Surrogate):
        >>> gg_fn = surrogate.GaussianGrad(sigma=0.1, alpha=1.0)
        >>> grads_gauss = jax.vmap(jax.grad(gg_fn))(xs_wide)
        >>>
-       >>> ax2.semilogy(xs_wide, jnp.abs(grads_inv), label='Inverse-Square', linewidth=2)
-       >>> ax2.semilogy(xs_wide, jnp.abs(grads_gauss), '--', label='Gaussian', alpha=0.7)
+       >>> _ = ax2.semilogy(xs_wide, jnp.abs(grads_inv), label='Inverse-Square', linewidth=2)
+       >>> _ = ax2.semilogy(xs_wide, jnp.abs(grads_gauss), '--', label='Gaussian', alpha=0.7)
        >>>
-       >>> ax2.set_xlabel('Input (x)')
-       >>> ax2.set_ylabel('|Gradient| (log scale)')
-       >>> ax2.set_title('Tail Behavior Comparison')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Input (x)')
+       >>> _ = ax2.set_ylabel('|Gradient| (log scale)')
+       >>> _ = ax2.set_title('Tail Behavior Comparison')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3, which="both")
        >>> plt.tight_layout()
        >>> plt.show()
@@ -2446,7 +2462,8 @@ class InvSquareGrad(Surrogate):
         >>> # Compute gradients
         >>> grad_fn = jax.grad(lambda x: isg_fn(x).sum())
         >>> grads = grad_fn(x)
-        >>> print(f"Gradients: {grads}")
+        >>> print("Gradients:", ", ".join(f"{g:.4f}" for g in grads))
+        Gradients: 0.0083, 1.0000, 0.0083
         >>> # Shows heavy-tailed behavior
 
     See Also
@@ -2530,32 +2547,32 @@ class SlayerGrad(Surrogate):
        >>>
        >>> # Plot gradients for different alpha values
        >>> for alpha in [0.5, 1.0, 2.0, 4.0]:
-       >>>     sg_fn = surrogate.SlayerGrad(alpha=alpha)
-       >>>     grads = jax.vmap(jax.grad(sg_fn))(xs)
-       >>>     ax1.plot(xs, grads, label=rf'$\alpha={alpha}$')
+       ...     sg_fn = surrogate.SlayerGrad(alpha=alpha)
+       ...     grads = jax.vmap(jax.grad(sg_fn))(xs)
+       ...     _ = ax1.plot(xs, grads, label=rf'$\alpha={alpha}$')
        >>>
-       >>> ax1.set_xlabel('Input (x)')
-       >>> ax1.set_ylabel('Gradient')
-       >>> ax1.set_title('SLAYER Surrogate Gradients')
-       >>> ax1.legend()
+       >>> _ = ax1.set_xlabel('Input (x)')
+       >>> _ = ax1.set_ylabel('Gradient')
+       >>> _ = ax1.set_title('SLAYER Surrogate Gradients')
+       >>> _ = ax1.legend()
        >>> ax1.grid(True, alpha=0.3)
        >>>
        >>> # Compare decay rates on semi-log plot
        >>> xs_pos = jnp.linspace(0, 4, 500)
        >>> for alpha in [0.5, 1.0, 2.0, 4.0]:
-       >>>     sg_fn = surrogate.SlayerGrad(alpha=alpha)
-       >>>     grads = jax.vmap(jax.grad(sg_fn))(xs_pos)
-       >>>     ax2.semilogy(xs_pos, grads, label=rf'$\alpha={alpha}$')
+       ...     sg_fn = surrogate.SlayerGrad(alpha=alpha)
+       ...     grads = jax.vmap(jax.grad(sg_fn))(xs_pos)
+       ...     _ = ax2.semilogy(xs_pos, grads, label=rf'$\alpha={alpha}$')
        >>>
        >>> # Add theoretical exponential decay lines
        >>> for alpha in [1.0, 2.0]:
-       >>>     theoretical = jnp.exp(-alpha * xs_pos)
-       >>>     ax2.semilogy(xs_pos, theoretical, '--', alpha=0.5)
+       ...     theoretical = jnp.exp(-alpha * xs_pos)
+       ...     _ = ax2.semilogy(xs_pos, theoretical, '--', alpha=0.5)
        >>>
-       >>> ax2.set_xlabel('Distance from threshold')
-       >>> ax2.set_ylabel('Gradient (log scale)')
-       >>> ax2.set_title('Exponential Decay Behavior')
-       >>> ax2.legend()
+       >>> _ = ax2.set_xlabel('Distance from threshold')
+       >>> _ = ax2.set_ylabel('Gradient (log scale)')
+       >>> _ = ax2.set_title('Exponential Decay Behavior')
+       >>> _ = ax2.legend()
        >>> ax2.grid(True, alpha=0.3, which="both")
        >>> plt.tight_layout()
        >>> plt.show()
@@ -2588,7 +2605,8 @@ class SlayerGrad(Surrogate):
         >>> # Compute gradients showing exponential decay
         >>> grad_fn = jax.grad(lambda x: sg_fn(x).sum())
         >>> grads = grad_fn(x)
-        >>> print(f"Gradients: {grads}")
+        >>> print("Gradients:", ", ".join(f"{g:.4f}" for g in grads))
+        Gradients: 0.1353, 0.3679, 1.0000, 0.3679, 0.1353
         >>> # Shows exp(-|x|) behavior
 
     See Also

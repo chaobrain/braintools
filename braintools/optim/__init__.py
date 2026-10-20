@@ -27,6 +27,10 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
 - **Advanced Optimizers**: AdamW, RAdam, Lamb, Lion, AdaBelief, etc.
 - **SciPy Integration**: Gradient-free and constrained optimization
 - **Nevergrad Integration**: Black-box optimization with evolutionary strategies
+- **Multi-Start Minimization**: Many starts of a pure function minimized at once
+  (one compiled, vmapped loop) with per-start convergence masks
+- **Readout Learning**: online RLS / FORCE and LMS updates of linear readouts, and
+  closed-form linear, ridge, lasso and elastic-net regression
 - **Learning Rate Schedulers**: Step, exponential, cosine, warmup, and custom schedules
 - **PyTorch-like Interface**: Familiar API for PyTorch users
 - **JAX/Optax Backend**: High-performance optimization with automatic differentiation
@@ -251,6 +255,23 @@ computing (SciPy, Nevergrad), and flexible learning rate scheduling strategies.
         options={'maxiter': 5000, 'xatol': 1e-8},
     )
 
+**Multi-Start Minimization:**
+
+.. code-block:: python
+
+    import jax
+    import jax.numpy as jnp
+    from braintools.optim import multistart_init, multistart_minimize
+
+    # A pure, differentiable loss of one parameter vector
+    def rosenbrock(x):
+        return (1.0 - x[0]) ** 2 + 100.0 * (x[1] - x[0] ** 2) ** 2
+
+    # 16 starts drawn uniformly inside the box, all minimized in one vmapped loop
+    x0 = multistart_init(jax.random.PRNGKey(0), (jnp.array([-2.0, -1.0]), jnp.array([2.0, 3.0])), 16)
+    res = multistart_minimize(rosenbrock, x0, method='lbfgs', max_iter=200)
+    res.best_x, res.best_fun, res.converged
+
 **Nevergrad Optimization:**
 
 .. code-block:: python
@@ -351,6 +372,27 @@ from ._base import (
     OptimState,
 )
 
+# Multi-start minimisation of pure functions
+from ._multistart import (
+    MultiStartResult,
+    multistart_minimize,
+    multistart_init,
+)
+
+# Online readout learning and closed-form regression
+from ._online import (
+    RLS,
+    FORCE,
+    LMS,
+)
+from ._regression import (
+    RegressionResult,
+    linear_regression,
+    ridge_regression,
+    lasso_regression,
+    elastic_net_regression,
+)
+
 # SciPy optimizer
 from ._scipy_optimizer import (
     ScipyOptimizer,
@@ -367,7 +409,7 @@ from ._state_uniquifier import (
 )
 
 # Learning rate schedulers
-from ._optax_lr_scheduler import (
+from ._lr_scheduler import (
     LRScheduler,
     StepLR,
     MultiStepLR,
@@ -426,6 +468,21 @@ __all__ = [
     # Base classes
     'Optimizer',
     'OptimState',
+
+    # Multi-start minimisation
+    'MultiStartResult',
+    'multistart_minimize',
+    'multistart_init',
+
+    # Online readout learning and closed-form regression
+    'RLS',
+    'FORCE',
+    'LMS',
+    'RegressionResult',
+    'linear_regression',
+    'ridge_regression',
+    'lasso_regression',
+    'elastic_net_regression',
 
     # SciPy optimizer
     'ScipyOptimizer',

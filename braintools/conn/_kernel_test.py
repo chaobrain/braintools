@@ -31,6 +31,8 @@ import unittest
 
 import brainunit as u
 import numpy as np
+import pytest
+from scipy.spatial.distance import cdist
 
 from braintools.conn import (
     Conv2dKernel,
@@ -1861,6 +1863,616 @@ class TestKernelRegressions(unittest.TestCase):
             pre_positions=pre, post_positions=post2,
         )
         self.assertEqual(result2.n_connections, 1)
+
+
+# ---------------------------------------------------------------------------
+# C4 (v0.4): the distance kernels are computed through the ``braintools.init``
+# distance profiles. These tests pin the outputs to the closed-form formulas
+# the kernels used before that refactor, re-implemented below verbatim, so any
+# numerical drift beyond floating-point round-off is caught.
+# ---------------------------------------------------------------------------
+
+# Round-off budget: the profiles evaluate ``exp(-0.5 * (d / s) ** 2)`` where the
+# old code evaluated ``exp(-d ** 2 / (2 * s ** 2))``; the two differ by at most
+# a couple of ULPs. Connection sets must match exactly.
+_RTOL = 1e-12
+_ATOL = 1e-14
+
+
+def _ref_gaussian(pre, post, sigma, max_distance=None, normalize=True, same_population=True):
+    """Old ``GaussianKernel`` closed form (plain numbers in the position unit)."""
+    distances = cdist(pre[:, :2], post[:, :2])
+    max_dist = 3 * sigma if max_distance is None else max_distance
+    w = np.exp(-distances ** 2 / (2 * sigma ** 2))
+    if normalize:
+        w /= (2 * np.pi * sigma ** 2)
+    mask = distances <= max_dist
+    if same_population:
+        np.fill_diagonal(mask, False)
+    w = w * mask
+    i, j = np.where(w > 1e-6)
+    return i, j, w[i, j]
+
+
+def _ref_dog(pre, post, sigma_c, sigma_s, amp_c, amp_s, max_distance=None, same_population=True):
+    """Old ``DoGKernel`` closed form (plain numbers in the position unit)."""
+    distances = cdist(pre[:, :2], post[:, :2])
+    max_dist = 3 * sigma_s if max_distance is None else max_distance
+    center = amp_c * np.exp(-distances ** 2 / (2 * sigma_c ** 2))
+    surround = amp_s * np.exp(-distances ** 2 / (2 * sigma_s ** 2))
+    w = center - surround
+    mask = distances <= max_dist
+    if same_population:
+        np.fill_diagonal(mask, False)
+    w = w * mask
+    i, j = np.where(np.abs(w) > 1e-4)
+    return i, j, w[i, j]
+
+
+def _ref_gabor(pre, post, sigma, frequency, theta, phase=0.0, max_distance=None, same_population=True):
+    """Old ``GaborKernel`` closed form (plain numbers in the position unit)."""
+    pre = pre[:, :2]
+    post = post[:, :2]
+    max_dist = 3 * sigma if max_distance is None else max_distance
+    cos_t, sin_t = np.cos(theta), np.sin(theta)
+    out_i, out_j, out_w = [], [], []
+    for j in range(post.shape[0]):
+        rel = pre - post[j]
+        dist = np.sqrt(np.sum(rel ** 2, axis=1))
+        for i in np.where(dist <= max_dist)[0]:
+            if same_population and i == j:
+                continue
+            dx, dy = rel[i, 0], rel[i, 1]
+            x_rot = dx * cos_t + dy * sin_t
+            y_rot = -dx * sin_t + dy * cos_t
+            g = np.exp(-(x_rot ** 2 + y_rot ** 2) / (2 * sigma ** 2))
+            val = g * np.cos(2 * np.pi * frequency * x_rot + phase)
+            if np.abs(val) > 1e-3:
+                out_i.append(i)
+                out_j.append(j)
+                out_w.append(val)
+    return np.array(out_i, dtype=np.int64), np.array(out_j, dtype=np.int64), np.array(out_w)
+
+
+def _sorted_triplets(pre_idx, post_idx, weights):
+    pre_idx = np.asarray(pre_idx)
+    post_idx = np.asarray(post_idx)
+    weights = np.asarray(u.get_mantissa(weights), dtype=np.float64)
+    order = np.lexsort((post_idx, pre_idx))
+    return pre_idx[order], post_idx[order], weights[order]
+
+
+def _assert_matches_reference(result, ref, weight_scale=1.0):
+    pre_r, post_r, w_r = _sorted_triplets(*ref)
+    pre_a, post_a, w_a = _sorted_triplets(result.pre_indices, result.post_indices, result.weights)
+    assert len(pre_r) > 0, 'reference produced no connections; pick other parameters'
+    np.testing.assert_array_equal(pre_a, pre_r)
+    np.testing.assert_array_equal(post_a, post_r)
+    np.testing.assert_allclose(w_a, w_r * weight_scale, rtol=_RTOL, atol=_ATOL)
+
+
+def _positions(n=40, low=0.0, high=100.0, dims=2, seed=0):
+    return np.random.RandomState(seed).uniform(low, high, (n, dims))
+
+
+class TestGaussianKernelProfileEquivalence:
+    """``GaussianKernel`` through ``GaussianProfile`` matches the old closed form."""
+
+    def test_unitless_normalized_default_cutoff(self):
+        pos = _positions()
+        result = GaussianKernel(sigma=15.0)(
+            pre_size=40, post_size=40, pre_positions=pos, post_positions=pos)
+        _assert_matches_reference(result, _ref_gaussian(pos, pos, 15.0))
+
+    def test_quantity_unnormalized_with_max_distance_and_weight(self):
+        pos = _positions(seed=1)
+        result = GaussianKernel(
+            sigma=20.0 * u.um, max_distance=50.0 * u.um, normalize=False,
+            weight=Constant(2.0 * u.nS),
+        )(pre_size=40, post_size=40, pre_positions=pos * u.um, post_positions=pos * u.um)
+        assert u.get_unit(result.weights) == u.nS
+        _assert_matches_reference(
+            result, _ref_gaussian(pos, pos, 20.0, max_distance=50.0, normalize=False),
+            weight_scale=2.0,
+        )
+
+    def test_sigma_in_other_unit_than_positions(self):
+        # Positions in mm, sigma in um: sigma is converted to the position unit.
+        pos = _positions(high=0.1, seed=2)
+        result = GaussianKernel(sigma=15.0 * u.um)(
+            pre_size=40, post_size=40, pre_positions=pos * u.mm, post_positions=pos * u.mm)
+        sigma_mm = u.Quantity(15.0 * u.um).to(u.mm).mantissa
+        _assert_matches_reference(result, _ref_gaussian(pos, pos, sigma_mm))
+
+    def test_distinct_populations_3d_positions(self):
+        pre = _positions(n=30, dims=3, seed=3)
+        post = _positions(n=25, dims=3, seed=4)
+        result = GaussianKernel(sigma=12.0, max_distance=40.0)(
+            pre_size=30, post_size=25, pre_positions=pre, post_positions=post)
+        _assert_matches_reference(
+            result, _ref_gaussian(pre, post, 12.0, max_distance=40.0, same_population=False))
+
+    def test_closed_form_value_at_one_sigma(self):
+        pre = np.array([[0.0, 0.0]]) * u.um
+        post = np.array([[10.0, 0.0]]) * u.um
+        result = GaussianKernel(sigma=10.0 * u.um)(
+            pre_size=1, post_size=1, pre_positions=pre, post_positions=post)
+        expected = np.exp(-0.5) / (2 * np.pi * 10.0 ** 2)
+        np.testing.assert_allclose(np.asarray(result.weights), [expected], rtol=1e-14)
+
+
+class TestDoGKernelProfileEquivalence:
+    """``DoGKernel`` / ``MexicanHat`` through Gaussian profiles match the old closed form."""
+
+    def test_quantity_default_amplitudes(self):
+        pos = _positions(seed=5)
+        result = DoGKernel(sigma_center=10.0 * u.um, sigma_surround=25.0 * u.um)(
+            pre_size=40, post_size=40, pre_positions=pos * u.um, post_positions=pos * u.um)
+        ref = _ref_dog(pos, pos, 10.0, 25.0, 1.0, 0.8)
+        _assert_matches_reference(result, ref)
+        # The inhibitory surround is kept (signed weights), unlike DoGProfile.
+        assert np.any(np.asarray(result.weights) < 0)
+
+    def test_unitless_custom_amplitudes_max_distance_weight(self):
+        pos = _positions(seed=6)
+        result = DoGKernel(
+            sigma_center=8.0, sigma_surround=20.0, amplitude_center=1.5,
+            amplitude_surround=0.5, max_distance=45.0, weight=Constant(3.0),
+        )(pre_size=40, post_size=40, pre_positions=pos, post_positions=pos)
+        _assert_matches_reference(
+            result, _ref_dog(pos, pos, 8.0, 20.0, 1.5, 0.5, max_distance=45.0), weight_scale=3.0)
+
+    def test_mexican_hat_quantity(self):
+        pos = _positions(seed=7)
+        result = MexicanHat(sigma=12.0 * u.um)(
+            pre_size=40, post_size=40, pre_positions=pos * u.um, post_positions=pos * u.um)
+        ref = _ref_dog(pos, pos, 12.0, 12.0 * np.sqrt(2), 2.0, 1.0, max_distance=48.0)
+        _assert_matches_reference(result, ref)
+        assert np.any(np.asarray(result.weights) < 0)
+
+    def test_mexican_hat_unitless_max_distance(self):
+        pos = _positions(seed=8)
+        result = MexicanHat(sigma=8.0, max_distance=30.0)(
+            pre_size=40, post_size=40, pre_positions=pos, post_positions=pos)
+        _assert_matches_reference(
+            result, _ref_dog(pos, pos, 8.0, 8.0 * np.sqrt(2), 2.0, 1.0, max_distance=30.0))
+
+
+class TestGaborKernelProfileEquivalence:
+    """The Gaussian envelope of ``GaborKernel`` goes through ``GaussianProfile``."""
+
+    def test_quantity_oblique(self):
+        pos = _positions(seed=9)
+        result = GaborKernel(sigma=20.0 * u.um, frequency=0.05, theta=np.pi / 4)(
+            pre_size=40, post_size=40, pre_positions=pos * u.um, post_positions=pos * u.um)
+        _assert_matches_reference(result, _ref_gabor(pos, pos, 20.0, 0.05, np.pi / 4))
+
+    def test_unitless_phase_max_distance_weight(self):
+        pos = _positions(seed=10)
+        result = GaborKernel(
+            sigma=10.0, frequency=0.1, theta=0.3, phase=np.pi / 2,
+            max_distance=25.0, weight=Constant(0.5),
+        )(pre_size=40, post_size=40, pre_positions=pos, post_positions=pos)
+        _assert_matches_reference(
+            result, _ref_gabor(pos, pos, 10.0, 0.1, 0.3, phase=np.pi / 2, max_distance=25.0),
+            weight_scale=0.5)
+
+    def test_distinct_populations(self):
+        pre = _positions(n=20, seed=11)
+        post = _positions(n=15, seed=12)
+        result = GaborKernel(sigma=15.0, frequency=0.03, theta=1.0)(
+            pre_size=20, post_size=15, pre_positions=pre, post_positions=post)
+        _assert_matches_reference(
+            result, _ref_gabor(pre, post, 15.0, 0.03, 1.0, same_population=False))
+
+
+class TestKernelNonPositiveSigma:
+    """The Gaussian profile rejects a non-positive width at generation time."""
+
+    @pytest.mark.parametrize('make', [
+        lambda s: GaussianKernel(sigma=s, max_distance=50.0),
+        lambda s: GaborKernel(sigma=s, frequency=0.05, theta=0.0, max_distance=50.0),
+        lambda s: DoGKernel(sigma_center=s, sigma_surround=20.0, max_distance=50.0),
+        lambda s: DoGKernel(sigma_center=5.0, sigma_surround=s, max_distance=50.0),
+        lambda s: MexicanHat(sigma=s, max_distance=50.0),
+    ])
+    @pytest.mark.parametrize('sigma', [0.0, -10.0])
+    def test_raises(self, make, sigma):
+        pos = _positions(n=10)
+        with pytest.raises(ValueError, match='sigma'):
+            make(sigma)(pre_size=10, post_size=10, pre_positions=pos, post_positions=pos)
+
+
+
+# ---------------------------------------------------------------------------
+# v0.7 (B4): the kernels are vectorised and memory-bounded. They are
+# deterministic, so the output must stay identical to the per-post loops of
+# 0.6, edge order included. The references below are the 0.6 loops verbatim
+# (plain numbers in the position unit); ``_CHUNKS`` forces tiny chunks so the
+# chunk boundaries (not dividing N, one row per chunk) are exercised too.
+# ---------------------------------------------------------------------------
+
+import braintools.conn._kernel as _kernel_mod
+from braintools.init import GaussianProfile as _GaussianProfile
+
+_CHUNKS = [None, 7, 1]
+
+
+def _set_chunk(monkeypatch, chunk):
+    if chunk is not None:
+        monkeypatch.setattr(_kernel_mod, 'MAX_CHUNK_PAIRS', chunk, raising=False)
+
+
+def _old_conv2d(pre, post, kernel, kernel_size, threshold=0.0, same_population=True):
+    pre = pre[:, :2]
+    post = post[:, :2]
+    kh, kw = kernel.shape
+    pitch = kernel_size / max(kh, kw)
+    extent_y, extent_x = pitch * kh, pitch * kw
+    kernel_y = np.linspace(-extent_y / 2, extent_y / 2, kh)
+    kernel_x = np.linspace(-extent_x / 2, extent_x / 2, kw)
+    out_i, out_j, out_w = [], [], []
+    for post_idx in range(post.shape[0]):
+        rel = pre - post[post_idx]
+        in_range = (np.abs(rel[:, 0]) <= extent_x / 2) & (np.abs(rel[:, 1]) <= extent_y / 2)
+        for pre_idx in np.where(in_range)[0]:
+            if same_population and pre_idx == post_idx:
+                continue
+            ki = np.argmin(np.abs(kernel_y - rel[pre_idx, 1]))
+            kj = np.argmin(np.abs(kernel_x - rel[pre_idx, 0]))
+            val = kernel[ki, kj]
+            if np.abs(val) > threshold:
+                out_i.append(pre_idx)
+                out_j.append(post_idx)
+                out_w.append(val)
+    return np.array(out_i, dtype=np.int64), np.array(out_j, dtype=np.int64), np.array(out_w)
+
+
+def _old_gaussian(pre, post, sigma, max_distance=None, normalize=True, same_population=True):
+    distances = cdist(pre[:, :2], post[:, :2])
+    max_dist = 3 * sigma if max_distance is None else max_distance
+    w = np.asarray(_GaussianProfile(sigma).probability(distances))
+    if normalize:
+        w = w / (2 * np.pi * sigma ** 2)
+    mask = distances <= max_dist
+    if same_population:
+        np.fill_diagonal(mask, False)
+    w = w * mask
+    i, j = np.where(w > 1e-6)
+    return i, j, w[i, j]
+
+
+def _old_dog(pre, post, sigma_c, sigma_s, amp_c, amp_s, max_distance=None, same_population=True):
+    distances = cdist(pre[:, :2], post[:, :2])
+    max_dist = 3 * sigma_s if max_distance is None else max_distance
+    profile = amp_c * _GaussianProfile(sigma_c) - amp_s * _GaussianProfile(sigma_s)
+    w = np.asarray(profile.probability(distances))
+    mask = distances <= max_dist
+    if same_population:
+        np.fill_diagonal(mask, False)
+    w = w * mask
+    i, j = np.where(np.abs(w) > 1e-4)
+    return i, j, w[i, j]
+
+
+def _old_gabor(pre, post, sigma, frequency, theta, phase=0.0, max_distance=None, same_population=True):
+    pre = pre[:, :2]
+    post = post[:, :2]
+    max_dist = 3 * sigma if max_distance is None else max_distance
+    cos_t, sin_t = np.cos(theta), np.sin(theta)
+    profile = _GaussianProfile(sigma)
+    out_i, out_j, out_w = [], [], []
+    for j in range(post.shape[0]):
+        rel = pre - post[j]
+        dist = np.sqrt(np.sum(rel ** 2, axis=1))
+        cand = np.where(dist <= max_dist)[0]
+        if same_population:
+            cand = cand[cand != j]
+        if cand.size == 0:
+            continue
+        x_rot = rel[cand, 0] * cos_t + rel[cand, 1] * sin_t
+        val = np.asarray(profile.probability(dist[cand])) * np.cos(2 * np.pi * frequency * x_rot + phase)
+        keep = np.abs(val) > 1e-3
+        out_i.extend(cand[keep].tolist())
+        out_j.extend([j] * int(keep.sum()))
+        out_w.extend(val[keep].tolist())
+    return np.array(out_i, dtype=np.int64), np.array(out_j, dtype=np.int64), np.array(out_w)
+
+
+def _old_custom(pre, post, func, kernel_size, threshold=0.0, same_population=True):
+    pre = pre[:, :2]
+    post = post[:, :2]
+    out_i, out_j, out_w = [], [], []
+    for j in range(post.shape[0]):
+        rel = pre - post[j]
+        dist = np.sqrt(np.sum(rel ** 2, axis=1))
+        in_range = dist <= kernel_size / 2
+        if same_population:
+            in_range[j] = False
+        cand = np.where(in_range)[0]
+        if len(cand) > 0:
+            vals = func(rel[cand, 0], rel[cand, 1])
+            above = np.abs(vals) > threshold
+            out_i.extend(cand[above])
+            out_j.extend([j] * int(above.sum()))
+            out_w.extend(vals[above])
+    return np.array(out_i, dtype=np.int64), np.array(out_j, dtype=np.int64), np.array(out_w)
+
+
+def _assert_identical(result, ref):
+    """Exact equality with the 0.6 output, edge order included."""
+    pre_r, post_r, w_r = ref
+    np.testing.assert_array_equal(result.pre_indices, pre_r)
+    np.testing.assert_array_equal(result.post_indices, post_r)
+    if len(pre_r):
+        np.testing.assert_array_equal(np.asarray(u.get_mantissa(result.weights), dtype=float),
+                                      np.asarray(w_r, dtype=float))
+    else:
+        assert result.n_connections == 0
+
+
+def _pin_positions(n, seed, dims=2, high=100.0, grid=False):
+    if grid:
+        side = int(np.ceil(np.sqrt(n)))
+        xy = np.stack(np.meshgrid(np.arange(side), np.arange(side)), -1).reshape(-1, 2)[:n]
+        return xy.astype(float) * (high / side)
+    return np.random.RandomState(seed).uniform(0.0, high, (n, dims))
+
+
+class TestKernelExactPins:
+    """The vectorised kernels reproduce the 0.6 per-post loops exactly."""
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    @pytest.mark.parametrize('grid', [False, True])
+    def test_conv2d(self, monkeypatch, chunk, grid):
+        _set_chunk(monkeypatch, chunk)
+        pos = _pin_positions(64, 0, grid=grid)
+        kernel = np.random.RandomState(1).normal(size=(3, 5))
+        result = Conv2dKernel(kernel=kernel, kernel_size=40.0, threshold=0.3)(
+            pre_size=64, post_size=64, pre_positions=pos, post_positions=pos)
+        _assert_identical(result, _old_conv2d(pos, pos, kernel, 40.0, 0.3))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_conv2d_distinct_populations_units(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+        pre = _pin_positions(50, 2, dims=3)
+        post = _pin_positions(37, 3)
+        kernel = np.array([[1.0, -2.0, 1.0], [0.0, 4.0, 0.0], [1.0, -2.0, 1.0]])
+        result = Conv2dKernel(kernel=kernel, kernel_size=0.03 * u.mm)(
+            pre_size=50, post_size=37, pre_positions=pre * u.um, post_positions=post * u.um)
+        size_um = u.Quantity(0.03 * u.mm).to(u.um).mantissa
+        _assert_identical(result, _old_conv2d(pre, post, kernel, size_um, 0.0, same_population=False))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_laplacian_and_sobel_grid(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+        pos = _pin_positions(49, 0, grid=True, high=70.0)
+        lap = LaplacianKernel(kernel_type='8-connected', kernel_size=30.0)(
+            pre_size=49, post_size=49, pre_positions=pos, post_positions=pos)
+        ref_kernel = np.array([[1, 1, 1], [1, -8, 1], [1, 1, 1]], dtype=np.float32)
+        _assert_identical(lap, _old_conv2d(pos, pos, ref_kernel, 30.0))
+        sob = SobelKernel(direction='vertical', kernel_size=30.0)(
+            pre_size=49, post_size=49, pre_positions=pos, post_positions=pos)
+        ref_kernel = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+        _assert_identical(sob, _old_conv2d(pos, pos, ref_kernel, 30.0))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    @pytest.mark.parametrize('normalize', [True, False])
+    def test_gaussian(self, monkeypatch, chunk, normalize):
+        _set_chunk(monkeypatch, chunk)
+        pos = _pin_positions(70, 4)
+        result = GaussianKernel(sigma=12.0, normalize=normalize)(
+            pre_size=70, post_size=70, pre_positions=pos, post_positions=pos)
+        _assert_identical(result, _old_gaussian(pos, pos, 12.0, normalize=normalize))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_gaussian_distinct_populations_quantity(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+        pre = _pin_positions(45, 5, dims=3)
+        post = _pin_positions(33, 6)
+        result = GaussianKernel(sigma=15.0 * u.um, max_distance=0.04 * u.mm, normalize=False)(
+            pre_size=45, post_size=33, pre_positions=pre * u.um, post_positions=post * u.um)
+        max_um = u.Quantity(0.04 * u.mm).to(u.um).mantissa
+        _assert_identical(result, _old_gaussian(pre, post, 15.0, max_distance=max_um,
+                                                normalize=False, same_population=False))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_gaussian_infinite_cutoff(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+        pos = _pin_positions(30, 7)
+        result = GaussianKernel(sigma=40.0, max_distance=np.inf, allow_self_connections=True)(
+            pre_size=30, post_size=30, pre_positions=pos, post_positions=pos)
+        _assert_identical(result, _old_gaussian(pos, pos, 40.0, max_distance=np.inf,
+                                                same_population=False))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_dog_and_mexican_hat(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+        pos = _pin_positions(60, 8)
+        dog = DoGKernel(sigma_center=8.0, sigma_surround=20.0)(
+            pre_size=60, post_size=60, pre_positions=pos, post_positions=pos)
+        _assert_identical(dog, _old_dog(pos, pos, 8.0, 20.0, 1.0, 0.8))
+        mh = MexicanHat(sigma=10.0 * u.um)(
+            pre_size=60, post_size=60, pre_positions=pos * u.um, post_positions=pos * u.um)
+        _assert_identical(mh, _old_dog(pos, pos, 10.0, 10.0 * np.sqrt(2), 2.0, 1.0, max_distance=40.0))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_gabor(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+        pos = _pin_positions(60, 9)
+        result = GaborKernel(sigma=15.0, frequency=0.04, theta=0.7, phase=0.2)(
+            pre_size=60, post_size=60, pre_positions=pos, post_positions=pos)
+        _assert_identical(result, _old_gabor(pos, pos, 15.0, 0.04, 0.7, phase=0.2))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_gabor_distinct_populations_quantity(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+        pre = _pin_positions(40, 10)
+        post = _pin_positions(30, 11)
+        result = GaborKernel(sigma=12.0 * u.um, frequency=0.05, theta=1.2, max_distance=30.0 * u.um)(
+            pre_size=40, post_size=30, pre_positions=pre * u.um, post_positions=post * u.um)
+        _assert_identical(result, _old_gabor(pre, post, 12.0, 0.05, 1.2, max_distance=30.0,
+                                             same_population=False))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_custom(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+
+        def func(x, y):
+            r = np.sqrt(x ** 2 + y ** 2)
+            return np.exp(-r / 20.0) * np.cos(r / 5.0) + 0.01 * x
+
+        pos = _pin_positions(64, 12)
+        result = CustomKernel(kernel_func=func, kernel_size=50.0, threshold=0.05)(
+            pre_size=64, post_size=64, pre_positions=pos, post_positions=pos)
+        _assert_identical(result, _old_custom(pos, pos, func, 50.0, 0.05))
+
+    @pytest.mark.parametrize('chunk', _CHUNKS)
+    def test_custom_distinct_populations_quantity(self, monkeypatch, chunk):
+        _set_chunk(monkeypatch, chunk)
+
+        def func(x, y):
+            return np.sign(x) * np.exp(-(x ** 2 + y ** 2) / 200.0)
+
+        pre = _pin_positions(40, 13)
+        post = _pin_positions(35, 14)
+        result = CustomKernel(kernel_func=func, kernel_size=0.06 * u.mm, threshold=0.1)(
+            pre_size=40, post_size=35, pre_positions=pre * u.um, post_positions=post * u.um)
+        size_um = u.Quantity(0.06 * u.mm).to(u.um).mantissa
+        _assert_identical(result, _old_custom(pre, post, func, size_um, 0.1, same_population=False))
+
+    def test_random_weight_initializer_stream_unchanged(self):
+        # The weight initializer draws after the edges, so its values are pinned too.
+        pos = _pin_positions(50, 15)
+        result = GaussianKernel(sigma=10.0, weight=Uniform(1.0, 2.0), seed=3)(
+            pre_size=50, post_size=50, pre_positions=pos, post_positions=pos)
+        i, j, w = _old_gaussian(pos, pos, 10.0)
+        base = np.random.RandomState(3).uniform(1.0, 2.0, len(i))
+        np.testing.assert_array_equal(result.pre_indices, i)
+        np.testing.assert_array_equal(result.post_indices, j)
+        np.testing.assert_allclose(np.asarray(result.weights), base * w, rtol=1e-12)
+
+
+
+import tracemalloc
+
+from braintools.conn._kernel import _candidate_pairs, _first_rows, _nearest_index
+
+
+def _peak_bytes(fn):
+    tracemalloc.start()
+    try:
+        fn()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+class TestKernelFloat32AndHelpers:
+    """Native-dtype arithmetic is kept (float32 positions), and helper edge cases."""
+
+    def test_float32_positions_match_old_loops(self, monkeypatch):
+        _set_chunk(monkeypatch, 7)
+        pos = _pin_positions(50, 30).astype(np.float32)
+        kernel = np.random.RandomState(2).normal(size=(5, 5))
+        conv = Conv2dKernel(kernel=kernel, kernel_size=35.0)(
+            pre_size=50, post_size=50, pre_positions=pos, post_positions=pos)
+        _assert_identical(conv, _old_conv2d(pos, pos, kernel, 35.0))
+        gabor = GaborKernel(sigma=10.0, frequency=0.05, theta=0.4)(
+            pre_size=50, post_size=50, pre_positions=pos, post_positions=pos)
+        _assert_identical(gabor, _old_gabor(pos, pos, 10.0, 0.05, 0.4))
+
+        def func(x, y):
+            return np.cos(x / 7.0) * np.exp(-np.abs(y) / 9.0)
+
+        custom = CustomKernel(kernel_func=func, kernel_size=40.0, threshold=0.2)(
+            pre_size=50, post_size=50, pre_positions=pos, post_positions=pos)
+        _assert_identical(custom, _old_custom(pos, pos, func, 40.0, 0.2))
+        gauss = GaussianKernel(sigma=8.0)(pre_size=50, post_size=50, pre_positions=pos, post_positions=pos)
+        _assert_identical(gauss, _old_gaussian(pos, pos, 8.0))
+
+    def test_post_size_smaller_than_positions_uses_first_rows(self):
+        pos = _pin_positions(30, 31)
+        kernel = np.ones((3, 3))
+        result = Conv2dKernel(kernel=kernel, kernel_size=40.0)(
+            pre_size=30, post_size=20, pre_positions=pos, post_positions=pos)
+        _assert_identical(result, _old_conv2d_first_posts(pos, pos, kernel, 40.0, 20))
+
+    def test_too_few_post_positions_raises(self):
+        pos = _pin_positions(10, 32)
+        with pytest.raises(ValueError, match='positions'):
+            CustomKernel(kernel_func=lambda x, y: x, kernel_size=10.0)(
+                pre_size=10, post_size=12, pre_positions=pos, post_positions=pos)
+        with pytest.raises(ValueError, match='positions'):
+            _first_rows(np.zeros((3, 2)), 4)
+
+    def test_custom_kernel_scalar_return_is_broadcast(self):
+        pos = _pin_positions(20, 33)
+        result = CustomKernel(kernel_func=lambda x, y: 0.5, kernel_size=30.0)(
+            pre_size=20, post_size=20, pre_positions=pos, post_positions=pos)
+        assert result.n_connections > 0
+        np.testing.assert_array_equal(np.asarray(result.weights), 0.5)
+
+    def test_nearest_index_ties_pick_first(self):
+        grid = np.array([-1.0, 0.0, 1.0])
+        np.testing.assert_array_equal(_nearest_index(grid, np.array([-0.5, 0.5, 2.0, -3.0, 0.1])),
+                                      [0, 1, 2, 0, 1])
+        assert _nearest_index(grid, np.zeros(0)).size == 0
+
+    def test_candidate_pairs_edge_cases(self, monkeypatch):
+        pts = np.array([[0.0, 0.0], [1.0, 0.0], [5.0, 0.0]])
+        assert list(_candidate_pairs(pts, pts, -1.0)) == []
+        assert list(_candidate_pairs(pts, pts, np.nan)) == []
+        assert list(_candidate_pairs(pts[:0], pts, 1.0)) == []
+        assert list(_candidate_pairs(pts, pts[:0], 1.0)) == []
+        # Zero radius keeps coincident points only.
+        q, d = map(np.concatenate, zip(*_candidate_pairs(pts, pts, 0.0)))
+        np.testing.assert_array_equal(q, [0, 1, 2])
+        np.testing.assert_array_equal(d, [0, 1, 2])
+        # An infinite radius gives every pair, chunked by rows.
+        monkeypatch.setattr(_kernel_mod, 'MAX_CHUNK_PAIRS', 4)
+        chunks = list(_candidate_pairs(pts, pts, np.inf))
+        assert len(chunks) == 3
+        q, d = map(np.concatenate, zip(*chunks))
+        np.testing.assert_array_equal(q * 3 + d, np.arange(9))
+        # Finite radius, tiny chunks: sorted superset of the pairs within radius.
+        q, d = map(np.concatenate, zip(*_candidate_pairs(pts, pts, 1.0)))
+        np.testing.assert_array_equal(q * 3 + d, [0, 1, 3, 4, 8])
+
+    def test_no_positions_inside_support(self):
+        pos = np.array([[0.0, 0.0], [100.0, 0.0]])
+        for conn in (GaussianKernel(sigma=1.0), DoGKernel(sigma_center=1.0, sigma_surround=2.0),
+                     GaborKernel(sigma=1.0, frequency=0.1, theta=0.0),
+                     Conv2dKernel(kernel=np.ones((3, 3)), kernel_size=3.0),
+                     CustomKernel(kernel_func=lambda x, y: x + 1, kernel_size=3.0)):
+            assert conn(pre_size=2, post_size=2, pre_positions=pos, post_positions=pos).n_connections == 0
+
+
+def _old_conv2d_first_posts(pre, post, kernel, kernel_size, post_num):
+    """Old Conv2dKernel looped over ``range(post_num)`` with the full position arrays."""
+    i, j, w = _old_conv2d(pre, post, kernel, kernel_size)
+    keep = j < post_num
+    return i[keep], j[keep], w[keep]
+
+
+class TestKernelMemoryBound:
+    """N = 2e4 neurons on a sheet: no N x N array (3.2 GB as float64) is built."""
+
+    def test_large_sheet(self):
+        n = 20000
+        pos = np.random.RandomState(0).uniform(0, 1400.0, (n, 2)) * u.um
+        small = pos[:30]
+        conns = [
+            GaussianKernel(sigma=6 * u.um),
+            DoGKernel(sigma_center=4 * u.um, sigma_surround=8 * u.um),
+            GaborKernel(sigma=6 * u.um, frequency=0.1, theta=0.3),
+            Conv2dKernel(kernel=np.ones((5, 5)), kernel_size=20 * u.um),
+            CustomKernel(kernel_func=lambda x, y: np.exp(-(x ** 2 + y ** 2) / 50.0), kernel_size=30 * u.um),
+        ]
+        for conn in conns:
+            conn(pre_size=30, post_size=30, pre_positions=small, post_positions=small)  # warm-up
+            peak = _peak_bytes(lambda: conn(pre_size=n, post_size=n, pre_positions=pos, post_positions=pos))
+            assert peak < 150 * 2 ** 20, (type(conn).__name__, peak)
 
 
 if __name__ == '__main__':

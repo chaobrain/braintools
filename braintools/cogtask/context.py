@@ -34,31 +34,36 @@ class Context:
     - Input/output buffers for trial data
     - RNG for reproducible randomness
 
-    Examples
-    --------
-    .. code-block:: python
-
-        >>> import jax
-        >>> import jax.numpy as jnp
-        >>> ctx = Context(key=jax.random.PRNGKey(42))
-        >>> ctx['ground_truth'] = 1
-        >>> ctx['stimulus_direction'] = 0.5 * jnp.pi
-        >>> print(ctx['ground_truth'])
-        1
-
-        >>> # In a phase, write into the buffer with a functional update
-        >>> # (JAX arrays are immutable; ``.at[...].set(...)`` returns a copy):
-        >>> # ctx.inputs = ctx.inputs.at[ctx.phase_start:ctx.phase_end, :].set(stimulus_encoding)
-
     Parameters
     ----------
     key : jax.Array, optional
         JAX PRNGKey for random number generation. If None, draws fresh
         randomness from brainstate's default RNG.
 
-    Note
-    ----
+    Notes
+    -----
     The time step (dt) is obtained from brainstate.environ.get_dt().
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import jax
+        >>> import jax.numpy as jnp
+        >>> from braintools.cogtask import Context
+        >>> ctx = Context(key=jax.random.PRNGKey(42))
+        >>> ctx['ground_truth'] = 1
+        >>> ctx.update(stimulus_direction=0.5 * jnp.pi)
+        >>> ctx['ground_truth'], 'stimulus_direction' in ctx, ctx.get('missing', 0)
+        (1, True, 0)
+        >>>
+        >>> # Phases write into the buffers with functional updates
+        >>> # (JAX arrays are immutable; ``.at[...].set(...)`` returns a copy).
+        >>> ctx.inputs = jnp.zeros((4, 2))
+        >>> ctx.phase_start, ctx.phase_end = 1, 3
+        >>> ctx.inputs = ctx.inputs.at[ctx.phase_slice(), 0].set(1.0)
+        >>> ctx.inputs[:, 0]
+        Array([0., 1., 1., 0.], dtype=float32)
     """
 
     def __init__(

@@ -1,6 +1,6 @@
 # File Processing
 
-BrainTools file helpers handle the two kinds of files most experiments touch: model checkpoints and MATLAB data.
+BrainTools file helpers handle the two kinds of files most experiments touch: model checkpoints and MATLAB data. Optional backends also read and write HDF5 with unit metadata (`save_hdf5` / `load_hdf5`, extra `braintools[hdf5]`), NWB units tables and time series (`braintools[nwb]`), and NEO spike trains (`braintools[neo]`); see the {doc}`API reference <../apis/file>`.
 
 ## What you'll find here
 

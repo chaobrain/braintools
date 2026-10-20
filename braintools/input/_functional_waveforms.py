@@ -26,7 +26,6 @@ import brainunit as u
 import numpy as np
 
 from braintools._misc import set_module_as
-from ._deprecation import create_deprecated_function
 from ._steps import ceil_steps, floor_steps
 
 __all__ = [
@@ -89,6 +88,7 @@ def sinusoidal(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import sinusoidal
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple 10 Hz sinusoid
@@ -287,6 +287,7 @@ def square(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import square
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Symmetric square wave at 2 Hz
@@ -467,6 +468,7 @@ def triangular(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import triangular
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple triangular wave at 5 Hz
@@ -639,6 +641,7 @@ def sawtooth(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import sawtooth
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Simple sawtooth at 2 Hz
@@ -821,6 +824,7 @@ def chirp(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import chirp
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Linear frequency sweep from 1 to 50 Hz
@@ -1030,6 +1034,7 @@ def noisy_sinusoidal(
 
         >>> import brainunit as u
         >>> import brainstate
+        >>> from braintools.input import noisy_sinusoidal
         >>> brainstate.environ.set(dt=0.1 * u.ms)
     
     Sinusoid with small noise
@@ -1162,12 +1167,3 @@ def noisy_sinusoidal(
     currents[start_i:end_i] = noisy_signal
 
     return u.maybe_decimal(currents * c_unit)
-
-
-sinusoidal_input = create_deprecated_function(sinusoidal, 'sinusoidal_input', 'sinusoidal')
-square_input = create_deprecated_function(square, 'square_input', 'square')
-triangular_input = create_deprecated_function(triangular, 'triangular_input', 'triangular')
-sawtooth_input = create_deprecated_function(sawtooth, 'sawtooth_input', 'sawtooth')
-chirp_input = create_deprecated_function(chirp, 'chirp_input', 'chirp')
-
-__all__.extend(['sinusoidal', 'square', 'triangular', 'sawtooth', 'chirp'])

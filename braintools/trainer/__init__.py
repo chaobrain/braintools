@@ -24,33 +24,42 @@ This module provides a comprehensive training framework including:
 - DataLoader: JAX-compatible data loading with distributed support
 - Distributed: Strategies for multi-device and multi-host training
 
-Example
--------
->>> import braintools
->>> import brainstate
->>>
->>> class MyModel(braintools.trainer.LightningModule):
-...     def __init__(self):
-...         super().__init__()
-...         self.linear = brainstate.nn.Linear(784, 10)
-...
-...     def __call__(self, x):
-...         return self.linear(x)
-...
-...     def training_step(self, batch, batch_idx):
-...         x, y = batch['x'], batch['y']
-...         logits = self(x)
-...         loss = jnp.mean((logits - y) ** 2)
-...         self.log('train_loss', loss)
-...         return {'loss': loss}
-...
-...     def configure_optimizers(self):
-...         return braintools.optim.Adam(lr=1e-3)
-...
->>> model = MyModel()
->>> trainer = braintools.trainer.Trainer(max_epochs=10)
->>> train_loader = braintools.trainer.DataLoader(data, batch_size=32)
->>> trainer.fit(model, train_loader)
+Examples
+--------
+.. code-block:: python
+
+    >>> import numpy as np
+    >>> import jax.numpy as jnp
+    >>> import brainstate
+    >>> import braintools
+    >>>
+    >>> class MyModel(braintools.trainer.LightningModule):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.linear = brainstate.nn.Linear(8, 2)
+    ...
+    ...     def __call__(self, x):
+    ...         return self.linear(x)
+    ...
+    ...     def training_step(self, batch, batch_idx):
+    ...         x, y = batch['x'], batch['y']
+    ...         loss = jnp.mean((self(x) - y) ** 2)
+    ...         self.log('mse', loss)
+    ...         return {'loss': loss}
+    ...
+    ...     def configure_optimizers(self):
+    ...         return braintools.optim.Adam(lr=1e-3)
+    ...
+    >>> brainstate.random.seed(0)
+    >>> model = MyModel()
+    >>> data = {'x': np.ones((64, 8), np.float32), 'y': np.zeros((64, 2), np.float32)}
+    >>> train_loader = braintools.trainer.DataLoader(data, batch_size=32)
+    >>> trainer = braintools.trainer.Trainer(
+    ...     max_epochs=10, logger=False, enable_progress_bar=False,
+    ...     enable_checkpointing=False)
+    >>> trainer.fit(model, train_loader)
+    >>> trainer.global_step
+    20
 """
 
 # Module
