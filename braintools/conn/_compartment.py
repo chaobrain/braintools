@@ -352,11 +352,11 @@ class CompartmentSpecific(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Connected pairs are sampled by drawing a binomial edge count and
        then that many distinct pairs, without a dense
        ``pre_size x post_size`` matrix, so time and memory grow with the
-       number of edges. The edges for a given ``seed`` differ from 0.6
+       number of edges. The edges for a given ``seed`` differ from 0.3
        (same distribution). This also applies to the subclasses that
        delegate to it (``SomaToDendrite``, ``AxonToSoma``, ``BranchSpecific``,
        ``AllToAllCompartments`` and the other targeting shortcuts).
@@ -637,10 +637,10 @@ class SomaToDendrite(CompartmentSpecific):
     compartments, commonly used for modeling antidromic activation or
     backpropagating action potentials.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
 
     Parameters
     ----------
@@ -710,10 +710,10 @@ class AxonToSoma(CompartmentSpecific):
     This creates connections specifically from axon compartments to soma
     compartments, representing direct synaptic input to the cell body.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
 
     Examples
     --------
@@ -744,10 +744,10 @@ class DendriteToSoma(CompartmentSpecific):
     This creates connections from dendritic compartments to soma compartments,
     modeling dendritic integration and signal propagation to the cell body.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
 
     Parameters
     ----------
@@ -788,10 +788,10 @@ class AxonToDendrite(CompartmentSpecific):
     This represents the most common type of synaptic connection where
     axons form synapses on dendritic branches.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
 
     Examples
     --------
@@ -826,10 +826,10 @@ class DendriteToDendrite(CompartmentSpecific):
     This models lateral connections between dendritic branches,
     important for dendritic computation and integration.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
 
     Examples
     --------
@@ -936,7 +936,7 @@ class MorphologyDistance(MultiCompartmentConnectivity):
     Pair probabilities are evaluated in chunks of presynaptic rows of
     bounded size, so peak memory does not grow with
     ``pre_size * post_size``. The random draws are the same as in version
-    0.6, so a given ``seed`` gives the same edges.
+    0.3, so a given ``seed`` gives the same edges.
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
@@ -1182,11 +1182,11 @@ class DendriticTree(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Connected pairs are sampled by drawing a binomial edge count and
        then that many distinct pairs, without a dense
        ``pre_size x post_size`` matrix, so time and memory grow with the
-       number of edges. The edges for a given ``seed`` differ from 0.6
+       number of edges. The edges for a given ``seed`` differ from 0.3
        (same distribution).
 
     Examples
@@ -1367,7 +1367,7 @@ class AxonalProjection(MultiCompartmentConnectivity):
     -----
     With a spatial term (``topographic_map`` or ``arborization_sigma``) the
     pair probabilities are evaluated in chunks of presynaptic rows of
-    bounded size, and the random draws are the same as in version 0.6.
+    bounded size, and the random draws are the same as in version 0.3.
     ``topographic_map`` stays a scalar function of one pre and one post
     position; within each chunk it is called once per pair of *distinct*
     positions and the values are shared by neurons at equal positions, so
@@ -1378,10 +1378,10 @@ class AxonalProjection(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Without ``topographic_map`` and ``arborization_sigma`` the pairs are
        sampled with a binomial edge count and distinct pairs, so the
-       edges for a given ``seed`` differ from 0.6 (same distribution).
+       edges for a given ``seed`` differ from 0.3 (same distribution).
        ``topographic_map`` is called once per pair of distinct positions
        instead of once per neuron pair.
 
@@ -1545,10 +1545,10 @@ class AxonalProjection(MultiCompartmentConnectivity):
 class ProximalTargeting(CompartmentSpecific):
     """Connectivity targeting proximal dendritic compartments.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
     """
     __module__ = 'braintools.conn'
 
@@ -1561,10 +1561,10 @@ class ProximalTargeting(CompartmentSpecific):
 class DistalTargeting(CompartmentSpecific):
     """Connectivity targeting distal dendritic compartments.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
     """
     __module__ = 'braintools.conn'
 
@@ -1602,11 +1602,11 @@ class BranchSpecific(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Connected pairs are sampled by drawing a binomial edge count and
        then that many distinct pairs, without a dense
        ``pre_size x post_size`` matrix, so time and memory grow with the
-       number of edges. The edges for a given ``seed`` differ from 0.6
+       number of edges. The edges for a given ``seed`` differ from 0.3
        (same distribution).
     """
     __module__ = 'braintools.conn'
@@ -1664,10 +1664,10 @@ class BranchSpecific(MultiCompartmentConnectivity):
 class BasalDendriteTargeting(CompartmentSpecific):
     """Specific targeting of basal dendrites.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
     """
     __module__ = 'braintools.conn'
 
@@ -1679,10 +1679,10 @@ class BasalDendriteTargeting(CompartmentSpecific):
 class ApicalDendriteTargeting(CompartmentSpecific):
     """Specific targeting of apical dendrites.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific` (binomial edge
        count, then distinct pairs), so the edges for a given ``seed`` differ
-       from 0.6.
+       from 0.3.
     """
     __module__ = 'braintools.conn'
 
@@ -1720,10 +1720,10 @@ class DendriticIntegration(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        All clusters are sampled in one vectorised call instead of a Python
        loop over postsynaptic neurons and clusters. The edges for a given
-       ``seed`` differ from 0.6 (same distribution).
+       ``seed`` differ from 0.3 (same distribution).
 
     Examples
     --------
@@ -1890,10 +1890,10 @@ class AxonalBranching(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        The branch counts and targets are drawn in bulk instead of in a
        Python loop over axons, and no ``pre_size x post_size`` distance
-       matrix is built. The edges for a given ``seed`` differ from 0.6
+       matrix is built. The edges for a given ``seed`` differ from 0.3
        (same distribution).
 
     References
@@ -2069,7 +2069,7 @@ class AxonalArborization(MultiCompartmentConnectivity):
     ``density``. Pair probabilities are evaluated in chunks of presynaptic rows of
     bounded size, so peak memory does not grow with
     ``pre_size * post_size``. The random draws are the same as in version
-    0.6, so a given ``seed`` gives the same edges.
+    0.3, so a given ``seed`` gives the same edges.
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
@@ -2214,11 +2214,11 @@ class TopographicProjection(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        With ``topographic_map=None`` the pairs are sampled by the uniform
        path of :class:`AxonalProjection` (binomial edge count, then distinct
-       pairs), so the edges for a given ``seed`` differ from 0.6. With a
-       map, the random draws are the same as in 0.6.
+       pairs), so the edges for a given ``seed`` differ from 0.3. With a
+       map, the random draws are the same as in 0.3.
 
     Examples
     --------
@@ -2304,11 +2304,11 @@ class SynapticPlacement(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Connected pairs are sampled by drawing a binomial edge count and
        then that many distinct pairs, without a dense
        ``pre_size x post_size`` matrix, so time and memory grow with the
-       number of edges. The edges for a given ``seed`` differ from 0.6
+       number of edges. The edges for a given ``seed`` differ from 0.3
        (same distribution).
 
     Examples
@@ -2447,9 +2447,9 @@ class SynapticClustering(MultiCompartmentConnectivity):
     Generation runs on the host with NumPy and cannot be traced by
     ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Vectorised with :class:`DendriticIntegration`; the edges for a
-       given ``seed`` differ from 0.6 (same distribution).
+       given ``seed`` differ from 0.3 (same distribution).
 
     Examples
     --------
@@ -2500,10 +2500,10 @@ class SynapticClustering(MultiCompartmentConnectivity):
 class AllToAllCompartments(CompartmentSpecific):
     """All-to-all compartment connectivity.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Pairs are sampled as in :class:`CompartmentSpecific`. With probability 1
        every pair is still connected, but random weight or delay initializers
-       draw different values for a given ``seed`` than in 0.6.
+       draw different values for a given ``seed`` than in 0.3.
     """
     __module__ = 'braintools.conn'
 

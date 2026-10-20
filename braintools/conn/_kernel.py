@@ -314,7 +314,7 @@ class Conv2dKernel(PointConnectivity):
     Candidate pairs are found with a k-d tree over the positions and handled
     in chunks of bounded size, so memory grows with the number of edges
     rather than with ``pre_size * post_size``. The edges, their order and the
-    weights are the same as in version 0.6. Generation runs on the host with
+    weights are the same as in version 0.3 (up to rounding). Generation runs on the host with
     NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples
@@ -499,7 +499,7 @@ class GaussianKernel(PointConnectivity):
     Candidate pairs are found with a k-d tree over the positions and handled
     in chunks of bounded size, so memory grows with the number of edges
     rather than with ``pre_size * post_size``. The edges, their order and the
-    weights are the same as in version 0.6. Generation runs on the host with
+    weights are the same as in version 0.3 (up to rounding). Generation runs on the host with
     NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples
@@ -658,7 +658,7 @@ class GaborKernel(PointConnectivity):
     Candidate pairs are found with a k-d tree over the positions and handled
     in chunks of bounded size, so memory grows with the number of edges
     rather than with ``pre_size * post_size``. The edges, their order and the
-    weights are the same as in version 0.6. Generation runs on the host with
+    weights are the same as in version 0.3 (up to rounding). Generation runs on the host with
     NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples
@@ -840,7 +840,7 @@ class DoGKernel(PointConnectivity):
     Candidate pairs are found with a k-d tree over the positions and handled
     in chunks of bounded size, so memory grows with the number of edges
     rather than with ``pre_size * post_size``. The edges, their order and the
-    weights are the same as in version 0.6. Generation runs on the host with
+    weights are the same as in version 0.3 (up to rounding). Generation runs on the host with
     NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples
@@ -984,7 +984,7 @@ class MexicanHat(DoGKernel):
     Candidate pairs are found with a k-d tree over the positions and handled
     in chunks of bounded size, so memory grows with the number of edges
     rather than with ``pre_size * post_size``. The edges, their order and the
-    weights are the same as in version 0.6. Generation runs on the host with
+    weights are the same as in version 0.3 (up to rounding). Generation runs on the host with
     NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples
@@ -1069,7 +1069,7 @@ class SobelKernel(PointConnectivity):
     Candidate pairs are found with a k-d tree over the positions and handled
     in chunks of bounded size, so memory grows with the number of edges
     rather than with ``pre_size * post_size``. The edges, their order and the
-    weights are the same as in version 0.6. Generation runs on the host with
+    weights are the same as in version 0.3 (up to rounding). Generation runs on the host with
     NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples
@@ -1222,7 +1222,7 @@ class LaplacianKernel(PointConnectivity):
     Candidate pairs are found with a k-d tree over the positions and handled
     in chunks of bounded size, so memory grows with the number of edges
     rather than with ``pre_size * post_size``. The edges, their order and the
-    weights are the same as in version 0.6. Generation runs on the host with
+    weights are the same as in version 0.3 (up to rounding). Generation runs on the host with
     NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples
@@ -1338,7 +1338,7 @@ class CustomKernel(PointConnectivity):
     Candidate pairs are found with a k-d tree over the positions and handled
     in chunks of bounded size, so memory grows with the number of edges
     rather than with ``pre_size * post_size``. The edges, their order and the
-    weights are the same as in version 0.6. Generation runs on the host with
+    weights are the same as in version 0.3 (up to rounding). Generation runs on the host with
     NumPy and cannot be traced by ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
     Examples

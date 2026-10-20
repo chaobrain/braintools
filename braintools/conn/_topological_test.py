@@ -2052,7 +2052,7 @@ class TestBlockBernoulliGenerators:
         lambda: CorePeripheryRandom(core_size=2, periphery_periphery_prob=-0.5),
     ])
     def test_probability_out_of_range_raises(self, make):
-        # .. versionchanged:: 0.7.0 -- probabilities outside [0, 1] used to be
+        # .. versionchanged:: 0.4.0 -- probabilities outside [0, 1] used to be
         # clipped silently by the per-pair comparison; they now raise.
         with pytest.raises(ValueError, match=r'\[0, 1\]'):
             make()(10, 10)

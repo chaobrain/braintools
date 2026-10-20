@@ -41,6 +41,11 @@ import time
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Force the non-interactive backend, as ``conftest.py`` does for pytest, so that
+# examples calling ``plt.show()`` never open a window or block. Set before any
+# import of matplotlib; the module subprocesses inherit it through ``env``.
+os.environ['MPLBACKEND'] = 'Agg'
+
 
 def public_modules():
     """Return the dotted names of all public ``braintools`` modules, sorted."""

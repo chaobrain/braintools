@@ -42,7 +42,7 @@ we review and release changes.
 
 ## Coding Guidelines
 
-- Python code must be compatible with CPython 3.10 and newer.
+- Python code must be compatible with CPython 3.12 and newer.
 - Follow the rules enforced by `ruff` and the project configuration. Prefer
   descriptive variable names and concise functions.
 - Keep modules focused; extract shared logic into utilities instead of duplicating

@@ -39,7 +39,7 @@ class ExcitatoryInhibitory(PointConnectivity):
     a presynaptic neuron to a postsynaptic neuron, a connection is formed with probability
     ``exc_prob`` (for excitatory neurons) or ``inh_prob`` (for inhibitory neurons).
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Each block is sampled without a dense mask: its edge count is drawn
        from a binomial and that many distinct pairs are drawn uniformly, the
        same distribution as one Bernoulli draw per pair. The edges a given

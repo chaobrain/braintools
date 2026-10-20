@@ -68,7 +68,7 @@ class BraintoolsDeprecationWarning(FutureWarning):
 
     Notes
     -----
-    Up to braintools 0.7 this class derived from :class:`DeprecationWarning`.
+    Up to braintools 0.3 this class derived from :class:`DeprecationWarning`.
     Filters written against ``DeprecationWarning`` no longer match it; filter
     on this class (or on ``FutureWarning``) instead.
 
