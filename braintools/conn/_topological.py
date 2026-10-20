@@ -126,7 +126,7 @@ def _rewire_targets(rng, n: int, sources: np.ndarray, targets: np.ndarray, rewir
     idx = np.nonzero(rewire)[0]
     if idx.size == 0:
         return targets
-    src = sources[idx].astype(np.int64)
+    src: np.ndarray = sources[idx].astype(np.int64)
     kept = ~np.asarray(rewire, dtype=bool)
     kept_codes = np.sort(sources[kept].astype(np.int64) * n + targets[kept])
     new_t: np.ndarray = np.empty(idx.size, dtype=np.int64)

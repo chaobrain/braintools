@@ -176,7 +176,7 @@ class EconomicDecisionMaking(Task):
         noise_sigma: Data = 0.0 * u.ms ** 0.5,
         **kwargs
     ):
-        offers_arr = np.asarray(offers, dtype=np.float32)
+        offers_arr: np.ndarray = np.asarray(offers, dtype=np.float32)
         if offers_arr.ndim != 2 or offers_arr.shape[0] == 0 or offers_arr.shape[1] != 2:
             raise ValueError(
                 f"offers must be a non-empty sequence of (nB, nA) pairs, got shape "

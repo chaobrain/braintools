@@ -1068,12 +1068,12 @@ class CompositeConnectivity(Connectivity):
         # Decode back to (pre, post) pairs and compartments
         if is_multicompartment:
             max_comp = 10
-            pre_indices = common_codes // (max_post * max_comp * max_comp)
-            remainder = common_codes % (max_post * max_comp * max_comp)
-            post_indices = remainder // (max_comp * max_comp)
-            remainder2 = remainder % (max_comp * max_comp)
-            pre_compartments = remainder2 // max_comp
-            post_compartments = remainder2 % max_comp
+            pre_indices: np.ndarray = common_codes // (max_post * max_comp * max_comp)
+            remainder: np.ndarray = common_codes % (max_post * max_comp * max_comp)
+            post_indices: np.ndarray = remainder // (max_comp * max_comp)
+            remainder2: np.ndarray = remainder % (max_comp * max_comp)
+            pre_compartments: np.ndarray = remainder2 // max_comp
+            post_compartments: np.ndarray = remainder2 % max_comp
         else:
             pre_indices = common_codes // max_post
             post_indices = common_codes % max_post

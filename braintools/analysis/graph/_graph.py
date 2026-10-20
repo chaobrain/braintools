@@ -227,7 +227,7 @@ def _row_chunks(x: sp.csr_matrix, y: sp.csr_matrix):
         return
     y_row_nnz = np.diff(y.indptr).astype(np.float64)
     work = _binary(x) @ y_row_nnz
-    cum = np.cumsum(work)
+    cum: np.ndarray = np.cumsum(work)
     cuts = np.searchsorted(cum, np.arange(_CHUNK_WORK, cum[-1] + _CHUNK_WORK, _CHUNK_WORK), side='right')
     bounds = np.unique(np.concatenate([[0], np.minimum(cuts, n), [n]]))
     for start, stop in zip(bounds[:-1], bounds[1:]):
@@ -351,7 +351,7 @@ def degree_distribution(conn: Any, *, direction: str = 'in') -> DegreeDistributi
     else:
         degrees = np.diff(csr.indptr) + np.diff(csr.tocsc().indptr)
     degrees = degrees.astype(np.int64)
-    counts = np.bincount(degrees).astype(np.int64) if degrees.size else np.zeros(0, dtype=np.int64)
+    counts: np.ndarray = np.bincount(degrees).astype(np.int64) if degrees.size else np.zeros(0, dtype=np.int64)
     return DegreeDistribution(degrees, np.arange(counts.size, dtype=np.int64), counts)
 
 

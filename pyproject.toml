@@ -65,6 +65,8 @@ testing = [
     "mne",
     "statsmodels",
     "networkx",
+    # CPU kernels of brainevent's sparse formats (CSR matmul in conn tests).
+    "numba",
     # Optional I/O backends of braintools.file.
     "h5py",
     "pynwb",
@@ -102,6 +104,8 @@ type-check = [
 ]
 cpu = [
     "jax[cpu]",
+    # numba: brainevent's CPU kernels for the sparse connectivity formats.
+    "brainevent[cpu]",
 ]
 cuda12 = [
     "jax[cuda12]",

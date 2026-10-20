@@ -870,7 +870,7 @@ def confusion_matrix(
     elif normalize == 'pred':
         cm = _safe_divide(cm, cm.sum(axis=0, keepdims=True))
     elif normalize == 'all':
-        total = cm.sum()
+        total = float(cm.sum())
         cm = cm / total if total != 0 else cm
 
     # Plot matrix

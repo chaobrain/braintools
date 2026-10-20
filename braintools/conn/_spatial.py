@@ -106,7 +106,7 @@ def _chunks_by_counts(counts: np.ndarray, max_pairs: Optional[int] = None) -> It
     """
     max_pairs = MAX_CHUNK_PAIRS if max_pairs is None else max_pairs
     n = len(counts)
-    csum = np.cumsum(np.asarray(counts, dtype=np.int64))
+    csum: np.ndarray = np.cumsum(np.asarray(counts, dtype=np.int64))
     start = 0
     while start < n:
         base = int(csum[start - 1]) if start else 0
@@ -1408,11 +1408,11 @@ class Grid2d(PointConnectivity):
         # sorting each row, repeated targets (periodic wrap on grids with a side
         # <= 2) are adjacent and dropped, so rows come out in (pre, post) order.
         rows, cols = int(rows), int(cols)
-        offsets = np.asarray(offsets, dtype=np.int64)
+        offset_table: np.ndarray = np.asarray(offsets, dtype=np.int64)
         source: np.ndarray = np.arange(rows * cols, dtype=np.int64)
         row_of, col_of = np.divmod(source, cols) if cols > 0 else (source, source)
-        target_row = row_of[:, None] + offsets[None, :, 0]
-        target_col = col_of[:, None] + offsets[None, :, 1]
+        target_row = row_of[:, None] + offset_table[None, :, 0]
+        target_col = col_of[:, None] + offset_table[None, :, 1]
         if self.periodic:
             target_row %= rows
             target_col %= cols

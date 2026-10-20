@@ -565,14 +565,14 @@ def morlet_transform(
     dt_s = _dt_seconds(dt)
     fs = 1.0 / dt_s
     n_time = _check_time_axis(xm)
-    freqs_np = onp.atleast_1d(onp.asarray(freqs, dtype=onp.float64))
+    freqs_np: onp.ndarray = onp.atleast_1d(onp.asarray(freqs, dtype=onp.float64))
     if freqs_np.ndim != 1 or freqs_np.size == 0:
         raise ValueError('`freqs` must be a non-empty 1-D sequence of frequencies.')
     if onp.any(freqs_np <= 0) or onp.any(freqs_np > fs / 2.0):
         raise ValueError(
             f'All `freqs` must lie in (0, fs/2] = (0, {fs / 2}] Hz, got {freqs_np.tolist()}.'
         )
-    cycles = onp.atleast_1d(onp.asarray(n_cycles, dtype=onp.float64))
+    cycles: onp.ndarray = onp.atleast_1d(onp.asarray(n_cycles, dtype=onp.float64))
     if cycles.size == 1:
         cycles = onp.full(freqs_np.shape, cycles[0])
     if cycles.shape != freqs_np.shape:
@@ -597,7 +597,7 @@ def morlet_transform(
             f'{n_time} samples). Use a longer signal or fewer cycles.'
         )
     nfft = scipy.fft.next_fast_len(n_time + max_len - 1)
-    kernel = onp.zeros((freqs_np.size, nfft), dtype=onp.complex128)
+    kernel: onp.ndarray = onp.zeros((freqs_np.size, nfft), dtype=onp.complex128)
     for i, w in enumerate(wavelets):
         half = (w.size - 1) // 2  # w.size is odd; centre sample is t = 0
         kernel[i, :half + 1] = w[half:]
