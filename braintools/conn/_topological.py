@@ -258,13 +258,13 @@ class SmallWorld(PointConnectivity):
     - Generation runs on the host with NumPy and cannot be traced by
       ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Rewiring is vectorised. The edges to rewire are chosen with the
-       same draw as in 0.6, but their new targets are drawn in bulk:
+       same draw as in 0.3, but their new targets are drawn in bulk:
        the rewired edges of a source get distinct targets, uniform over
        the nodes that are neither the source nor one of its kept targets
        (self-connections and duplicates are redrawn). For ``p > 0`` the
-       edges for a given ``seed`` therefore differ from 0.6. ``p = 0``
+       edges for a given ``seed`` therefore differ from 0.3. ``p = 0``
        gives the same ring lattice as before.
 
     References
@@ -445,12 +445,12 @@ class ScaleFree(PointConnectivity):
     - Generation runs on the host with NumPy and cannot be traced by
       ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Attachment targets are drawn from a list of edge endpoints, in
        which every node appears once per incident edge, instead of by
        normalising the full degree vector at each step. The attachment
        rule is unchanged, the cost is O(n * m), and the edges for a
-       given ``seed`` differ from 0.6.
+       given ``seed`` differ from 0.3.
 
     References
     ----------
@@ -624,9 +624,9 @@ class Regular(PointConnectivity):
     - Generation runs on the host with NumPy and cannot be traced by
       ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        The targets of all sources are sampled in one vectorised call, so
-       the edges for a given ``seed`` differ from 0.6 (same
+       the edges for a given ``seed`` differ from 0.3 (same
        distribution). Edges are sorted by pre, then post index.
 
     Examples
@@ -796,13 +796,13 @@ class ModularRandom(PointConnectivity):
     - Generation runs on the host with NumPy and cannot be traced by
       ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Each block of neuron pairs is sampled by drawing a binomial edge
        count and then that many distinct pairs, without a dense
        ``pre_size x post_size`` matrix, so time and memory grow with the
-       number of edges. The edge set for a given ``seed`` differs from 0.6
+       number of edges. The edge set for a given ``seed`` differs from 0.3
        (same distribution); edges are sorted by pre, then post index.
-       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.6
+       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.3
        treated them as 0 or 1).
 
     References
@@ -1379,13 +1379,13 @@ class HierarchicalRandom(PointConnectivity):
     - Generation runs on the host with NumPy and cannot be traced by
       ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Each block of neuron pairs is sampled by drawing a binomial edge
        count and then that many distinct pairs, without a dense
        ``pre_size x post_size`` matrix, so time and memory grow with the
-       number of edges. The edge set for a given ``seed`` differs from 0.6
+       number of edges. The edge set for a given ``seed`` differs from 0.3
        (same distribution); edges are sorted by pre, then post index.
-       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.6
+       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.3
        treated them as 0 or 1).
 
     References
@@ -1653,13 +1653,13 @@ class CorePeripheryRandom(PointConnectivity):
     - Generation runs on the host with NumPy and cannot be traced by
       ``jax.jit``, ``jax.vmap`` or ``jax.grad``.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Each block of neuron pairs is sampled by drawing a binomial edge
        count and then that many distinct pairs, without a dense
        ``pre_size x post_size`` matrix, so time and memory grow with the
-       number of edges. The edge set for a given ``seed`` differs from 0.6
+       number of edges. The edge set for a given ``seed`` differs from 0.3
        (same distribution); edges are sorted by pre, then post index.
-       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.6
+       Probabilities outside ``[0, 1]`` now raise ``ValueError`` (0.3
        treated them as 0 or 1).
 
     References

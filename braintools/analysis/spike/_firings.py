@@ -291,7 +291,7 @@ def victor_purpura_distance(
     has units of ``cost_factor * time + count``); the magnitudes of Quantities
     are used as given.
 
-    Before version 0.5 this function returned a Python ``float``; ``float(d)``
+    Before version 0.4 this function returned a Python ``float``; ``float(d)``
     still works on the 0-d array.
 
     Examples
@@ -439,7 +439,7 @@ def van_rossum_distance(
     ``t_max`` (except where the distance is 0). ``tau``, ``t_max`` and the
     spike times must use consistent time units.
 
-    Before version 0.5 this function returned a Python ``float``; ``float(d)``
+    Before version 0.4 this function returned a Python ``float``; ``float(d)``
     still works on the 0-d array.
 
     Examples
@@ -585,7 +585,7 @@ def spike_train_synchrony(
     traced, so the function works under ``jax.jit`` and ``jax.vmap`` (e.g.
     over trials). It is not differentiable (it counts spikes).
 
-    Before version 0.5 this function returned a Python ``float``;
+    Before version 0.4 this function returned a Python ``float``;
     ``float(s)`` still works on the 0-d array.
 
     Examples

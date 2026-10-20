@@ -225,7 +225,7 @@ class DistanceDependent(PointConnectivity):
     3. Stochastically generates connections based on these probabilities
     4. Assigns weights and delays to established connections using initializers
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Generation is chunked over pre neurons and never holds an
        ``N_pre x N_post`` array. When the profile has a hard cutoff (the
        ``max_distance`` of the built-in profiles, or the ``threshold`` of a
@@ -559,7 +559,7 @@ class Gaussian(DistanceDependent):
     - :math:`\\sigma` is the spread parameter (standard deviation)
     - :math:`d_{\\text{max}}` is the maximum connection distance
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        With ``max_distance`` set, only the pairs within it are found (KD-tree
        search, chunked over pre neurons) and drawn, so large sheets build in
        time and memory proportional to the candidate pairs; this changes the
@@ -753,7 +753,7 @@ class Exponential(DistanceDependent):
     - :math:`\\lambda` is the spatial scale (decay length constant)
     - :math:`d_{\\text{max}}` is the maximum connection distance
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        With ``max_distance`` set, only the pairs within it are found (KD-tree
        search, chunked over pre neurons) and drawn, so large sheets build in
        time and memory proportional to the candidate pairs; this changes the
@@ -1491,7 +1491,7 @@ class RadialPatches(PointConnectivity):
     independent ``prob`` draw per patch, so it is connected with probability
     ``1 - (1 - prob) ** m`` when it lies in ``m`` patches.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Vectorised: patch centres are drawn for all pre neurons at once as an
        ``(N_pre, n_patches)`` table, the patch members come from a chunked
        KD-tree search, and duplicates are removed through encoded pair ids.

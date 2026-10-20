@@ -17,7 +17,7 @@ the same form:
 `braintools.metric.firing_rate` is deprecated since 0.4.0 and will be removed in 1.0.0. Use `braintools.analysis.spike.firing_rate` instead.
 ```
 
-Since 0.8, `BraintoolsDeprecationWarning` is a subclass of `FutureWarning`
+Since 0.4, `BraintoolsDeprecationWarning` is a subclass of `FutureWarning`
 (it used to subclass `DeprecationWarning`). Python shows `FutureWarning` by
 default, so the warnings now appear even when the deprecated call is made from
 library code rather than from your script. Filters written for
@@ -222,5 +222,5 @@ result, so it is no longer confused with `braintools.analysis.spike.firing_rate`
 - `braintools.file.load_matfile(header_info=...)` meant the inverse of its
   name. Use `include_header=not header_info`.
 
-Before 0.8 these warned with a plain `DeprecationWarning`. They now use
+Before 0.4 these warned with a plain `DeprecationWarning`. They now use
 `BraintoolsDeprecationWarning` like every other deprecation.

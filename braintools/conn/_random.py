@@ -58,7 +58,7 @@ class Random(PointConnectivity):
     This is the fundamental random connectivity pattern for point neurons,
     where each potential connection is made with a fixed probability.
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Edges are sampled without a dense ``N_pre x N_post`` mask: the edge
        count is drawn from ``Binomial(M, prob)`` over the ``M`` allowed pairs
        and that many distinct pairs are drawn uniformly. This is the same
@@ -258,7 +258,7 @@ class Random(PointConnectivity):
 class FixedProb(Random):
     """Alias for Random connectivity with fixed probability (:class:`Random`).
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        Sampled through a binomial edge count without a dense mask, like
        :class:`Random`; the edges a given ``seed`` produces differ from
        earlier versions.
@@ -293,7 +293,7 @@ class ClusteredRandom(PointConnectivity):
     - :math:`r_{\\text{cluster}}` is the cluster radius
     - :math:`f_{\\text{cluster}}` is the cluster enhancement factor
 
-    .. versionchanged:: 0.7.0
+    .. versionchanged:: 0.4.0
        No dense distance or probability matrix is built. Every pair gets a
        Bernoulli(``prob``) draw through a binomial edge count; pairs within
        ``cluster_radius`` (found with a chunked KD-tree search) then get the
