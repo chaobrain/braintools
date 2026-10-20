@@ -3,7 +3,7 @@ brainstate>=0.1.0
 brainunit>=0.5.2
 brainevent
 typing_extensions
-jax
+jax>=0.9.0
 matplotlib
 msgpack
 optax

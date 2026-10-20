@@ -38,7 +38,7 @@ keywords = [
     "brain modeling toolbox",
 ]
 dependencies = [
-    "jax",
+    "jax>=0.9.0",
     "numpy>=1.15",
     "brainstate>=0.1.0",
     "brainunit>=0.5.2",  # 0.5.2: saiunit einsum works on JAX 0.11
@@ -103,18 +103,18 @@ type-check = [
     "mypy>=1.8",
 ]
 cpu = [
-    "jax[cpu]",
+    "jax[cpu]>=0.9.0",
     # numba: brainevent's CPU kernels for the sparse connectivity formats.
     "brainevent[cpu]",
 ]
 cuda12 = [
-    "jax[cuda12]",
+    "jax[cuda12]>=0.9.0",
 ]
 cuda13 = [
-    "jax[cuda13]",
+    "jax[cuda13]>=0.9.0",
 ]
 tpu = [
-    "jax[tpu]",
+    "jax[tpu]>=0.9.0",
 ]
 # Compatibility alias kept so `pip install braintools[cogtask]` keeps working.
 # It only duplicates core dependencies; braintools.cogtask needs no extras.
