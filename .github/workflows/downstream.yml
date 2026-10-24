@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [brainpy, brainmass, brainpy_state]
+        package: [brainpy, brainmass, brainspike]
     env:
       JAX_PLATFORMS: cpu
       XLA_PYTHON_CLIENT_PREALLOCATE: 'false'
