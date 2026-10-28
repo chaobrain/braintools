@@ -2050,6 +2050,13 @@ def _weights(model):
     return {k: np.asarray(v) for k, v in model.lin.weight.value.items()}
 
 
+def _floats(xs):
+    """Learning rates as Python floats: most schedulers return 0-d jax Arrays
+    (their formulas use jnp, so they trace under jit), which ``pytest.approx``
+    does not compare inside a list."""
+    return [float(x) for x in xs]
+
+
 class TestResumeRestoresLRScheduler:
     """``fit(ckpt_path=...)`` continues the LR schedule, not restarts it."""
 
@@ -2165,8 +2172,8 @@ class TestResumeRestoresLRScheduler:
             trainer._restore_schedulers(state, 3)
         assert int(opt_sched.last_epoch.value) == 3
         assert int(other.last_epoch.value) == 3
-        assert opt_sched.get_last_lr() == pytest.approx([0.125])
-        assert other.get_last_lr() == pytest.approx([0.125])
+        assert _floats(opt_sched.get_last_lr()) == pytest.approx([0.125])
+        assert _floats(other.get_last_lr()) == pytest.approx([0.125])
 
     def test_checkpoint_without_schedulers_does_not_warn(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2207,7 +2214,7 @@ class TestRestoreSchedulersHelpers:
         trainer._restore_schedulers({'lr_schedulers': saved, 'lr_schedulers_stepped': True}, 3)
         assert int(sched.last_epoch.value) == 2
         assert sched.base_lrs == [1.0]
-        assert sched.get_last_lr() == pytest.approx([0.25])
+        assert _floats(sched.get_last_lr()) == pytest.approx([0.25])
         assert trainer.state.lr_schedulers_stepped
 
     def test_restore_unstepped_list_state(self):
@@ -2217,7 +2224,7 @@ class TestRestoreSchedulersHelpers:
         saved = [{'last_epoch': 2, 'base_lrs': [1.0], 'current_lrs': [0.25]}]
         trainer._restore_schedulers({'lr_schedulers': saved}, 3)
         assert int(sched.last_epoch.value) == 3
-        assert sched.get_last_lr() == pytest.approx([0.125])
+        assert _floats(sched.get_last_lr()) == pytest.approx([0.125])
 
 
 class TestResumeAtMaxSteps:

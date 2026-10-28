@@ -4296,6 +4296,13 @@ def test_state_dict_before_registration_has_no_opt_state():
 # optimizer continues its schedule instead of restarting it.
 # ---------------------------------------------------------------------------
 
+def _floats(xs):
+    """Learning rates as Python floats: most schedulers return 0-d jax Arrays
+    (their formulas use jnp, so they trace under jit), which ``pytest.approx``
+    does not compare inside a list."""
+    return [float(x) for x in xs]
+
+
 def _sched_opt(make_sched, make_opt=O.Adam, w0=(1.0, -2.0, 0.5)):
     """A fresh ``(optimizer, scheduler, weight)`` with ``lr=make_sched()``."""
     w = ParamState(jnp.asarray(w0, dtype=jnp.float32))
@@ -4327,7 +4334,7 @@ class TestSchedulerStateInStateDict:
         opt2.load_state_dict(sd)
         assert int(sched2.last_epoch.value) == 3
         assert float(opt2.current_lr) == pytest.approx(0.00625)
-        assert sched2.get_last_lr() == pytest.approx([0.00625])
+        assert _floats(sched2.get_last_lr()) == pytest.approx([0.00625])
         # A stepped and a fresh optimizer have the same state_dict structure, so a
         # serialiser can restore the saved leaves into a fresh optimizer's structure.
         assert jax.tree.structure(sd) == jax.tree.structure(_sched_opt(_steplr)[0].state_dict())
@@ -4367,7 +4374,7 @@ class TestSchedulerStateInStateDict:
         extra.step(1.0)
         sd = opt.state_dict()
         assert int(sd['lr_scheduler']['last_epoch']) == 1
-        assert sd['lr_scheduler']['current_lrs'] == pytest.approx([0.025])
+        assert _floats(sd['lr_scheduler']['current_lrs']) == pytest.approx([0.025])
         assert len(sd['schedulers']) == 1
         assert int(sd['schedulers'][0]['last_epoch']) == 1
         bad = [x for x in jax.tree.leaves([sd['lr_scheduler'], sd['schedulers']])
@@ -4381,7 +4388,7 @@ class TestSchedulerStateInStateDict:
         opt.step(self._G)
         sd = opt.state_dict()
         assert int(sd['lr_scheduler']['last_epoch']) == 0
-        assert sd['lr_scheduler']['current_lrs'] == pytest.approx([0.01])
+        assert _floats(sd['lr_scheduler']['current_lrs']) == pytest.approx([0.01])
         assert sd['schedulers'] == []
 
         w2 = ParamState(w.value)
@@ -4389,7 +4396,7 @@ class TestSchedulerStateInStateDict:
         opt2.register_trainable_weights({'w': w2})
         opt2.load_state_dict(sd)
         assert float(opt2.current_lr) == pytest.approx(0.01)
-        assert opt2.lr_scheduler.get_last_lr() == pytest.approx([0.01])
+        assert _floats(opt2.lr_scheduler.get_last_lr()) == pytest.approx([0.01])
         assert jax.tree.map(float, opt2.state_dict()['lr_scheduler']) == \
                jax.tree.map(float, sd['lr_scheduler'])
         opt.step(self._G)
@@ -4406,7 +4413,7 @@ class TestSchedulerStateInStateDict:
                                  make_opt=O.SGD, w0=(0.0, 0.0, 0.0))
         opt2.load_state_dict(opt.state_dict())
         assert float(opt2.current_lr) == pytest.approx(0.002)
-        assert opt2.lr_scheduler.get_last_lr() == pytest.approx([0.002])
+        assert _floats(opt2.lr_scheduler.get_last_lr()) == pytest.approx([0.002])
         opt2.step(self._G)
         np.testing.assert_allclose(np.asarray(w2.value),
                                    -0.002 * np.asarray(self._G['w']), rtol=1e-6)
@@ -4425,11 +4432,11 @@ class TestSchedulerStateInStateDict:
         opt2, extra2 = make()
         opt2.load_state_dict(opt.state_dict())
         assert int(extra2.last_epoch.value) == 2
-        assert extra2.get_last_lr() == pytest.approx([0.001])
-        assert opt2.get_last_lr() == pytest.approx([0.001])
+        assert _floats(extra2.get_last_lr()) == pytest.approx([0.001])
+        assert _floats(opt2.get_last_lr()) == pytest.approx([0.001])
         assert int(opt2.lr_scheduler.last_epoch.value) == 0
         extra2.step()
-        assert extra2.get_last_lr() == pytest.approx([0.0001])
+        assert _floats(extra2.get_last_lr()) == pytest.approx([0.0001])
 
     def test_scheduler_count_mismatch_raises_before_any_change(self):
         opt = O.Adam(lr=0.01)
@@ -4496,12 +4503,12 @@ class TestSchedulerStateInStateDict:
         opt2.load_state_dict(sd)
         assert int(sched2.last_epoch.value) == n
         assert float(opt2.current_lr) == pytest.approx(float(opt.current_lr))
-        assert sched2.get_last_lr() == pytest.approx(sched.get_last_lr())
+        assert _floats(sched2.get_last_lr()) == pytest.approx(_floats(sched.get_last_lr()))
         for _ in range(2):
             sched.step()
             sched2.step()
             assert float(opt2.current_lr) == pytest.approx(float(opt.current_lr)), name
-            assert sched2.get_last_lr() == pytest.approx(sched.get_last_lr()), name
+            assert _floats(sched2.get_last_lr()) == pytest.approx(_floats(sched.get_last_lr())), name
 
     @pytest.mark.parametrize('extra', [0, 1], ids=['no_extra', 'one_extra'])
     def test_add_scheduler_state_survives_msgpack(self, extra, tmp_path):
@@ -4528,7 +4535,7 @@ class TestSchedulerStateInStateDict:
         assert int(sched2.last_epoch.value) == 1
         for e, e2 in zip(extras, extras2):
             assert int(e2.last_epoch.value) == 2
-            assert e2.get_last_lr() == pytest.approx(e.get_last_lr())
+            assert _floats(e2.get_last_lr()) == pytest.approx(_floats(e.get_last_lr()))
             assert float(e2.best.value) == pytest.approx(1.0)
             assert int(e2.num_bad_epochs.value) == int(e.num_bad_epochs.value)
 
