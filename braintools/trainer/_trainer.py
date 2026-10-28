@@ -35,6 +35,7 @@ from brainstate.typing import PyTree
 
 from braintools._deprecation import register_deprecation, warn_deprecated
 from braintools.optim import Optimizer, UniqueStateManager
+from braintools.optim._optax_optimizer import _from_msgpack_lists
 
 from ._callbacks import Callback, CallbackList, EarlyStopping, ModelCheckpoint
 from ._dataloader import DataLoader
@@ -1202,7 +1203,10 @@ class Trainer:
         ``CheckpointManager`` or by hand) is handled by stepping the freshly
         configured schedulers ``start_epoch`` times, which reproduces the
         trainer's once-per-epoch schedule; a warning says so, since manual
-        or metric-driven stepping cannot be reconstructed.
+        or metric-driven stepping cannot be reconstructed. A scheduler whose
+        state its optimizer's checkpoint already restored (an optimizer's
+        ``state_dict`` includes its schedulers) is stepped only from its
+        restored ``last_epoch`` up to ``start_epoch``.
         """
         schedulers = [(i, s) for i, s in enumerate(self.schedulers)
                       if s is not None and hasattr(s, 'step')]
@@ -1221,17 +1225,46 @@ class Trainer:
             if not bool(state.get('lr_schedulers_stepped', False)):
                 self._step_schedulers()
         else:
-            if start_epoch > 0:
+            # A scheduler whose state its optimizer's checkpoint restored resumes
+            # from its saved epoch; the others start from a fresh schedule.
+            restored = self._schedulers_restored_by_optimizers(state)
+            steps = [
+                (s, max(0, start_epoch - int(s.last_epoch.value)) if id(s) in restored
+                 else start_epoch)
+                for _, s in schedulers
+            ]
+            if any(n for _, n in steps):
                 warnings.warn(
                     f"The checkpoint has no learning-rate scheduler state; the "
-                    f"schedulers are stepped {start_epoch} time(s) to reach "
-                    f"epoch {start_epoch}. This is exact only for schedulers "
-                    f"stepped once per epoch by the trainer.",
+                    f"schedulers are stepped {', '.join(str(n) for _, n in steps)} "
+                    f"time(s) to reach epoch {start_epoch}. This is exact only for "
+                    f"schedulers stepped once per epoch by the trainer.",
                     stacklevel=4,
                 )
-            for _ in range(start_epoch):
-                self._step_schedulers()
+            for scheduler, n in steps:
+                for _ in range(n):
+                    scheduler.step()
         self.state.lr_schedulers_stepped = True
+
+    def _schedulers_restored_by_optimizers(self, state: Dict[str, Any]) -> set:
+        """``id`` of each scheduler whose state an optimizer's checkpoint restored.
+
+        A ``braintools.optim`` optimizer saves the state of its ``lr`` scheduler
+        (``'lr_scheduler'``) and of the schedulers added with ``add_scheduler``
+        (``'schedulers'``), and its ``load_state_dict`` restores them.
+        """
+        restored: set = set()
+        saved = state.get('optimizer_state_dict')
+        if not self.optimizers or saved is None:
+            return restored
+        for opt, single in zip(self.optimizers, _normalize_optimizer_states(saved)):
+            if not isinstance(single, dict):
+                continue
+            if single.get('lr_scheduler') is not None and getattr(opt, 'lr_scheduler', None) is not None:
+                restored.add(id(opt.lr_scheduler))
+            if single.get('schedulers') is not None:
+                restored.update(id(s) for s in getattr(opt, 'schedulers', None) or [])
+        return restored
 
     def _cleanup(self):
         """Release per-fit transient caches.
@@ -1526,24 +1559,6 @@ def _normalize_optimizer_states(opt_state: Any) -> List[Any]:
             return [opt_state[k] for k in sorted(opt_state.keys(), key=lambda x: int(x))]
         return [opt_state]
     return []
-
-
-def _from_msgpack_lists(value: Any) -> Any:
-    """Turn the digit-keyed dicts msgpack makes of lists back into lists.
-
-    ``msgpack_save`` stores a list as ``{'0': ..., '1': ...}``. A scheduler's
-    ``load_state_dict`` expects its original lists (``base_lrs``, nested
-    ``schedulers``, ...), so every dict whose keys are exactly ``'0'..'n-1'``
-    is converted back, recursively. Other dicts keep their keys.
-    """
-    if isinstance(value, dict):
-        converted = {k: _from_msgpack_lists(v) for k, v in value.items()}
-        if converted and set(converted) == {str(i) for i in range(len(converted))}:
-            return [converted[str(i)] for i in range(len(converted))]
-        return converted
-    if isinstance(value, (list, tuple)):
-        return [_from_msgpack_lists(v) for v in value]
-    return value
 
 
 def _prefixed(stage: str, key: str) -> str:

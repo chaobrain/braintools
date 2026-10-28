@@ -4289,3 +4289,261 @@ def test_state_dict_before_registration_has_no_opt_state():
     sd = opt.state_dict()
     assert sd['opt_state'] is None
     assert float(sd['lr']) == pytest.approx(0.01)
+
+
+# ---------------------------------------------------------------------------
+# The LR scheduler state is part of the optimizer state (issue #137): a restored
+# optimizer continues its schedule instead of restarting it.
+# ---------------------------------------------------------------------------
+
+def _floats(xs):
+    """Learning rates as Python floats: most schedulers return 0-d jax Arrays
+    (their formulas use jnp, so they trace under jit), which ``pytest.approx``
+    does not compare inside a list."""
+    return [float(x) for x in xs]
+
+
+def _sched_opt(make_sched, make_opt=O.Adam, w0=(1.0, -2.0, 0.5)):
+    """A fresh ``(optimizer, scheduler, weight)`` with ``lr=make_sched()``."""
+    w = ParamState(jnp.asarray(w0, dtype=jnp.float32))
+    sched = make_sched()
+    opt = make_opt(lr=sched)
+    opt.register_trainable_weights({'w': w})
+    return opt, sched, w
+
+
+def _steplr():
+    return O.StepLR(base_lr=0.05, step_size=1, gamma=0.5)
+
+
+def _plain_leaf(x):
+    return isinstance(x, (bool, int, float, str, np.ndarray, np.generic, jax.Array))
+
+
+class TestSchedulerStateInStateDict:
+    _G = {'w': jnp.array([0.3, -0.4, 0.2], dtype=jnp.float32)}
+
+    def test_steplr_round_trip_continues_schedule(self):
+        opt, sched, w = _sched_opt(_steplr)
+        for _ in range(3):
+            opt.step(self._G)
+            sched.step()
+        sd = opt.state_dict()
+
+        opt2, sched2, w2 = _sched_opt(_steplr, w0=w.value)
+        opt2.load_state_dict(sd)
+        assert int(sched2.last_epoch.value) == 3
+        assert float(opt2.current_lr) == pytest.approx(0.00625)
+        assert _floats(sched2.get_last_lr()) == pytest.approx([0.00625])
+        # A stepped and a fresh optimizer have the same state_dict structure, so a
+        # serialiser can restore the saved leaves into a fresh optimizer's structure.
+        assert jax.tree.structure(sd) == jax.tree.structure(_sched_opt(_steplr)[0].state_dict())
+
+        # The next optimizer step applies the restored LR: same weights as the
+        # uninterrupted run, bit for bit.
+        opt.step(self._G)
+        opt2.step(self._G)
+        np.testing.assert_array_equal(np.asarray(w2.value), np.asarray(w.value))
+
+        # The next scheduler step continues from epoch 3 (0.05 * 0.5**4).
+        sched.step()
+        sched2.step()
+        assert int(sched2.last_epoch.value) == 4
+        assert float(opt2.current_lr) == pytest.approx(0.003125)
+        assert float(opt2.current_lr) == float(opt.current_lr)
+        opt.step(self._G)
+        opt2.step(self._G)
+        np.testing.assert_array_equal(np.asarray(w2.value), np.asarray(w.value))
+
+    def test_applied_lr_after_load_is_the_restored_lr(self):
+        # Plain SGD from zero weights gives ``w = -lr * g``: the update shows the LR.
+        opt, sched, w = _sched_opt(_steplr, make_opt=O.SGD)
+        for _ in range(3):
+            sched.step()
+        opt2, sched2, w2 = _sched_opt(_steplr, make_opt=O.SGD, w0=(0.0, 0.0, 0.0))
+        opt2.load_state_dict(opt.state_dict())
+        opt2.step(self._G)
+        np.testing.assert_allclose(np.asarray(w2.value),
+                                   -0.00625 * np.asarray(self._G['w']), rtol=1e-6)
+
+    def test_state_dict_holds_scheduler_state_as_plain_values(self):
+        opt, sched, _ = _sched_opt(_steplr)
+        extra = O.ReduceLROnPlateau(base_lr=0.1, patience=0)
+        opt.add_scheduler(extra)
+        sched.step()
+        extra.step(1.0)
+        sd = opt.state_dict()
+        assert int(sd['lr_scheduler']['last_epoch']) == 1
+        assert _floats(sd['lr_scheduler']['current_lrs']) == pytest.approx([0.025])
+        assert len(sd['schedulers']) == 1
+        assert int(sd['schedulers'][0]['last_epoch']) == 1
+        bad = [x for x in jax.tree.leaves([sd['lr_scheduler'], sd['schedulers']])
+               if not _plain_leaf(x)]
+        assert bad == []
+
+    def test_constant_lr_round_trips_unchanged(self):
+        w = ParamState(jnp.ones(3))
+        opt = O.Adam(lr=0.01)
+        opt.register_trainable_weights({'w': w})
+        opt.step(self._G)
+        sd = opt.state_dict()
+        assert int(sd['lr_scheduler']['last_epoch']) == 0
+        assert _floats(sd['lr_scheduler']['current_lrs']) == pytest.approx([0.01])
+        assert sd['schedulers'] == []
+
+        w2 = ParamState(w.value)
+        opt2 = O.Adam(lr=0.01)
+        opt2.register_trainable_weights({'w': w2})
+        opt2.load_state_dict(sd)
+        assert float(opt2.current_lr) == pytest.approx(0.01)
+        assert _floats(opt2.lr_scheduler.get_last_lr()) == pytest.approx([0.01])
+        assert jax.tree.map(float, opt2.state_dict()['lr_scheduler']) == \
+               jax.tree.map(float, sd['lr_scheduler'])
+        opt.step(self._G)
+        opt2.step(self._G)
+        np.testing.assert_array_equal(np.asarray(w2.value), np.asarray(w.value))
+
+    def test_manual_lr_change_survives_round_trip(self):
+        # ``current_lr = x`` writes the reported LR and the schedule's applied LR;
+        # both come back after a load.
+        opt, _, _ = _sched_opt(lambda: O.ConstantLR(base_lr=0.01, factor=1.0, total_iters=0),
+                               make_opt=O.SGD)
+        opt.current_lr = 0.002
+        opt2, _, w2 = _sched_opt(lambda: O.ConstantLR(base_lr=0.01, factor=1.0, total_iters=0),
+                                 make_opt=O.SGD, w0=(0.0, 0.0, 0.0))
+        opt2.load_state_dict(opt.state_dict())
+        assert float(opt2.current_lr) == pytest.approx(0.002)
+        assert _floats(opt2.lr_scheduler.get_last_lr()) == pytest.approx([0.002])
+        opt2.step(self._G)
+        np.testing.assert_allclose(np.asarray(w2.value),
+                                   -0.002 * np.asarray(self._G['w']), rtol=1e-6)
+
+    def test_add_scheduler_state_round_trips(self):
+        def make():
+            opt = O.Adam(lr=0.01)
+            opt.register_trainable_weights({'w': ParamState(jnp.ones(3))})
+            extra = O.StepLR(base_lr=0.1, step_size=1, gamma=0.1)
+            opt.add_scheduler(extra)
+            return opt, extra
+
+        opt, extra = make()
+        extra.step()
+        extra.step()
+        opt2, extra2 = make()
+        opt2.load_state_dict(opt.state_dict())
+        assert int(extra2.last_epoch.value) == 2
+        assert _floats(extra2.get_last_lr()) == pytest.approx([0.001])
+        assert _floats(opt2.get_last_lr()) == pytest.approx([0.001])
+        assert int(opt2.lr_scheduler.last_epoch.value) == 0
+        extra2.step()
+        assert _floats(extra2.get_last_lr()) == pytest.approx([0.0001])
+
+    def test_scheduler_count_mismatch_raises_before_any_change(self):
+        opt = O.Adam(lr=0.01)
+        opt.register_trainable_weights({'w': ParamState(jnp.ones(3))})
+        opt.add_scheduler(O.StepLR(base_lr=0.1, step_size=1, gamma=0.1))
+        opt.step(self._G)
+        sd = opt.state_dict()
+
+        fresh = O.Adam(lr=0.01)
+        fresh.register_trainable_weights({'w': ParamState(jnp.ones(3))})
+        with pytest.raises(ValueError, match='1 scheduler.*0'):
+            fresh.load_state_dict(sd)
+        assert int(fresh.step_count.value) == 0
+
+    def test_old_style_state_dict_without_scheduler_keys_loads(self):
+        opt, sched, w = _sched_opt(_steplr)
+        for _ in range(3):
+            opt.step(self._G)
+            sched.step()
+        sd = opt.state_dict()
+        del sd['lr_scheduler'], sd['schedulers']
+
+        opt2, sched2, w2 = _sched_opt(_steplr, w0=w.value)
+        opt2.load_state_dict(sd)
+        # As before the scheduler state was saved: the schedule is not restored,
+        # the reported/applied LR and the optax state are.
+        assert int(sched2.last_epoch.value) == 0
+        assert float(opt2.current_lr) == pytest.approx(0.00625)
+        assert int(opt2.step_count.value) == 3
+        opt.step(self._G)
+        opt2.step(self._G)
+        np.testing.assert_array_equal(np.asarray(w2.value), np.asarray(w.value))
+
+    _SCHEDULERS = [
+        ('StepLR', _steplr, 3),
+        ('MultiStepLR', lambda: O.MultiStepLR(base_lr=0.1, milestones=[2, 4], gamma=0.1), 3),
+        ('ExponentialLR', lambda: O.ExponentialLR(base_lr=0.1, gamma=0.9), 3),
+        ('CosineAnnealingLR', lambda: O.CosineAnnealingLR(base_lr=0.1, T_max=10), 3),
+        ('CosineAnnealingWarmRestarts',
+         lambda: O.CosineAnnealingWarmRestarts(base_lr=0.1, T_0=2, T_mult=2), 5),
+        ('ChainedScheduler', lambda: O.ChainedScheduler([
+            O.StepLR(base_lr=0.1, step_size=2, gamma=0.5),
+            O.ExponentialLR(base_lr=0.1, gamma=0.9)]), 3),
+        ('SequentialLR', lambda: O.SequentialLR(
+            [O.LinearLR(base_lr=0.1, start_factor=0.1, total_iters=2),
+             O.StepLR(base_lr=0.1, step_size=1, gamma=0.5)], milestones=[2]), 4),
+    ]
+
+    @pytest.mark.parametrize('via_msgpack', [False, True], ids=['memory', 'msgpack'])
+    @pytest.mark.parametrize('name,make_sched,n', _SCHEDULERS, ids=[s[0] for s in _SCHEDULERS])
+    def test_scheduler_kinds_round_trip(self, name, make_sched, n, via_msgpack, tmp_path):
+        from braintools.file import msgpack_load, msgpack_save
+
+        opt, sched, _ = _sched_opt(make_sched, make_opt=O.SGD)
+        for _ in range(n):
+            sched.step()
+        sd = opt.state_dict()
+        if via_msgpack:
+            path = str(tmp_path / 'opt.msgpack')
+            msgpack_save(path, sd, verbose=False)
+            sd = msgpack_load(path)
+
+        opt2, sched2, _ = _sched_opt(make_sched, make_opt=O.SGD)
+        opt2.load_state_dict(sd)
+        assert int(sched2.last_epoch.value) == n
+        assert float(opt2.current_lr) == pytest.approx(float(opt.current_lr))
+        assert _floats(sched2.get_last_lr()) == pytest.approx(_floats(sched.get_last_lr()))
+        for _ in range(2):
+            sched.step()
+            sched2.step()
+            assert float(opt2.current_lr) == pytest.approx(float(opt.current_lr)), name
+            assert _floats(sched2.get_last_lr()) == pytest.approx(_floats(sched.get_last_lr())), name
+
+    @pytest.mark.parametrize('extra', [0, 1], ids=['no_extra', 'one_extra'])
+    def test_add_scheduler_state_survives_msgpack(self, extra, tmp_path):
+        from braintools.file import msgpack_load, msgpack_save
+
+        def make():
+            opt, sched, _ = _sched_opt(_steplr)
+            extras = [O.ReduceLROnPlateau(base_lr=0.1, patience=0, factor=0.5)
+                      for _ in range(extra)]
+            for e in extras:
+                opt.add_scheduler(e)
+            return opt, sched, extras
+
+        opt, sched, extras = make()
+        sched.step()
+        for e in extras:
+            e.step(1.0)
+            e.step(2.0)  # worse: one reduction (patience 0)
+        path = str(tmp_path / 'opt.msgpack')
+        msgpack_save(path, opt.state_dict(), verbose=False)
+
+        opt2, sched2, extras2 = make()
+        opt2.load_state_dict(msgpack_load(path))
+        assert int(sched2.last_epoch.value) == 1
+        for e, e2 in zip(extras, extras2):
+            assert int(e2.last_epoch.value) == 2
+            assert _floats(e2.get_last_lr()) == pytest.approx(_floats(e.get_last_lr()))
+            assert float(e2.best.value) == pytest.approx(1.0)
+            assert int(e2.num_bad_epochs.value) == int(e.num_bad_epochs.value)
+
+    def test_every_optax_optimizer_inherits_the_state_dict_methods(self):
+        subclasses = [getattr(O, n) for n in dir(O)
+                      if isinstance(getattr(O, n), type)
+                      and issubclass(getattr(O, n), O.OptaxOptimizer)]
+        assert len(subclasses) > 20
+        for cls in subclasses:
+            assert cls.state_dict is O.OptaxOptimizer.state_dict, cls.__name__
+            assert cls.load_state_dict is O.OptaxOptimizer.load_state_dict, cls.__name__

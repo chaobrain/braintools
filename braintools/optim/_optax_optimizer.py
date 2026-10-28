@@ -75,6 +75,25 @@ def _restore_opt_state(template: Any, saved: Any) -> Any:
     return msgpack_from_state_dict(template, msgpack_to_state_dict(saved))
 
 
+def _from_msgpack_lists(value: Any) -> Any:
+    """Turn the digit-keyed dicts msgpack makes of lists back into lists.
+
+    ``msgpack_save`` stores a list as ``{'0': ..., '1': ...}`` (an empty list as
+    ``{}``). A scheduler's ``load_state_dict`` expects its original lists
+    (``base_lrs``, ``current_lrs``, nested ``schedulers``, ...), so every dict whose
+    keys are exactly ``'0'..'n-1'`` is converted back, recursively. Other dicts keep
+    their keys, and an in-memory state passes through unchanged.
+    """
+    if isinstance(value, dict):
+        converted = {k: _from_msgpack_lists(v) for k, v in value.items()}
+        if converted and set(converted) == {str(i) for i in range(len(converted))}:
+            return [converted[str(i)] for i in range(len(converted))]
+        return converted
+    if isinstance(value, (list, tuple)):
+        return [_from_msgpack_lists(v) for v in value]
+    return value
+
+
 class OptaxOptimizer(Optimizer):
     """
     Base class for Optax-based optimizers with PyTorch-like interface.
@@ -619,8 +638,16 @@ class OptaxOptimizer(Optimizer):
         """
         Return the state of the optimizer as a dictionary.
 
-        Returns:
-          Dictionary containing optimizer state, step count, and hyperparameters.
+        Returns
+        -------
+        dict
+            The step count, the current and base learning rates, the per-group
+            hyperparameters and optax states, the optax state (``None`` before
+            ``register_trainable_weights``), and the learning-rate schedule:
+            ``'lr_scheduler'`` holds the ``state_dict()`` of the scheduler passed as
+            ``lr`` (a ``ConstantLR`` for a float ``lr``) and ``'schedulers'`` the
+            ``state_dict()`` of each scheduler registered with :meth:`add_scheduler`,
+            in order. All values are numbers, arrays, strings, lists and dicts.
         """
         # Prepare param_groups for serialization
         serializable_groups = dict()
@@ -643,7 +670,11 @@ class OptaxOptimizer(Optimizer):
                 for i, s in enumerate(self.param_groups_opt_states)
             },
             # ``None`` until ``register_trainable_weights`` builds the optax state.
-            'opt_state': None if self.opt_state is None else self.opt_state.value
+            'opt_state': None if self.opt_state is None else self.opt_state.value,
+            # The schedule's position (``last_epoch``, current rates, scheduler
+            # counters), so a restored optimizer continues the schedule.
+            'lr_scheduler': self._lr_scheduler.state_dict(),
+            'schedulers': [s.state_dict() for s in self._schedulers],
         }
         return state_dict
 
@@ -651,10 +682,42 @@ class OptaxOptimizer(Optimizer):
         """
         Load optimizer state from a dictionary.
 
-        Args:
-          state_dict: Dictionary containing optimizer state.
+        Parameters
+        ----------
+        state_dict : dict
+            A dictionary returned by :meth:`state_dict`, in memory or after a
+            msgpack round trip. The scheduler states (``'lr_scheduler'``,
+            ``'schedulers'``) are loaded into this optimizer's schedulers when
+            present; a dictionary without them (written before they were saved)
+            loads as before and leaves the schedulers where they are.
+
+        Raises
+        ------
+        ValueError
+            If ``state_dict`` holds a different number of :meth:`add_scheduler`
+            schedulers than this optimizer. Nothing is changed in that case.
         """
+        saved_schedulers = None
+        if state_dict.get('schedulers') is not None:
+            saved_schedulers = _from_msgpack_lists(state_dict['schedulers'])
+            if saved_schedulers == {}:  # an empty list after a msgpack round trip
+                saved_schedulers = []
+            if len(saved_schedulers) != len(self._schedulers):
+                raise ValueError(
+                    f"The state dict holds {len(saved_schedulers)} scheduler state(s) "
+                    f"registered with add_scheduler, this optimizer has "
+                    f"{len(self._schedulers)}."
+                )
+
         self.step_count.value = state_dict['step_count']
+
+        # Schedules first: the reported ``lr`` below is then written on top of the
+        # restored schedule, which keeps ``current_lr`` and the applied LR equal.
+        if state_dict.get('lr_scheduler') is not None:
+            self._lr_scheduler.load_state_dict(_from_msgpack_lists(state_dict['lr_scheduler']))
+        for scheduler, saved in zip(self._schedulers, saved_schedulers or []):
+            scheduler.load_state_dict(saved)
+
         self.current_lr = msgpack_from_state_dict(self.current_lr, state_dict['lr'])
         self._base_lr = state_dict['base_lr']
 

@@ -2050,6 +2050,13 @@ def _weights(model):
     return {k: np.asarray(v) for k, v in model.lin.weight.value.items()}
 
 
+def _floats(xs):
+    """Learning rates as Python floats: most schedulers return 0-d jax Arrays
+    (their formulas use jnp, so they trace under jit), which ``pytest.approx``
+    does not compare inside a list."""
+    return [float(x) for x in xs]
+
+
 class TestResumeRestoresLRScheduler:
     """``fit(ckpt_path=...)`` continues the LR schedule, not restarts it."""
 
@@ -2095,24 +2102,78 @@ class TestResumeRestoresLRScheduler:
         assert int(last['lr_schedulers']['0']['last_epoch']) == 3
         assert last['lr_schedulers_stepped']
 
+    def _without_trainer_scheduler_state(self, tmpdir, name, drop_optimizer_scheduler):
+        """``name`` re-saved without the trainer's scheduler state (and, optionally,
+        without the scheduler state inside the optimizer state)."""
+        state = braintools.trainer.load_checkpoint(os.path.join(tmpdir, name))
+        del state['lr_schedulers'], state['lr_schedulers_stepped']
+        if drop_optimizer_scheduler:
+            for opt_state in state['optimizer_state_dict'].values():
+                del opt_state['lr_scheduler'], opt_state['schedulers']
+        path = os.path.join(tmpdir, 'stripped.ckpt')
+        save_checkpoint(state, path)
+        return path
+
+    def _resume(self, path, warns):
+        rec = _LRRecorder()
+        model = _steplr_model(seed=7)
+        trainer = _quiet_trainer(max_epochs=5, callbacks=[rec])
+        if warns:
+            with pytest.warns(UserWarning, match='no learning-rate scheduler state'):
+                trainer.fit(model, _loader(), _loader(), ckpt_path=path)
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter('error')
+                trainer.fit(model, _loader(), _loader(), ckpt_path=path)
+        return rec.lrs, _weights(model), trainer
+
     def test_legacy_checkpoint_fast_forwards_with_warning(self):
-        # A checkpoint written before scheduler state was saved: the schedule
-        # is rebuilt by stepping it once per completed epoch.
+        # A checkpoint written before scheduler state was saved (by the trainer or
+        # by the optimizer): the schedule is rebuilt by stepping it once per
+        # completed epoch.
         lrs, weights = self._continuous()
         with tempfile.TemporaryDirectory() as tmpdir:
             self._three_epochs(tmpdir)
-            state = braintools.trainer.load_checkpoint(os.path.join(tmpdir, 'e2.ckpt'))
-            del state['lr_schedulers'], state['lr_schedulers_stepped']
-            legacy = os.path.join(tmpdir, 'legacy.ckpt')
-            save_checkpoint(state, legacy)
-            rec = _LRRecorder()
-            model = _steplr_model(seed=7)
-            trainer = _quiet_trainer(max_epochs=5, callbacks=[rec])
-            with pytest.warns(UserWarning, match='no learning-rate scheduler state'):
-                trainer.fit(model, _loader(), _loader(), ckpt_path=legacy)
-        assert rec.lrs == pytest.approx({3: lrs[3], 4: lrs[4]})
+            path = self._without_trainer_scheduler_state(tmpdir, 'e2.ckpt', True)
+            got, got_weights, trainer = self._resume(path, warns=True)
+        assert got == pytest.approx({3: lrs[3], 4: lrs[4]})
+        assert int(trainer.schedulers[0].last_epoch.value) == 5
         for key, value in weights.items():
-            np.testing.assert_allclose(_weights(model)[key], value, rtol=1e-5, atol=1e-6)
+            np.testing.assert_allclose(got_weights[key], value, rtol=1e-5, atol=1e-6)
+
+    @pytest.mark.parametrize('name,warns', [('e2.ckpt', True), ('last.ckpt', False)])
+    def test_optimizer_scheduler_state_is_not_stepped_twice(self, name, warns):
+        # A checkpoint holding only the optimizer state (as ``CheckpointManager``
+        # writes it): the optimizer restores its scheduler, which is then stepped
+        # only up to the resumed epoch, not ``start_epoch`` more times. ``e2.ckpt``
+        # was saved before the epoch-end step (one step, with a warning),
+        # ``last.ckpt`` after it (nothing to step, no warning).
+        lrs, weights = self._continuous()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._three_epochs(tmpdir)
+            path = self._without_trainer_scheduler_state(tmpdir, name, False)
+            got, got_weights, trainer = self._resume(path, warns=warns)
+        assert got == pytest.approx({3: lrs[3], 4: lrs[4]})
+        assert int(trainer.schedulers[0].last_epoch.value) == 5
+        for key, value in weights.items():
+            np.testing.assert_allclose(got_weights[key], value, rtol=1e-5, atol=1e-6)
+
+    def test_scheduler_not_in_optimizer_state_starts_fresh(self):
+        # Only schedulers the optimizer restored resume from their saved epoch.
+        opt_sched = braintools.optim.StepLR(base_lr=1.0, step_size=1, gamma=0.5)
+        other = braintools.optim.StepLR(base_lr=1.0, step_size=1, gamma=0.5)
+        trainer = _quiet_trainer()
+        trainer.optimizers = [braintools.optim.SGD(lr=opt_sched)]
+        trainer.schedulers = [opt_sched, other]
+        opt_sched.step()
+        opt_sched.step()  # restored at epoch 2 by its optimizer
+        state = {'optimizer_state_dict': [trainer.optimizers[0].state_dict()]}
+        with pytest.warns(UserWarning, match='stepped 1, 3 time'):
+            trainer._restore_schedulers(state, 3)
+        assert int(opt_sched.last_epoch.value) == 3
+        assert int(other.last_epoch.value) == 3
+        assert _floats(opt_sched.get_last_lr()) == pytest.approx([0.125])
+        assert _floats(other.get_last_lr()) == pytest.approx([0.125])
 
     def test_checkpoint_without_schedulers_does_not_warn(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2153,7 +2214,7 @@ class TestRestoreSchedulersHelpers:
         trainer._restore_schedulers({'lr_schedulers': saved, 'lr_schedulers_stepped': True}, 3)
         assert int(sched.last_epoch.value) == 2
         assert sched.base_lrs == [1.0]
-        assert sched.get_last_lr() == pytest.approx([0.25])
+        assert _floats(sched.get_last_lr()) == pytest.approx([0.25])
         assert trainer.state.lr_schedulers_stepped
 
     def test_restore_unstepped_list_state(self):
@@ -2163,7 +2224,7 @@ class TestRestoreSchedulersHelpers:
         saved = [{'last_epoch': 2, 'base_lrs': [1.0], 'current_lrs': [0.25]}]
         trainer._restore_schedulers({'lr_schedulers': saved}, 3)
         assert int(sched.last_epoch.value) == 3
-        assert sched.get_last_lr() == pytest.approx([0.125])
+        assert _floats(sched.get_last_lr()) == pytest.approx([0.125])
 
 
 class TestResumeAtMaxSteps:
