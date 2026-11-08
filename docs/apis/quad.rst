@@ -41,6 +41,12 @@ braincell register steps there that advance a model in place,
     :nosignatures:
 
     ODESolution
+
+.. autosummary::
+    :toctree: generated/
+    :nosignatures:
+    :template: classtemplate.rst
+
     MethodInfo
 
 

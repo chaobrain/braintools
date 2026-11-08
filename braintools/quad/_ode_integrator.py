@@ -1039,7 +1039,7 @@ def ode_ralston4_step(
     Ralston's 4th-order Runge–Kutta method (minimum truncation-error bound).
 
     A four-stage, fourth-order explicit scheme whose free parameters are chosen
-    to minimise the bound on the local truncation error (Ralston, 1962). The
+    to minimise the bound on the local truncation error (Ralston, 1962) [1]_. The
     coefficients are exact closed forms in :math:`\sqrt{5}`:
 
     - :math:`c = (0,\ 2/5,\ (14 - 3\sqrt{5})/16,\ 1)`
