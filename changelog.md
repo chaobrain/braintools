@@ -5,6 +5,13 @@
 
 ### New features
 
+- **`braintools.visualize.morphology`** (new, VIS-3): morphology, tree-topology
+  and value plots moved here from `braincell.vis`. The plots take neutral
+  frozen data (`MorphologyData`, `BranchData`, `RegionData`, `LocsetData`,
+  `TopologyGraph`) or any object implementing `__morphology_data__()` /
+  `__topology_data__()`, so braintools does not depend on braincell. The
+  module is not imported by `import braintools`; install its optional
+  backends with `pip install braintools[morphology]`.
 - **`braintools.quad` registry metadata** (QUAD-2a): `register_method` takes
   optional `order`, `category`, `aliases` and `description` keywords, and the
   new `method_info(name, kind='ode')` returns them as a frozen `MethodInfo`.
