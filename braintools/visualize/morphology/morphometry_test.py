@@ -24,6 +24,8 @@ import numpy as np
 
 from braintools.visualize.morphology._testing import Branch, Morphology
 from braintools.visualize.morphology._testing import (
+    BaselineMixin,
+    make_baseline_tree,
     make_deep_chain_tree,
     make_length_only_tree,
     make_projected_node_tree,
@@ -205,6 +207,20 @@ class DeepMorphologyTest(unittest.TestCase):
         bars = [patch for patch in ax.patches if isinstance(patch, Rectangle)]
         # A chain has exactly one branch at every order.
         self.assertEqual(len(bars), self.n_branches)
+
+
+class MorphometryPixelBaselineTest(BaselineMixin, unittest.TestCase):
+    """Pixel baselines for the morphometry plots; regenerate with ``BRAINTOOLS_UPDATE_BASELINES=1``."""
+
+    def test_dendrogram(self) -> None:
+        fig, ax = self.new_axes()
+        plot_dendrogram(make_baseline_tree(), ax=ax)
+        self.assert_baseline(fig, "dendrogram")
+
+    def test_sholl(self) -> None:
+        fig, ax = self.new_axes()
+        plot_sholl(make_baseline_tree(), ax=ax, step_um=10.0)
+        self.assert_baseline(fig, "sholl")
 
 
 if __name__ == "__main__":

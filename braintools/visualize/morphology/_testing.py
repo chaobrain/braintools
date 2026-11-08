@@ -30,7 +30,9 @@ selection helpers and render-backend doubles.
 """
 
 import importlib.util
+import os
 import unittest
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import brainunit as u
@@ -42,7 +44,13 @@ from braintools.visualize.morphology._data import (
     LocsetData,
     MorphologyData,
     RegionData,
+    TopologyGraph,
 )  # noqa: F401
+from braintools.visualize.morphology._image_compare import (
+    BASELINE_DPI,
+    assert_figure_matches,
+    baseline_style,
+)
 from braintools.visualize.morphology._tree import BranchNode, MorphologyTree, as_tree
 
 
@@ -474,6 +482,109 @@ def make_projected_node_tree() -> Morphology:
     return tree
 
 
+def make_baseline_tree(*, apical_scale: float = 1.0) -> Morphology:
+    """The branching 3D tree every pixel baseline draws.
+
+    A soma, an apical dendrite that forks once, a basal dendrite and an axon,
+    all with explicit 3D points so the projected layout and the Sholl profile
+    are defined. ``apical_scale`` stretches the trunk (and so moves its
+    children) away from the soma: ``1.01`` is the one-percent length change
+    the baselines must detect. The geometry is the same as braincell's
+    baseline tree, so both packages share the baseline images.
+    """
+    s = float(apical_scale)
+
+    def pts(rows, origin=(0.0, 0.0, 0.0)):
+        o = np.asarray(origin, dtype=float)
+        return (o + s * np.asarray(rows, dtype=float)) * u.um
+
+    soma = Branch.from_points(
+        points=[[0.0, 0.0, 0.0], [20.0, 0.0, 0.0]] * u.um,
+        radii=[10.0, 10.0] * u.um,
+        type="soma",
+    )
+    trunk_rows = [[0.0, 0.0, 0.0], [10.0, 30.0, 0.0], [5.0, 70.0, 5.0]]
+    trunk_end = np.asarray([20.0, 0.0, 0.0]) + s * np.asarray(trunk_rows[-1])
+    trunk = Branch.from_points(
+        points=pts(trunk_rows, (20.0, 0.0, 0.0)),
+        radii=[3.0, 2.5, 2.0] * u.um,
+        type="apical_dendrite",
+    )
+    fork_a = Branch.from_points(
+        points=(
+            trunk_end
+            + np.asarray([[0.0, 0.0, 0.0], [-25.0, 30.0, 0.0], [-30.0, 60.0, 0.0]])
+        )
+        * u.um,
+        radii=[2.0, 1.5, 1.0] * u.um,
+        type="apical_dendrite",
+    )
+    fork_b = Branch.from_points(
+        points=(
+            trunk_end
+            + np.asarray([[0.0, 0.0, 0.0], [25.0, 35.0, 0.0], [40.0, 55.0, 0.0]])
+        )
+        * u.um,
+        radii=[2.0, 1.4, 1.0] * u.um,
+        type="apical_dendrite",
+    )
+    basal = Branch.from_points(
+        points=[[0.0, 0.0, 0.0], [-30.0, -20.0, 0.0], [-60.0, -25.0, 0.0]] * u.um,
+        radii=[2.5, 2.0, 1.5] * u.um,
+        type="basal_dendrite",
+    )
+    axon = Branch.from_points(
+        points=[[20.0, 0.0, 0.0], [50.0, -20.0, 0.0], [90.0, -30.0, 0.0]] * u.um,
+        radii=[1.2, 1.0, 0.8] * u.um,
+        type="axon",
+    )
+    tree = Morphology.from_root(soma, name="soma")
+    tree.attach(parent="soma", child_branch=trunk, child_name="trunk", parent_x=1.0)
+    tree.attach(parent="trunk", child_branch=fork_a, child_name="fork_a", parent_x=1.0)
+    tree.attach(parent="trunk", child_branch=fork_b, child_name="fork_b", parent_x=1.0)
+    tree.attach(parent="soma", child_branch=basal, child_name="basal", parent_x=0.0)
+    tree.attach(parent="soma", child_branch=axon, child_name="axon", parent_x=1.0)
+    return tree
+
+
+def make_baseline_cv_graph() -> TopologyGraph:
+    """Control-volume graph of :func:`make_baseline_tree`, one CV per branch.
+
+    These are the CVs braincell builds for that tree, with the first half of
+    the trunk highlighted (``BranchSlice(1, 0.0, 0.5)``).
+    """
+    return TopologyGraph(
+        node_ids=(0, 1, 2, 3, 4, 5),
+        edges=((0, 1), (1, 2), (1, 3), (0, 4), (0, 5)),
+        root_id=0,
+        level="cv",
+        highlight_fractions={1: 0.5499430137741315},
+    )
+
+
+def make_baseline_node_graph() -> TopologyGraph:
+    """Solver-node graph braincell builds for :func:`make_baseline_tree` (one CV per branch)."""
+    return TopologyGraph(
+        node_ids=tuple(range(13)),
+        edges=(
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 4),
+            (4, 5),
+            (5, 6),
+            (4, 7),
+            (7, 8),
+            (0, 9),
+            (9, 10),
+            (2, 11),
+            (11, 12),
+        ),  # fmt: skip
+        root_id=0,
+        level="node",
+    )
+
+
 def make_fan_root_partition_tree() -> Morphology:
     """Soma with children attached at left / middle / right root positions.
 
@@ -533,6 +644,23 @@ def make_fan_root_partition_tree() -> Morphology:
 
 
 # =============================================================================
+# Pixel baselines
+# =============================================================================
+
+BASELINE_DIR = Path(__file__).resolve().parent / "baseline_images"
+"""Committed baseline PNGs, one per figure; not packaged in the wheel."""
+
+UPDATE_BASELINES_ENV = "BRAINTOOLS_UPDATE_BASELINES"
+"""Set to ``1`` to rewrite the baselines instead of comparing against them."""
+
+BASELINE_FIGSIZE = (4.0, 3.0)
+"""Figure size in inches; at ``BASELINE_DPI`` every baseline is 400 x 300 px."""
+
+BASELINE_TOL = 0.0
+"""RMS tolerance (0-255) for every baseline comparison."""
+
+
+# =============================================================================
 # Backend doubles
 # =============================================================================
 
@@ -585,6 +713,50 @@ class VisDefaultsResetMixin(_MixinBase):
 
         reset_defaults()
         self.addCleanup(reset_defaults)
+
+
+class BaselineMixin(VisDefaultsResetMixin):
+    """Render in the pinned baseline style and close every figure afterwards.
+
+    Mix in ahead of :class:`unittest.TestCase`; :meth:`new_axes` then returns
+    axes of the fixed baseline size, and :meth:`assert_baseline` compares the
+    figure with ``baseline_images/<name>.png``.
+    """
+
+    def setUp(self) -> None:  # noqa: N802 - unittest naming
+        super().setUp()
+        import matplotlib.pyplot as plt
+
+        self.enterContext(baseline_style())
+        self.addCleanup(plt.close, "all")
+
+    @staticmethod
+    def new_axes(figsize=BASELINE_FIGSIZE):
+        import matplotlib.pyplot as plt
+
+        return plt.subplots(figsize=figsize, dpi=BASELINE_DPI)
+
+    @staticmethod
+    def assert_baseline(fig, name: str, *, tol: float = BASELINE_TOL) -> None:
+        assert_figure_matches(
+            fig,
+            BASELINE_DIR / f"{name}.png",
+            tol=tol,
+            update_env=UPDATE_BASELINES_ENV,
+        )
+
+    def assert_baseline_differs(self, fig, name: str) -> None:
+        """Assert that ``fig`` does *not* match baseline ``name``, never rewriting it.
+
+        Skipped while ``BRAINTOOLS_UPDATE_BASELINES=1`` is set: a regeneration
+        run must never overwrite a baseline with the deliberately wrong figure.
+        """
+        if os.environ.get(UPDATE_BASELINES_ENV):
+            self.skipTest("baselines are being regenerated")
+        with self.assertRaisesRegex(
+            AssertionError, rf"{name}\.png differs from its baseline"
+        ):
+            self.assert_baseline(fig, name)
 
 
 # =============================================================================

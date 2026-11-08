@@ -22,6 +22,8 @@ import numpy as np
 
 from braintools.visualize.morphology import plot2d
 from braintools.visualize.morphology._testing import (
+    BaselineMixin,
+    make_baseline_tree,
     FakeBackend,
     VisDefaultsResetMixin,
     make_deep_chain_tree,
@@ -221,6 +223,63 @@ def test_plot2d_medium_values(benchmark, clean_layout_cache) -> None:
         plt.close(fig)
 
     benchmark(_render)
+
+
+class Plot2dPixelBaselineTest(BaselineMixin, unittest.TestCase):
+    """Pixel baselines for ``plot2d``; regenerate with ``BRAINTOOLS_UPDATE_BASELINES=1``."""
+
+    def _draw(self, tree=None, **kwargs):
+        fig, ax = self.new_axes()
+        plot2d(
+            tree if tree is not None else make_baseline_tree(),
+            backend="matplotlib",
+            ax=ax,
+            **kwargs,
+        )
+        return fig
+
+    def test_projected_layout(self) -> None:
+        self.assert_baseline(
+            self._draw(layout="projected", shape="line"), "plot2d_projected"
+        )
+
+    def test_stem_layout(self) -> None:
+        self.assert_baseline(self._draw(layout="stem", shape="frustum"), "plot2d_stem")
+
+    def test_balloon_layout(self) -> None:
+        self.assert_baseline(
+            self._draw(layout="balloon", shape="frustum"), "plot2d_balloon"
+        )
+
+    def test_radial_layout(self) -> None:
+        self.assert_baseline(
+            self._draw(layout="radial_360", shape="frustum"), "plot2d_radial"
+        )
+
+    def test_values_with_colorbar(self) -> None:
+        values = np.linspace(-70.0, -40.0, 11)
+        fig = self._draw(
+            layout="stem", shape="frustum", values=values, value_label="V (mV)"
+        )
+        self.assert_baseline(fig, "plot2d_values_colorbar")
+
+    def test_baseline_detects_one_percent_branch_length_change(self) -> None:
+        # Guard on the comparison itself: a trunk 1 % longer must not pass for the stem baseline.
+        fig = self._draw(
+            make_baseline_tree(apical_scale=1.01), layout="stem", shape="frustum"
+        )
+        self.assert_baseline_differs(fig, "plot2d_stem")
+
+    def test_baseline_detects_a_different_colormap(self) -> None:
+        values = np.linspace(-70.0, -40.0, 11)
+        fig = self._draw(
+            layout="stem",
+            shape="frustum",
+            values=values,
+            value_label="V (mV)",
+            cmap="plasma",
+        )
+        self.assert_baseline_differs(fig, "plot2d_values_colorbar")
 
 
 if __name__ == "__main__":

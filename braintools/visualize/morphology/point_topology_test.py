@@ -24,6 +24,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from braintools.visualize.morphology import TopologyGraph, plot_topology_graph
+from braintools.visualize.morphology._testing import (
+    BaselineMixin,
+    make_baseline_cv_graph,
+    make_baseline_node_graph,
+)
 from braintools.visualize.morphology.point_topology import (
     _blend_node_rgba,
     _plot_discrete_topology_graph,
@@ -323,6 +328,25 @@ class TopologyGraphInputTest(unittest.TestCase):
                 ImportError, r"pip install braintools\[morphology\]"
             ):
                 plot_topology_graph(self._graph(), layout="kamada_kawai")
+
+
+class TopologyGraphPixelBaselineTest(BaselineMixin, unittest.TestCase):
+    """Pixel baselines for topology graphs; regenerate with ``BRAINTOOLS_UPDATE_BASELINES=1``.
+
+    The graphs are the ones braincell builds for the baseline tree, so these
+    images are the same files as braincell's CV-level cell topology and
+    point topology baselines.
+    """
+
+    def test_cv_level_with_highlight(self) -> None:
+        fig, ax = self.new_axes()
+        plot_topology_graph(make_baseline_cv_graph(), layout="kamada_kawai", ax=ax)
+        self.assert_baseline(fig, "cell_topology_cv")
+
+    def test_node_level(self) -> None:
+        fig, ax = self.new_axes()
+        plot_topology_graph(make_baseline_node_graph(), layout="kamada_kawai", ax=ax)
+        self.assert_baseline(fig, "point_topology")
 
 
 if __name__ == "__main__":
