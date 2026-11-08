@@ -17,6 +17,22 @@ concurrency:
 
 jobs:
 
+  # Only the hook that keeps references to the private planning repository
+  # out of this repository. The other pre-commit hooks are not enforced in CI
+  # yet: main does not pass them.
+  private-references:
+    name: No private references
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+      - name: Run the no-private-references hook on every file
+        run: pre-commit run no-private-references --all-files --show-diff-on-failure
+
   tests:
     name: Tests (${{ matrix.os }} / py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
