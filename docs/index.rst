@@ -113,3 +113,4 @@ BrainTools is one part of our `brain simulation ecosystem <https://brainx.chaobr
     apis/trainer.rst
     apis/tree.rst
     apis/visualize.rst
+    apis/visualize_morphology.rst

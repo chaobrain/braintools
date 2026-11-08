@@ -53,6 +53,7 @@ def public_modules():
 
     seen = set()
     stack = [braintools]
+    stack += [importlib.import_module(name) for name in braintools._LAZY_PUBLIC_MODULES]
     while stack:
         mod = stack.pop()
         if mod.__name__ in seen:

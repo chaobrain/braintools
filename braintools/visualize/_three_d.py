@@ -745,6 +745,11 @@ def dendrite_tree_3d(
     -------
     ax : mpl_toolkits.mplot3d.Axes3D
         The 3D axes object.
+
+    See Also
+    --------
+    braintools.visualize.morphology.plot3d : 3-D rendering of a neuron morphology
+        with branch radii.
     """
     if ax is None:
         fig = plt.figure(figsize=figsize)

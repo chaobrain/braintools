@@ -72,10 +72,22 @@ testing = [
     "pynwb",
     "neo",
     "quantities",
+    # Optional backends of braintools.visualize.morphology, and the
+    # property-based layout tests.
+    "plotly",
+    "pyvista",
+    "hypothesis",
 ]
 viz = [
     # Interactive figures in braintools.visualize (plotly backends).
     "plotly",
+]
+morphology = [
+    # Optional backends of braintools.visualize.morphology: topology-graph
+    # layouts (networkx) and 3-D rendering (pyvista, plotly).
+    "networkx",
+    "plotly",
+    "pyvista",
 ]
 progress = [
     # Progress bars in braintools.trainer.

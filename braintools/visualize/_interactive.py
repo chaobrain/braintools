@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import importlib.util
 from typing import Any, Optional, Union, Tuple, List, cast
 
 import numpy as np
@@ -22,18 +23,11 @@ from ._neural import _edge_attribute, NEGATIVE_EDGE_COLOR
 from ..tree import as_numpy
 from ._utils import as_array, flatten_spikes, inter_spike_intervals, is_spike_trains, spike_trains_events
 
-# Try to import plotly
-try:
-    import plotly.graph_objects as go
-    import plotly.express as px
-    from plotly.subplots import make_subplots
-
-    PLOTLY_AVAILABLE = True
-except ImportError:
-    PLOTLY_AVAILABLE = False
-    go = None
-    px = None
-    make_subplots = None
+# plotly is optional and imported on first use (``_check_plotly``), so that
+# ``import braintools`` does not load it; ``plotly.express`` alone costs ~35 ms.
+PLOTLY_AVAILABLE = importlib.util.find_spec("plotly") is not None
+go: Any = None
+make_subplots: Any = None
 
 __all__ = [
     'interactive_spike_raster',
@@ -51,11 +45,17 @@ __all__ = [
 @set_module_as('braintools.visualize')
 def _check_plotly():
     """Check if plotly is available."""
+    global go, make_subplots
     if not PLOTLY_AVAILABLE:
         raise ImportError(
             "Plotly is required for interactive plots. "
             "Install with: pip install braintools[viz] (or pip install plotly)"
         )
+    if go is None:
+        import plotly.graph_objects as _go
+        from plotly.subplots import make_subplots as _make_subplots
+
+        go, make_subplots = _go, _make_subplots
 
 
 @set_module_as('braintools.visualize')

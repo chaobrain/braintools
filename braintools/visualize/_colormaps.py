@@ -138,6 +138,11 @@ def publication_style(
         Figure DPI.
     usetex : bool
         Whether to use LaTeX for text rendering.
+
+    See Also
+    --------
+    braintools.visualize.morphology.publication_theme : The same idea for morphology plots;
+        it also sets branch-type colours.
     """
     params = {
         'figure.figsize': figsize,
@@ -325,6 +330,10 @@ def apply_style(style_name: str, **kwargs):
     ------
     ValueError
         If ``style_name`` is not recognized.
+
+    See Also
+    --------
+    braintools.visualize.morphology.theme : Temporary defaults for morphology plots.
     """
     # Validate first so an unknown style raises before any state is captured.
     if style_name not in ('neural', 'publication', 'dark', 'colorblind'):
