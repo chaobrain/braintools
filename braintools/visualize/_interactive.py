@@ -72,7 +72,7 @@ def interactive_spike_raster(
 ):
     """
     Create interactive spike raster plot using Plotly.
-
+    
     Parameters
     ----------
     spike_times : array-like, list or SpikeTrains
@@ -93,7 +93,7 @@ def interactive_spike_raster(
         Figure dimensions.
     **kwargs
         Additional arguments passed to Plotly scatter.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
@@ -181,7 +181,7 @@ def interactive_line_plot(
 ):
     """
     Create interactive line plot using Plotly.
-
+    
     Parameters
     ----------
     x : np.ndarray
@@ -198,7 +198,7 @@ def interactive_line_plot(
         Figure dimensions.
     **kwargs
         Additional arguments passed to Plotly scatter.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
@@ -258,7 +258,7 @@ def interactive_heatmap(
 ):
     """
     Create interactive heatmap using Plotly.
-
+    
     Parameters
     ----------
     data : np.ndarray
@@ -273,7 +273,7 @@ def interactive_heatmap(
         Figure dimensions.
     **kwargs
         Additional arguments passed to Plotly heatmap.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
@@ -318,7 +318,7 @@ def interactive_3d_scatter(
 ):
     """
     Create interactive 3D scatter plot using Plotly.
-
+    
     Parameters
     ----------
     x, y, z : np.ndarray
@@ -335,7 +335,7 @@ def interactive_3d_scatter(
         Figure dimensions.
     **kwargs
         Additional arguments passed to Plotly scatter3d.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
@@ -398,7 +398,7 @@ def interactive_network(
 ):
     """
     Create interactive network visualization using Plotly.
-
+    
     Parameters
     ----------
     adjacency : np.ndarray
@@ -421,7 +421,7 @@ def interactive_network(
         Figure dimensions.
     **kwargs
         Additional arguments passed to Plotly scatter.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
@@ -526,7 +526,7 @@ def interactive_histogram(
 ):
     """
     Create interactive histogram using Plotly.
-
+    
     Parameters
     ----------
     data : array-like or list of arrays
@@ -546,7 +546,7 @@ def interactive_histogram(
         Figure dimensions.
     **kwargs
         Additional arguments passed to Plotly histogram.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
@@ -607,7 +607,7 @@ def interactive_surface(
 ):
     """
     Create interactive 3D surface plot using Plotly.
-
+    
     Parameters
     ----------
     z : np.ndarray
@@ -622,7 +622,7 @@ def interactive_surface(
         Figure dimensions.
     **kwargs
         Additional arguments passed to Plotly surface.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
@@ -673,7 +673,7 @@ def interactive_correlation_matrix(
 ):
     """
     Create interactive correlation matrix heatmap using Plotly.
-
+    
     Parameters
     ----------
     data : np.ndarray
@@ -688,7 +688,7 @@ def interactive_correlation_matrix(
         Figure dimensions.
     **kwargs
         Additional arguments passed to Plotly heatmap.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
@@ -755,7 +755,7 @@ def dashboard_neural_activity(
 ):
     """
     Create comprehensive dashboard for neural activity visualization.
-
+    
     Parameters
     ----------
     spike_times : array-like or list
@@ -770,7 +770,7 @@ def dashboard_neural_activity(
         Dashboard title.
     width, height : int
         Figure dimensions.
-
+        
     Returns
     -------
     fig : plotly.graph_objects.Figure
