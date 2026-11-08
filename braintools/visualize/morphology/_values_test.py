@@ -202,5 +202,58 @@ class ValueSpecLengthMismatchTest(VisDefaultsResetMixin, unittest.TestCase):
             )
 
 
+class ExplicitValueSpaceTest(unittest.TestCase):
+    """``ValueSpec.space`` names the interpretation instead of inferring it from the length."""
+
+    def setUp(self) -> None:
+        # Three one-segment branches: n_branches == total segments == 3,
+        # centerline points == 6.
+        from braintools.visualize.morphology._testing import Branch, Morphology
+
+        tree = Morphology.from_root(
+            Branch.from_lengths(
+                lengths=[10.0] * u.um, radii=[2.0, 2.0] * u.um, type="soma"
+            )
+        )
+        for name in ("a", "b"):
+            tree.attach(
+                parent="soma",
+                child_branch=Branch.from_lengths(
+                    lengths=[10.0] * u.um,
+                    radii=[1.0, 1.0] * u.um,
+                    type="basal_dendrite",
+                ),
+                child_name=name,
+            )
+        self.tree = tree
+
+    def test_branch_and_segment_spaces_of_equal_length_agree(self) -> None:
+        # With one segment per branch the two readings are the same array,
+        # so inferring "branch" from the length never draws a wrong colour.
+        values = np.array([0.0, 1.0, 2.0])
+        inferred, _ = resolve_values(self.tree, ValueSpec(values))
+        for space in ("branch", "segment"):
+            with self.subTest(space=space):
+                explicit, _ = resolve_values(self.tree, ValueSpec(values, space=space))
+                for index, branch_values in inferred.items():
+                    np.testing.assert_array_equal(
+                        explicit[index].point_values, branch_values.point_values
+                    )
+
+    def test_explicit_space_is_checked_against_the_length(self) -> None:
+        with self.assertRaisesRegex(ValueError, "space='branch' needs 3"):
+            resolve_values(self.tree, ValueSpec(np.arange(6.0), space="branch"))
+        per_point, _ = resolve_values(
+            self.tree, ValueSpec(np.arange(6.0), space="centerline")
+        )
+        np.testing.assert_array_equal(per_point[1].point_values, [2.0, 3.0])
+
+    def test_solver_spaces_are_rejected(self) -> None:
+        for space in ("cv", "node", "points"):
+            with self.subTest(space=space):
+                with self.assertRaisesRegex(ValueError, "plot_topology_graph"):
+                    ValueSpec(np.arange(3.0), space=space)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -268,5 +268,37 @@ class DispatcherCacheIntegrationTest(unittest.TestCase):
         self.assertEqual(get_default_layout_cache().hits, 0)
 
 
+class ChildOrderKeyTest(unittest.TestCase):
+    def test_reordered_children_get_their_own_key_and_layout(self) -> None:
+        import dataclasses
+
+        from braintools.visualize.morphology import as_morphology_data
+        from braintools.visualize.morphology._testing import make_two_dendrite_tree
+        from braintools.visualize.morphology.layout import build_layout_branches_2d
+
+        data = as_morphology_data(make_two_dendrite_tree())
+        swapped = dataclasses.replace(
+            data, children=tuple(tuple(reversed(c)) for c in data.children)
+        )
+        self.assertNotEqual(data.structure_key, swapped.structure_key)
+        cache = LayoutCache(maxsize=4)
+        a = build_layout_branches_2d(
+            data, mode="tree", layout_family="balloon", cache=cache
+        )
+        b = build_layout_branches_2d(
+            swapped, mode="tree", layout_family="balloon", cache=cache
+        )
+        self.assertEqual(cache.misses, 2)
+        end_a = {
+            layout.branch_index: tuple(layout.segment_points_um[-1].round(6))
+            for layout in a
+        }
+        end_b = {
+            layout.branch_index: tuple(layout.segment_points_um[-1].round(6))
+            for layout in b
+        }
+        self.assertNotEqual(end_a, end_b)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,7 @@ import unittest
 import warnings
 from unittest import mock
 
+import brainunit as u
 import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
@@ -242,6 +243,86 @@ class PointTopologyPlotTest(unittest.TestCase):
             intensities=np.asarray([0.5], dtype=float),
         )
         np.testing.assert_allclose(blended[0, :3], np.asarray([0.5, 0.0, 0.5]))
+
+
+class TopologyGraphInputTest(unittest.TestCase):
+    """What :func:`plot_topology_graph` reads from the graph itself."""
+
+    def tearDown(self) -> None:
+        plt.close("all")
+
+    def _graph(self, **kwargs) -> TopologyGraph:
+        return TopologyGraph(
+            node_ids=(0, 1, 2), edges=((0, 1), (0, 2)), root_id=0, **kwargs
+        )
+
+    def _colours(self, ax) -> np.ndarray:
+        return np.asarray(ax.collections[-1].get_facecolors(), dtype=float)
+
+    def test_graph_values_colour_the_nodes_and_frame_selects_a_row(self) -> None:
+        graph = self._graph(
+            values=np.array([[0.0, 1.0, 2.0], [5.0, 6.0, 7.0]]) * u.mV, value_label="V"
+        )
+        ax = plot_topology_graph(graph, frame=1, layout="kamada_kawai")
+        direct = plot_topology_graph(
+            self._graph(),
+            values=np.array([5.0, 6.0, 7.0]) * u.mV,
+            layout="kamada_kawai",
+        )
+        np.testing.assert_array_equal(self._colours(ax), self._colours(direct))
+        self.assertEqual(ax.figure.axes[-1].get_ylabel(), "V [mV]")
+        with self.assertRaisesRegex(ValueError, "pass frame=<index>"):
+            plot_topology_graph(graph, layout="kamada_kawai")
+
+    def test_values_or_fractions_in_both_places_are_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError, "values both in the graph and as an argument"
+        ):
+            plot_topology_graph(
+                self._graph(values=np.zeros(3)),
+                values=np.ones(3),
+                layout="kamada_kawai",
+            )
+        with self.assertRaisesRegex(ValueError, "highlight_fractions both"):
+            plot_topology_graph(
+                self._graph(highlight_fractions={1: 1.0}),
+                highlight_fractions={2: 1.0},
+                layout="kamada_kawai",
+            )
+
+    def test_graph_highlight_fractions_are_drawn(self) -> None:
+        graph = self._graph(highlight_fractions={1: 1.0})
+        a = plot_topology_graph(graph, layout="kamada_kawai")
+        b = plot_topology_graph(
+            self._graph(), highlight_fractions={1: 1.0}, layout="kamada_kawai"
+        )
+        np.testing.assert_array_equal(
+            a.collections[-1].get_facecolors(), b.collections[-1].get_facecolors()
+        )
+
+    def test_branch_level_graphs_are_topology_only(self) -> None:
+        graph = self._graph(level="branch")
+        plot_topology_graph(graph, layout="kamada_kawai")
+        for kwargs in (
+            dict(cmap="viridis"),
+            dict(vmin=0.0),
+            dict(show_colorbar=False),
+            dict(values=np.ones(3)),
+        ):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaisesRegex(ValueError, "level='branch' graph"):
+                    plot_topology_graph(graph, layout="kamada_kawai", **kwargs)
+
+    def test_non_graph_input_is_rejected(self) -> None:
+        with self.assertRaisesRegex(TypeError, "__topology_data__"):
+            plot_topology_graph([(0, 1)])
+
+    def test_missing_networkx_names_the_extra(self) -> None:
+        with mock.patch.dict("sys.modules", {"networkx": None}):
+            with self.assertRaisesRegex(
+                ImportError, r"pip install braintools\[morphology\]"
+            ):
+                plot_topology_graph(self._graph(), layout="kamada_kawai")
 
 
 if __name__ == "__main__":
