@@ -32,8 +32,10 @@ making them ideal for simulation loops with minimal boilerplate.
 - **JAX-Optimized**: JIT-compatible, vectorizable, and differentiable
 - **Trajectory drivers**: :func:`odeint` (fixed step, one compiled ``scan``)
   and :func:`solve_ivp` (adaptive step size with error control)
-- **Method registry**: :func:`get_method`, :func:`register_method` and
-  :func:`list_methods` look steppers up by short name (``'rk4'``, ``'dopri5'``, ...)
+- **Method registry**: :func:`get_method`, :func:`register_method`,
+  :func:`method_info` and :func:`list_methods` look steppers and their
+  metadata (order, category, aliases) up by short name (``'rk4'``,
+  ``'dopri5'``, ...)
 
 **Quick Start - ODE Trajectories** (one compiled ``scan``, no Python loop):
 
@@ -375,8 +377,10 @@ any registered ODE stepper by name (``method='euler'``, ``'rk4'``, ...).
 # Trajectory drivers and the method registry
 from ._odeint import odeint
 from ._registry import (
+    MethodInfo,
     register_method,
     get_method,
+    method_info,
     list_methods,
 )
 from ._solve_ivp import (
@@ -405,6 +409,7 @@ from ._ode_integrator import (
     ode_bs32_step,
     ode_ralston2_step,
     ode_ralston3_step,
+    ode_ralston4_step,
 )
 
 # SDE integrators
@@ -443,6 +448,8 @@ __all__ = [
     'ODESolution',
     'register_method',
     'get_method',
+    'method_info',
+    'MethodInfo',
     'list_methods',
 
     # ODE integrators - Basic methods
@@ -467,6 +474,7 @@ __all__ = [
     'ode_bs32_step',
     'ode_ralston2_step',
     'ode_ralston3_step',
+    'ode_ralston4_step',
 
     # SDE integrators
     'sde_euler_step',

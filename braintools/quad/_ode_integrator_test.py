@@ -48,6 +48,7 @@ def test_accuracy_improves_with_smaller_dt():
         'rk4': (braintools.quad.ode_rk4_step, 4),
         'rk4_38': (braintools.quad.ode_rk4_38_step, 4),
         'ssprk33': (braintools.quad.ode_ssprk33_step, 3),
+        'ralston4': (braintools.quad.ode_ralston4_step, 4),
     }
 
     h = 0.1
@@ -344,3 +345,59 @@ def test_ode_expeuler_step_rejects_integer_scalar():
             raise AssertionError(f"expected ValueError, got {type(e).__name__}: {e}")
         else:
             raise AssertionError("expected ValueError for integer input")
+
+
+def _ralston4_tableau():
+    from braintools.quad import _ode_integrator as m
+    A = np.zeros((4, 4))
+    for i, row in enumerate(m._RALSTON4_A):
+        A[i, :len(row)] = row
+    return A, np.asarray(m._RALSTON4_B), np.asarray(m._RALSTON4_C)
+
+
+def test_ralston4_coefficients_satisfy_fourth_order_conditions():
+    A, b, c = _ralston4_tableau()
+    conditions = [
+        b.sum() - 1.0,
+        b @ c - 1.0 / 2.0,
+        b @ c ** 2 - 1.0 / 3.0,
+        b @ A @ c - 1.0 / 6.0,
+        b @ c ** 3 - 1.0 / 4.0,
+        (b * c) @ A @ c - 1.0 / 8.0,
+        b @ A @ c ** 2 - 1.0 / 12.0,
+        b @ A @ A @ c - 1.0 / 24.0,
+    ]
+    assert max(abs(x) for x in conditions) <= 1e-14
+    np.testing.assert_allclose(A.sum(axis=1), c, rtol=0, atol=1e-15)
+    # the published 8-digit values
+    np.testing.assert_allclose(b, [0.17476028, -0.55148066, 1.20553560, 0.17118478], atol=5e-9)
+    np.testing.assert_allclose(c, [0.0, 0.4, 0.45573725, 1.0], atol=5e-9)
+
+
+def test_ralston4_local_error_is_fifth_order():
+    def one(h):
+        with brainstate.environ.context(dt=h):
+            return float(braintools.quad.ode_ralston4_step(lambda y, t: -y, 1.0, 0.0))
+
+    assert abs(one(0.1) - np.exp(-0.1)) < 1e-6
+    # large enough steps that float32 rounding does not mask the truncation error
+    e1 = abs(one(0.4) - np.exp(-0.4))
+    e2 = abs(one(0.2) - np.exp(-0.2))
+    assert 25.0 < e1 / e2 < 40.0
+
+
+def test_ralston4_stage_times_and_pytree():
+    # dy/dt = t is integrated exactly by any fourth-order method
+    def f(y, t):
+        return jax.tree.map(lambda x: jnp.ones_like(x) * t, y)
+
+    with brainstate.environ.context(dt=0.1):
+        out = braintools.quad.ode_ralston4_step(f, {'a': jnp.zeros(2), 'b': jnp.zeros(())}, 1.0)
+    np.testing.assert_allclose(out['a'], 0.1 * 1.0 + 0.1 ** 2 / 2, rtol=1e-6)
+    np.testing.assert_allclose(out['b'], 0.1 * 1.0 + 0.1 ** 2 / 2, rtol=1e-6)
+
+
+def test_ralston4_with_units():
+    with brainstate.environ.context(dt=0.1 * u.ms):
+        v = braintools.quad.ode_ralston4_step(lambda v, t: -v / (10.0 * u.ms), -65.0 * u.mV, 0.0 * u.ms)
+    assert u.math.allclose(v, -65.0 * u.mV * np.exp(-0.01), rtol=1e-6)

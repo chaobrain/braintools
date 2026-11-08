@@ -1,6 +1,31 @@
 # Release Notes
 
 
+## Version 0.5.0 (unreleased)
+
+### New features
+
+- **`braintools.quad` registry metadata** (QUAD-2a): `register_method` takes
+  optional `order`, `category`, `aliases` and `description` keywords, and the
+  new `method_info(name, kind='ode')` returns them as a frozen `MethodInfo`.
+  `get_method` and `method_info` resolve aliases; `list_methods` still lists
+  canonical names only. Every built-in ODE method records its order and
+  category (`explicit`, `embedded` or `exponential`). An alias that clashes
+  with another method's name or alias raises `ValueError`. Existing names,
+  signatures and behaviour are unchanged.
+- **`'module'` registry kind** for steps of stateful hosts,
+  `step(target, *args) -> None`, which advance a model in place and read `t`
+  and `dt` from `brainstate.environ` (braincell registers its integrators
+  there). braintools registers nothing under it, and `odeint`/`solve_ivp` do
+  not accept it.
+- **`ode_ralston4_step`**: Ralston's fourth-order Runge-Kutta method with the
+  exact coefficients, registered as `'ralston4'`.
+- **ODE aliases** `heun3` (for `heun`), `ssprk3` (for `ssprk33`) and `heun2`
+  (for `rk2`).
+- The weekly downstream workflow also tests braincell (installed from its git
+  main).
+
+
 ## Version 0.4.0 (2026-10-20)
 
 braintools 0.4.0 is the largest release so far and the last major step before
@@ -1238,7 +1263,7 @@ documentation and CI infrastructure.
 - **Brain-specific colormaps** for membrane potential, spike activity, and connectivity
 
 #### Enhanced Numerical Integration
-- **New ODE integrators**: 
+- **New ODE integrators**:
   - Runge-Kutta methods: RK23, RK45, RKF45, DOP853, DOPRI5, SSPRK33
   - Specialized methods: Midpoint, Heun, RK4(3/8), Ralston RK2/RK3, Bogacki-Shampine
 - **New SDE integrators**: Heun, Tamed Euler, Implicit Euler, SRK2, SRK3, SRK4
@@ -1298,9 +1323,3 @@ documentation and CI infrastructure.
 - Corrected paths in publish workflow
 - Fixed formatting in ODE integrator documentation
 - Resolved msgpack checkpoint handling errors
-
-
-
-
-
-

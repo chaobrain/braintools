@@ -1,8 +1,8 @@
 ``braintools.quad`` module
 ============================
 
-.. currentmodule:: braintools.quad 
-.. automodule:: braintools.quad 
+.. currentmodule:: braintools.quad
+.. automodule:: braintools.quad
 
 Time-stepping schemes for deterministic, stochastic, and implicit-explicit
 equations used in neural simulations.
@@ -15,9 +15,14 @@ compiled ``scan`` (``checkpoint=True`` bounds memory for backpropagation through
 time). :func:`solve_ivp` integrates with an adaptive step size, using the
 embedded error estimate of ``dopri5`` / ``rk45`` / ``rkf45`` / ``rk23`` /
 ``bs32`` / ``dopri8`` and a PI step-size controller; its bounded loop is
-reverse-mode differentiable. Steppers are looked up by short name through the
-registry (``'euler'``, ``'rk4'``, ``'dopri5'``, ``'milstein'``, ...), which also
-accepts user-defined methods.
+reverse-mode differentiable. Steppers are looked up by short name or alias
+through the registry (``'euler'``, ``'rk4'``, ``'dopri5'``, ``'milstein'``, ...),
+which also accepts user-defined methods. :func:`method_info` returns a method's
+metadata (:class:`MethodInfo`: order, category, aliases, description). Besides
+the equation kinds ``'ode'``, ``'sde'``, ``'imex'`` and ``'dde'``, the registry
+has a ``'module'`` kind without built-in entries: stateful hosts such as
+braincell register steps there that advance a model in place,
+``step(target, *args) -> None``; the drivers do not accept it.
 
 .. autosummary::
     :toctree: generated/
@@ -28,6 +33,7 @@ accepts user-defined methods.
     solve_ivp
     register_method
     get_method
+    method_info
     list_methods
 
 .. autosummary::
@@ -35,6 +41,7 @@ accepts user-defined methods.
     :nosignatures:
 
     ODESolution
+    MethodInfo
 
 
 ODE Numerical Integrators
@@ -67,6 +74,7 @@ higher-order Runge-Kutta variants.
     ode_bs32_step
     ode_ralston2_step
     ode_ralston3_step
+    ode_ralston4_step
 
 
 
@@ -124,5 +132,3 @@ one or more delayed states ``y(t - τ)`` supplied by a user history function.
     dde_rk4_step
     dde_euler_pc_step
     dde_heun_pc_step
-
-
