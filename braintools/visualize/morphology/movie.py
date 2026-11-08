@@ -96,8 +96,8 @@ def plot_movie(
 
     Parameters
     ----------
-    morpho : MorphologyTree
-        MorphologyTree the values are defined against.
+    morpho : MorphologyData-like
+        Morphology the values are defined against.
     values_over_time : ArrayLike
         A ``(T, N)`` array where ``T`` is the number of frames and
         ``N`` matches one of the supported shapes for

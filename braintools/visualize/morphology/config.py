@@ -432,13 +432,13 @@ def publication_theme(
 def theme(**overrides: object) -> Iterator[VisDefaults]:
     """Temporarily override visualization defaults for the duration of a block.
 
-    All keyword arguments are forwarded to :func:`configure`. On exit the
+    All keyword arguments are forwarded to :func:`configure_defaults`. On exit the
     previous defaults are restored, even if the block raised.
 
     Parameters
     ----------
     **overrides
-        Any keyword accepted by :func:`configure`, e.g. ``layout_2d_default``,
+        Any keyword accepted by :func:`configure_defaults`, e.g. ``layout_2d_default``,
         ``branch_type_colors``, ``alpha_2d_line``, ``highlight_color``.
 
     Yields
@@ -451,10 +451,12 @@ def theme(**overrides: object) -> Iterator[VisDefaults]:
 
     .. code-block:: python
 
-        >>> import braincell
-        >>> with braintools.visualize.morphology.theme(branch_type_colors={"axon": "#ff0000"}):
-        ...     morpho.vis2d()  # doctest: +SKIP
-        >>> morpho.vis2d()       # doctest: +SKIP  — original colors restored
+        >>> from braintools.visualize.morphology import get_defaults, theme
+        >>> with theme(alpha_2d=0.5) as inside:
+        ...     inside.alpha_2d
+        0.5
+        >>> get_defaults().alpha_2d
+        0.8
     """
     global _VIS_DEFAULTS
 
@@ -631,18 +633,21 @@ def _normalize_color(color: object) -> tuple[int, int, int]:
             f"Color iterable must contain exactly 3 channels, got {len(channels)}."
         )
     if all(0.0 <= channel <= 1.0 for channel in channels):
-        scaled = tuple(int(round(channel * 255.0)) for channel in channels)
+        scaled = [int(round(channel * 255.0)) for channel in channels]
     else:
-        scaled = tuple(int(round(channel)) for channel in channels)
+        scaled = [int(round(channel)) for channel in channels]
     if not all(0 <= channel <= 255 for channel in scaled):
         raise ValueError(f"RGB channels must be between 0 and 255, got {color!r}.")
-    return scaled
+    return scaled[0], scaled[1], scaled[2]
 
 
 def _darken_color(
     color: tuple[int, int, int], *, factor: float
 ) -> tuple[int, int, int]:
-    return tuple(max(0, min(255, int(round(channel * factor)))) for channel in color)
+    red, green, blue = (
+        max(0, min(255, int(round(channel * factor)))) for channel in color
+    )
+    return red, green, blue
 
 
 def rgb_to_hex(rgb: tuple[int, int, int]) -> str:

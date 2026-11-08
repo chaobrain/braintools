@@ -57,7 +57,7 @@ def compare_morphologies(
 
     Parameters
     ----------
-    morphologies : sequence of Morphology
+    morphologies : sequence of MorphologyData-like
         Morphologies to compare. Order left → right matches panel
         order. Must contain at least one element.
     titles : sequence of str or None
@@ -153,7 +153,7 @@ def compare_values(
 
     Parameters
     ----------
-    morpho : Morphology
+    morpho : MorphologyData-like
         Shared morphology for every panel.
     value_arrays : sequence of arrays
         One scalar array per panel. Each array is interpreted through

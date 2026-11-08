@@ -380,7 +380,9 @@ def _plot_discrete_topology_graph(
             )
         )
 
-    node_sizes = np.full(len(node_ids), _default_node_size(len(node_ids)), dtype=float)
+    node_sizes: np.ndarray = np.full(
+        len(node_ids), _default_node_size(len(node_ids)), dtype=float
+    )
     node_sizes[id_to_index[root_id]] *= 1.8
 
     if intensities is not None:
@@ -548,7 +550,7 @@ def _resolve_coverage_intensities(
     coverage_mode: CoverageMode,
 ) -> np.ndarray:
     resolved_mode = _normalize_coverage_mode(coverage_mode)
-    fractions = np.asarray(
+    fractions: np.ndarray = np.asarray(
         [
             float(np.clip(highlight_fractions.get(node_id, 0.0), 0.0, 1.0))
             for node_id in node_ids
@@ -673,7 +675,7 @@ def _resolve_node_rgba(
     norm,
     node_color: str,
     root_color: str,
-) -> tuple[np.ndarray, object | None, str | None]:
+) -> tuple[np.ndarray, Any, str | None]:
     import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
 
@@ -766,7 +768,7 @@ def _graph_depths(
     roots = [node_id for node_id in node_ids if indegree[node_id] == 0]
     root_id = roots[0]
     id_to_index = {node_id: index for index, node_id in enumerate(node_ids)}
-    depths = np.full(len(node_ids), -1.0, dtype=float)
+    depths: np.ndarray = np.full(len(node_ids), -1.0, dtype=float)
     depths[id_to_index[root_id]] = 0.0
     # ``deque.popleft`` is O(1); ``list.pop(0)`` is O(len(queue)), which
     # makes the whole BFS quadratic on wide trees.
@@ -818,7 +820,7 @@ def _blend_node_rgba(
     import matplotlib.colors as mcolors
 
     out = np.asarray(base_rgba, dtype=float).copy()
-    target = np.asarray(mcolors.to_rgba(highlight_color), dtype=float)
+    target: np.ndarray = np.asarray(mcolors.to_rgba(highlight_color), dtype=float)
     weights = np.clip(np.asarray(intensities, dtype=float).reshape(-1, 1), 0.0, 1.0)
     out = (1.0 - weights) * out + weights * target[None, :]
     out[:, 3] = 1.0

@@ -12,6 +12,8 @@
   `__topology_data__()`, so braintools does not depend on braincell. The
   module is not imported by `import braintools`; install its optional
   backends with `pip install braintools[morphology]`.
+- **`morphology` extra**: `networkx`, `plotly` and `pyvista`, the optional
+  layout and 3-D backends of `braintools.visualize.morphology`.
 - **`braintools.quad` registry metadata** (QUAD-2a): `register_method` takes
   optional `order`, `category`, `aliases` and `description` keywords, and the
   new `method_info(name, kind='ode')` returns them as a frozen `MethodInfo`.
@@ -29,8 +31,17 @@
   exact coefficients, registered as `'ralston4'`.
 - **ODE aliases** `heun3` (for `heun`), `ssprk3` (for `ssprk33`) and `heun2`
   (for `rk2`).
-- The weekly downstream workflow also tests braincell (installed from its git
-  main).
+- The weekly downstream workflow also tests braincell (its git main, full
+  test suite with the `morphology` extra).
+
+### Changes
+
+- `braintools.visualize` imports Plotly on the first call of an interactive
+  plot instead of at import time; `PLOTLY_AVAILABLE` is still set at import.
+- Relative to `braincell.vis`: `plot_topology_graph` takes a `TopologyGraph`
+  (or an object implementing `__topology_data__()`); `ValueSpec` gains
+  `space`; the layout cache key includes the order of children. The
+  `legacy` root layout and the `set_defaults` alias are not carried over.
 
 
 ## Version 0.4.0 (2026-10-20)

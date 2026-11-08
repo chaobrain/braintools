@@ -251,7 +251,7 @@ def build_scene2d_line(
                 draw_order += 1
         else:
             branch_values = per_branch_values[branch_layout.branch_index]
-            widths = np.empty(n_points, dtype=float)
+            widths: np.ndarray = np.empty(n_points, dtype=float)
             if n_points > 0:
                 widths[0] = 2.0 * float(branch_layout.radii_proximal_um[0])
                 widths[1:] = 2.0 * np.asarray(

@@ -99,12 +99,11 @@ class MatplotlibBackend:
             _draw_polygon(ax, plt, polygon)
         for polyline in polylines:
             _draw_polyline(ax, polyline)
+        value_cmap = value_spec.cmap if value_spec is not None else None
         for batch in value_polygons:
-            _draw_value_polygons(ax, batch, cmap=value_spec.cmap, norm=value_norm)
+            _draw_value_polygons(ax, batch, cmap=value_cmap, norm=value_norm)
         for value_polyline in value_polylines:
-            _draw_value_polyline(
-                ax, value_polyline, cmap=value_spec.cmap, norm=value_norm
-            )
+            _draw_value_polyline(ax, value_polyline, cmap=value_cmap, norm=value_norm)
 
         for circle in scene.circles:
             color = _rgb_to_float(circle.color_rgb)
@@ -257,7 +256,7 @@ def _draw_value_polyline(
     ax,
     polyline: PolylineValues2D,
     *,
-    cmap: str,
+    cmap: str | None,
     norm,
 ) -> None:
     from matplotlib.collections import LineCollection
@@ -306,7 +305,7 @@ def _draw_value_polygons(
     ax,
     batch: PolygonValuesBatch2D,
     *,
-    cmap: str,
+    cmap: str | None,
     norm,
 ) -> None:
     from matplotlib.collections import PolyCollection
@@ -399,9 +398,9 @@ def _set_scene_limits(ax, scene: RenderScene2D) -> None:
         if polyline.points_um.size:
             bounds.append(np.asarray(polyline.points_um, dtype=float))
 
-    for polyline in scene.polyline_values:
-        if polyline.points_um.size:
-            bounds.append(np.asarray(polyline.points_um, dtype=float))
+    for value_polyline in scene.polyline_values:
+        if value_polyline.points_um.size:
+            bounds.append(np.asarray(value_polyline.points_um, dtype=float))
 
     for polygon in scene.polygons:
         if polygon.points_um.size:

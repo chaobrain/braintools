@@ -61,6 +61,92 @@ def plot2d(
     layout_config: LayoutConfig | None = None,
     hooks: VisHooks | None = None,
 ) -> object:
+    """Draw a morphology in 2-D with Matplotlib.
+
+    ``layout`` decides where the branches go and ``shape`` how they are drawn.
+    ``"projected"`` drops one axis of the 3-D points; ``"fan"``, ``"stem"``,
+    ``"balloon"`` and ``"radial_360"`` are schematic layouts computed from
+    branch lengths and topology, so they also work for morphologies without
+    point geometry.
+
+    Parameters
+    ----------
+    morpho : MorphologyData-like
+        A :class:`MorphologyData` or any object implementing
+        ``__morphology_data__()``.
+    region : RegionData-like, optional
+        Intervals ``(branch_index, prox, dist)`` to highlight.
+    locset : LocsetData-like, optional
+        Points ``(branch_index, x)`` to mark.
+    values : array-like, optional
+        Scalars to colour-map, one per branch, per segment or per centerline
+        point (inferred from the length; pass a :class:`ValueSpec` with
+        ``space`` to state it).
+    cmap, vmin, vmax, norm, value_label, show_colorbar
+        Colour-mapping settings for ``values``; see :class:`ValueSpec`.
+    layout : {"fan", "stem", "balloon", "radial_360", "projected"}, optional
+        Defaults to :attr:`VisDefaults.layout_2d_default` (``"fan"``).
+    shape : {"frustum", "line"}, optional
+        Defaults to :attr:`VisDefaults.shape_2d_default` (``"frustum"``).
+        ``"projected"`` supports ``"line"`` only.
+    branch_type_colors, branch_type_edge_colors_2d, frustum_edge_linewidth_2d
+        Style overrides for this call only.
+    backend : str, optional
+        Backend name; ``"matplotlib"`` is the only 2-D backend.
+    chooser : BackendChooser, optional
+        Explicit backend chooser.
+    ax : matplotlib.axes.Axes, optional
+        Axes to draw into; a new figure is created otherwise.
+    notebook, jupyter_backend, return_plotter
+        Display options forwarded to the backend.
+    projection_plane : {"xy", "xz", "yz"}
+        Axis pair for ``layout="projected"``.
+    min_branch_angle_deg : float or None
+        Minimum angle between sibling branches in schematic layouts.
+    root_layout : {"type_split"}
+        How the root's children are arranged in schematic layouts.
+    layout_config : LayoutConfig, optional
+        Fine-grained layout parameters.
+    hooks : VisHooks, optional
+        Pick callbacks.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes drawn into.
+
+    Raises
+    ------
+    TypeError
+        If ``morpho`` is not morphology data.
+    ValueError
+        If ``layout="projected"`` is used without full point geometry or with
+        ``shape="frustum"``, or if an option is not recognised.
+
+    See Also
+    --------
+    plot3d : 3-D rendering with PyVista or Plotly.
+    compare_morphologies : Several morphologies side by side.
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+        >>> import brainunit as u
+        >>> from braintools.visualize.morphology import BranchData, MorphologyData, plot2d
+        >>> soma = BranchData(
+        ...     index=0, name="soma", type="soma", parent_index=None,
+        ...     parent_x=None, child_x=None, lengths=[20.0] * u.um,
+        ...     radii_proximal=[10.0] * u.um, radii_distal=[10.0] * u.um,
+        ... )
+        >>> dend = BranchData(
+        ...     index=1, name="dend", type="basal_dendrite", parent_index=0,
+        ...     parent_x=1.0, child_x=0.0, lengths=[50.0, 50.0] * u.um,
+        ...     radii_proximal=[1.0, 0.8] * u.um, radii_distal=[0.8, 0.5] * u.um,
+        ... )
+        >>> ax = plot2d(MorphologyData(branches=(soma, dend)), layout="stem")
+    """
     morpho = as_tree(morpho, caller="plot2d(...)")
 
     resolved_layout = resolve_default_2d_layout(layout)

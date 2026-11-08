@@ -81,8 +81,8 @@ def plot_dendrogram(
 
     Parameters
     ----------
-    morpho : MorphologyTree
-        MorphologyTree to render.
+    morpho : MorphologyData-like
+        Morphology to render.
     ax : matplotlib Axes or None
         Destination axes. When ``None``, a fresh figure is created.
     color_by_type : bool
@@ -282,7 +282,7 @@ def compute_sholl_profile(
             intersections=np.array([0], dtype=int),
         )
     radii = np.arange(step_um, upper + step_um, step_um)
-    counts = np.zeros(radii.shape, dtype=int)
+    counts: np.ndarray = np.zeros(radii.shape, dtype=int)
     for i, r in enumerate(radii):
         inside = distances_start < r
         outside = distances_end >= r
@@ -358,7 +358,8 @@ def _path_segment_distances(morpho: MorphologyTree) -> tuple[np.ndarray, np.ndar
     # recorded before any of its children are reached, so each child can
     # read it straight out of the dict instead of off the call stack.
     for node in iter_depth_first(root):
-        running = 0.0 if node is root else cumulative[node.parent.index]
+        parent = node.parent
+        running = 0.0 if parent is None else cumulative[parent.index]
         lengths = np.asarray(node.lengths.to_decimal(u.um), dtype=float)
         for seg_len in lengths:
             starts.append(running)
@@ -403,7 +404,7 @@ def plot_branch_order_histogram(
             "plot_branch_order_histogram(...) requires a non-empty morphology."
         )
     max_order = max(depths.values())
-    counts = np.zeros(max_order + 1, dtype=int)
+    counts: np.ndarray = np.zeros(max_order + 1, dtype=int)
     for depth in depths.values():
         counts[depth] += 1
 

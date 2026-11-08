@@ -70,7 +70,7 @@ def plot_traces(
 
     Parameters
     ----------
-    morpho : MorphologyTree
+    morpho : MorphologyData-like
         Source morphology. Used for both the left-hand morphology
         view (when ``show_morphology=True``) and to validate that the
         number of traces matches the number of locset points.
@@ -228,7 +228,7 @@ def plot_traces(
                     continue
                 pts = np.asarray(polygon.points_um, dtype=float)
                 midline = 0.5 * (pts[:2] + pts[-2:][::-1])
-                widths = np.full(len(midline), 1.0, dtype=float)
+                widths: np.ndarray = np.full(len(midline), 1.0, dtype=float)
                 centerlines[polygon.branch_index] = _Centerline2D.from_points(
                     branch_index=polygon.branch_index,
                     branch_name=polygon.branch_name,

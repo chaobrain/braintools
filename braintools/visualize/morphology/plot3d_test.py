@@ -138,7 +138,7 @@ class Plot3dDispatchTest(VisDefaultsResetMixin, unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            r"vis2d\(layout='stem', shape='line'\).+vis2d\(layout='stem', shape='frustum'\)",
+            r"plot2d\(\.\.\., layout='stem', shape='line'\) or shape='frustum'",
         ):
             plot3d(tree, chooser=BackendChooser(backends=(FakeBackend(),)))
 

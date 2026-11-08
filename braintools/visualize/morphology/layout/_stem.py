@@ -882,6 +882,10 @@ def _stem_profile_candidates(
     if abs(desired_tail_offset_rad) < math.radians(6.0):
         desired_sign = preferred_sign
 
+    sign_sequence: tuple[float, ...]
+    tail_offsets_rad: tuple[float, ...]
+    launch_magnitudes_rad: tuple[float, ...]
+    settle_ratios: tuple[float, ...]
     if branch_role == "trunk":
         sign_sequence = (desired_sign,)
         tail_offsets_rad = (

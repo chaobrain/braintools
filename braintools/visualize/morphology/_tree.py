@@ -64,12 +64,19 @@ class BranchNode:
         return self._data.type
 
     @property
-    def parent_x(self) -> float | None:
-        return self._data.parent_x
+    def parent_x(self) -> float:
+        """Attachment position on the parent; :class:`ValueError` on the root."""
+        return self._attachment(self._data.parent_x, "parent_x")
 
     @property
-    def child_x(self) -> float | None:
-        return self._data.child_x
+    def child_x(self) -> float:
+        """Attached end of this branch; :class:`ValueError` on the root."""
+        return self._attachment(self._data.child_x, "child_x")
+
+    def _attachment(self, value: float | None, field: str) -> float:
+        if value is None:
+            raise ValueError(f"The root branch {self.name!r} has no {field}.")
+        return value
 
     @property
     def lengths(self) -> u.Quantity:
@@ -107,11 +114,11 @@ class BranchNode:
     @property
     def children(self) -> tuple["BranchNode", ...]:
         branches = self._tree.branches
-        return tuple(branches[i] for i in self._tree.data.children[self._data.index])
+        return tuple(branches[i] for i in self._tree.children[self._data.index])
 
     @property
     def n_children(self) -> int:
-        return len(self._tree.data.children[self._data.index])
+        return len(self._tree.children[self._data.index])
 
     def __repr__(self) -> str:
         return f"BranchNode(index={self.index}, name={self.name!r}, type={self.type!r})"
@@ -120,10 +127,12 @@ class BranchNode:
 class MorphologyTree:
     """Tree view of a :class:`MorphologyData`; build it with :func:`as_tree`."""
 
-    __slots__ = ("data", "branches")
+    __slots__ = ("data", "branches", "children")
 
     def __init__(self, data: MorphologyData) -> None:
         self.data = data
+        # Always set once MorphologyData is constructed; ``or ()`` narrows the type.
+        self.children: tuple[tuple[int, ...], ...] = data.children or ()
         self.branches: tuple[BranchNode, ...] = tuple(
             BranchNode(self, branch) for branch in data.branches
         )

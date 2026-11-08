@@ -41,7 +41,7 @@ Examples
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from braintools.visualize.morphology.backend import module_available
 
@@ -195,7 +195,7 @@ def _save_matplotlib(
     from matplotlib.figure import Figure
 
     if isinstance(figure, Axes):
-        fig: Figure = figure.figure
+        fig: Figure = cast(Figure, figure.figure)
     else:
         fig = figure
 

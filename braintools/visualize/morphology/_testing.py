@@ -30,6 +30,8 @@ selection helpers and render-backend doubles.
 """
 
 import importlib.util
+import unittest
+from typing import TYPE_CHECKING
 
 import brainunit as u
 import numpy as np
@@ -563,7 +565,13 @@ class FakeBackend:
 # =============================================================================
 
 
-class VisDefaultsResetMixin:
+if TYPE_CHECKING:
+    _MixinBase = unittest.TestCase
+else:
+    _MixinBase = object
+
+
+class VisDefaultsResetMixin(_MixinBase):
     """Restore ``braintools.visualize.morphology`` global defaults around every test.
 
     ``plot2d``/``plot3d`` read module-level defaults that several tests

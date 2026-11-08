@@ -58,7 +58,7 @@ def build_render_scene_3d(
     if not morpho.has_full_point_geometry:
         raise ValueError(
             "3D mode='geometry' requires complete point geometry on every branch. "
-            "Use vis2d(layout='stem', shape='line') or vis2d(layout='stem', shape='frustum') "
+            "Use plot2d(..., layout='stem', shape='line') or shape='frustum' "
             "for length/radius-only morphologies."
         )
     value_spec, per_branch_values, unit_label = _resolve_overlay_values_3d(
@@ -66,9 +66,6 @@ def build_render_scene_3d(
     )
 
     branches: list[BranchPolyline3D] = []
-    # ``morpho.branch(index=...)`` re-sorts the node table on every
-    # call, so indexing it in a loop is O(n^2 log n); ``morpho.branches``
-    # resolves the same "default" ordering once.
     for branch_view in morpho.branches:
         branch_index = branch_view.index
         branch = branch_view.branch
@@ -106,8 +103,8 @@ def build_render_scene_3d(
         )
 
     grouped: OrderedDict[str, list[BranchPolyline3D]] = OrderedDict()
-    for branch in branches:
-        grouped.setdefault(branch.branch_type, []).append(branch)
+    for polyline in branches:
+        grouped.setdefault(polyline.branch_type, []).append(polyline)
 
     batches: list[BranchTypeBatch3D] = []
     value_batches: list[ValueBatch3D] = []
@@ -119,21 +116,21 @@ def build_render_scene_3d(
         branch_names: list[str] = []
         point_values_all: list[np.ndarray] = []
         offset = 0
-        for branch in type_branches:
-            n_points = len(branch.points_um)
-            cell = np.arange(offset, offset + n_points, dtype=np.int64)
+        for polyline in type_branches:
+            n_points = len(polyline.points_um)
+            cell: np.ndarray = np.arange(offset, offset + n_points, dtype=np.int64)
             cell = np.insert(cell, 0, n_points)
-            points_all.append(branch.points_um)
-            radii_all.append(branch.radii_um)
+            points_all.append(polyline.points_um)
+            radii_all.append(polyline.radii_um)
             lines_all.append(cell)
-            branch_indices.append(branch.branch_index)
-            branch_names.append(branch.branch_name)
+            branch_indices.append(polyline.branch_index)
+            branch_names.append(polyline.branch_name)
             if per_branch_values is not None:
-                branch_values = per_branch_values[branch.branch_index]
+                branch_values = per_branch_values[polyline.branch_index]
                 pv = np.asarray(branch_values.point_values, dtype=float)
                 if pv.size != n_points:
                     raise ValueError(
-                        f"Value array for branch {branch.branch_name!r} has length {pv.size} "
+                        f"Value array for branch {polyline.branch_name!r} has length {pv.size} "
                         f"but the branch has {n_points} centerline points."
                     )
                 point_values_all.append(pv)
@@ -167,7 +164,7 @@ def build_render_scene_3d(
                 )
             )
 
-    branch_lookup = {branch.branch_index: branch for branch in branches}
+    branch_lookup = {polyline.branch_index: polyline for polyline in branches}
     highlight_strokes, markers = _build_overlay_primitives_3d(overlay, branch_lookup)
 
     return RenderScene3D(

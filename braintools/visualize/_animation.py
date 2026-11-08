@@ -84,6 +84,10 @@ def animator(
     anim : matplotlib.animation.ArtistAnimation
         Animation to be displayed (e.g. via ``anim.to_html5_video()``) or saved
         with ``anim.save(...)``.
+
+    See Also
+    --------
+    braintools.visualize.morphology.plot_movie : Animate values over a neuron morphology.
     """
 
     data = as_numpy(data)

@@ -37,7 +37,7 @@ of cycles.
 
 import math
 from dataclasses import dataclass
-from typing import Callable, TypeVar
+from typing import Callable, Mapping, TypeVar
 
 import brainunit as u
 import numpy as np
@@ -283,7 +283,7 @@ def walk_layout_top_down(
 # ---------------------------------------------------------------------------
 
 
-def _child_weight(child: BranchNode, weights: dict[int, float]) -> float:
+def _child_weight(child: BranchNode, weights: Mapping[int, float]) -> float:
     """Return a child's angular weight, floored so a zero never divides.
 
     Missing entries default to ``1.0`` so an unweighted child still gets
@@ -297,7 +297,7 @@ def _allocate_weighted_angles(
     children: tuple[BranchNode, ...],
     *,
     interval: tuple[float, float],
-    weights: dict[int, float],
+    weights: Mapping[int, float],
 ) -> dict[int, float]:
     child_intervals = _weighted_child_intervals(
         children, interval=interval, weights=weights, min_gap_rad=0.0
@@ -312,7 +312,7 @@ def _weighted_child_intervals(
     children: tuple[BranchNode, ...] | list[BranchNode],
     *,
     interval: tuple[float, float],
-    weights: dict[int, float],
+    weights: Mapping[int, float],
     min_gap_rad: float,
 ) -> list[tuple[BranchNode, tuple[float, float]]]:
     children = tuple(children)

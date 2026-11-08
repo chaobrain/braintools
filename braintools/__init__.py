@@ -32,6 +32,14 @@ from . import visualize
 from ._deprecation import deprecated_class as _deprecated_class
 from ._version import __version__, __version_info__
 
+# Public modules that ``import braintools`` deliberately does not load (they
+# pull in heavy optional dependencies on first use). The API-reference
+# coverage test and scripts/run_doctests.py walk ``__all__`` and would not
+# find them, so they read this list as well.
+_LAZY_PUBLIC_MODULES = (
+    'braintools.visualize.morphology',
+)
+
 # Encoders moved to ``braintools.spike`` in 0.4.0. The top-level names are
 # deprecated aliases that warn on instantiation (never on import/access).
 LatencyEncoder = _deprecated_class(

@@ -126,7 +126,7 @@ def _make_straight_layout_branch(
     target_angle_rad: float,
     child_x: float,
 ) -> LayoutBranch2D:
-    segment_angles_rad = np.full(
+    segment_angles_rad: np.ndarray = np.full(
         len(spec.segment_lengths_um), target_angle_rad, dtype=float
     )
     return _layout_branch_from_angles(
@@ -170,7 +170,9 @@ def _layout_branch_from_angles(
     # Walking the segments in Python is a plain prefix sum; the stem
     # family calls this once per placement candidate, so the vectorized
     # form is worth several-fold on the whole layout build.
-    raw_segment_points_um = np.zeros((len(spec.segment_lengths_um) + 1, 2), dtype=float)
+    raw_segment_points_um: np.ndarray = np.zeros(
+        (len(spec.segment_lengths_um) + 1, 2), dtype=float
+    )
     np.cumsum(
         segment_directions_um
         * np.asarray(spec.segment_lengths_um, dtype=float)[:, None],
@@ -236,7 +238,9 @@ def _smoothstep(values: np.ndarray) -> np.ndarray:
     return values * values * (3.0 - 2.0 * values)
 
 
-def _blend_angle_rad(angle_a_rad: float, angle_b_rad: float, weight_b: float) -> float:
+def _blend_angle_rad(
+    angle_a_rad: float, angle_b_rad: float, weight_b: float | np.ndarray
+) -> float:
     weight_b = float(np.clip(weight_b, 0.0, 1.0))
     return angle_a_rad + weight_b * _shortest_angle_delta_rad(angle_b_rad - angle_a_rad)
 

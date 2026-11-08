@@ -147,6 +147,7 @@ def _public_modules():
     """Yield ``(dotted_name, module)`` for every public module reachable through ``__all__``."""
     seen = set()
     stack = [('braintools', braintools)]
+    stack += [(name, importlib.import_module(name)) for name in braintools._LAZY_PUBLIC_MODULES]
     while stack:
         name, mod = stack.pop()
         if name in seen:

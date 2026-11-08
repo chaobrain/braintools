@@ -19,7 +19,11 @@ import sys
 from dataclasses import dataclass
 from typing import Protocol
 
-from braintools.visualize.morphology.scene import RenderScene2D, RenderScene3D
+from braintools.visualize.morphology.scene import (
+    RenderRequest,
+    RenderScene2D,
+    RenderScene3D,
+)
 
 
 def module_available(module_name: str) -> bool:
@@ -61,12 +65,16 @@ class RenderBackend(Protocol):
     ``frozenset({"2d", "3d"})``.
     """
 
-    name: str
-    supported_scene_kinds: frozenset[str]
+    # Read-only members, so frozen dataclass backends satisfy the protocol.
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def supported_scene_kinds(self) -> frozenset[str]: ...
 
     def available(self) -> bool: ...
 
-    def render(self, request: object) -> object: ...
+    def render(self, request: RenderRequest) -> object: ...
 
 
 def _backend_supports(backend: RenderBackend, scene_kind: str) -> bool:
@@ -112,6 +120,11 @@ class BackendChooser:
                     continue
                 if backend.available():
                     return backend
+            if any(_backend_supports(backend, scene_kind) for backend in self.backends):
+                raise RuntimeError(
+                    f"No {scene_kind.upper()} visualization backend is available. "
+                    "Install the optional backends with `pip install braintools[morphology]`."
+                )
 
         for backend in self.backends:
             if backend.available():

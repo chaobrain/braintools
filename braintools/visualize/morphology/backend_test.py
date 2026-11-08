@@ -58,6 +58,16 @@ class MissingOptionalBackendTest(VisDefaultsResetMixin, unittest.TestCase):
                     ):
                         plot3d(tree, backend=name)
 
+    def test_default_3d_backend_reports_the_install_hint(self) -> None:
+        from braintools.visualize.morphology.backend_plotly import PlotlyBackend
+
+        with mock.patch.object(PyVistaBackend, "available", return_value=False):
+            with mock.patch.object(PlotlyBackend, "available", return_value=False):
+                with self.assertRaisesRegex(
+                    RuntimeError, r"No 3D .*pip install braintools\[morphology\]"
+                ):
+                    plot3d(make_node_tree())
+
     def test_3d_movie_without_pyvista(self) -> None:
         import numpy as np
 

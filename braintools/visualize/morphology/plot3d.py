@@ -49,6 +49,60 @@ def plot3d(
     return_plotter: bool = False,
     hooks: VisHooks | None = None,
 ) -> object:
+    """Render a morphology in 3-D with PyVista or Plotly.
+
+    Every branch must carry point geometry
+    (:attr:`MorphologyData.has_full_point_geometry`).
+
+    Parameters
+    ----------
+    morpho : MorphologyData-like
+        A :class:`MorphologyData` or any object implementing
+        ``__morphology_data__()``.
+    region, locset, values, cmap, vmin, vmax, norm, value_label, show_colorbar
+        Overlays and colour mapping, as in :func:`plot2d`.
+    mode : {"geometry", "skeleton"}, optional
+        Tubes with the branch radii, or thin centerlines. Defaults to
+        :attr:`VisDefaults.mode_3d_default`.
+    backend : {"pyvista", "plotly"}, optional
+        Defaults to the first one installed.
+    chooser : BackendChooser, optional
+        Explicit backend chooser.
+    notebook : bool, optional
+        Embed the scene in the notebook cell output.
+    jupyter_backend : str, optional
+        PyVista Jupyter backend, such as ``"html"`` for static documents.
+    return_plotter : bool
+        Return the PyVista plotter or Plotly figure instead of showing it.
+    hooks : VisHooks, optional
+        Pick callbacks.
+
+    Returns
+    -------
+    object
+        The backend's plotter or figure.
+
+    Raises
+    ------
+    ValueError
+        If some branch lacks point geometry or ``mode`` is not recognised.
+    RuntimeError
+        If neither PyVista nor Plotly is installed
+        (``pip install braintools[morphology]``).
+
+    See Also
+    --------
+    plot2d : 2-D drawing with Matplotlib.
+    braintools.visualize.dendrite_tree_3d : Plotly tree of explicit coordinates.
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+        >>> from braintools.visualize.morphology import plot3d
+        >>> plotter = plot3d(data, mode="skeleton", return_plotter=True)  # doctest: +SKIP
+    """
     morpho = as_tree(morpho, caller="plot3d(...)")
     resolved_mode = resolve_default_3d_mode(mode)
     if resolved_mode not in SUPPORTED_3D_MODES:

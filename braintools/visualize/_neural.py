@@ -1030,6 +1030,11 @@ def network_topology(
     -------
     ax : matplotlib.axes.Axes
         The axes object containing the plot.
+
+    See Also
+    --------
+    braintools.visualize.morphology.plot_topology_graph : Draw a discrete neuron
+        topology (branches, control volumes, solver nodes) as a graph.
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
