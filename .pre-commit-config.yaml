@@ -32,3 +32,14 @@ repos:
     rev: 2.2.4
     hooks:
       - id: pyproject-fmt
+
+  # Keep the maintainers' private planning repository out of this public one:
+  # name a task by its ID (e.g. VIS-3) instead of pointing into that repository.
+  - repo: local
+    hooks:
+      - id: no-private-references
+        name: no references to the private planning repository
+        language: pygrep
+        entry: 'braincell-spec|decisions-need-me|v0\.3/(milestones|records)'
+        types: [text]
+        exclude: '^\.pre-commit-config\.yaml$'
