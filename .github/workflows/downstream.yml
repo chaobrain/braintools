@@ -30,7 +30,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [brainpy, brainmass, brainspike]
+        # install: pip requirement of the downstream package; tests: what pytest
+        # collects with --pyargs. braincell tracks braintools' git main, so it is
+        # installed from its own git main and only its integrator tests run.
+        include:
+          - package: brainpy
+            install: brainpy
+            tests: brainpy
+          - package: brainmass
+            install: brainmass
+            tests: brainmass
+          - package: brainspike
+            install: brainspike
+            tests: brainspike
+          - package: braincell
+            install: braincell @ git+https://github.com/chaobrain/braincell@main
+            tests: braincell.quad braincell._single_compartment
     env:
       JAX_PLATFORMS: cpu
       XLA_PYTHON_CLIENT_PREALLOCATE: 'false'
@@ -47,7 +62,7 @@ jobs:
           python -m pip install --upgrade pip
           # Install the downstream package (this pulls braintools from PyPI),
           # then replace braintools with the checkout and resolve its deps.
-          python -m pip install "${{ matrix.package }}" pytest
+          python -m pip install "${{ matrix.install }}" pytest
           python -m pip install --force-reinstall --no-deps .
           python -m pip install .
           python -m pip check || true
@@ -60,5 +75,5 @@ jobs:
         # error) is not picked up.
         working-directory: ${{ runner.temp }}
         run: |
-          python -m pytest --pyargs "${{ matrix.package }}" -q --maxfail=20 \
+          python -m pytest --pyargs ${{ matrix.tests }} -q --maxfail=20 \
             -p no:cacheprovider -o python_files="*_test.py test_*.py"

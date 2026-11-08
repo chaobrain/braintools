@@ -22,6 +22,7 @@ Runge–Kutta families as well as an exponential Euler variant for stiff linear
 parts.
 """
 
+import math
 from typing import Callable, TypeAlias
 
 import brainstate
@@ -49,6 +50,7 @@ __all__ = [
     'ode_bs32_step',  # Bogacki–Shampine 3(2) alias
     'ode_ralston2_step',  # Ralston RK2
     'ode_ralston3_step',  # Ralston RK3
+    'ode_ralston4_step',  # Ralston RK4
 ]
 
 DT: TypeAlias = brainstate.typing.ArrayLike
@@ -1000,6 +1002,101 @@ def ode_ralston3_step(
     k3 = f(y3, t + dt * 0.75, *args, **kwargs)
     return tree_map(lambda x, _k1, _k2, _k3: x + dt * ((2.0 / 9.0) * _k1 + (1.0 / 3.0) * _k2 + (4.0 / 9.0) * _k3),
                     y, k1, k2, k3)
+
+
+# Ralston's (1962) fourth-order method with minimum truncation-error bound. The
+# coefficients are the exact closed forms in sqrt(5); truncated decimals (e.g.
+# 8 digits) violate the fourth-order conditions at the 1e-8 level.
+_SQRT5 = math.sqrt(5.0)
+_RALSTON4_C = (0.0, 0.4, (14.0 - 3.0 * _SQRT5) / 16.0, 1.0)
+_RALSTON4_A = (
+    (),
+    (0.4,),
+    ((-2889.0 + 1428.0 * _SQRT5) / 1024.0, (3785.0 - 1620.0 * _SQRT5) / 1024.0),
+    (
+        (-3365.0 + 2094.0 * _SQRT5) / 6040.0,
+        (-975.0 - 3046.0 * _SQRT5) / 2552.0,
+        (467040.0 + 203968.0 * _SQRT5) / 240845.0,
+    ),
+)
+_RALSTON4_B = (
+    (263.0 + 24.0 * _SQRT5) / 1812.0,
+    (125.0 - 1000.0 * _SQRT5) / 3828.0,
+    (3426304.0 + 1661952.0 * _SQRT5) / 5924787.0,
+    (30.0 - 4.0 * _SQRT5) / 123.0,
+)
+
+
+@set_module_as('braintools.quad')
+def ode_ralston4_step(
+    f: ODE,
+    y: brainstate.typing.PyTree,
+    t: DT,
+    *args,
+    **kwargs
+):
+    r"""
+    Ralston's 4th-order Runge–Kutta method (minimum truncation-error bound).
+
+    A four-stage, fourth-order explicit scheme whose free parameters are chosen
+    to minimise the bound on the local truncation error (Ralston, 1962) [1]_. The
+    coefficients are exact closed forms in :math:`\sqrt{5}`:
+
+    - :math:`c = (0,\ 2/5,\ (14 - 3\sqrt{5})/16,\ 1)`
+      :math:`\approx (0, 0.4, 0.45573725, 1)`
+    - :math:`b \approx (0.17476028, -0.55148066, 1.20553560, 0.17118478)`
+
+    Parameters
+    ----------
+    f : callable
+        Right-hand side function ``f(y, t, *args) -> PyTree``.
+    y : PyTree
+        Current state at time ``t``.
+    t : float or brainunit.Quantity
+        Current time.
+    *args
+        Additional positional arguments forwarded to ``f``.
+
+    Returns
+    -------
+    PyTree
+        The updated state after one Ralston RK4 step.
+
+    See Also
+    --------
+    ode_rk4_step : Classical fourth-order Runge–Kutta.
+    ode_ralston3_step : Ralston's third-order method.
+
+    References
+    ----------
+    .. [1] A. Ralston, "Runge-Kutta methods with minimum error bounds",
+       Mathematics of Computation 16 (1962) 431-437.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        >>> import brainstate
+        >>> from braintools.quad import ode_ralston4_step
+        >>> with brainstate.environ.context(dt=0.1):
+        ...     y1 = ode_ralston4_step(lambda y, t: -y, 1.0, 0.0)
+        >>> round(float(y1), 6)  # exp(-0.1) = 0.904837...
+        0.904837
+    """
+    assert callable(f), 'The input function should be callable.'
+    dt = brainstate.environ.get_dt()
+    a, b, c = _RALSTON4_A, _RALSTON4_B, _RALSTON4_C
+    k1 = f(y, t, *args, **kwargs)
+    y2 = tree_map(lambda x, q1: x + dt * (a[1][0] * q1), y, k1)
+    k2 = f(y2, t + dt * c[1], *args, **kwargs)
+    y3 = tree_map(lambda x, q1, q2: x + dt * (a[2][0] * q1 + a[2][1] * q2), y, k1, k2)
+    k3 = f(y3, t + dt * c[2], *args, **kwargs)
+    y4 = tree_map(lambda x, q1, q2, q3: x + dt * (a[3][0] * q1 + a[3][1] * q2 + a[3][2] * q3), y, k1, k2, k3)
+    k4 = f(y4, t + dt * c[3], *args, **kwargs)
+    return tree_map(
+        lambda x, q1, q2, q3, q4: x + dt * (b[0] * q1 + b[1] * q2 + b[2] * q3 + b[3] * q4),
+        y, k1, k2, k3, k4
+    )
 
 
 @set_module_as('braintools.quad')

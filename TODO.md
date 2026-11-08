@@ -41,8 +41,9 @@ PR when it is done.
   (a dependency in the wrong direction). Needs a joint decision; the roadmap
   proposes `braintools.init` as canonical.
 - [ ] **Two integrator registries.** braincell has its own
-  (`braincell/quad/_registry.py`); it could register its solvers through
-  `braintools.quad.register_method`.
+  (`braincell/quad/_registry.py`). The braintools side is done (QUAD-2a:
+  registry metadata, aliases and the `'module'` kind); braincell switches to it
+  in QUAD-2b.
 - [ ] **brainmass test fixtures.** 25 brainmass tests error on fixtures that
   existed before this work (they are counted in the downstream baseline).
 
