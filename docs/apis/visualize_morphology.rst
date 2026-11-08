@@ -107,8 +107,22 @@ only), pick callbacks, and figure export for every backend.
    theme
    publication_theme
    PublicationTheme
-   PUBLICATION_BRANCH_TYPE_COLORS
-   PUBLICATION_RC_PARAMS
    VisHooks
    PickInfo
    save_figure
+
+
+Constants
+---------
+
+.. data:: PUBLICATION_BRANCH_TYPE_COLORS
+
+   Branch-type colours (RGB, 0-255) of :func:`publication_theme`, from Paul
+   Tol's colour-blind-safe palette; the keys are the branch types (``"soma"``,
+   ``"axon"``, ``"basal_dendrite"``, ``"apical_dendrite"``, ``"dendrite"``,
+   ``"custom"``).
+
+.. data:: PUBLICATION_RC_PARAMS
+
+   Matplotlib ``rcParams`` applied by :func:`publication_theme`: serif font,
+   thicker lines, no grid and tight margins, tuned for export at 300 dpi.
