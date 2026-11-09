@@ -1,7 +1,13 @@
 # Release Notes
 
 
-## Version 0.5.0 (unreleased)
+## Version 0.5.0 (2026-11-09)
+
+braintools 0.5.0 takes over two pieces of braincell: neuron-morphology
+plotting, in the new `braintools.visualize.morphology`, and a single
+integrator registry that braincell now registers its stateful integrators
+into. Both additions are backwards compatible for braintools users: no
+existing name, signature or default changes.
 
 ### New features
 
