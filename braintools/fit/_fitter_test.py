@@ -86,7 +86,11 @@ def test_single_start_defaults_to_midpoint_or_init():
     assert fitter.names == ('a', 'tau')
 
 
+@jax.enable_x64()
 def test_single_start_equals_vmapped_start():
+    # Compare line-search trajectories in float64: float32 rounding can take
+    # different branches near Wolfe thresholds in batched and unbatched XLA.
+    # Other recovery tests retain the default precision.
     x0 = {'a': jnp.array([0.5, 4., 2.5, 1.]), 'tau': jnp.array([0.9, 0.1, 0.5, 0.2])}
     fitter = Fitter(decay, mse, SPACE)
     batch = fitter.fit(TARGET, x0=x0, n_steps=60)
