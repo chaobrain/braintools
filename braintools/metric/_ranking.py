@@ -109,7 +109,7 @@ def _safe_reduce(
     Notes
     -----
     Special handling for different scenarios:
-    
+
     - **Mean reduction with empty mask**: Returns 0.0 instead of NaN when all
       elements are masked but input contains no NaN values
     - **No reduction function**: Masked elements are set to 0.0 to enable
@@ -256,14 +256,14 @@ def ranking_softmax_loss(
     Notes
     -----
     This loss function implements a probabilistic approach to ranking where:
-    
+
     - Items with higher relevance labels should receive higher probability mass
     - The softmax operation ensures valid probability distributions
     - Masked items (where ``where`` is False) are effectively ignored
     - The loss is differentiable w.r.t. logits, enabling gradient-based optimization
 
     The function handles edge cases gracefully:
-    
+
     - Empty masks (all items invalid) return 0.0 instead of NaN
     - Numerical stability is maintained through log-softmax computation
     - Mixed data types are handled by casting labels to match logit precision
@@ -275,7 +275,7 @@ def ranking_softmax_loss(
     >>> import jax.numpy as jnp
     >>> import braintools as braintools
     >>> # Scores for 3 items
-    >>> logits = jnp.array([2.0, 1.0, 3.0])  
+    >>> logits = jnp.array([2.0, 1.0, 3.0])
     >>> # Relevance: item 3 most relevant, item 1 second, item 2 least
     >>> labels = jnp.array([1.0, 0.0, 2.0])
     >>> loss = braintools.metric.ranking_softmax_loss(logits, labels)
@@ -305,8 +305,8 @@ def ranking_softmax_loss(
     >>> batch_losses = braintools.metric.ranking_softmax_loss(
     ...     logits, labels, where=where, reduce_fn=None
     ... )
-    >>> print(f"Individual losses: {batch_losses}")
-    Individual losses: [0.31326163 0.68026966]
+    >>> print("Individual losses:", [round(float(loss), 6) for loss in batch_losses])
+    Individual losses: [0.313262, 0.68027]
 
     Using the ``reduction`` string API (preferred):
 
@@ -327,10 +327,10 @@ def ranking_softmax_loss(
 
     References
     ----------
-    .. [1] Liu, Tie-Yan. "Learning to rank for information retrieval." 
+    .. [1] Liu, Tie-Yan. "Learning to rank for information retrieval."
            Foundations and Trends in Information Retrieval 3.3 (2009): 225-331.
-    .. [2] Cao, Zhe, et al. "Learning to rank: from pairwise approach to listwise 
-           approach." Proceedings of the 24th international conference on Machine 
+    .. [2] Cao, Zhe, et al. "Learning to rank: from pairwise approach to listwise
+           approach." Proceedings of the 24th international conference on Machine
            learning. 2007.
     """
     # Coerce inputs to arrays so Python lists/scalars are accepted (e.g.
