@@ -1,0 +1,71 @@
+name: Clean consumed artifacts
+
+# Only new runs are eligible. No manual/scheduled historical sweep.
+on:
+  workflow_run:
+    workflows: ["Publish to PyPI"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: consumed-artifacts-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      # Do not checkout or execute source-run code in this privileged workflow.
+      - name: Remove only consumed artifacts from this completed run
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const RELEASE_NAMES = ["dist"];
+            const INTERMEDIATE_NAMES = [];
+            const INTERMEDIATE_PREFIXES = [];
+            const source = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+            const since = Date.parse('2026-11-24T04:10:58Z');
+            const started = Date.parse(source?.created_at);
+            if (!source || source.status !== 'completed' || source.conclusion !== 'success' ||
+                source.head_repository?.full_name !== `${owner}/${repo}` ||
+                !Number.isFinite(started) || started < since) {
+              core.info('Keeping artifacts: unsuccessful, foreign or pre-policy run.');
+              return;
+            }
+            // Re-fetch before deleting: a delayed completion event must not clean a rerun.
+            const { data: current } = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: source.id
+            });
+            if (current.status !== 'completed' || current.conclusion !== 'success' ||
+                current.run_attempt !== source.run_attempt) {
+              core.info('Keeping artifacts: the source run changed after this event.');
+              return;
+            }
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              owner, repo, run_id: source.id, per_page: 100
+            });
+            const publishing = source.name === 'Publish to PyPI';
+            const exact = publishing ? RELEASE_NAMES : INTERMEDIATE_NAMES;
+            const prefixes = publishing ? [] : INTERMEDIATE_PREFIXES;
+            // Never delete cross-run baselines, final reports, documentation or failed releases.
+            const protectedNames = new Set([
+              'docs-html', 'test-map', 'impact-map', 'impact-partial', 'night',
+              'main-assembled', 'main-bisected', 'night-assembled', 'night-bisected',
+              'coverage-xml'
+            ]);
+            let removed = 0;
+            for (const artifact of artifacts) {
+              if (artifact.expired || protectedNames.has(artifact.name) ||
+                  !Number.isFinite(Date.parse(artifact.created_at)) ||
+                  Date.parse(artifact.created_at) < started ||
+                  !exact.includes(artifact.name) && !prefixes.some(p => artifact.name.startsWith(p))) continue;
+              await github.rest.actions.deleteArtifact({owner, repo, artifact_id: artifact.id});
+              removed++;
+            }
+            core.info(`Deleted ${removed} consumed artifacts from successful run ${source.id}.`);
